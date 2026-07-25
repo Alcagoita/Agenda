@@ -6,7 +6,6 @@ import type { NudgeMessage } from '../../components/ScrRotatingNudge';
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
 export const SCREEN_W = Dimensions.get('window').width;
-export const SCROLL_RANGE = 90; // SECTION_H_REST − SECTION_H_COLLAPSED (declared below)
 
 export const RING_REST      = 184;
 export const RING_COLLAPSED = 112;
@@ -16,6 +15,7 @@ export const RING_LEFT_COLLAPSED = 22;
 
 export const SECTION_H_REST      = 240;
 export const SECTION_H_COLLAPSED = 150;
+export const SCROLL_RANGE = SECTION_H_REST - SECTION_H_COLLAPSED;
 export const RING_TOP_REST      = (SECTION_H_REST      - RING_REST)      / 2;
 export const RING_TOP_COLLAPSED = (SECTION_H_COLLAPSED - RING_COLLAPSED) / 2;
 

@@ -609,6 +609,30 @@ describe('useTodayScreen — optimistic toggle', () => {
     expect(mockGetLearnedPlaceCounts).toHaveBeenCalledTimes(3);
   });
 
+  it('suppresses learned-place refresh failures after the toggle succeeds', async () => {
+    mockGetTasksForDate.mockResolvedValue([TASK]);
+    mockGetLearnedPlaceCounts.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useTodayScreen(UID));
+    await act(async () => {});
+    expect(mockGetLearnedPlaceCounts).toHaveBeenCalledTimes(1); // initial mount fetch
+
+    mockGetLearnedPlaceCounts.mockRejectedValueOnce(new Error('Learned places unavailable'));
+
+    let thrown: unknown;
+    await act(async () => {
+      try {
+        await result.current.handleToggle('task-1', true);
+      } catch (error) {
+        thrown = error;
+      }
+    });
+
+    expect(thrown).toBeUndefined();
+    expect(mockSetTaskDone).toHaveBeenCalledWith(UID, 'task-1', true);
+    expect(mockGetLearnedPlaceCounts).toHaveBeenCalledTimes(2);
+  });
+
   it('passes completedPlace to setTaskDone when brushing a task near its own POI type (KAN-226)', async () => {
     mockGetTasksForDate.mockResolvedValue([POI_TASK]);
 
