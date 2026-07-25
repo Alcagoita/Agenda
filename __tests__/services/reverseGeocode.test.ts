@@ -1,15 +1,20 @@
 /**
- * extractCityName — KAN-301 reverse-geocode display-name picker (OSM Nominatim).
+ * reverseGeocode — KAN-301 OSM Nominatim reverse-geocoder.
  *
- * The async reverseGeocode() wraps a Nominatim fetch; the interesting,
- * deterministic logic is which address field wins, which is pure and lives here.
+ * Covers the pure city-name extractor, plus the Nominatim usage-policy
+ * guarantees: results are cached per ~100 m cell, and no two requests ever fire
+ * within 1 second.
  */
 
-// maps.ts pulls in placesFunctions -> @react-native-firebase/functions, a
-// native module unavailable under Jest. We only exercise the pure extractor.
+// maps.ts pulls in placesFunctions -> @react-native-firebase/functions (native,
+// unavailable under Jest), and reverseGeocodeCache -> expo-sqlite. Stub both.
 jest.mock('../../src/services/placesFunctions', () => ({}));
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(() => ({ hit: false, city: null })),
+  putCachedCity: jest.fn(),
+}));
 
-import { extractCityName } from '../../src/services/maps';
+import { extractCityName, reverseGeocode, __resetReverseGeocodeForTests } from '../../src/services/maps';
 
 describe('extractCityName (KAN-301, Nominatim address)', () => {
   it('prefers city over broader fields', () => {
@@ -28,12 +33,34 @@ describe('extractCityName (KAN-301, Nominatim address)', () => {
   });
 
   it('returns null when no populated-place field is present (never a state/country)', () => {
-    // state/country are deliberately not in the priority list.
     expect(extractCityName({} as never)).toBeNull();
   });
 
   it('returns null for null / undefined', () => {
     expect(extractCityName(null)).toBeNull();
     expect(extractCityName(undefined)).toBeNull();
+  });
+});
+
+describe('reverseGeocode — caching + rate limit (KAN-301, Nominatim policy)', () => {
+  const okResponse = { ok: true, json: async () => ({ address: { city: 'Lisboa' } }) };
+
+  beforeEach(() => {
+    __resetReverseGeocodeForTests();
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(okResponse);
+  });
+
+  it('hits the network once when the position moves within the same ~100 m cell', async () => {
+    // Three fixes that all round to 38.722,-9.139.
+    expect(await reverseGeocode(38.7223, -9.1393)).toBe('Lisboa');
+    expect(await reverseGeocode(38.7224, -9.1394)).toBe('Lisboa');
+    expect(await reverseGeocode(38.7222, -9.1392)).toBe('Lisboa');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('never fires a second request within 1 second (different cells)', async () => {
+    await reverseGeocode(38.722, -9.139);   // cell A → one request
+    await reverseGeocode(40.000, -8.000);   // cell B, immediately → rate-limited, no request
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

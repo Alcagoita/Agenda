@@ -23,6 +23,7 @@ import {
   placesAutocompleteProxy,
   searchNearbyPlacesProxy,
 } from './placesFunctions';
+import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { Category, PoiType, POI_GOOGLE_TYPES, poiCatalogLabel } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -120,6 +121,21 @@ const REVERSE_GEOCODE_TIMEOUT_MS = 8_000;
 // Nominatim (like Overpass) asks every client to identify itself; unlabeled
 // traffic risks being rate-limited or blocked.
 const REVERSE_GEOCODE_USER_AGENT = `BrushApp/${require('../../package.json').version}`;
+// Nominatim's usage policy caps traffic at 1 request/second — a hard rule, not
+// a nicety (enforced by blocking). This guards it app-wide.
+const REVERSE_GEOCODE_MIN_INTERVAL_MS = 1_000;
+
+// In-memory cache of resolved cells for this session (the fast path; the
+// SQLite layer below makes a name survive restarts). Keyed on coords rounded to
+// ~3 decimals (≈100 m) so nearby fixes reuse one result. `null` = resolved, no
+// name — cached too, so we don't re-hit Nominatim for the same empty cell.
+const reverseGeocodeMem = new Map<string, string | null>();
+let lastReverseGeocodeAt = 0;
+
+/** Rounds a coordinate to a ~100 m cache cell key. */
+function reverseGeocodeCell(lat: number, lng: number): string {
+  return `${lat.toFixed(3)},${lng.toFixed(3)}`;
+}
 
 /** The subset of Nominatim's `address` object we consider for a city label. */
 export interface OsmAddress {
@@ -153,10 +169,29 @@ export function extractCityName(address: OsmAddress | null | undefined): string 
 
 /**
  * Reverse-geocode a coordinate to a city / area name for the Lantern's
- * "Outside" state via OSM Nominatim. Returns null on any failure (offline, no
- * result, rate-limited) — the caller shows "Outside" instead. Never throws.
+ * "Outside" state via OSM Nominatim. Cached (session memory + SQLite) and rate
+ * limited to 1 request/second per Nominatim's usage policy. Returns null on a
+ * cache/rate-limit skip or any failure (offline, no result) — the caller shows
+ * "Outside" instead. Never throws.
  */
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  const cell = reverseGeocodeCell(lat, lng);
+
+  // 1) Session cache — free, no network, no rate-limit cost.
+  if (reverseGeocodeMem.has(cell)) { return reverseGeocodeMem.get(cell) ?? null; }
+
+  // 2) Persistent cache — a name resolved in a previous session/before a restart.
+  const persisted = getCachedCity(cell);
+  if (persisted.hit) {
+    reverseGeocodeMem.set(cell, persisted.city);
+    return persisted.city;
+  }
+
+  // 3) Rate limit — never two Nominatim requests within 1 s, app-wide.
+  const now = Date.now();
+  if (now - lastReverseGeocodeAt < REVERSE_GEOCODE_MIN_INTERVAL_MS) { return null; }
+  lastReverseGeocodeAt = now;
+
   const url = `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REVERSE_GEOCODE_TIMEOUT_MS);
@@ -168,12 +203,22 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
     });
     if (!res.ok) { return null; }
     const json = (await res.json()) as { address?: OsmAddress };
-    return extractCityName(json.address);
+    const city = extractCityName(json.address);
+    reverseGeocodeMem.set(cell, city);
+    putCachedCity(cell, city);
+    return city;
   } catch {
+    // Transient failure — don't cache, so a later attempt can retry.
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Test-only: clears the session reverse-geocode cache and rate-limit clock. */
+export function __resetReverseGeocodeForTests(): void {
+  reverseGeocodeMem.clear();
+  lastReverseGeocodeAt = 0;
 }
 
 // ─── Places API — Nearby Search ───────────────────────────────────────────────

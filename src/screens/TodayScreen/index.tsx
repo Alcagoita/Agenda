@@ -96,6 +96,7 @@ export default function TodayScreen() {
     poiPlaces,
     placeContext,
     coords,
+    permissionGranted,
     storeTuningActive,
     showStoreTuningPrompt,
     onStoreTuningTurnOn,
@@ -142,7 +143,7 @@ export default function TodayScreen() {
   const { scrollHandler, collapsed, bgStyle, captionStyle, collapsedStyle } = useCollapseAnimation();
 
   // ── Lantern — persistent place-familiarity header (KAN-301) ───────────────────
-  const lanternState = useLanternState(placeContext, coords);
+  const lanternState = useLanternState(placeContext, coords, permissionGranted);
   const onLanternPill = useCallback(() => {
     // Only the unset state has a destination for now — it points at the home
     // address flow. The other states' pill is built here but wired by KAN-304.

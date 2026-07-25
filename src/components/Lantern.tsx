@@ -89,9 +89,13 @@ interface Visual {
   cycleMs: number;
 }
 
+/** A LanternState with a rendered form — every kind except the held `locating`
+ *  state, which the component short-circuits to render nothing. */
+type RenderableLanternState = Exclude<LanternState, { kind: 'locating' }>;
+
 /** Maps a resolved LanternState to its icon, halo tint, label and pill — the
  *  same shape-the-view step ContextChip does for ContextChipView. */
-function getVisual(state: LanternState, palette: Palette): Visual {
+function getVisual(state: RenderableLanternState, palette: Palette): Visual {
   const lit = {
     baseOpacity: HALO_OPACITY_LIT,
     breathe: BREATHE_LIT,
@@ -249,6 +253,11 @@ export default function Lantern({
     const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
     return () => sub.remove();
   }, [reduceMotionOverride]);
+
+  // Held state — home is set but we don't have a fix yet. Render nothing rather
+  // than guessing Outside (which would flash on cold start / stick with no POI
+  // tasks). Placed after the hooks so hook order stays stable.
+  if (state.kind === 'locating') { return null; }
 
   const v = getVisual(state, palette);
 

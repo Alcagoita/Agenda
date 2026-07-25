@@ -60,9 +60,10 @@ export interface ProximityEngine {
   /** Mall/trip context for the last position fix (KAN-242) — feeds the header ContextChip / Lantern. */
   placeContext:       PlaceContext;
   /** Last settled-search position (KAN-301) — feeds the Lantern's home/outside
-   *  resolution. Reuses the existing 200 m / 3-min search cadence, so it costs
-   *  no new location watcher; seeded once on permission grant for users with no
-   *  POI tasks (who never trigger a proximity search). Null before any fix. */
+   *  resolution while a moving user has open POI tasks. Reuses the existing
+   *  200 m / 3-min search cadence, so it costs no new location watcher. Null
+   *  when no search has run (e.g. no POI tasks); useLanternState takes its own
+   *  one-shot fix in that case. */
   coords:             { lat: number; lng: number } | null;
   locationUnavailable: boolean;
   storeTuningActive:      boolean;
@@ -392,25 +393,6 @@ export function useProximityEngine(
       return false;
     }
   }, [uid, permissionGranted, hasPOITasks, isStoreTuningActive, onNearbyUpdate]);
-
-  // KAN-301 — seed the Lantern's position once on permission grant. A user with
-  // no POI tasks never triggers a proximity search (the outdoor lifecycle above
-  // is gated on hasPOITasks), so onNearbyUpdate would never fire and `coords`
-  // would stay null forever, leaving the Lantern unable to tell Home from
-  // Outside. One low-accuracy fix, no watcher, no polling (KAN-231).
-  useEffect(() => {
-    if (DEBUG_DISABLE_BACKGROUND) { return; }
-    if (!permissionGranted) { return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const { getPositionLowAccuracy } = await import('../../services/geolocation');
-        const pos = await getPositionLowAccuracy();
-        if (!cancelled && pos) { setCoords(prev => prev ?? { lat: pos.lat, lng: pos.lng }); }
-      } catch { /* no fix — the Lantern falls back to its home-set/unset default */ }
-    })();
-    return () => { cancelled = true; };
-  }, [permissionGranted]);
 
   // Settled once permission is known AND either nothing was ever going to
   // search (no permission, no POI tasks, Store tuning owns it instead) or a

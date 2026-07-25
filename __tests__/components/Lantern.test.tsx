@@ -47,6 +47,13 @@ describe('Lantern — states (KAN-301 AC1)', () => {
   });
 });
 
+describe('Lantern — locating held state (KAN-301)', () => {
+  it('renders nothing while locating (no Outside flash before a fix)', () => {
+    const { toJSON } = render(<Lantern state={{ kind: 'locating' }} reduceMotionOverride />);
+    expect(toJSON()).toBeNull();
+  });
+});
+
 describe('Lantern — interaction', () => {
   it('only the pill is pressable (AC6) — exactly one button in the tree', () => {
     render(<Lantern state={{ kind: 'home' }} reduceMotionOverride />);

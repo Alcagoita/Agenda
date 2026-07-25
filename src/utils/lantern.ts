@@ -18,13 +18,18 @@
 import type { PlaceContext } from '../services/proximity';
 import { isTodayWithinTripDates } from './contextChip';
 
-export type LanternStateKind = 'mall' | 'trip' | 'home' | 'outside' | 'unset';
+export type LanternStateKind = 'mall' | 'trip' | 'home' | 'outside' | 'locating' | 'unset';
 
 export type LanternState =
   | { kind: 'mall'; name: string; offlineDot: boolean }
   | { kind: 'trip'; destination: string; offlineDot: boolean }
   | { kind: 'home' }
   | { kind: 'outside'; cityName: string | null }
+  /** Home IS set but the position isn't known yet (no fix). A neutral held
+   *  state — the Lantern renders nothing rather than guessing Outside, which
+   *  would flash on every cold start and stick for a no-POI-task user until a
+   *  fix arrives. */
+  | { kind: 'locating' }
   | { kind: 'unset' };
 
 /**
@@ -36,14 +41,10 @@ export const HOME_ENTER_M = 150;
 export const HOME_LEAVE_M = 200;
 
 /**
- * Applies the enter-fast / leave-slow buffer to a raw home distance.
- * Returns:
- *   - `null`  when no home is stored (distance unknown) → the unset state,
- *   - `true`  when the user should read as Home,
- *   - `false` when the user should read as Outside.
+ * Applies the enter-fast / leave-slow buffer to a known home distance.
+ * Enter Home at ≤150 m; once Home, leave only past 200 m.
  */
-export function resolveHomeProximity(distanceM: number | null, wasHome: boolean): boolean | null {
-  if (distanceM == null) { return null; }
+export function resolveHomeProximity(distanceM: number, wasHome: boolean): boolean {
   return wasHome ? distanceM <= HOME_LEAVE_M : distanceM <= HOME_ENTER_M;
 }
 
@@ -51,7 +52,9 @@ export interface ResolveLanternStateInput {
   /** Mall/trip context for the last position fix, or null (from proximity.ts). */
   placeContext: PlaceContext;
   todayIso: string;
-  /** Distance in metres from the current position to the stored home, or null when no home is set. */
+  /** Whether a home address is stored at all (services/home). Drives unset vs. home/outside. */
+  homeSet: boolean;
+  /** Distance in metres from the current position to the stored home, or null when the position isn't known yet. */
   homeDistanceM: number | null;
   /** Whether the previous render resolved to Home — feeds the hysteresis buffer. */
   wasHome: boolean;
@@ -62,13 +65,18 @@ export interface ResolveLanternStateInput {
 }
 
 /**
- * Priority: mall > trip > home/outside; unset when no home is stored.
+ * Priority: mall > trip > home/outside. Mall and trip never need a position
+ * fix. When there's no mall/trip context: unset if no home is stored; locating
+ * if a home is stored but the position isn't known yet (never guess Outside —
+ * that would flash on cold start and stick for a no-POI-task user); otherwise
+ * home/outside via the hysteresis buffer.
+ *
  * Exactly one kind is ever returned — never two indicators (doctrine §9).
- * Off-grid trips are excluded (they're a distinct concept, KAN-246), matching
+ * Off-grid trips are excluded (a distinct concept, KAN-246), matching
  * resolveContextChipView.
  */
 export function resolveLanternState({
-  placeContext, todayIso, homeDistanceM, wasHome, cityName, offline,
+  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline,
 }: ResolveLanternStateInput): LanternState {
   if (placeContext?.kind === 'mall') {
     // The mall name comes from the stored snapshot, so it's correct offline too
@@ -84,9 +92,10 @@ export function resolveLanternState({
     return { kind: 'trip', destination: placeContext.trip.destination, offlineDot: offline };
   }
 
-  const homeProximity = resolveHomeProximity(homeDistanceM, wasHome);
-  if (homeProximity === null) { return { kind: 'unset' }; }
-  if (homeProximity === true) { return { kind: 'home' }; }
+  if (!homeSet) { return { kind: 'unset' }; }
+  if (homeDistanceM == null) { return { kind: 'locating' }; }
+
+  if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home' }; }
 
   // Outside. Never show a guessed or stale name: offline forces the literal
   // "Outside" (the component substitutes it for a null cityName).
