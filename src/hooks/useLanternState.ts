@@ -16,6 +16,7 @@
  * resolver holds `locating` rather than guessing Outside.
  */
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import type { PlaceContext } from '../services/proximity';
 import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
@@ -51,6 +52,19 @@ export function useLanternState(
       .catch(() => { /* no fix — resolver stays in `locating` */ });
     return () => { cancelled = true; };
   }, [effectiveCoords, permissionGranted]);
+
+  // Re-seed on foreground. The seed above runs once and then holds forever, so
+  // without this a no-POI-task user (whom the engine never supplies coords for)
+  // would keep yesterday's fix after reopening the app. Clearing seedCoords on
+  // a background→active transition lets the effect above take exactly one fresh
+  // read — still no watcher, no interval (KAN-231). A no-op when the engine has
+  // coords: effectiveCoords stays non-null, so the seed effect early-returns.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => {
+      if (next === 'active') { setSeedCoords(null); }
+    });
+    return () => sub.remove();
+  }, []);
 
   const home = getHomeLocation();
   const homeSet = home != null;

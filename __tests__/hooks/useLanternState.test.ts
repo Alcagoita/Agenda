@@ -8,6 +8,7 @@
  * "Outside".
  */
 import { renderHook, act } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 const mockGetHomeLocation = jest.fn();
 const mockDistanceFromHome = jest.fn();
@@ -72,4 +73,45 @@ it('uses engine coords directly when present (no one-shot needed)', async () => 
   await act(async () => {});
   expect(result.current.kind).toBe('outside');
   expect(mockGetPositionLowAccuracy).not.toHaveBeenCalled();
+});
+
+describe('foreground re-seed (KAN-301 review)', () => {
+  it('re-reads position on background→active with no POI coords — exactly one more call', async () => {
+    mockGetHomeLocation.mockReturnValue(HOME);
+    mockDistanceFromHome.mockReturnValue(40);
+    mockGetPositionLowAccuracy.mockResolvedValue({ lat: 38.72, lng: -9.14 });
+
+    let appStateHandler: ((s: string) => void) | undefined;
+    const addSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_e: string, cb: (s: string) => void) => {
+      appStateHandler = cb;
+      return { remove: jest.fn() };
+    }) as never);
+
+    renderHook(() => useLanternState(null, null, true));
+    await act(async () => {}); // mount one-shot
+    expect(mockGetPositionLowAccuracy).toHaveBeenCalledTimes(1);
+
+    await act(async () => { appStateHandler?.('active'); }); // foreground
+    expect(mockGetPositionLowAccuracy).toHaveBeenCalledTimes(2);
+
+    addSpy.mockRestore();
+  });
+
+  it('does not re-read on foreground when engine coords are present', async () => {
+    mockGetHomeLocation.mockReturnValue(HOME);
+    mockDistanceFromHome.mockReturnValue(40);
+
+    let appStateHandler: ((s: string) => void) | undefined;
+    const addSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_e: string, cb: (s: string) => void) => {
+      appStateHandler = cb;
+      return { remove: jest.fn() };
+    }) as never);
+
+    renderHook(() => useLanternState(null, { lat: 1, lng: 2 }, true));
+    await act(async () => {});
+    await act(async () => { appStateHandler?.('active'); });
+    expect(mockGetPositionLowAccuracy).not.toHaveBeenCalled();
+
+    addSpy.mockRestore();
+  });
 });
