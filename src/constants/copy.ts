@@ -406,6 +406,26 @@ const en = {
     clearErrorToast: "Couldn't clear — check your connection and try again.",
   },
 
+  // ─── Lantern — Today place-familiarity header (KAN-301) ──────────────────────
+  lantern: {
+    /** Home state word — a relationship, not a place name. */
+    home: 'Home',
+    /** Outside state, offline fallback — never a stale or guessed place name. */
+    outside: 'Outside',
+    /** No-home-set state label — the question the pill answers. */
+    whereIsHome: "Where's home?",
+    /** No-home-set pill — the answer to the question above. */
+    tellMe: 'Tell me',
+    /** Held state while waiting for the first position fix. Same word-budget as a place name. */
+    lookingAround: 'Looking around…',
+    /** The fix never arrived (past the ceiling). First-person, no claimed cause. */
+    cantFindYou: "Can't find you",
+    /** Pill a11y for the resolved states (label = current place word). */
+    placesPillA11y: (label: string) => `${label} — see the places I know`,
+    /** Pill a11y for the unset state. */
+    setHomePillA11y: 'Tell me where home is',
+  },
+
   // ─── Settings (KAN-252) ─────────────────────────────────────────────────────
   settings: {
     screenTitle: 'Settings',
@@ -441,7 +461,7 @@ const en = {
     signOutErrorTitle: 'Error',
     signOutErrorBody: 'Failed to sign out. Please try again.',
     footerVersion: (version: string) => `Brush Away · v${version}`,
-    footerAttribution: 'Place data © OpenStreetMap contributors (ODbL)',
+    footerAttribution: 'Place & location data © OpenStreetMap contributors (ODbL)',
   },
 
   // ─── Login (KAN-252) ────────────────────────────────────────────────────────
@@ -1453,6 +1473,18 @@ const ptPT: typeof en = {
     clearErrorToast: 'Não consegui limpar — verifica a tua ligação e tenta outra vez.',
   },
 
+  // ─── Lantern — cabeçalho de familiaridade do Hoje (KAN-301) ──────────────────
+  lantern: {
+    home: 'Casa',
+    outside: 'Fora',
+    whereIsHome: 'Onde é casa?',
+    tellMe: 'Diz-me',
+    lookingAround: 'À procura…',
+    cantFindYou: 'Não te encontro',
+    placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
+    setHomePillA11y: 'Diz-me onde é casa',
+  },
+
   settings: {
     screenTitle: 'Definições',
     backA11y: 'Voltar',
@@ -1487,7 +1519,7 @@ const ptPT: typeof en = {
     signOutErrorTitle: 'Erro',
     signOutErrorBody: 'Falha ao terminar sessão. Tenta outra vez.',
     footerVersion: (version: string) => `Brush Away · v${version}`,
-    footerAttribution: 'Dados de locais © colaboradores do OpenStreetMap (ODbL)',
+    footerAttribution: 'Dados de locais e localização © colaboradores do OpenStreetMap (ODbL)',
   },
 
   login: {

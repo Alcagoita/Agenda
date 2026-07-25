@@ -33,6 +33,7 @@ const DEFAULT_HOOK_RETURN = {
   nearbyPlace:             null,
   poiPlaces:               {},
   placeContext:            null,
+  coords:                  null,
   storeTuningActive:       false,
   showStoreTuningPrompt:   false,
   onStoreTuningTurnOn:     jest.fn(),
@@ -131,6 +132,8 @@ jest.mock('react-native-reanimated', () => {
 // ─── Heavy component stubs ────────────────────────────────────────────────────
 
 jest.mock('../../src/components/Header',                () => () => null);
+jest.mock('../../src/components/Lantern',               () => () => null);
+jest.mock('../../src/hooks/useLanternState', () => ({ useLanternState: () => ({ kind: 'unset' }) }));
 jest.mock('../../src/components/ProgressRing',          () => () => null);
 jest.mock('../../src/components/NearbyCard',            () => () => null);
 jest.mock('../../src/components/NetworkBanner',         () => () => null);

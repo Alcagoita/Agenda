@@ -57,8 +57,14 @@ export interface ProximityEngine {
   /** Mirror of nearbyPlace for stable callbacks (e.g. useTaskCompletion, KAN-226). */
   nearbyPlaceRef:     React.RefObject<NearbyPlace | null>;
   poiPlaces:          PlacesMap;
-  /** Mall/trip context for the last position fix (KAN-242) — feeds the header ContextChip. */
+  /** Mall/trip context for the last position fix (KAN-242) — feeds the header ContextChip / Lantern. */
   placeContext:       PlaceContext;
+  /** Last settled-search position (KAN-301) — feeds the Lantern's home/outside
+   *  resolution while a moving user has open POI tasks. Reuses the existing
+   *  200 m / 3-min search cadence, so it costs no new location watcher. Null
+   *  when no search has run (e.g. no POI tasks); useLanternState takes its own
+   *  one-shot fix in that case. */
+  coords:             { lat: number; lng: number } | null;
   locationUnavailable: boolean;
   storeTuningActive:      boolean;
   showStoreTuningPrompt:  boolean;
@@ -102,6 +108,7 @@ export function useProximityEngine(
   const nearbyPlaceRef = useRef<NearbyPlace | null>(null);
   const [poiPlaces,           setPoiPlaces]           = useState<PlacesMap>({});
   const [placeContext,        setPlaceContext]        = useState<PlaceContext>(null);
+  const [coords,              setCoords]              = useState<{ lat: number; lng: number } | null>(null);
   const [locationUnavailable, setLocationUnavailable] = useState(false);
 
   // ── Battery level (KAN-52) — read on foreground only; not used for pausing ──
@@ -221,6 +228,11 @@ export function useProximityEngine(
       setPoiPlaces(allPlaces);
       setLocationUnavailable(false);
       setHasCompletedScan(true);
+      // KAN-301 — capture the position this scan ran against for the Lantern's
+      // home/outside resolution. getLastSearchCoords() is set by the search
+      // that just fired this callback, so it's the fresh fix.
+      const searchCoords = getLastSearchCoords();
+      if (searchCoords) { setCoords(searchCoords); }
     },
     [],
   );
@@ -264,13 +276,13 @@ export function useProximityEngine(
 
     positionTimerRef.current = setInterval(async () => {
       try {
-        const coords = await (await import('../../services/geolocation')).getPositionLowAccuracy();
+        const fix = await (await import('../../services/geolocation')).getPositionLowAccuracy();
         const last = getLastSearchCoords();
         if (!last) {
           runProximitySearch(uid, latestTasksRef.current, onNearbyUpdate).catch(onSearchError);
           return;
         }
-        const moved = getDistanceMeters(coords.lat, coords.lng, last.lat, last.lng);
+        const moved = getDistanceMeters(fix.lat, fix.lng, last.lat, last.lng);
         if (moved >= 200) {
           runProximitySearch(uid, latestTasksRef.current, onNearbyUpdate).catch(onSearchError);
         }
@@ -396,6 +408,7 @@ export function useProximityEngine(
     nearbyPlaceRef,
     poiPlaces,
     placeContext,
+    coords,
     locationUnavailable,
     storeTuningActive: isStoreTuningActive,
     showStoreTuningPrompt: storeTuningState === 'prompt_shown',

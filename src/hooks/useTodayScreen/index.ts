@@ -51,8 +51,10 @@ export interface TodayScreenState {
   nearbyPlace:      NearbyPlace | null;
   /** Nearest known place per POI type — drives NearbyCard "Also close" rows. */
   poiPlaces:        PlacesMap;
-  /** Mall/trip context for the last position fix (KAN-242) — feeds the header ContextChip. */
+  /** Mall/trip context for the last position fix (KAN-242) — feeds the Lantern. */
   placeContext:     PlaceContext;
+  /** Last settled-search position (KAN-301) — feeds the Lantern's home/outside resolution. Null before any fix. */
+  coords:           { lat: number; lng: number } | null;
   storeTuningActive:        boolean;
   showStoreTuningPrompt:    boolean;
   onStoreTuningTurnOn:      () => void;
@@ -183,6 +185,7 @@ export function useTodayScreen(uid: string | undefined): TodayScreenState {
     nearbyPlace: proximity.nearbyPlace,
     poiPlaces: proximity.poiPlaces,
     placeContext: proximity.placeContext,
+    coords: proximity.coords,
     storeTuningActive:     proximity.storeTuningActive,
     showStoreTuningPrompt: proximity.showStoreTuningPrompt,
     onStoreTuningTurnOn: proximity.onStoreTuningTurnOn,

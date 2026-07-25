@@ -45,33 +45,29 @@ import '@react-native-firebase/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import Header from '../../components/Header';
-import ProgressRing from '../../components/ProgressRing';
+import Lantern from '../../components/Lantern';
 import TaskRow from '../../components/TaskRow';
 import NearbyCard from '../../components/NearbyCard';
 import ErrandBundleCard from '../../components/ErrandBundleCard';
 import TripSuggestionCard from '../../components/TripSuggestionCard';
 import NetworkBanner from '../../components/NetworkBanner';
-import ContextChip from '../../components/ContextChip';
 import NewTaskSheetHost from '../../components/NewTaskSheetHost';
 import { useNewTaskSheetStore } from '../../store/newTaskSheetStore';
 import StoreTuningPromptSheet from '../../components/StoreTuningPromptSheet';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { useTodayScreen } from '../../hooks/useTodayScreen';
+import { useLanternState } from '../../hooks/useLanternState';
 import { consumeTasksDirty } from '../../services/taskMutationSignal';
 import { COPY } from '../../constants/copy';
 import { localDateISO } from '../../utils/date';
 import {
   SECTION_H_REST,
   buildEmptyMessages,
-  getWeekdays,
-  getMonths,
   DEBUG_SHOW_LIST,
   DEBUG_SHOW_NEARBY,
   DEBUG_SHOW_RING,
   DEBUG_SIMPLE_ROWS,
   DEBUG_MINIMAL,
-  RING_REST,
-  STROKE_REST,
 } from './constants';
 import { useCollapseAnimation } from './useCollapseAnimation';
 import { SkeletonRow } from './SkeletonRow';
@@ -99,16 +95,13 @@ export default function TodayScreen() {
     nearbyPoiType,
     poiPlaces,
     placeContext,
+    coords,
+    permissionGranted,
     storeTuningActive,
     showStoreTuningPrompt,
     onStoreTuningTurnOn,
     onStoreTuningNotNow,
     customCategories,
-    totalTasks,
-    doneTasks,
-    progress,
-    nearbyCount,
-    totalPoints,
     inboxCount,
     socialUnreadCount,
     handleToggle,
@@ -143,18 +136,19 @@ export default function TodayScreen() {
   // screen; the sheet itself is rendered by NewTaskSheetHost which subscribes.
   const openSheet = useCallback(() => useNewTaskSheetStore.getState().open(), []);
 
-  // ── Date display ──────────────────────────────────────────────────────────────
-  const now     = new Date();
-  const weekday = getWeekdays()[now.getDay()];
-  const month   = getMonths()[now.getMonth()];
-  const day     = now.getDate();
+  // ── Scroll-driven header collapse (KAN-157) ───────────────────────────────────
+  // Reused unmodified (KAN-301 AC12). captionStyle is the rest-layer opacity,
+  // collapsedStyle the collapsed-layer opacity — fed straight to the Lantern's
+  // two crossfade layers. ringWrapStyle (the old ring scale) is no longer used.
+  const { scrollHandler, collapsed, bgStyle, captionStyle, collapsedStyle } = useCollapseAnimation();
 
-  // ── Scroll-driven ring collapse (KAN-157) ─────────────────────────────────────
-  const { scrollHandler, collapsed, ringWrapStyle, bgStyle, captionStyle, collapsedStyle } = useCollapseAnimation();
-
-  // ── Progress counters ─────────────────────────────────────────────────────────
-  const pct       = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-  const remaining = totalTasks - doneTasks;
+  // ── Lantern — persistent place-familiarity header (KAN-301) ───────────────────
+  const lanternState = useLanternState(placeContext, coords, permissionGranted);
+  const onLanternPill = useCallback(() => {
+    // Only the unset state has a destination for now — it points at the home
+    // address flow. The other states' pill is built here but wired by KAN-304.
+    if (lanternState.kind === 'unset') { navigation.navigate('HomeAddress'); }
+  }, [lanternState.kind, navigation]);
 
   // ── Task display order: undone first, done at bottom ─────────────────────────
   // Memoized so a nearby-data change (which leaves `tasks` untouched) doesn't
@@ -287,17 +281,12 @@ export default function TodayScreen() {
           <Text style={[styles.sectionTitle, { color: palette.muted }]}>
             {COPY.today.sectionTitlePrefix}
           </Text>
-          {remaining > 0 && (
-            <Text style={[styles.sectionTitleRight, { color: palette.muted }]}>
-              {COPY.today.leftCount(remaining)}
-            </Text>
-          )}
         </View>
       </View>
     </>
   ), [
     sortedTasks, nearbyPoiType, poiPlaces, storeTuningActive,
-    palette, remaining,
+    palette,
     nearbyHasContent, setNearbyHasContent,
     refreshProximity,
     errandBundle, dismissErrandBundle,
@@ -363,12 +352,9 @@ export default function TodayScreen() {
           photoURL={user?.photoURL}
           hasUnread={inboxCount > 0 || socialUnreadCount > 0}
           socialBadge={0}
-          points={totalPoints}
           onAvatarPress={() => navigation.navigate('Profile')}
           onBellPress={() => navigation.navigate('SharedTaskInbox')}
           onPeoplePress={() => navigation.navigate('SocialHub')}
-          onAchievementsPress={() => navigation.navigate('Achievements')}
-          contextChip={<ContextChip placeContext={placeContext} />}
         />
       </View>
 
@@ -437,15 +423,15 @@ export default function TodayScreen() {
           />
         ))}
 
-        {/* ── Collapsible ring section — absolutely positioned ON TOP of content ── */}
+        {/* ── Collapsible Lantern section — absolutely positioned ON TOP of content (KAN-301) ── */}
         {/*                                                                         */}
-        {/* 3-STATE SNAP (KAN-157): the header has three fixed layouts (rest /      */}
-        {/* middle / collapsed) selected by `stage`. Nothing animates per frame —   */}
-        {/* a stage change swaps to a different set of STATIC styles. This removes  */}
-        {/* the per-frame layout/commit work that froze the thread on scroll.       */}
+        {/* Replaces the progress ring. The Lantern owns two static layouts (rest  */}
+        {/* centred; collapsed = icon+label left, pill right) that cross-fade via   */}
+        {/* captionStyle / collapsedStyle — nothing animates per frame, matching    */}
+        {/* the KAN-157 doctrine. The breathing halo is a View, never SVG.          */}
         {/*                                                                         */}
-        {/* pointerEvents="box-none" lets scroll gestures pass through to the      */}
-        {/* ScrollView while still allowing the day-number Pressable to work.       */}
+        {/* pointerEvents="box-none" lets scroll gestures pass through to the       */}
+        {/* FlatList while the Lantern's pill stays tappable.                       */}
         {DEBUG_SHOW_RING && (
         <View
           pointerEvents="box-none"
@@ -461,78 +447,13 @@ export default function TodayScreen() {
             ]}
           />
 
-          {/* Ring — rendered once at rest size; scaled/translated per stage */}
-          <Animated.View style={[styles.ringWrap, ringWrapStyle]} pointerEvents="none">
-            <ProgressRing
-              progress={progress}
-              diameter={RING_REST}
-              strokeWidth={STROKE_REST}
-            />
-          </Animated.View>
-
-          {/* Full caption — fades out as the header collapses */}
-          <Animated.View
-            style={[styles.captionWrap, captionStyle]}
-            pointerEvents={collapsed ? 'none' : 'box-none'}>
-            <Text style={[styles.captionLabel, { color: palette.muted }]}>
-              {weekday.toUpperCase()}
-            </Text>
-            <Pressable
-              onPress={() => navigation.navigate('Calendar')}
-              accessibilityRole="button"
-              accessibilityLabel={COPY.today.openCalendarA11y(weekday, day)}
-              hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}>
-              <Text style={[styles.captionDay, { color: palette.text }]}>
-                {day}
-              </Text>
-            </Pressable>
-            {isEmpty ? (
-              <Text style={[styles.captionSub, { color: palette.muted }]}>{month}</Text>
-            ) : (
-              <Text style={[styles.captionSub, { color: palette.muted }]}>
-                {`${month} · `}
-                <Text style={[styles.captionSubBold, { color: palette.text }]}>
-                  {COPY.today.nearbyCount(nearbyCount)}
-                </Text>
-              </Text>
-            )}
-          </Animated.View>
-
-          {/* Compact caption — fades in when collapsed */}
-          <Animated.View style={[styles.ringCaption, collapsedStyle]} pointerEvents="none">
-            <Text style={[styles.ringCaptionDay3, { color: palette.muted }]}>
-              {weekday.slice(0, 3).toUpperCase()}
-            </Text>
-            <Text style={[styles.ringCaptionNum, { color: palette.text }]}>
-              {day}
-            </Text>
-            <Text style={[styles.ringCaptionMonth, { color: palette.muted }]}>
-              {month}
-            </Text>
-          </Animated.View>
-
-          {/* Progress panel — fades in when collapsed */}
-          <Animated.View
-            style={[styles.progressWrap, collapsedStyle]}
-            accessibilityLabel={COPY.progress.ringA11y(doneTasks, totalTasks)}
-            accessibilityRole="text"
-            pointerEvents="none">
-            <Text style={[styles.progressLabel, { color: palette.muted }]}>
-              {COPY.today.progressLabel}
-            </Text>
-            <View style={styles.fractionRow}>
-              <Text style={[styles.counterDone, { color: palette.text }]}>
-                {doneTasks}
-              </Text>
-              <Text style={[styles.counterSep, { color: palette.faint }]}>/</Text>
-              <Text style={[styles.counterTotal, { color: palette.muted }]}>
-                {totalTasks}
-              </Text>
-            </View>
-            <Text style={[styles.progressSub, { color: palette.muted }]}>
-              {COPY.today.progressSummary(pct, remaining)}
-            </Text>
-          </Animated.View>
+          <Lantern
+            state={lanternState}
+            onPillPress={onLanternPill}
+            restStyle={captionStyle}
+            collapsedStyle={collapsedStyle}
+            collapsed={collapsed}
+          />
         </View>
         )}
 

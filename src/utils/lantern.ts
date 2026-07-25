@@ -1,0 +1,107 @@
+/**
+ * lantern.ts — KAN-301 Lantern state resolver + home hysteresis.
+ *
+ * Pure decision logic for the Today header "Lantern": given the current place
+ * context (mall/trip, already prioritized by proximity.ts's
+ * findActivePlaceContext), the distance to the stored home, connectivity and a
+ * reverse-geocoded city name, it decides the single state to render.
+ *
+ * Kept independent of geolocation/Firestore/theme so the mall > trip >
+ * home/outside priority, the unset (no-home) branch and the home-boundary
+ * hysteresis are all unit-testable without mocking any of them — mirroring
+ * contextChip.ts, whose priority order this deliberately reuses.
+ *
+ * The resolver returns a copy-free discriminated union (raw names, not
+ * localized strings); the Lantern component maps each kind to its icon, halo
+ * token and localized label, exactly as ContextChip maps ContextChipView.
+ */
+import type { PlaceContext } from '../services/proximity';
+import { isTodayWithinTripDates } from './contextChip';
+
+export type LanternStateKind =
+  | 'mall' | 'trip' | 'home' | 'outside' | 'locating' | 'unavailable' | 'unset';
+
+export type LanternState =
+  | { kind: 'mall'; name: string; offlineDot: boolean }
+  | { kind: 'trip'; destination: string; offlineDot: boolean }
+  | { kind: 'home' }
+  | { kind: 'outside'; cityName: string | null }
+  /** Home IS set but the position isn't known yet (no fix). A held state with
+   *  its own visual ("Looking around…") — never Outside, which would flash on
+   *  cold start and stick for a no-POI-task user until a fix arrives. Produced
+   *  by the resolver; useLanternState owns the timing around it. */
+  | { kind: 'locating' }
+  /** The fix never arrived (past the ceiling). "Can't find you." Produced by
+   *  useLanternState's timing, never the resolver. */
+  | { kind: 'unavailable' }
+  | { kind: 'unset' };
+
+/**
+ * Home-boundary hysteresis (KAN-301). GPS jitter at a boundary would otherwise
+ * flip Home → Outside → Home every few seconds, so we use a distance buffer,
+ * not a timer: enter Home at ≤150 m, but leave only past 200 m.
+ */
+export const HOME_ENTER_M = 150;
+export const HOME_LEAVE_M = 200;
+
+/**
+ * Applies the enter-fast / leave-slow buffer to a known home distance.
+ * Enter Home at ≤150 m; once Home, leave only past 200 m.
+ */
+export function resolveHomeProximity(distanceM: number, wasHome: boolean): boolean {
+  return wasHome ? distanceM <= HOME_LEAVE_M : distanceM <= HOME_ENTER_M;
+}
+
+export interface ResolveLanternStateInput {
+  /** Mall/trip context for the last position fix, or null (from proximity.ts). */
+  placeContext: PlaceContext;
+  todayIso: string;
+  /** Whether a home address is stored at all (services/home). Drives unset vs. home/outside. */
+  homeSet: boolean;
+  /** Distance in metres from the current position to the stored home, or null when the position isn't known yet. */
+  homeDistanceM: number | null;
+  /** Whether the previous render resolved to Home — feeds the hysteresis buffer. */
+  wasHome: boolean;
+  /** Reverse-geocoded city / area name, or null (offline / unknown). */
+  cityName: string | null;
+  /** True when the device is offline — a quiet modifier, never its own state. */
+  offline: boolean;
+}
+
+/**
+ * Priority: mall > trip > home/outside. Mall and trip never need a position
+ * fix. When there's no mall/trip context: unset if no home is stored; locating
+ * if a home is stored but the position isn't known yet (never guess Outside —
+ * that would flash on cold start and stick for a no-POI-task user); otherwise
+ * home/outside via the hysteresis buffer.
+ *
+ * Exactly one kind is ever returned — never two indicators (doctrine §9).
+ * Off-grid trips are excluded (a distinct concept, KAN-246), matching
+ * resolveContextChipView.
+ */
+export function resolveLanternState({
+  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline,
+}: ResolveLanternStateInput): LanternState {
+  if (placeContext?.kind === 'mall') {
+    // The mall name comes from the stored snapshot, so it's correct offline too
+    // — the offlineDot just marks that the surrounding data is cached.
+    return { kind: 'mall', name: placeContext.snapshot.name, offlineDot: offline };
+  }
+
+  if (
+    placeContext?.kind === 'trip' &&
+    placeContext.trip.kind !== 'offgrid' &&
+    isTodayWithinTripDates(placeContext.trip, todayIso)
+  ) {
+    return { kind: 'trip', destination: placeContext.trip.destination, offlineDot: offline };
+  }
+
+  if (!homeSet) { return { kind: 'unset' }; }
+  if (homeDistanceM == null) { return { kind: 'locating' }; }
+
+  if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home' }; }
+
+  // Outside. Never show a guessed or stale name: offline forces the literal
+  // "Outside" (the component substitutes it for a null cityName).
+  return { kind: 'outside', cityName: offline ? null : cityName };
+}
