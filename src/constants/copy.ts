@@ -406,6 +406,22 @@ const en = {
     clearErrorToast: "Couldn't clear — check your connection and try again.",
   },
 
+  // ─── Lantern — Today place-familiarity header (KAN-301) ──────────────────────
+  lantern: {
+    /** Home state word — a relationship, not a place name. */
+    home: 'Home',
+    /** Outside state, offline fallback — never a stale or guessed place name. */
+    outside: 'Outside',
+    /** No-home-set state label — the question the pill answers. */
+    whereIsHome: "Where's home?",
+    /** No-home-set pill — the answer to the question above. */
+    tellMe: 'Tell me',
+    /** Pill a11y for the resolved states (label = current place word). */
+    placesPillA11y: (label: string) => `${label} — see the places I know`,
+    /** Pill a11y for the unset state. */
+    setHomePillA11y: 'Tell me where home is',
+  },
+
   // ─── Settings (KAN-252) ─────────────────────────────────────────────────────
   settings: {
     screenTitle: 'Settings',
@@ -1451,6 +1467,16 @@ const ptPT: typeof en = {
     clearCancelAction: 'Manter',
     saveErrorToast: 'Não consegui guardar — verifica a tua ligação e tenta outra vez.',
     clearErrorToast: 'Não consegui limpar — verifica a tua ligação e tenta outra vez.',
+  },
+
+  // ─── Lantern — cabeçalho de familiaridade do Hoje (KAN-301) ──────────────────
+  lantern: {
+    home: 'Casa',
+    outside: 'Fora',
+    whereIsHome: 'Onde é casa?',
+    tellMe: 'Diz-me',
+    placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
+    setHomePillA11y: 'Diz-me onde é casa',
   },
 
   settings: {

@@ -27,6 +27,14 @@ export const lightPalette = {
   nearTint2:  '#f9ede0',   // oklch(0.94 0.05 65)
   nearBorder: '#e8c9a0',   // oklch(0.85 0.09 65)
   nearText:   '#7a4a20',   // oklch(0.42 0.13 65)
+  // Lantern halo tints (KAN-301) — the soft circular glow behind the header
+  // icon, rendered as a low-opacity View fill (never an SVG). Home reuses the
+  // peach ringFill hue; the "away" states (outside/mall/trip) use accent; the
+  // unset state is neutral. Dark mode gets its own brighter values (see
+  // darkPalette) so the halo doesn't vanish on OLED black at .10–.16 opacity.
+  haloHome:   '#db9657',   // = ringFill (warm, steady)
+  haloPlace:  '#e8a86a',   // = accent (outside / mall / trip)
+  haloUnset:  '#8b857a',   // = muted (no home set)
   success:    '#4caf7d',   // accepted / positive status
   danger:     '#e05252',   // declined / error status
   onAccent:   '#ffffff',   // text/icons shown on an accent-coloured surface
@@ -54,6 +62,13 @@ export const darkPalette = {
   nearTint2:  '#362514',   // oklch(0.27 0.06 65)
   nearBorder: '#a06f40',   // oklch(0.52 0.10 65) — ≥3:1 vs both nearTint and nearTint2
   nearText:   '#dba87a',   // oklch(0.86 0.10 65)
+  // Lantern halo tints (KAN-301) — dedicated dark values, NOT a dimmed
+  // light-mode ramp: luminance can't be pushed lower on #0e0e0c without the
+  // halo disappearing, so these are pitched brighter to stay visible at
+  // .10–.16 opacity over the near-black background.
+  haloHome:   '#f0b878',   // warm amber, brighter than dark accent
+  haloPlace:  '#e8a86a',   // brighter accent for outside / mall / trip
+  haloUnset:  '#9c9c94',   // brighter than dark muted so the unset halo reads
   success:    '#5fc090',   // accepted / positive status (brighter for dark bg)
   danger:     '#f06a6a',   // declined / error status (brighter for dark bg)
   onAccent:   '#ffffff',   // text/icons shown on an accent-coloured surface
@@ -81,6 +96,9 @@ export type Palette = {
   nearTint2: string;
   nearBorder: string;
   nearText: string;
+  haloHome: string;
+  haloPlace: string;
+  haloUnset: string;
   success: string;
   danger: string;
   onAccent: string;

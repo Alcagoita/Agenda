@@ -29,6 +29,17 @@ interface PlaceDetailsResponse {
   displayName?: { text?: string };
 }
 
+export interface GeocodeAddressComponent {
+  long_name?: string;
+  short_name?: string;
+  types?: string[];
+}
+
+export interface ReverseGeocodeResponse {
+  status?: string;
+  results?: Array<{ address_components?: GeocodeAddressComponent[] }>;
+}
+
 export async function searchNearbyPlacesProxy(
   lat: number,
   lng: number,
@@ -63,5 +74,14 @@ export async function getPlaceDetailsProxy(placeId: string): Promise<PlaceDetail
     'getPlaceDetailsProxy',
   );
   const result = await callable({ placeId });
+  return result.data;
+}
+
+export async function reverseGeocodeProxy(lat: number, lng: number): Promise<ReverseGeocodeResponse> {
+  const callable = httpsCallable<{ lat: number; lng: number }, ReverseGeocodeResponse>(
+    functionsService,
+    'reverseGeocodeProxy',
+  );
+  const result = await callable({ lat, lng });
   return result.data;
 }

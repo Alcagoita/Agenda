@@ -22,7 +22,9 @@ import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
   searchNearbyPlacesProxy,
+  reverseGeocodeProxy,
 } from './placesFunctions';
+import type { GeocodeAddressComponent } from './placesFunctions';
 import { Category, PoiType, POI_GOOGLE_TYPES, poiCatalogLabel } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -105,6 +107,55 @@ export function getDistanceMeters(
     Math.cos(lat1 * DEG_TO_RAD) * Math.cos(lat2 * DEG_TO_RAD) *
     Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── Reverse geocoding — city / area name (KAN-301) ────────────────────────────
+
+/**
+ * Preference order for which address component becomes the Lantern's "Outside"
+ * label. `locality` is the city proper; `postal_town` covers regions (e.g. the
+ * UK) where Google uses it instead; `sublocality` is a district within a large
+ * city; `administrative_area_level_2` is the last-resort broader area. We never
+ * fall through to a country or postcode — a bare country name is worse than the
+ * generic "Outside" fallback the caller supplies.
+ */
+const REVERSE_GEOCODE_TYPE_PRIORITY = [
+  'locality',
+  'postal_town',
+  'sublocality',
+  'administrative_area_level_2',
+] as const;
+
+/**
+ * Pure extractor — picks the best display name from a Geocoding result's
+ * address components, honouring REVERSE_GEOCODE_TYPE_PRIORITY. Returns null when
+ * none of the wanted types are present. Exported for unit testing.
+ */
+export function extractCityName(components: GeocodeAddressComponent[] | undefined): string | null {
+  if (!components?.length) { return null; }
+  for (const wanted of REVERSE_GEOCODE_TYPE_PRIORITY) {
+    const match = components.find(c => c.types?.includes(wanted) && !!c.long_name);
+    if (match?.long_name) { return match.long_name; }
+  }
+  return null;
+}
+
+/**
+ * Reverse-geocode a coordinate to a city / area name for the Lantern's
+ * "Outside" state. Returns null on any failure (offline, quota, no result) —
+ * the caller shows "Outside" instead. Never throws.
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await reverseGeocodeProxy(lat, lng);
+    for (const result of res.results ?? []) {
+      const city = extractCityName(result.address_components);
+      if (city) { return city; }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Places API — Nearby Search ───────────────────────────────────────────────

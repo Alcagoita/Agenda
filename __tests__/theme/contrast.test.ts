@@ -37,6 +37,15 @@ function contrastRatio(hexA: string, hexB: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/** Flattens an opaque hex color at a given alpha onto an opaque hex background. */
+function blendHexOntoBg(hex: string, alpha: number, bgHex: string): string {
+  const [r, g, b] = hexToRgb(hex);
+  const [br, bg, bb] = hexToRgb(bgHex);
+  const blend = (fg: number, bgChannel: number) => Math.round(fg * alpha + bgChannel * (1 - alpha));
+  const toHex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${toHex(blend(r, br))}${toHex(blend(g, bg))}${toHex(blend(b, bb))}`;
+}
+
 /** Flattens an rgba(...) string onto an opaque hex background. */
 function blendOntoBg(rgba: string, bgHex: string): string {
   const match = rgba.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\)/);
@@ -103,5 +112,39 @@ describe('lightPalette contrast (baseline, unchanged by KAN-258)', () => {
     expect(contrastRatio(p.muted, p.bg)).toBeGreaterThanOrEqual(3.5);
     expect(contrastRatio(p.muted, p.surface)).toBeGreaterThanOrEqual(3.2);
     expect(contrastRatio(p.muted, p.surface2)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// KAN-301 — the Lantern halo is a low-opacity View fill behind the header icon.
+// The icon (palette.text, or palette.muted in the unset state) is drawn on top
+// of the halo, which is itself over bg. Two things must hold in both themes:
+//   1. the icon stays readable over the halo-blended background, and
+//   2. the halo is actually visible against bg (it's a decorative glow — subtle
+//      is fine, invisible is a bug, which is exactly the dark-mode risk this
+//      ticket's dedicated dark tokens exist to prevent).
+// Resting opacities match the visual spec: .16 for the lit states, .10 unset.
+describe.each([
+  ['darkPalette', darkPalette],
+  ['lightPalette', lightPalette],
+])('%s Lantern halo tokens (KAN-301)', (_name, p) => {
+  const HALO_LIT_OPACITY = 0.16;
+  const HALO_UNSET_OPACITY = 0.10;
+
+  it('the icon stays readable over the lit halos (home / place)', () => {
+    for (const halo of [p.haloHome, p.haloPlace]) {
+      const behindIcon = blendHexOntoBg(halo, HALO_LIT_OPACITY, p.bg);
+      expect(contrastRatio(p.text, behindIcon)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('the muted icon stays readable over the unset halo', () => {
+    const behindIcon = blendHexOntoBg(p.haloUnset, HALO_UNSET_OPACITY, p.bg);
+    expect(contrastRatio(p.muted, behindIcon)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('every halo is visibly present on bg (not swallowed by the background)', () => {
+    expect(contrastRatio(blendHexOntoBg(p.haloHome, HALO_LIT_OPACITY, p.bg), p.bg)).toBeGreaterThan(1.05);
+    expect(contrastRatio(blendHexOntoBg(p.haloPlace, HALO_LIT_OPACITY, p.bg), p.bg)).toBeGreaterThan(1.05);
+    expect(contrastRatio(blendHexOntoBg(p.haloUnset, HALO_UNSET_OPACITY, p.bg), p.bg)).toBeGreaterThan(1.02);
   });
 });

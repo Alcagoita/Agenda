@@ -156,6 +156,8 @@ jest.mock('../../src/components/TaskRow', () => {
 
 jest.mock('../../src/components/NearbyCard',       () => () => null);
 jest.mock('../../src/components/Header',           () => () => null);
+jest.mock('../../src/components/Lantern',          () => () => null);
+jest.mock('../../src/hooks/useLanternState', () => ({ useLanternState: () => ({ kind: 'unset' }) }));
 jest.mock('../../src/components/ProgressRing',     () => () => null);
 jest.mock('../../src/components/ScrRotatingNudge', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../src/components/NewTaskSheet', () => {

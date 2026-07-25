@@ -135,6 +135,9 @@ jest.mock('../../src/services/notifications', () => ({
 
 jest.mock('../../src/services/geolocation', () => ({
   requestLocationPermission: jest.fn().mockResolvedValue('granted'),
+  // KAN-301 — useProximityEngine seeds the Lantern's position with one
+  // low-accuracy fix on permission grant. Mocked so it resolves cleanly.
+  getPositionLowAccuracy:    jest.fn().mockResolvedValue({ lat: 0, lng: 0 }),
   LocationContext:           {},
 }));
 
