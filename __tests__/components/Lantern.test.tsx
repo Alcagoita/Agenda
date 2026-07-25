@@ -32,12 +32,14 @@ const PLACES = COPY.tripPlanner.placesIKnowTitle;
 
 describe('Lantern — states (KAN-301 AC1)', () => {
   const cases: Array<{ name: string; state: LanternState; label: string; pill: string }> = [
-    { name: 'home',    state: { kind: 'home' },                                   label: COPY.lantern.home,        pill: PLACES },
-    { name: 'outside', state: { kind: 'outside', cityName: 'Porto' },             label: 'Porto',                  pill: PLACES },
-    { name: 'outside offline', state: { kind: 'outside', cityName: null },        label: COPY.lantern.outside,     pill: PLACES },
-    { name: 'mall',    state: { kind: 'mall', name: 'Colombo', offlineDot: false }, label: 'Colombo',              pill: PLACES },
-    { name: 'trip',    state: { kind: 'trip', destination: 'Faro', offlineDot: false }, label: 'Faro',             pill: PLACES },
-    { name: 'unset',   state: { kind: 'unset' },                                  label: COPY.lantern.whereIsHome, pill: COPY.lantern.tellMe },
+    { name: 'home',    state: { kind: 'home' },                                   label: COPY.lantern.home,          pill: PLACES },
+    { name: 'outside', state: { kind: 'outside', cityName: 'Porto' },             label: 'Porto',                    pill: PLACES },
+    { name: 'outside offline', state: { kind: 'outside', cityName: null },        label: COPY.lantern.outside,       pill: PLACES },
+    { name: 'mall',    state: { kind: 'mall', name: 'Colombo', offlineDot: false }, label: 'Colombo',                pill: PLACES },
+    { name: 'trip',    state: { kind: 'trip', destination: 'Faro', offlineDot: false }, label: 'Faro',               pill: PLACES },
+    { name: 'unset',   state: { kind: 'unset' },                                  label: COPY.lantern.whereIsHome,   pill: COPY.lantern.tellMe },
+    { name: 'locating',    state: { kind: 'locating' },                           label: COPY.lantern.lookingAround, pill: PLACES },
+    { name: 'unavailable', state: { kind: 'unavailable' },                        label: COPY.lantern.cantFindYou,   pill: PLACES },
   ];
 
   it.each(cases)('$name renders its label and pill', ({ state, label, pill }) => {
@@ -45,12 +47,17 @@ describe('Lantern — states (KAN-301 AC1)', () => {
     expect(screen.getByText(label)).toBeTruthy();
     expect(screen.getByText(pill)).toBeTruthy();
   });
-});
 
-describe('Lantern — locating held state (KAN-301)', () => {
-  it('renders nothing while locating (no Outside flash before a fix)', () => {
-    const { toJSON } = render(<Lantern state={{ kind: 'locating' }} reduceMotionOverride />);
-    expect(toJSON()).toBeNull();
+  it('every state renders a non-empty, structurally identical block (never empty; AC height parity)', () => {
+    // The Lantern sits in a fixed-height section and every state renders the
+    // same halo + label + single pill structure, so nothing on Today shifts as
+    // the state settles. Assert each state is non-empty with exactly one pill.
+    for (const { state } of cases) {
+      const { toJSON, getAllByRole, unmount } = render(<Lantern state={state} reduceMotionOverride />);
+      expect(toJSON()).not.toBeNull();
+      expect(getAllByRole('button')).toHaveLength(1);
+      unmount();
+    }
   });
 });
 

@@ -27,6 +27,11 @@ import { todayISO } from '../utils/date';
 
 export interface LanternCoords { lat: number; lng: number; }
 
+/** Once locating shows, keep it visible this long so a fast fix can't flash it. */
+export const LOCATING_MIN_MS = 400;
+/** No fix within this long → fall through from `locating` to `unavailable`. */
+export const LOCATING_CEILING_MS = 10_000;
+
 export function useLanternState(
   placeContext: PlaceContext | null,
   coords: LanternCoords | null,
@@ -82,6 +87,52 @@ export function useLanternState(
     offline,
   });
 
+  // ── Locating / unavailable timing (KAN-301 review) ──────────────────────────
+  // The resolver returns `locating` while home is set but no fix exists. We
+  // never render an empty block, but we also don't want to flash "Looking
+  // around…" for a warm start (coords already present → `state` is a real state,
+  // so we're never waiting). While genuinely waiting for the FIRST fix:
+  //   • hold `locating` at least LOCATING_MIN_MS so a fast fix can't flash it,
+  //   • fall through to `unavailable` after LOCATING_CEILING_MS,
+  //   • never regress once any real state has resolved (a later coord loss holds
+  //     the last resolved state instead of blinking back to locating).
+  const resolvedOnceRef = useRef(false);
+  const lastRealRef = useRef<LanternState | null>(null);
+  const locatingStartRef = useRef<number | null>(null);
+  const isReal = state.kind !== 'locating';
+  if (isReal) { resolvedOnceRef.current = true; lastRealRef.current = state; }
+  const waiting = !isReal && !resolvedOnceRef.current;
+
+  const [waitPhase, setWaitPhase] = useState<'none' | 'locating' | 'unavailable'>(
+    () => (state.kind === 'locating' ? 'locating' : 'none'),
+  );
+
+  useEffect(() => {
+    if (waiting) {
+      if (locatingStartRef.current == null) { locatingStartRef.current = Date.now(); }
+      setWaitPhase('locating');
+      const ceiling = setTimeout(() => setWaitPhase('unavailable'), LOCATING_CEILING_MS);
+      return () => clearTimeout(ceiling);
+    }
+    // Not waiting (a real fix arrived, or we never waited). If locating was on
+    // screen, keep it until the min-visible floor elapses; otherwise drop it now.
+    if (locatingStartRef.current != null) {
+      const remaining = LOCATING_MIN_MS - (Date.now() - locatingStartRef.current);
+      locatingStartRef.current = null;
+      if (remaining > 0) {
+        const floor = setTimeout(() => setWaitPhase('none'), remaining);
+        return () => clearTimeout(floor);
+      }
+    }
+    setWaitPhase('none');
+  }, [waiting]);
+
+  const display: LanternState =
+    waitPhase === 'unavailable' ? { kind: 'unavailable' }
+      : waitPhase === 'locating' ? { kind: 'locating' }
+        : isReal ? state
+          : (lastRealRef.current ?? { kind: 'locating' });
+
   // Track the RAW home-proximity buffer independently of the rendered state
   // (KAN-301 review): a mall/trip override must not clear it, or leaving that
   // context while still inside the 200 m leave threshold would wrongly flip to
@@ -111,5 +162,5 @@ export function useLanternState(
     return () => { cancelled = true; };
   }, [wantCity, effectiveCoords]);
 
-  return state;
+  return display;
 }

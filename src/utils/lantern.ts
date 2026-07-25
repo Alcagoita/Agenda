@@ -18,18 +18,22 @@
 import type { PlaceContext } from '../services/proximity';
 import { isTodayWithinTripDates } from './contextChip';
 
-export type LanternStateKind = 'mall' | 'trip' | 'home' | 'outside' | 'locating' | 'unset';
+export type LanternStateKind =
+  | 'mall' | 'trip' | 'home' | 'outside' | 'locating' | 'unavailable' | 'unset';
 
 export type LanternState =
   | { kind: 'mall'; name: string; offlineDot: boolean }
   | { kind: 'trip'; destination: string; offlineDot: boolean }
   | { kind: 'home' }
   | { kind: 'outside'; cityName: string | null }
-  /** Home IS set but the position isn't known yet (no fix). A neutral held
-   *  state — the Lantern renders nothing rather than guessing Outside, which
-   *  would flash on every cold start and stick for a no-POI-task user until a
-   *  fix arrives. */
+  /** Home IS set but the position isn't known yet (no fix). A held state with
+   *  its own visual ("Looking around…") — never Outside, which would flash on
+   *  cold start and stick for a no-POI-task user until a fix arrives. Produced
+   *  by the resolver; useLanternState owns the timing around it. */
   | { kind: 'locating' }
+  /** The fix never arrived (past the ceiling). "Can't find you." Produced by
+   *  useLanternState's timing, never the resolver. */
+  | { kind: 'unavailable' }
   | { kind: 'unset' };
 
 /**

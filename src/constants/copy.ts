@@ -416,6 +416,10 @@ const en = {
     whereIsHome: "Where's home?",
     /** No-home-set pill — the answer to the question above. */
     tellMe: 'Tell me',
+    /** Held state while waiting for the first position fix. Same word-budget as a place name. */
+    lookingAround: 'Looking around…',
+    /** The fix never arrived (past the ceiling). First-person, no claimed cause. */
+    cantFindYou: "Can't find you",
     /** Pill a11y for the resolved states (label = current place word). */
     placesPillA11y: (label: string) => `${label} — see the places I know`,
     /** Pill a11y for the unset state. */
@@ -1475,6 +1479,8 @@ const ptPT: typeof en = {
     outside: 'Fora',
     whereIsHome: 'Onde é casa?',
     tellMe: 'Diz-me',
+    lookingAround: 'À procura…',
+    cantFindYou: 'Não te encontro',
     placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
     setHomePillA11y: 'Diz-me onde é casa',
   },

@@ -89,19 +89,22 @@ interface Visual {
   cycleMs: number;
 }
 
-/** A LanternState with a rendered form — every kind except the held `locating`
- *  state, which the component short-circuits to render nothing. */
-type RenderableLanternState = Exclude<LanternState, { kind: 'locating' }>;
-
 /** Maps a resolved LanternState to its icon, halo tint, label and pill — the
- *  same shape-the-view step ContextChip does for ContextChipView. */
-function getVisual(state: RenderableLanternState, palette: Palette): Visual {
+ *  same shape-the-view step ContextChip does for ContextChipView. Every kind
+ *  renders (the Lantern is never empty); `locating`/`unavailable` reuse the
+ *  unset state's neutral halo, differing only in the word. */
+function getVisual(state: LanternState, palette: Palette): Visual {
   const lit = {
     baseOpacity: HALO_OPACITY_LIT,
     breathe: BREATHE_LIT,
     cycleMs: BREATHE_CYCLE_MS,
     isUnset: false,
   };
+  const neutral = {
+    Icon: CrosshairIcon, haloToken: palette.haloUnset, iconColor: palette.muted,
+    isUnset: true, offlineDot: false,
+    baseOpacity: HALO_OPACITY_UNSET, breathe: BREATHE_UNSET, cycleMs: BREATHE_CYCLE_MS_UNSET,
+  } as const;
   const placesPill = COPY.tripPlanner.placesIKnowTitle;
 
   switch (state.kind) {
@@ -134,11 +137,21 @@ function getVisual(state: RenderableLanternState, palette: Palette): Visual {
       };
     case 'unset':
       return {
-        Icon: CrosshairIcon, haloToken: palette.haloUnset, iconColor: palette.muted,
+        ...neutral,
         label: COPY.lantern.whereIsHome, pillLabel: COPY.lantern.tellMe,
         pillA11y: COPY.lantern.setHomePillA11y,
-        isUnset: true, offlineDot: false,
-        baseOpacity: HALO_OPACITY_UNSET, breathe: BREATHE_UNSET, cycleMs: BREATHE_CYCLE_MS_UNSET,
+      };
+    case 'locating':
+      return {
+        ...neutral,
+        label: COPY.lantern.lookingAround, pillLabel: placesPill,
+        pillA11y: COPY.lantern.placesPillA11y(COPY.lantern.lookingAround),
+      };
+    case 'unavailable':
+      return {
+        ...neutral,
+        label: COPY.lantern.cantFindYou, pillLabel: placesPill,
+        pillA11y: COPY.lantern.placesPillA11y(COPY.lantern.cantFindYou),
       };
   }
 }
@@ -246,11 +259,6 @@ export default function Lantern({
     return () => sub.remove();
   }, [reduceMotionOverride]);
 
-  // Held state — home is set but we don't have a fix yet. Render nothing rather
-  // than guessing Outside (which would flash on cold start / stick with no POI
-  // tasks). Placed after the hooks so hook order stays stable.
-  if (state.kind === 'locating') { return null; }
-
   const v = getVisual(state, palette);
 
   const offlineDot = v.offlineDot ? (
@@ -280,19 +288,21 @@ export default function Lantern({
     </>
   );
 
-  // ── Collapsed layout — one row: icon + label left, pill right ──
+  // ── Collapsed layout — icon stacked over its label, pill right beside it ──
   const collapsedContent = (
     <>
-      <View style={styles.collapsedLeft}>
+      <View style={styles.collapsedGroup}>
         <Halo
           token={v.haloToken} iconColor={v.iconColor} Icon={v.Icon}
           size={HALO_COLLAPSED} iconSize={ICON_COLLAPSED}
           baseOpacity={v.baseOpacity} breathe={v.breathe} cycleMs={v.cycleMs} reduceMotion={reduceMotion}
         />
-        <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={1}>
-          {v.label}
-        </Text>
-        {offlineDot}
+        <View style={styles.collapsedLabelRow}>
+          <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={1}>
+            {v.label}
+          </Text>
+          {offlineDot}
+        </View>
       </View>
       <Pill label={v.pillLabel} expanded={false} onPress={onPillPress} a11yLabel={v.pillA11y} palette={palette} />
     </>
@@ -351,15 +361,24 @@ const styles = StyleSheet.create({
     height: SECTION_H_COLLAPSED,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    // Left-aligned so the pill sits right next to the icon+label group rather
+    // than being pushed to the far edge (KAN-301 design revision).
+    justifyContent: 'flex-start',
+    gap: 16,
     paddingHorizontal: spacing.page,
   },
-  collapsedLeft: {
-    flexDirection: 'row',
+  // Icon stacked on top of its label.
+  collapsedGroup: {
     alignItems: 'center',
-    gap: 12,
+    gap: 2,
     flexShrink: 1,
     minWidth: 0,
+  },
+  collapsedLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: 120,
   },
   collapsedLabel: {
     fontSize: 17,

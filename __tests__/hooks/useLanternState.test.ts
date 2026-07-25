@@ -1,11 +1,9 @@
 /**
- * useLanternState — KAN-301 review fix: the Lantern's home/outside resolution
- * must not depend on POI tasks existing.
+ * useLanternState — KAN-301.
  *
- * When the proximity engine reports no coords (no open POI tasks → it never
- * searches), the hook takes ONE low-accuracy fix of its own, so a user standing
- * in their kitchen with nothing to brush still reads "Home" — never a stuck
- * "Outside".
+ * Covers the POI-independent one-shot position seed, foreground re-seed, the
+ * home hysteresis surviving a mall/trip override, and the locating→unavailable
+ * timing (min-visible floor, ceiling, never-regress).
  */
 import { renderHook, act } from '@testing-library/react-native';
 import { AppState } from 'react-native';
@@ -27,7 +25,7 @@ jest.mock('../../src/hooks/useOfflineCoverage', () => ({
   useOfflineCoverage: () => ({ offline: false, hasCache: null }),
 }));
 
-import { useLanternState } from '../../src/hooks/useLanternState';
+import { useLanternState, LOCATING_MIN_MS, LOCATING_CEILING_MS } from '../../src/hooks/useLanternState';
 import type { PlaceContext } from '../../src/services/proximity';
 
 const HOME = { address: 'home', lat: 38.72, lng: -9.14 };
@@ -36,6 +34,10 @@ const mallCtx = { kind: 'mall', snapshot: { name: 'Colombo' } } as unknown as Pl
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.useFakeTimers();
+});
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 it('resolves to Home with no POI tasks (coords null) once its own one-shot fix lands (AC1)', async () => {
@@ -44,14 +46,66 @@ it('resolves to Home with no POI tasks (coords null) once its own one-shot fix l
   mockGetPositionLowAccuracy.mockResolvedValue({ lat: 38.72, lng: -9.14 });
 
   const { result } = renderHook(() => useLanternState(null, null, true));
+  expect(result.current).toEqual({ kind: 'locating' }); // before the fix: held, not Outside
 
-  // Before the fix lands: held, not Outside.
-  expect(result.current).toEqual({ kind: 'locating' });
-
-  await act(async () => {}); // flush the one-shot getPositionLowAccuracy
+  await act(async () => {});                                   // one-shot resolves
+  await act(async () => { jest.advanceTimersByTime(LOCATING_MIN_MS); }); // clear the floor
 
   expect(result.current).toEqual({ kind: 'home' });
   expect(mockGetPositionLowAccuracy).toHaveBeenCalledTimes(1); // one read, no watcher
+});
+
+it('holds locating for the min-visible floor even when the fix is fast (no flash)', async () => {
+  mockGetHomeLocation.mockReturnValue(HOME);
+  mockDistanceFromHome.mockReturnValue(40);
+  let resolveFix: (c: { lat: number; lng: number }) => void = () => {};
+  mockGetPositionLowAccuracy.mockReturnValue(new Promise(r => { resolveFix = r; }));
+
+  const { result } = renderHook(() => useLanternState(null, null, true));
+  expect(result.current.kind).toBe('locating');
+
+  await act(async () => { resolveFix({ lat: 38.72, lng: -9.14 }); }); // fast fix
+  expect(result.current.kind).toBe('locating');                       // floor still holds
+
+  await act(async () => { jest.advanceTimersByTime(LOCATING_MIN_MS); });
+  expect(result.current.kind).toBe('home');
+});
+
+it('falls through to unavailable after the ceiling when no fix arrives', async () => {
+  mockGetHomeLocation.mockReturnValue(HOME);
+  mockGetPositionLowAccuracy.mockReturnValue(new Promise(() => {})); // never resolves
+
+  const { result } = renderHook(() => useLanternState(null, null, true));
+  expect(result.current).toEqual({ kind: 'locating' });
+
+  await act(async () => { jest.advanceTimersByTime(LOCATING_CEILING_MS); });
+  expect(result.current).toEqual({ kind: 'unavailable' });
+});
+
+it('never regresses to locating once a real state has resolved', async () => {
+  mockGetHomeLocation.mockReturnValue(HOME);
+  mockDistanceFromHome.mockReturnValue(40);
+  const { result, rerender } = renderHook(
+    ({ c }: { c: typeof COORDS | null }) => useLanternState(null, c, true),
+    { initialProps: { c: COORDS as typeof COORDS | null } },
+  );
+  await act(async () => {});
+  expect(result.current.kind).toBe('home');
+
+  // Engine coords disappear (a later tick with no fix) — must hold Home, not blink to locating.
+  mockGetPositionLowAccuracy.mockReturnValue(new Promise(() => {}));
+  await act(async () => { rerender({ c: null }); });
+  expect(result.current.kind).toBe('home');
+});
+
+it('uses engine coords directly when present — warm start never shows locating (AC)', async () => {
+  mockGetHomeLocation.mockReturnValue(HOME);
+  mockDistanceFromHome.mockReturnValue(4000); // away
+  const { result } = renderHook(() => useLanternState(null, { lat: 1, lng: 2 }, true));
+  expect(result.current.kind).toBe('outside'); // real from the first render, no locating
+  await act(async () => {});
+  expect(result.current.kind).toBe('outside');
+  expect(mockGetPositionLowAccuracy).not.toHaveBeenCalled();
 });
 
 it('does not read a position when permission is not granted — stays locating', async () => {
@@ -67,15 +121,6 @@ it('shows unset when no home is stored, without needing a fix', async () => {
   const { result } = renderHook(() => useLanternState(null, null, true));
   await act(async () => {});
   expect(result.current).toEqual({ kind: 'unset' });
-});
-
-it('uses engine coords directly when present (no one-shot needed)', async () => {
-  mockGetHomeLocation.mockReturnValue(HOME);
-  mockDistanceFromHome.mockReturnValue(4000); // away
-  const { result } = renderHook(() => useLanternState(null, { lat: 1, lng: 2 }, true));
-  await act(async () => {});
-  expect(result.current.kind).toBe('outside');
-  expect(mockGetPositionLowAccuracy).not.toHaveBeenCalled();
 });
 
 it('keeps Home through a mall/trip override within the leave threshold (KAN-301 review)', async () => {
