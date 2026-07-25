@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   restPill: {
-    marginTop: 3,
+    marginTop: 10,
   },
   collapsedLayer: {
     position: 'absolute',
