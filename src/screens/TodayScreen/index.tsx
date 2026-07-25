@@ -14,25 +14,23 @@
  *   3. Nearby Card                        — KAN-46
  *   4. Task list                          — KAN-15
  *
- * Scroll collapse:  k = clamp(scrollY / 170, 0, 1)
+ * Scroll collapse:  k = clamp(scrollY / 90, 0, 1)
  *
  * k=0 (rest)        k=1 (collapsed)
- * diameter  246     112
- * stroke     14      10
- * left       (screen–246)/2    22
- * height    320     150
+ * diameter  184     112
+ * stroke     11      10
+ * left       (screen–184)/2    22
+ * height    240     150
  * caption   opaque  transparent   (fades over k 0→0.625)
  * counter   hidden   visible       (fades over k 0.45→0.91)
  *
  * Animation: react-native-reanimated — all interpolations run on the UI thread.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
   ActivityIndicator,
   Pressable,
-  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -77,13 +75,12 @@ import {
 } from './constants';
 import { useCollapseAnimation } from './useCollapseAnimation';
 import { SkeletonRow } from './SkeletonRow';
-import PullSpinner from './PullSpinner';
 import { styles } from './styles';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Today'>;
 
 export default function TodayScreen() {
-  const { palette, dark, language } = useTheme();
+  const { palette, language } = useTheme();
   const insets      = useSafeAreaInsets();
   const navigation  = useNavigation<Nav>();
 
@@ -117,9 +114,6 @@ export default function TodayScreen() {
     handleToggle,
     nearbyReady,
     refreshProximity,
-    isPullRefreshing,
-    showThrottleNotice,
-    onPullRefresh,
     errandBundle,
     errandBundleLeisure,
     dismissErrandBundle,
@@ -128,11 +122,6 @@ export default function TodayScreen() {
   } = useTodayScreen(uid);
 
   const [nearbyHasContent, setNearbyHasContent] = useState(false);
-  // KAN-288 — the ring section's top in screen coords. The pull loading
-  // indicator and the throttle notice are root-level overlays, so without
-  // this they'd position from screen-top and land ON the ring (the header's
-  // height is not a fixed constant). Measured, not guessed.
-  const [scrollAreaY, setScrollAreaY] = useState(0);
 
   // Refresh tasks on focus — but only when a real mutation happened
   // somewhere since the last load (a task edited/added/deleted, a shared
@@ -148,17 +137,6 @@ export default function TodayScreen() {
     if (consumeTasksDirty()) { refresh(); }
   }, [refresh]));
 
-  // KAN-288 — the throttle notice mounts and unmounts transiently with no
-  // live region, so VoiceOver never announces it on its own; TalkBack is
-  // unreliable for the same reason. Say it explicitly, matching Toast.tsx.
-  // Keyed on the flag, so it fires once on the false→true edge and never on
-  // the many unrelated re-renders this screen does.
-  useEffect(() => {
-    if (showThrottleNotice) {
-      AccessibilityInfo.announceForAccessibility?.(COPY.today.refreshedRecently);
-    }
-  }, [showThrottleNotice]);
-
   // ── New Task sheet open trigger ───────────────────────────────────────────────
   // Visibility lives in useNewTaskSheetStore, NOT screen state. `openSheet` is
   // read via getState() (no subscription) so opening never re-renders this
@@ -170,50 +148,6 @@ export default function TodayScreen() {
   const weekday = getWeekdays()[now.getDay()];
   const month   = getMonths()[now.getMonth()];
   const day     = now.getDate();
-
-  // KAN-288 — refresh belongs to the task list only: the zone below the ring,
-  // which already has its own overscroll. The ring/calendar zone is left
-  // alone deliberately — nobody pulls a calendar, and turning the whole
-  // screen into one pull surface risks the scroll behaviour KAN-157 was
-  // about.
-  //
-  // progressViewOffset is the whole trick. This list is absoluteFill, so its
-  // scroll origin is the TOP OF THE SCREEN, while the ring section sits
-  // absolutely positioned over the first SECTION_H_REST px of it. At the
-  // default offset the spinner renders underneath the ring — present, doing
-  // its job, completely invisible, which reads as a dead gesture. Offsetting
-  // by SECTION_H_REST drops it to where the list's content actually starts,
-  // i.e. the first pixel the user can see move.
-  // Memoised on its own inputs. This screen re-renders constantly during a
-  // refresh (task state, proximity ticks), and rebuilding the element each
-  // time hands the list a fresh RefreshControl on every one of those renders
-  // — enough for the native SwipeRefreshLayout to be torn down and recreated
-  // mid-spin, which ends the animation while `refreshing` is still true.
-  const pullRefreshIndicatorColor = palette.pullRefreshIndicator;
-  const pullRefreshOverlayColor = palette.pullRefreshOverlay;
-  const refreshControl = useMemo(() => (
-    dark ? (
-      <RefreshControl
-        key="refresh-dark"
-        refreshing={isPullRefreshing}
-        onRefresh={onPullRefresh}
-        tintColor={palette.pullRefreshIndicator}
-        colors={[palette.pullRefreshIndicator]}
-        progressBackgroundColor={palette.surface}
-        progressViewOffset={SECTION_H_REST}
-      />
-    ) : (
-      <RefreshControl
-        key="refresh-light"
-        refreshing={isPullRefreshing}
-        onRefresh={onPullRefresh}
-        tintColor={palette.pullRefreshIndicator}
-        colors={[palette.pullRefreshIndicator]}
-        progressBackgroundColor={palette.surface}
-        progressViewOffset={SECTION_H_REST}
-      />
-    )
-  ), [dark, isPullRefreshing, onPullRefresh, palette.pullRefreshIndicator, palette.surface]);
 
   // ── Scroll-driven ring collapse (KAN-157) ─────────────────────────────────────
   const { scrollHandler, collapsed, ringWrapStyle, bgStyle, captionStyle, collapsedStyle } = useCollapseAnimation();
@@ -352,10 +286,6 @@ export default function TodayScreen() {
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: palette.muted }]}>
             {COPY.today.sectionTitlePrefix}
-            <Text style={[styles.sectionTitleCount, { color: palette.text }]}
-              accessibilityLabel={COPY.progress.ringA11y(doneTasks, totalTasks)}>
-              {`${doneTasks}/${totalTasks}`}
-            </Text>
           </Text>
           {remaining > 0 && (
             <Text style={[styles.sectionTitleRight, { color: palette.muted }]}>
@@ -367,7 +297,7 @@ export default function TodayScreen() {
     </>
   ), [
     sortedTasks, nearbyPoiType, poiPlaces, storeTuningActive,
-    palette, doneTasks, totalTasks, remaining,
+    palette, remaining,
     nearbyHasContent, setNearbyHasContent,
     refreshProximity,
     errandBundle, dismissErrandBundle,
@@ -447,7 +377,7 @@ export default function TodayScreen() {
 
       {/* ── Scroll area — ring section overlaid on content ── */}
       {(DEBUG_SHOW_LIST || DEBUG_SHOW_RING) && (
-      <View style={styles.scrollArea} onLayout={e => setScrollAreaY(e.nativeEvent.layout.y)}>
+      <View style={styles.scrollArea}>
 
         {DEBUG_SHOW_LIST && (isEmpty ? (
           /* ── Empty state body (KAN-139) — no scroll, nudge + CTA ── */
@@ -480,16 +410,10 @@ export default function TodayScreen() {
         ) : (
           /*
             The ScrollView fills the entire scrollArea (absoluteFill).
-            paddingTop = SECTION_H_REST means content always starts 320px down,
+            paddingTop = SECTION_H_REST means content always starts 240px down,
             directly below where the ring section sits at rest. As the ring
-            section collapses by SCROLL_RANGE (170px), content scrolls up the
+            section collapses by SCROLL_RANGE (90px), content scrolls up the
             same distance — they stay in perfect alignment throughout.
-          */
-          /*
-            KAN-288 — pull-to-refresh lives on this list (see refreshControl
-            above). RefreshControl drives its own spinner and never touches
-            onScroll, so useCollapseAnimation's handler — and the 3-state
-            snap it feeds (KAN-157) — are unaffected.
           */
           <Animated.FlatList
             style={StyleSheet.absoluteFill}
@@ -506,7 +430,6 @@ export default function TodayScreen() {
             showsVerticalScrollIndicator={false}
             scrollEventThrottle={16}
             onScroll={scrollHandler}
-            refreshControl={refreshControl}
             removeClippedSubviews
             initialNumToRender={10}
             maxToRenderPerBatch={10}
@@ -647,56 +570,15 @@ export default function TodayScreen() {
         onNotNow={onStoreTuningNotNow}
       />
 
-      {/* ── KAN-298 pull-refresh spinner ──
-           The native RefreshControl still owns the pull gesture, but its
-           Android spinner can retract mid-fetch. This one follows
-           isPullRefreshing directly, so it stays visible while loading. */}
-      <PullSpinner
-        visible={isPullRefreshing && !DEBUG_MINIMAL}
-        top={scrollAreaY + SECTION_H_REST + 8}
-        color={pullRefreshIndicatorColor}
-        backgroundColor={palette.surface}
-        borderColor={palette.line}
-      />
-
-      {/* ── KAN-288 throttle notice ──
-           A pull inside the throttle window loads nothing and settles
-           instantly, which on its own is indistinguishable from a real
-           refresh that returned fast. This says which it was. Sits at the
-           top of the list zone — where the user just pulled — and never
-           blocks input: it is information, not a state. */}
-      {showThrottleNotice && (
-        <View style={[styles.throttleNotice, { top: scrollAreaY + SECTION_H_REST - 30 }]} pointerEvents="none">
-          <Text style={[styles.throttleNoticeLabel, { color: palette.muted, backgroundColor: palette.surface2 }]}>
-            {COPY.today.refreshedRecently}
-          </Text>
-        </View>
-      )}
-
-      {/* ── Loading overlay — blocks touches until initial fetch completes ──
-           KAN-288: also covers a pull-refresh, for exactly as long as the
-           services take — no minimum, no padding. A throttled pull never
-           reaches here at all: it has nothing to load, so there is nothing
-           for a stray tap to corrupt and no reason to freeze the screen. We
-           throttle the service calls, never the person. `pointerEvents=
-           "box-only"` does the blocking: the overlay takes every touch and
-           passes none through. */}
-      {(isLoading || isPullRefreshing) && !DEBUG_MINIMAL && (
+      {/* ── Loading overlay — blocks touches until initial fetch completes ── */}
+      {isLoading && !DEBUG_MINIMAL && (
         <View
           style={[
             styles.loadingOverlay,
-            // Pull-refresh dims lighter than the initial load: the native
-            // pull indicator is the loading signal, so this overlay is only a
-            // touch guard — it blocks input while services run, and shows no
-            // indicator of its own (one loading on screen, never two).
-            { backgroundColor: isLoading ? palette.scrim : pullRefreshOverlayColor },
+            { backgroundColor: palette.scrim },
           ]}
           pointerEvents="box-only">
-          {isLoading && (
-            /* Initial app load only — there is no native pull indicator
-               behind it, so this case still needs one. */
-            <ActivityIndicator size="large" color={palette.accent} />
-          )}
+          <ActivityIndicator size="large" color={palette.accent} />
         </View>
       )}
     </View>

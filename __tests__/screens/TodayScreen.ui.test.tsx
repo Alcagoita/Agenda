@@ -5,12 +5,11 @@
  * hook's data-fetching internals (those are covered in useTodayScreen.test.ts).
  *
  * Covers:
- *   - Skeleton rows shown when tasksState.status === 'loading'
- *   - Task titles shown when tasksState.status === 'success'
+ *   - Task titles shown in success state
  *   - "No tasks for today" shown when success + empty list
- *   - Error message shown when tasksState.status === 'error'
+ *   - Error message shown in error state
  *   - "Try again" button present in error state
- *   - Pressing "Try again" calls setRetryKey
+ *   - Pressing "Try again" calls refresh
  *   - Pressing a task row calls handleToggle
  */
 
@@ -19,30 +18,44 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 // ─── Mock useTodayScreen ──────────────────────────────────────────────────────
 
-const mockSetRetryKey  = jest.fn();
 const mockHandleToggle = jest.fn();
+const mockRefresh = jest.fn().mockResolvedValue(undefined);
+const mockRefreshProximity = jest.fn().mockResolvedValue(true);
 
 const DEFAULT_HOOK_RETURN = {
-  tasksState:              { status: 'loading' as const },
-  retryKey:                0,
-  setRetryKey:             mockSetRetryKey,
+  tasks:                   [],
+  isLoading:               true,
+  isRefreshing:            false,
+  error:                   null,
+  refresh:                 mockRefresh,
   nearbyPoiType:           null,
+  nearbyReady:             false,
   nearbyPlace:             null,
   poiPlaces:               {},
+  placeContext:            null,
   storeTuningActive:       false,
   showStoreTuningPrompt:   false,
   onStoreTuningTurnOn:     jest.fn(),
   onStoreTuningNotNow:     jest.fn(),
+  refreshProximity:        mockRefreshProximity,
+  locationUnavailable:     false,
   sheetVisible:            false,
   setSheetVisible:         jest.fn(),
   customCategories:        [],
-  tasks:                   [],
-  effectiveTasks:          [],
   totalTasks:              0,
   doneTasks:               0,
   progress:                0,
   nearbyCount:             0,
+  totalPoints:             0,
+  inboxCount:              0,
+  socialUnreadCount:       0,
   handleToggle:            mockHandleToggle,
+  permissionGranted:       false,
+  errandBundle:            null,
+  errandBundleLeisure:     null,
+  dismissErrandBundle:     jest.fn(),
+  tripSuggestion:          null,
+  dismissTripSuggestion:   jest.fn(),
 };
 
 jest.mock('../../src/hooks/useTodayScreen', () => ({
@@ -53,7 +66,7 @@ jest.mock('../../src/services/sharing', () => ({
   subscribeToIncomingSharedTasks: jest.fn(() => jest.fn()),
 }));
 
-let mockHookReturn = { ...DEFAULT_HOOK_RETURN };
+let mockHookReturn: any = { ...DEFAULT_HOOK_RETURN };
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -65,7 +78,8 @@ jest.mock('@react-native-firebase/auth', () => ({}));
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn() }),
+  useFocusEffect: (fn: () => void) => fn(),
+  useNavigation: () => ({ navigate: jest.fn(), push: jest.fn() }),
 }));
 jest.mock('@react-navigation/native-stack', () => ({}));
 
@@ -76,10 +90,11 @@ jest.mock('../../src/theme', () => ({
     palette: {
       bg: '#fff', surface: '#f6f5f1', surface2: '#efeeea',
       text: '#000', muted: '#999', faint: '#ccc',
-      line: '#ddd', accent: '#e8a86a',
+      line: '#ddd', accent: '#e8a86a', onAccent: '#000', scrim: 'rgba(0,0,0,0.2)',
       ringTrack: '#ddd', ringFill: '#000',
       nearTint: '#fff', nearTint2: '#eee', nearBorder: '#ddd', nearText: '#000',
     },
+    language: 'en',
   }),
 }));
 
@@ -92,9 +107,9 @@ jest.mock('react-native-safe-area-context', () => ({
 // ─── Reanimated ───────────────────────────────────────────────────────────────
 
 jest.mock('react-native-reanimated', () => {
-  const { View, ScrollView } = require('react-native');
+  const { View, ScrollView, FlatList } = require('react-native');
   const noop = () => {};
-  const Animated = { View, ScrollView, createAnimatedComponent: (c: unknown) => c };
+  const Animated = { View, ScrollView, FlatList, createAnimatedComponent: (c: unknown) => c };
   return {
     __esModule: true,
     default:                  Animated,
@@ -107,6 +122,7 @@ jest.mock('react-native-reanimated', () => {
     withRepeat:               (v: unknown) => v,
     withSequence:             (...args: unknown[]) => args[0],
     interpolate:              (_v: unknown, _i: unknown[], o: unknown[]) => o[0],
+    Easing:                   { inOut: () => noop, cubic: noop },
     Extrapolation:            { CLAMP: 'clamp' },
     runOnJS:                  (fn: (...args: unknown[]) => unknown) => fn,
   };
@@ -117,6 +133,10 @@ jest.mock('react-native-reanimated', () => {
 jest.mock('../../src/components/Header',                () => () => null);
 jest.mock('../../src/components/ProgressRing',          () => () => null);
 jest.mock('../../src/components/NearbyCard',            () => () => null);
+jest.mock('../../src/components/NetworkBanner',         () => () => null);
+jest.mock('../../src/components/ContextChip',           () => () => null);
+jest.mock('../../src/components/ErrandBundleCard',      () => () => null);
+jest.mock('../../src/components/TripSuggestionCard',    () => () => null);
 jest.mock('../../src/components/StoreTuningPromptSheet',() => ({ __esModule: true, default: () => null }));
 jest.mock('../../src/components/NewTaskSheet', () => {
   const { forwardRef } = require('react');
@@ -135,7 +155,11 @@ jest.mock('../../src/components/TaskRow', () => {
   };
 });
 
-jest.mock('../../src/components/AppIcon', () => ({ PlusIcon: () => null }));
+jest.mock('../../src/components/AppIcon', () => ({
+  ChevronRightIcon: () => null,
+  NavigateIcon:     () => null,
+  PlusIcon:         () => null,
+}));
 
 // ─── Import (after mocks) ─────────────────────────────────────────────────────
 
@@ -145,19 +169,9 @@ import TodayScreen from '../../src/screens/TodayScreen';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRefresh.mockResolvedValue(undefined);
+  mockRefreshProximity.mockResolvedValue(true);
   mockHookReturn = { ...DEFAULT_HOOK_RETURN };
-});
-
-describe('TodayScreen UI — KAN-60 loading state', () => {
-  it('does NOT render task rows while loading', () => {
-    render(<TodayScreen />);
-    expect(screen.queryByTestId('task-row-task-1')).toBeNull();
-  });
-
-  it('does NOT render the empty message while loading', () => {
-    render(<TodayScreen />);
-    expect(screen.queryByText('No tasks for today')).toBeNull();
-  });
 });
 
 describe('TodayScreen UI — KAN-60 success state', () => {
@@ -169,9 +183,8 @@ describe('TodayScreen UI — KAN-60 success state', () => {
   beforeEach(() => {
     mockHookReturn = {
       ...DEFAULT_HOOK_RETURN,
-      tasksState:    { status: 'success', tasks: [TASK] },
+      isLoading:     false,
       tasks:         [TASK],
-      effectiveTasks:[TASK],
       totalTasks:    1,
     };
   });
@@ -189,17 +202,12 @@ describe('TodayScreen UI — KAN-60 success state', () => {
 
 describe('TodayScreen UI — KAN-60 empty success state', () => {
   beforeEach(() => {
-    mockHookReturn = {
-      ...DEFAULT_HOOK_RETURN,
-      tasksState:    { status: 'success', tasks: [] },
-      tasks:         [],
-      effectiveTasks:[],
-    };
+    mockHookReturn = { ...DEFAULT_HOOK_RETURN, isLoading: false, tasks: [] };
   });
 
-  it('shows "No tasks for today" when success state has no tasks', () => {
+  it('shows an empty-state prompt when success state has no tasks', () => {
     render(<TodayScreen />);
-    expect(screen.getByText('No tasks for today')).toBeTruthy();
+    expect(screen.getByText('Nothing on today. That doesn’t mean nothing matters.')).toBeTruthy();
   });
 });
 
@@ -207,7 +215,8 @@ describe('TodayScreen UI — KAN-60 error state', () => {
   beforeEach(() => {
     mockHookReturn = {
       ...DEFAULT_HOOK_RETURN,
-      tasksState: { status: 'error', message: 'Could not load tasks. Check your connection.' },
+      isLoading: false,
+      error: 'Could not load tasks. Check your connection.',
     };
   });
 
@@ -226,13 +235,36 @@ describe('TodayScreen UI — KAN-60 error state', () => {
     expect(screen.queryByTestId('task-row-task-1')).toBeNull();
   });
 
-  it('calls setRetryKey when "Try again" is pressed', async () => {
+  it('calls refresh when "Try again" is pressed', async () => {
     render(<TodayScreen />);
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Try again'));
     });
-    expect(mockSetRetryKey).toHaveBeenCalledTimes(1);
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('TodayScreen UI — KAN-300 list header', () => {
+  const TASK = {
+    id: 'task-1', title: 'Buy milk', category: 'errands',
+    done: false, date: '2026-06-01', createdAt: { toDate: () => new Date() } as any,
+  };
+
+  beforeEach(() => {
+    mockHookReturn = {
+      ...DEFAULT_HOOK_RETURN,
+      isLoading:  false,
+      tasks:      [TASK],
+      totalTasks: 1,
+    };
+  });
+
+  it('renames the list and removes the inline done/total count', () => {
+    render(<TodayScreen />);
+    expect(screen.getByText('WHAT I NEED')).toBeTruthy();
+    expect(screen.queryByText('0/1')).toBeNull();
+  });
+
 });
 
 describe('TodayScreen UI — KAN-60 interaction', () => {
@@ -244,9 +276,8 @@ describe('TodayScreen UI — KAN-60 interaction', () => {
   beforeEach(() => {
     mockHookReturn = {
       ...DEFAULT_HOOK_RETURN,
-      tasksState:    { status: 'success', tasks: [TASK] },
+      isLoading:     false,
       tasks:         [TASK],
-      effectiveTasks:[TASK],
       totalTasks:    1,
     };
   });

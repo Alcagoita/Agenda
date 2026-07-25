@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
+import { Text } from 'react-native';
 import NearbyCard from '../../src/components/NearbyCard';
 import type { Task } from '../../src/types';
 import { Timestamp } from '@react-native-firebase/firestore';
@@ -30,11 +31,11 @@ jest.mock('../../src/theme', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => {
-  const { View, Text } = require('react-native');
+  const { View, Text: RNText } = require('react-native');
   const noop = () => {};
   return {
     __esModule: true,
-    default:          { View, Text, createAnimatedComponent: (c: unknown) => c },
+    default:          { View, Text: RNText, createAnimatedComponent: (c: unknown) => c },
     useSharedValue:   (v: unknown) => ({ value: v }),
     useAnimatedStyle: () => ({}),
     cancelAnimation:  noop,
@@ -213,6 +214,25 @@ describe('NearbyCard — also close section', () => {
     expect(screen.getByText('Buy groceries')).toBeTruthy();
   });
 
+  it('orders also-close rows by proximity instead of task order', () => {
+    const farther = makeTask({ id: 'farther', poi: 'supermarket', title: 'Buy groceries' });
+    const nearer = makeTask({ id: 'nearer', poi: 'atm', title: 'Get cash' });
+
+    render(
+      <NearbyCard
+        tasks={[farther, nearer]}
+        nearbyPoiType={null}
+        poiPlaces={{
+          supermarket: [{ ...GREY_PLACE, name: 'Far market', distanceMeters: 240 }],
+          atm: [{ ...GREY_PLACE, placeId: 'atm-place', name: 'Near ATM', distanceMeters: 140 }],
+        }}
+      />,
+    );
+
+    const renderedText = screen.UNSAFE_getAllByType(Text).map(node => node.props.children).flat().join(' ');
+    expect(renderedText.indexOf('Get cash')).toBeLessThan(renderedText.indexOf('Buy groceries'));
+  });
+
   it('does not render the also-close label when only one POI task exists', () => {
     render(
       <NearbyCard
@@ -248,6 +268,25 @@ describe('NearbyCard — hero carousel page indicator', () => {
     expect(screen.getByTestId('nearby-page-dots')).toBeTruthy();
     expect(screen.getAllByTestId('nearby-page-dot-active')).toHaveLength(1);
     expect(screen.getAllByTestId('nearby-page-dot')).toHaveLength(1);
+  });
+
+  it('orders hero slides by proximity instead of task order', () => {
+    const fartherHero = makeTask({ id: 'farther', poi: 'pharmacy', title: 'Pick up prescription' });
+    const nearerHero = makeTask({ id: 'nearer', poi: 'supermarket', title: 'Buy groceries' });
+
+    render(
+      <NearbyCard
+        tasks={[fartherHero, nearerHero]}
+        nearbyPoiType="pharmacy"
+        poiPlaces={{
+          pharmacy: [{ ...NEARBY_PLACE, name: 'Far pharmacy', distanceMeters: 90 }],
+          supermarket: [{ ...NEARBY_PLACE, placeId: 'market-place', name: 'Near market', distanceMeters: 40 }],
+        }}
+      />,
+    );
+
+    const renderedText = screen.UNSAFE_getAllByType(Text).map(node => node.props.children).flat().join(' ');
+    expect(renderedText.indexOf('Buy groceries')).toBeLessThan(renderedText.indexOf('Pick up prescription'));
   });
 
   it('renders no page dots when there is only a single hero slide', () => {

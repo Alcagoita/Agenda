@@ -20,29 +20,6 @@ export const styles = StyleSheet.create({
     zIndex: 100,
   },
   stickyHeader: { zIndex: 3 },
-  // KAN-288 — sits just below the ring, where the pull gesture happens, and
-  // above the list so it isn't clipped by rows. Below loadingOverlay's
-  // zIndex 100: the two never show together, but a real refresh starting
-  // mid-notice should cover it, not sit under it.
-  throttleNotice: {
-    position:   'absolute',
-    left:       0,
-    right:      0,
-    alignItems: 'center',
-    zIndex:     50,
-    // `top` set inline from the measured ring position.
-  },
-  // Matches the app's quiet refresh feedback (NearbyCard's "Updated"): small,
-  // regular weight, muted — a subtle surface pill only so it stays legible
-  // over list content.
-  throttleNoticeLabel: {
-    fontSize:          11,
-    fontFamily:        'Geist-Regular',
-    paddingHorizontal: 10,
-    paddingVertical:   5,
-    borderRadius:      radius.chip,
-    overflow:          'hidden',
-  },
   // scrollArea fills all space below the sticky header. The ring section
   // is absolutely positioned at top:0 of scrollArea (zIndex 2), and the
   // ScrollView is absoluteFill behind it with paddingTop = SECTION_H_REST.
@@ -50,7 +27,7 @@ export const styles = StyleSheet.create({
   scrollContent: {
     // paddingTop = SECTION_H_REST ensures content always starts exactly where
     // the ring section ends at rest. As the ring section collapses by
-    // SCROLL_RANGE (= 170), content scrolls up the same distance → perfect sync.
+    // SCROLL_RANGE (= 90), content scrolls up the same distance → perfect sync.
     paddingTop: SECTION_H_REST,
   },
   ringSection: {
@@ -85,24 +62,24 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   captionLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     fontFamily: 'Geist-SemiBold',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     marginBottom: 2,
   },
   captionDay: {
-    fontSize: 80,
+    fontSize: 72,
     fontWeight: '600',
     fontFamily: 'Geist-SemiBold',
     fontVariant: ['tabular-nums'],
-    letterSpacing: -3,
-    lineHeight: 88,
+    letterSpacing: -2,
+    lineHeight: 78,
   },
   captionSub: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Geist-Regular',
-    marginTop: 4,
+    marginTop: 2,
   },
   captionSubBold: {
     fontWeight: '600',
@@ -194,7 +171,7 @@ export const styles = StyleSheet.create({
   },
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
   },
@@ -203,10 +180,6 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Geist-SemiBold',
     letterSpacing: 1,
-  },
-  sectionTitleCount: {
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 0,
   },
   sectionTitleRight: {
     fontSize: 11,
@@ -272,7 +245,7 @@ export const styles = StyleSheet.create({
     height: 14,
     borderRadius: 7,
   },
-  // Extra bottom padding ensures the user can always scroll SCROLL_RANGE (170px)
+  // Extra bottom padding ensures the user can always scroll SCROLL_RANGE (90px)
   // even with a short task list.
   // Clears the floating add-task FAB at the end of the list.
   bottomPad: { height: 96 },

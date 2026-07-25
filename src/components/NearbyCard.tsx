@@ -55,6 +55,10 @@ import { COPY } from '../constants/copy';
 // Distance threshold that separates the orange hero zone from the grey zone.
 const HERO_RADIUS_M = 100;
 
+function nearestDistanceForTask(task: Task, poiPlaces: PlacesMap): number {
+  return task.poi ? poiPlaces[task.poi]?.[0]?.distanceMeters ?? Number.POSITIVE_INFINITY : Number.POSITIVE_INFINITY;
+}
+
 function capitalizeFirstLetter(text: string): string {
   if (!text) { return text; }
   return text[0].toUpperCase() + text.slice(1);
@@ -378,7 +382,7 @@ function NearbyCard({
       return acc;
     },
     [],
-  );
+  ).sort((a, b) => a.places[0].distanceMeters - b.places[0].distanceMeters);
 
   const isHero = heroEntries.length > 0 || nearbyPoiType !== null;
 
@@ -387,7 +391,7 @@ function NearbyCard({
   const greyTasks = poiTasks.filter(t => {
     if (!t.poi || heroPoiTypes.has(t.poi)) { return false; }
     return !!poiPlaces[t.poi]?.length;
-  });
+  }).sort((a, b) => nearestDistanceForTask(a, poiPlaces) - nearestDistanceForTask(b, poiPlaces));
 
   const hasContent = poiTasks.length > 0 && (heroEntries.length > 0 || greyTasks.length > 0);
 

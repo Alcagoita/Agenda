@@ -59,8 +59,8 @@ export interface TodayScreenData {
   isRefreshing:      boolean;
   error:             string | null;
   /** Re-runs the full fetch. Returns the in-flight promise so callers that
-   *  need to know when the data has actually landed (pull-to-refresh) can
-   *  await it — firing and forgetting made a refresh look instantaneous. */
+   *  need to know when the data has actually landed can await it — firing and
+   *  forgetting made a refresh look instantaneous. */
   refresh:           () => Promise<void>;
   customCategories:  Category[];
   totalPoints:       number;
@@ -135,8 +135,8 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
 
   // ── One-shot data fetch ────────────────────────────────────────────────────
   //
-  // No background watchers. Called once on mount and again on pull-to-refresh,
-  // error retry, or when onTaskAdded fires after a new task is created.
+  // No background watchers. Called once on mount and again on error retry,
+  // focus refresh, or when onTaskAdded fires after a new task is created.
   //
   // requestIdRef guards against overlapping calls (e.g. a fast refocus refresh
   // firing while the initial fetch is still in flight) — only the most recent

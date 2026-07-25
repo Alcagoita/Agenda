@@ -656,18 +656,13 @@ const en = {
       'What’s the one thing future-you will thank you for?',
       'Going somewhere soon?',
     ],
-    sectionTitlePrefix: 'TODAY · ',
+    sectionTitlePrefix: 'WHAT I NEED',
     leftCount: (n: number) => `${n} left`,
     retry: 'Try again',
     addSomething: 'Add something',
     addSomethingHelper: 'Those are just passing thoughts. Add what’s actually yours.',
     openCalendarA11y: (weekday: string, day: number) => `Open calendar for ${weekday} ${day}`,
     nearbyCount: (n: number) => `${n} Nearby`,
-    // KAN-288 — shown when a pull lands inside the refresh throttle window.
-    // States the fact and stops: the data is current, so there was nothing
-    // to fetch. Never scolds the user for pulling, and never implies a
-    // failure — nothing failed.
-    refreshedRecently: 'Already up to date',
     addTaskA11y: 'Add task',
     progressLabel: 'PROGRESS',
     progressSummary: (pct: number, remaining: number) => `${pct}% complete · ${remaining} left`,
@@ -1691,15 +1686,13 @@ const ptPT: typeof en = {
       'Qual é a coisa pela qual o teu eu futuro te vai agradecer?',
       'Vais a algum lado em breve?',
     ],
-    sectionTitlePrefix: 'HOJE · ',
+    sectionTitlePrefix: 'O QUE PRECISO',
     leftCount: (n: number) => (n === 1 ? 'Falta 1' : `Faltam ${n}`),
     retry: 'Tentar outra vez',
     addSomething: 'Adiciona algo',
     addSomethingHelper: 'Isso são só pensamentos passageiros. Adiciona o que é realmente teu.',
     openCalendarA11y: (weekday: string, day: number) => `Abrir calendário de ${weekday} ${day}`,
     nearbyCount: (n: number) => (n === 1 ? '1 Local' : `${n} Locais`),
-    // KAN-288 — ver nota na versão EN.
-    refreshedRecently: 'Já está atualizado',
     addTaskA11y: 'Adicionar tarefa',
     progressLabel: 'PROGRESSO',
     progressSummary: (pct: number, remaining: number) => `${pct}% concluído · faltam ${remaining}`,
