@@ -298,7 +298,7 @@ export default function Lantern({
           baseOpacity={v.baseOpacity} breathe={v.breathe} cycleMs={v.cycleMs} reduceMotion={reduceMotion}
         />
         <View style={styles.collapsedLabelRow}>
-          <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={1}>
+          <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={2}>
             {v.label}
           </Text>
           {offlineDot}
@@ -361,16 +361,17 @@ const styles = StyleSheet.create({
     height: SECTION_H_COLLAPSED,
     flexDirection: 'row',
     alignItems: 'center',
-    // Left-aligned so the pill sits right next to the icon+label group rather
-    // than being pushed to the far edge (KAN-301 design revision).
-    justifyContent: 'flex-start',
+    // The icon+label group and the pill are centred as a cluster, so the pill
+    // sits around the middle for a short label and is only pushed rightward when
+    // a long label widens the group (which wraps to two lines, KAN-301 revision).
+    justifyContent: 'center',
     gap: 16,
     paddingHorizontal: spacing.page,
   },
-  // Icon stacked on top of its label.
+  // Icon stacked on top of its label, with breathing room between them.
   collapsedGroup: {
     alignItems: 'center',
-    gap: 2,
+    gap: 8,
     flexShrink: 1,
     minWidth: 0,
   },
@@ -378,13 +379,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    maxWidth: 120,
+    // Bounds the label so a long name wraps to two lines instead of a long
+    // single line pushing the pill off the row.
+    maxWidth: 150,
   },
   collapsedLabel: {
     fontSize: 17,
     fontFamily: 'Geist-Medium',
     fontWeight: '500',
     letterSpacing: -0.425,       // -0.025em at 17
+    lineHeight: 20,
+    textAlign: 'center',
     flexShrink: 1,
   },
   offlineDot: {
