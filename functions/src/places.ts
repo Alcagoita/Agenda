@@ -8,7 +8,6 @@ const FETCH_TIMEOUT_MS = 8_000;
 const PLACES_NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby';
 const PLACES_AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete';
 const PLACES_DETAILS_URL = 'https://places.googleapis.com/v1/places';
-const GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
 const PLACES_PROXY_MAX_INSTANCES = 10;
 const PLACES_RATE_LIMIT_WINDOW_MS = 60_000;
 const PLACES_RATE_LIMIT_MAX_REQUESTS = 30;
@@ -255,40 +254,5 @@ export const getPlaceDetailsProxy = onCall(
         },
       },
     );
-  },
-);
-
-interface ReverseGeocodeInput {
-  lat: number;
-  lng: number;
-}
-
-/**
- * KAN-301 — reverse-geocode a coordinate to a city/area name for the Lantern's
- * "Outside" state. Uses the classic Geocoding API (the Places API New has no
- * reverse-geocode endpoint) and narrows the request to the administrative
- * result types we'd ever show, so the payload stays small. The client
- * (maps.ts:reverseGeocode) extracts the display name and falls back to
- * "Outside" on any failure — so this never has to be perfectly reliable.
- */
-export const reverseGeocodeProxy = onCall(
-  {
-    secrets: [googlePlacesApiKey],
-    timeoutSeconds: 30,
-    memory: '256MiB',
-    maxInstances: PLACES_PROXY_MAX_INSTANCES,
-  },
-  async (request) => {
-    assertAuthenticated(request.auth);
-    const data = request.data as ReverseGeocodeInput;
-    assertCoordinate(data?.lat, data?.lng);
-    await enforceUserRateLimit(request.auth!.uid, 'reverseGeocode');
-
-    const url =
-      `${GEOCODE_URL}?latlng=${data.lat},${data.lng}` +
-      '&result_type=locality|postal_town|sublocality|administrative_area_level_2' +
-      `&key=${encodeURIComponent(getApiKey())}`;
-
-    return requireOkJson(url, { method: 'GET' });
   },
 );

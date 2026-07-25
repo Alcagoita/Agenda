@@ -1,54 +1,39 @@
 /**
- * extractCityName — KAN-301 reverse-geocode display-name picker.
+ * extractCityName — KAN-301 reverse-geocode display-name picker (OSM Nominatim).
  *
- * The async reverseGeocode() wraps a cloud-function call (covered by the
- * function's own tests); the interesting, deterministic logic is which address
- * component wins, which is pure and lives here.
+ * The async reverseGeocode() wraps a Nominatim fetch; the interesting,
+ * deterministic logic is which address field wins, which is pure and lives here.
  */
+
 // maps.ts pulls in placesFunctions -> @react-native-firebase/functions, a
 // native module unavailable under Jest. We only exercise the pure extractor.
-jest.mock('../../src/services/placesFunctions', () => ({
-  reverseGeocodeProxy: jest.fn(),
-}));
+jest.mock('../../src/services/placesFunctions', () => ({}));
 
 import { extractCityName } from '../../src/services/maps';
-import type { GeocodeAddressComponent } from '../../src/services/placesFunctions';
 
-const comp = (long_name: string, types: string[]): GeocodeAddressComponent => ({ long_name, types });
-
-describe('extractCityName (KAN-301)', () => {
-  it('prefers locality (the city proper) over broader areas', () => {
-    const components = [
-      comp('Lisboa', ['locality', 'political']),
-      comp('Lisbon District', ['administrative_area_level_1', 'political']),
-      comp('Portugal', ['country', 'political']),
-    ];
-    expect(extractCityName(components)).toBe('Lisboa');
+describe('extractCityName (KAN-301, Nominatim address)', () => {
+  it('prefers city over broader fields', () => {
+    expect(extractCityName({ city: 'Lisboa', county: 'Lisboa', suburb: 'Alfama' })).toBe('Lisboa');
   });
 
-  it('falls back to postal_town when there is no locality', () => {
-    const components = [
-      comp('Reading', ['postal_town']),
-      comp('England', ['administrative_area_level_1', 'political']),
-    ];
-    expect(extractCityName(components)).toBe('Reading');
+  it('falls back to town, then village, then municipality', () => {
+    expect(extractCityName({ town: 'Reading' })).toBe('Reading');
+    expect(extractCityName({ village: 'Sintra' })).toBe('Sintra');
+    expect(extractCityName({ municipality: 'Cascais' })).toBe('Cascais');
   });
 
-  it('falls back to sublocality, then administrative_area_level_2', () => {
-    expect(extractCityName([comp('Benfica', ['sublocality', 'political'])])).toBe('Benfica');
-    expect(extractCityName([comp('Grande Porto', ['administrative_area_level_2'])])).toBe('Grande Porto');
+  it('falls back to suburb, then county, as a last resort', () => {
+    expect(extractCityName({ suburb: 'Benfica' })).toBe('Benfica');
+    expect(extractCityName({ county: 'Grande Porto' })).toBe('Grande Porto');
   });
 
-  it('returns null when only a country / postcode is present (never label with those)', () => {
-    const components = [
-      comp('Portugal', ['country', 'political']),
-      comp('1000-001', ['postal_code']),
-    ];
-    expect(extractCityName(components)).toBeNull();
+  it('returns null when no populated-place field is present (never a state/country)', () => {
+    // state/country are deliberately not in the priority list.
+    expect(extractCityName({} as never)).toBeNull();
   });
 
-  it('returns null for empty / undefined components', () => {
-    expect(extractCityName([])).toBeNull();
+  it('returns null for null / undefined', () => {
+    expect(extractCityName(null)).toBeNull();
     expect(extractCityName(undefined)).toBeNull();
   });
 });

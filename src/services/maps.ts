@@ -22,9 +22,7 @@ import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
   searchNearbyPlacesProxy,
-  reverseGeocodeProxy,
 } from './placesFunctions';
-import type { GeocodeAddressComponent } from './placesFunctions';
 import { Category, PoiType, POI_GOOGLE_TYPES, poiCatalogLabel } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,51 +108,71 @@ export function getDistanceMeters(
 }
 
 // ─── Reverse geocoding — city / area name (KAN-301) ────────────────────────────
+//
+// Uses OpenStreetMap's free Nominatim service — no API key, no Google, and the
+// same source the app already uses for places (osmPlaces.ts / Overpass). Called
+// straight from the device (like Overpass), gated by useLanternState so it only
+// fires when an Outside city label will actually be shown; volume is far under
+// Nominatim's usage policy. Any failure falls back to "Outside" at the caller.
+
+const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+const REVERSE_GEOCODE_TIMEOUT_MS = 8_000;
+// Nominatim (like Overpass) asks every client to identify itself; unlabeled
+// traffic risks being rate-limited or blocked.
+const REVERSE_GEOCODE_USER_AGENT = `BrushApp/${require('../../package.json').version}`;
+
+/** The subset of Nominatim's `address` object we consider for a city label. */
+export interface OsmAddress {
+  city?: string;
+  town?: string;
+  village?: string;
+  municipality?: string;
+  suburb?: string;
+  county?: string;
+}
 
 /**
- * Preference order for which address component becomes the Lantern's "Outside"
- * label. `locality` is the city proper; `postal_town` covers regions (e.g. the
- * UK) where Google uses it instead; `sublocality` is a district within a large
- * city; `administrative_area_level_2` is the last-resort broader area. We never
- * fall through to a country or postcode — a bare country name is worse than the
- * generic "Outside" fallback the caller supplies.
+ * Preference order for the Lantern's "Outside" label: the most specific
+ * populated-place field Nominatim returns wins. We stop at `county` — never a
+ * state or country, since a bare region name is worse than the "Outside"
+ * fallback the caller supplies. Exported (with the extractor) for unit testing.
  */
-const REVERSE_GEOCODE_TYPE_PRIORITY = [
-  'locality',
-  'postal_town',
-  'sublocality',
-  'administrative_area_level_2',
-] as const;
+const CITY_FIELD_PRIORITY: (keyof OsmAddress)[] = [
+  'city', 'town', 'village', 'municipality', 'suburb', 'county',
+];
 
-/**
- * Pure extractor — picks the best display name from a Geocoding result's
- * address components, honouring REVERSE_GEOCODE_TYPE_PRIORITY. Returns null when
- * none of the wanted types are present. Exported for unit testing.
- */
-export function extractCityName(components: GeocodeAddressComponent[] | undefined): string | null {
-  if (!components?.length) { return null; }
-  for (const wanted of REVERSE_GEOCODE_TYPE_PRIORITY) {
-    const match = components.find(c => c.types?.includes(wanted) && !!c.long_name);
-    if (match?.long_name) { return match.long_name; }
+/** Pure extractor — the best display name from a Nominatim `address`, or null. */
+export function extractCityName(address: OsmAddress | null | undefined): string | null {
+  if (!address) { return null; }
+  for (const field of CITY_FIELD_PRIORITY) {
+    const value = address[field];
+    if (value) { return value; }
   }
   return null;
 }
 
 /**
  * Reverse-geocode a coordinate to a city / area name for the Lantern's
- * "Outside" state. Returns null on any failure (offline, quota, no result) —
- * the caller shows "Outside" instead. Never throws.
+ * "Outside" state via OSM Nominatim. Returns null on any failure (offline, no
+ * result, rate-limited) — the caller shows "Outside" instead. Never throws.
  */
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  const url = `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REVERSE_GEOCODE_TIMEOUT_MS);
   try {
-    const res = await reverseGeocodeProxy(lat, lng);
-    for (const result of res.results ?? []) {
-      const city = extractCityName(result.address_components);
-      if (city) { return city; }
-    }
-    return null;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'User-Agent': REVERSE_GEOCODE_USER_AGENT },
+      signal: controller.signal,
+    });
+    if (!res.ok) { return null; }
+    const json = (await res.json()) as { address?: OsmAddress };
+    return extractCityName(json.address);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

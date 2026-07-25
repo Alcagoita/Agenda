@@ -30,5 +30,4 @@ export {
   searchNearbyPlacesProxy,
   placesAutocompleteProxy,
   getPlaceDetailsProxy,
-  reverseGeocodeProxy,
 } from './places';
