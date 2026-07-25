@@ -22,7 +22,7 @@ import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
 import { getPositionLowAccuracy } from '../services/geolocation';
 import { useOfflineCoverage } from './useOfflineCoverage';
-import { resolveLanternState, HOME_ENTER_M, type LanternState } from '../utils/lantern';
+import { resolveLanternState, resolveHomeProximity, type LanternState } from '../utils/lantern';
 import { todayISO } from '../utils/date';
 
 export interface LanternCoords { lat: number; lng: number; }
@@ -72,21 +72,6 @@ export function useLanternState(
   const homeDistanceM: number | null =
     homeSet && effectiveCoords ? distanceFromHome(effectiveCoords) : null;
 
-  // Fetch a city name only when it will actually be shown: online, a real fix,
-  // no mall/trip context, home set, and beyond the home-enter radius.
-  const wantCity =
-    !offline && effectiveCoords != null && placeContext == null && homeSet &&
-    homeDistanceM != null && homeDistanceM > HOME_ENTER_M;
-
-  useEffect(() => {
-    if (!wantCity || !effectiveCoords) { setCityName(null); return; }
-    let cancelled = false;
-    reverseGeocode(effectiveCoords.lat, effectiveCoords.lng).then(name => {
-      if (!cancelled) { setCityName(name); }
-    });
-    return () => { cancelled = true; };
-  }, [wantCity, effectiveCoords]);
-
   const state = resolveLanternState({
     placeContext,
     todayIso: todayISO(),
@@ -97,10 +82,34 @@ export function useLanternState(
     offline,
   });
 
-  // Feed this render's outcome back into the hysteresis buffer for the next one.
+  // Track the RAW home-proximity buffer independently of the rendered state
+  // (KAN-301 review): a mall/trip override must not clear it, or leaving that
+  // context while still inside the 200 m leave threshold would wrongly flip to
+  // Outside. When the position is unknown, hold the previous value.
+  const homeProximity = homeDistanceM != null
+    ? resolveHomeProximity(homeDistanceM, wasHomeRef.current)
+    : wasHomeRef.current;
   useEffect(() => {
-    wasHomeRef.current = state.kind === 'home';
+    wasHomeRef.current = homeProximity;
   });
+
+  // Fetch a city name only when the resolved state is actually Outside — this
+  // respects the hysteresis band (no wasted geocode while the buffer still
+  // reads Home) and skips it entirely for mall/trip/home/locating/unset.
+  const wantCity = state.kind === 'outside' && !offline && effectiveCoords != null;
+
+  useEffect(() => {
+    if (!wantCity || !effectiveCoords) { setCityName(null); return; }
+    // Clear the previous city before the replacement request so a move to a new
+    // area never briefly shows the old area's name (it reads "Outside" until the
+    // new lookup lands).
+    setCityName(null);
+    let cancelled = false;
+    reverseGeocode(effectiveCoords.lat, effectiveCoords.lng).then(name => {
+      if (!cancelled) { setCityName(name); }
+    });
+    return () => { cancelled = true; };
+  }, [wantCity, effectiveCoords]);
 
   return state;
 }

@@ -63,4 +63,15 @@ describe('reverseGeocode — caching + rate limit (KAN-301, Nominatim policy)', 
     await reverseGeocode(40.000, -8.000);   // cell B, immediately → rate-limited, no request
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it('returns null (user sees "Outside") when the request fails', async () => {
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('offline'));
+    expect(await reverseGeocode(41.15, -8.61)).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null on a non-OK response', async () => {
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({ ok: false, json: async () => ({}) });
+    expect(await reverseGeocode(41.15, -8.61)).toBeNull();
+  });
 });

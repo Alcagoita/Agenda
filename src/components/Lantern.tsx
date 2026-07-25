@@ -192,9 +192,7 @@ function Pill({
   label: string; expanded: boolean; onPress?: () => void; a11yLabel: string; palette: Palette;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const s = expanded
-    ? { text: 11.5, pv: 5, pl: 11, pr: 9, gap: 5, chev: 11 }
-    : { text: 13, pv: 9, pl: 15, pr: 13, gap: 6, chev: 12 };
+  const s = expanded ? { text: 11.5, chev: 11 } : { text: 13, chev: 12 };
 
   return (
     <AnimatedPressable
@@ -203,22 +201,16 @@ function Pill({
       onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 4 }).start()}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
-      hitSlop={8}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: s.gap,
-        paddingTop: s.pv,
-        paddingBottom: s.pv,
-        paddingLeft: s.pl,
-        paddingRight: s.pr,
-        borderRadius: 999,
-        borderWidth: 1,
-        backgroundColor: palette.nearTint2,
-        borderColor: palette.nearBorder,
-        transform: [{ scale }],
-      }}>
-      <Text style={{ fontSize: s.text, fontFamily: 'Geist-Medium', fontWeight: '500', letterSpacing: -0.025 * s.text, color: palette.nearText }}>
+      // The rest-layout (expanded) pill is short by the visual spec (5px vertical
+      // padding); a larger hitSlop lifts its effective touch target to ≥44px
+      // without changing the visual. The compact pill is already tall enough.
+      hitSlop={expanded ? 12 : 8}
+      style={[
+        styles.pillBase,
+        expanded ? styles.pillExpanded : styles.pillCompact,
+        { backgroundColor: palette.nearTint2, borderColor: palette.nearBorder, transform: [{ scale }] },
+      ]}>
+      <Text style={[styles.pillText, { fontSize: s.text, letterSpacing: -0.025 * s.text, color: palette.nearText }]}>
         {label}
       </Text>
       <ChevronRightIcon color={palette.nearText} size={s.chev} strokeWidth={2.4} />
@@ -380,5 +372,30 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 9999,
+  },
+  // ── Pill (static layout; colours + press transform stay inline) ──
+  pillBase: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  pillExpanded: {
+    gap: 5,
+    paddingTop: 5,
+    paddingBottom: 5,
+    paddingLeft: 11,
+    paddingRight: 9,
+  },
+  pillCompact: {
+    gap: 6,
+    paddingTop: 9,
+    paddingBottom: 9,
+    paddingLeft: 15,
+    paddingRight: 13,
+  },
+  pillText: {
+    fontFamily: 'Geist-Medium',
+    fontWeight: '500',
   },
 });

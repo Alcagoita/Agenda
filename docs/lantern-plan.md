@@ -35,25 +35,29 @@ Never swap those. Brightness alone fails accessibility, is invisible in daylight
 
 ### States
 
+*As shipped in KAN-301. Five states; offline is a modifier, not a state.*
+
 | State | Word | Light | Source of truth |
 |---|---|---|---|
-| Mall (known interior) | The mall's name | Enclosed, settled — rhymes with Home | `mallSnapshots.ts`, active snapshot bounds |
-| Home | "Home" — *decided 2026-07-25, not the neighbourhood name* | Warm, steady | `services/home.ts` stored home address (KAN-247) |
-| Out, known area | The area's name | Warm, awake | habitat cache covers current position |
-| Somewhere new | "New to me" | Dusk | away + outside cached coverage |
-| No home set | "Where do you start?" | Unlit | no stored home address |
+| Mall | The mall's name (offline-safe from the snapshot) | Enclosed, settled — rhymes with Home | `PlaceContext.kind === 'mall'` (proximity.ts) |
+| Trip | The trip's destination | Warm, awake | active trip, `isTodayWithinTripDates` |
+| Home | "Home" — *not the neighbourhood name* | Warm, steady | `services/home.ts` `isNearHome(coords)` true |
+| Outside | The city / area name when online; **"Outside"** when offline | Warm, awake | `isNearHome(coords)` false |
+| No home set | "Where's home?" | Unlit | `isNearHome(coords)` returns `null` |
 
-**"Somewhere new" is not a travel state.** It fires the first time you visit an unfamiliar district of your own city. It is about familiarity, not distance. The 99% case must never be designed around the traveller.
+There is also a transient **`locating`** held state (home set, no fix yet): it renders nothing rather than guessing Outside, so there's no cold-start flash. It resolves to Home/Outside once a position is known.
 
-Priority order is the one `resolveContextChipView` already implements: mall > trip > off-grid > offline.
+**"Somewhere new" is ON HOLD — not built.** It would only be meaningful for a new *city*, and for 99% of use the city name already covers it. Home vs Outside is the whole binary.
+
+Priority order (as implemented in `resolveLanternState`, mirroring `resolveContextChipView`): **mall > trip > home/outside**. Offline is a quiet modifier on any state (the `offlineDot` precedent), never its own state.
 
 ### Rules
 
 - No numbers anywhere in the Lantern. No fill, no completion, no percentage, no spin.
-- Breathing motion only — 4–6s cycle, imperceptible. If a user can tell it's animating, it's too fast.
+- Breathing motion only — 4.5s cycle (6s unset), imperceptible. If a user can tell it's animating, it's too fast. Runs on the halo View via `useNativeDriver`, never on the SVG icon (KAN-157). Respects reduce-motion.
 - State transitions take **seconds, not frames**. Nothing snaps.
 - All text sits on the background, never inside the lit area (the open white-on-amber ~2.5:1 contrast issue must not be made worse).
-- Tapping it opens **your places**; the current state supplies the reason for the tap.
+- Only the pill is tappable; it opens **your places** (the unset state points at the home-address flow; other destinations are KAN-304).
 
 ---
 
@@ -80,9 +84,9 @@ Offline, mall and trip stop being separate chips and become **quiet modifiers** 
 
 ### Hysteresis — hard requirement
 
-GPS drifts hardest at building edges, exactly where mall state flips. A Lantern oscillating Colombo → Out → Colombo destroys the entire premise in about four seconds.
+GPS drifts hardest at building edges, exactly where state flips. A Lantern oscillating Colombo → Out → Colombo destroys the entire premise in about four seconds.
 
-**Enter fast, leave slow, with a dwell time before any state change renders.**
+**Enter fast, leave slow — a distance buffer, not a timer.** As implemented: enter Home at ≤150 m, leave only past 200 m (`HOME_ENTER_M` / `HOME_LEAVE_M`). The buffer is tracked independently of the rendered state, so a mall/trip override doesn't clear it — leaving that context while still inside the leave threshold stays Home. Mall bounds inherit the same damping from proximity.ts's existing 200 m / 3-min recompute gate.
 
 ---
 

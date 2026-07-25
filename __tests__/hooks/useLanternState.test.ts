@@ -28,8 +28,11 @@ jest.mock('../../src/hooks/useOfflineCoverage', () => ({
 }));
 
 import { useLanternState } from '../../src/hooks/useLanternState';
+import type { PlaceContext } from '../../src/services/proximity';
 
 const HOME = { address: 'home', lat: 38.72, lng: -9.14 };
+const COORDS = { lat: 38.72, lng: -9.14 };
+const mallCtx = { kind: 'mall', snapshot: { name: 'Colombo' } } as unknown as PlaceContext;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -73,6 +76,28 @@ it('uses engine coords directly when present (no one-shot needed)', async () => 
   await act(async () => {});
   expect(result.current.kind).toBe('outside');
   expect(mockGetPositionLowAccuracy).not.toHaveBeenCalled();
+});
+
+it('keeps Home through a mall/trip override within the leave threshold (KAN-301 review)', async () => {
+  mockGetHomeLocation.mockReturnValue(HOME);
+  // Start at home (40 m), then 190 m — inside the 200 m leave threshold — for
+  // the mall and the following no-context render.
+  mockDistanceFromHome.mockReturnValueOnce(40).mockReturnValue(190);
+
+  const { result, rerender } = renderHook(
+    ({ ctx }: { ctx: PlaceContext | null }) => useLanternState(ctx, COORDS, true),
+    { initialProps: { ctx: null as PlaceContext | null } },
+  );
+  await act(async () => {});
+  expect(result.current.kind).toBe('home'); // 40 m → Home, buffer now true
+
+  await act(async () => { rerender({ ctx: mallCtx }); }); // enter mall at 190 m
+  expect(result.current.kind).toBe('mall');
+
+  await act(async () => { rerender({ ctx: null }); });     // leave mall, still 190 m
+  // Still inside the 200 m leave threshold → the home buffer must have survived
+  // the mall override, so we read Home, not Outside.
+  expect(result.current.kind).toBe('home');
 });
 
 describe('foreground re-seed (KAN-301 review)', () => {
