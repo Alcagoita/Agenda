@@ -288,23 +288,30 @@ export default function Lantern({
     </>
   );
 
-  // ── Collapsed layout — icon stacked over its label, pill right beside it ──
+  // ── Collapsed layout — two zones. Left: icon stacked over its label, centred
+  // (the label has the whole half to grow into, wrapping to two lines). Right:
+  // the pill, left-aligned, so it sits at the midpoint and only visually shifts
+  // when a long label fills the left zone. ──
   const collapsedContent = (
     <>
-      <View style={styles.collapsedGroup}>
-        <Halo
-          token={v.haloToken} iconColor={v.iconColor} Icon={v.Icon}
-          size={HALO_COLLAPSED} iconSize={ICON_COLLAPSED}
-          baseOpacity={v.baseOpacity} breathe={v.breathe} cycleMs={v.cycleMs} reduceMotion={reduceMotion}
-        />
-        <View style={styles.collapsedLabelRow}>
-          <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={2}>
-            {v.label}
-          </Text>
-          {offlineDot}
+      <View style={styles.collapsedLeftZone}>
+        <View style={styles.collapsedGroup}>
+          <Halo
+            token={v.haloToken} iconColor={v.iconColor} Icon={v.Icon}
+            size={HALO_COLLAPSED} iconSize={ICON_COLLAPSED}
+            baseOpacity={v.baseOpacity} breathe={v.breathe} cycleMs={v.cycleMs} reduceMotion={reduceMotion}
+          />
+          <View style={styles.collapsedLabelRow}>
+            <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={2}>
+              {v.label}
+            </Text>
+            {offlineDot}
+          </View>
         </View>
       </View>
-      <Pill label={v.pillLabel} expanded={false} onPress={onPillPress} a11yLabel={v.pillA11y} palette={palette} />
+      <View style={styles.collapsedRightZone}>
+        <Pill label={v.pillLabel} expanded={false} onPress={onPillPress} a11yLabel={v.pillA11y} palette={palette} />
+      </View>
     </>
   );
 
@@ -360,28 +367,33 @@ const styles = StyleSheet.create({
     top: 0, left: 0, right: 0,
     height: SECTION_H_COLLAPSED,
     flexDirection: 'row',
-    alignItems: 'center',
-    // The icon+label group and the pill are centred as a cluster, so the pill
-    // sits around the middle for a short label and is only pushed rightward when
-    // a long label widens the group (which wraps to two lines, KAN-301 revision).
-    justifyContent: 'center',
-    gap: 16,
+    alignItems: 'stretch',
     paddingHorizontal: spacing.page,
+  },
+  // Two equal zones (KAN-301 revision). Left holds the centred icon+label; the
+  // label has this whole half to grow into and wraps to two lines. Right holds
+  // the pill, left-aligned, so it sits at the midpoint.
+  collapsedLeftZone: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  collapsedRightZone: {
+    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   // Icon stacked on top of its label, with breathing room between them.
   collapsedGroup: {
     alignItems: 'center',
     gap: 8,
-    flexShrink: 1,
     minWidth: 0,
   },
   collapsedLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    // Bounds the label so a long name wraps to two lines instead of a long
-    // single line pushing the pill off the row.
-    maxWidth: 150,
   },
   collapsedLabel: {
     fontSize: 17,
