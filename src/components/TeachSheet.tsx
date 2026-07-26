@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
 import { CloseIcon, PoiIcon } from './AppIcon';
-import { ALL_POI_TYPES, poiCatalogLabel, type PoiType } from '../types';
+import { TEACHABLE_POI_TYPES, poiCatalogLabel, type PoiType } from '../types';
 import { COPY } from '../constants/copy';
 
 export interface TeachSheetProps {
@@ -48,7 +48,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
 
           <Text style={[styles.fieldLabel, { color: palette.muted }]}>{COPY.places.teachTypeLabel}</Text>
           <View style={styles.typeGrid}>
-            {ALL_POI_TYPES.map(t => {
+            {TEACHABLE_POI_TYPES.map(t => {
               const selected = t === type;
               return (
                 <Pressable

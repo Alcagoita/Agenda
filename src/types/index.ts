@@ -146,6 +146,16 @@ export function isCatalogPoiType(value: string | null | undefined): value is Poi
  */
 export const ALL_POI_TYPES: PoiType[] = POI_CATALOG.map(c => c.type);
 
+/**
+ * POI types worth teaching a *brand* for (KAN-304): places that come as
+ * multiple, chain-able stores where naming a favourite makes sense — a café,
+ * a market, a gym. Excludes one-off/utility types (ATM, park, post, bus…)
+ * where a brand name carries no signal. May grow later.
+ */
+export const TEACHABLE_POI_TYPES: PoiType[] = [
+  'cafe', 'supermarket', 'gas', 'gym', 'restaurant', 'salon',
+];
+
 /** /users/{uid}/pois/{poiType} */
 export interface PoiPreference {
   /**

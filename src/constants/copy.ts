@@ -452,7 +452,7 @@ const en = {
     teachTitle: 'Teach a place',
     teachTypeLabel: 'What kind of place?',
     teachNameLabel: 'Which one do you go to?',
-    teachNamePlaceholder: 'Name it — like Whole Foods',
+    teachNamePlaceholder: 'Type a brand — like Whole Foods',
     teachSaveAction: 'Save',
     teachCancelA11y: 'Cancel',
     // Long-press forget
@@ -1546,7 +1546,7 @@ const ptPT: typeof en = {
     teachTitle: 'Ensinar um sítio',
     teachTypeLabel: 'Que tipo de sítio?',
     teachNameLabel: 'A qual costumas ir?',
-    teachNamePlaceholder: 'Dá-lhe um nome — tipo Whole Foods',
+    teachNamePlaceholder: 'Escreve uma marca — tipo Pingo Doce',
     teachSaveAction: 'Guardar',
     teachCancelA11y: 'Cancelar',
     forgetA11y: (name: string) => `Esquecer ${name}`,
