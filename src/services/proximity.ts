@@ -93,7 +93,7 @@ import { todayISO } from '../utils/date';
 import { recordLiveResult, refreshHabitatCacheIfStale, queryHabitatCache, findExistingPlaceId, hasCachedPlaces } from './habitatCache';
 import { saveProximitySnapshot, loadProximitySnapshot } from './proximitySnapshot';
 import { useToastStore } from '../store/toastStore';
-import { LearnedPlace, getLearnedPlaceForPoiType } from './learnedPlaces';
+import { LearnedBrand, getLearnedPlaceForPoiType } from './learnedPlaces';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -237,7 +237,7 @@ export function shouldShowCoverageInvitation(invitationShownCount: number): bool
 }
 
 /** KAN-230 — on-device learned-place ranking, fed in from outside (see setLearnedPlaces). */
-let _learnedPlaces: LearnedPlace[] = [];
+let _learnedPlaces: LearnedBrand[] = [];
 
 /** KAN-238 — user's custom category place types, fed in from outside (see setCustomCategoryPoiTypes). */
 let _customCategoryPoiTypes: string[] = [];
@@ -333,7 +333,7 @@ export function updateNotifNearbyEnabled(enabled: boolean): void {
 }
 
 /** KAN-230 — feed in the on-device learned-place ranking. Pass null/empty to clear (e.g. on sign-out). */
-export function setLearnedPlaces(places: LearnedPlace[] | null): void {
+export function setLearnedPlaces(places: LearnedBrand[] | null): void {
   _learnedPlaces = places ?? [];
 }
 
@@ -859,17 +859,13 @@ function processProximityTick(
     const winningType = heroType;
     const learnedForType = getLearnedPlaceForPoiType(_learnedPlaces, winningType);
     const currentPlaces = allPlaces[winningType] ?? [];
-    if (learnedForType && currentPlaces[0]?.placeId !== learnedForType.placeId) {
+    // KAN-304 — prefer the learned BRAND (by name), not a specific place id, so
+    // any branch of the user's preferred brand represents the type.
+    if (learnedForType && currentPlaces[0]?.name !== learnedForType.name) {
       for (const candidate of currentPlaces.slice(1)) {
-        let candidateId = candidate.placeId;
-        if (!answeredFromCache) {
-          const existingId = findExistingPlaceId(winningType, candidate.name, candidate.lat, candidate.lng);
-          if (existingId) { candidateId = existingId; }
-        }
-        if (candidateId === learnedForType.placeId && candidate.distanceMeters < HERO_RADIUS_M) {
-          const promoted = { ...candidate, placeId: candidateId };
-          allPlaces[winningType] = [promoted, ...currentPlaces.filter(p => p !== candidate)];
-          heroPlace = promoted;
+        if (candidate.name === learnedForType.name && candidate.distanceMeters < HERO_RADIUS_M) {
+          allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
+          heroPlace = candidate;
           break;
         }
       }

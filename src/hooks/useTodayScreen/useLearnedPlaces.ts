@@ -21,16 +21,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getLearnedPlaceCounts } from '../../services/firestore';
 import { computeLearnedPlaces } from '../../services/learnedPlaces';
-import type { LearnedPlace } from '../../services/learnedPlaces';
+import type { LearnedBrand } from '../../services/learnedPlaces';
 
 export interface LearnedPlacesState {
-  learnedPlaces: LearnedPlace[];
+  learnedPlaces: LearnedBrand[];
   /** Re-fetches history and recomputes the ranking — call after a brush at a known place. */
   refresh: () => Promise<void>;
 }
 
 export function useLearnedPlaces(uid: string | undefined): LearnedPlacesState {
-  const [learnedPlaces, setLearnedPlaces] = useState<LearnedPlace[]>([]);
+  const [learnedPlaces, setLearnedPlaces] = useState<LearnedBrand[]>([]);
   const requestIdRef = useRef(0);
 
   const refresh = useCallback(async () => {
