@@ -350,6 +350,11 @@ service cloud.firestore {
           && validTripData(request.resource.data);
       }
 
+      // ─── Taught places / favourites (KAN-304) ────────────────────────────────
+      match /places/{placeId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
       // ─── Mall snapshot (KAN-237) ─────────────────────────────────────────────
       match /mallSnapshot/current {
         allow read, delete: if isOwner(userId);

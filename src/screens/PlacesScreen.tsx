@@ -239,9 +239,9 @@ function EmptyPanel({ icon: Icon, line, palette, action }: {
   icon: IconCmp; line: string; palette: Palette; action?: { label: string; onPress: () => void };
 }) {
   return (
-    <View style={[styles.emptyPanel, { backgroundColor: palette.surface2 }]}>
-      <Icon color={palette.faint} size={22} />
-      <Text style={[styles.emptyLine, { color: palette.muted }]}>{line}</Text>
+    <View style={styles.emptyPanel}>
+      <Icon color={palette.accent} size={24} />
+      <Text style={[styles.emptyLine, { color: palette.text }]}>{line}</Text>
       {action && (
         <Pressable
           style={[styles.emptyActionPill, { borderColor: palette.line }]}
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
 
   yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
 
-  emptyPanel: { alignItems: 'center', gap: 8, paddingVertical: 24, paddingHorizontal: 16, borderRadius: radii.card, marginTop: 4 },
+  emptyPanel: { alignItems: 'center', gap: 8, paddingVertical: 28, paddingHorizontal: 16, marginTop: 4 },
   emptyLine: { fontSize: 13, fontFamily: 'Geist-Regular', textAlign: 'center' },
   emptyActionPill: { marginTop: 4, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1 },
   emptyActionLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },

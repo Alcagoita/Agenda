@@ -63,21 +63,22 @@ export function usePlaces(): PlacesState {
       return;
     }
     if (!hasLoadedRef.current) { setLoading(true); } // spinner only on first load, not on every focus refetch
-    try {
-      const [taughtPlaces, counts, allTrips] = await Promise.all([
-        getTaughtPlaces(uid),
-        getLearnedPlaceCounts(uid),
-        getTrips(uid),
-      ]);
-      if (uidRef.current !== uid) { return; }
-      setTaught(taughtPlaces);
-      setLearned(computeLearnedPlaces(counts));
-      setTrips(allTrips);
-    } catch (err) {
-      if (uidRef.current === uid) { console.warn('[usePlaces] refresh failed', err); }
-    } finally {
-      if (uidRef.current === uid) { hasLoadedRef.current = true; setLoading(false); }
-    }
+    // Settle each read independently: one collection failing (e.g. a rules gap)
+    // must not blank the other two lists.
+    const [taughtRes, countsRes, tripsRes] = await Promise.allSettled([
+      getTaughtPlaces(uid),
+      getLearnedPlaceCounts(uid),
+      getTrips(uid),
+    ]);
+    if (uidRef.current !== uid) { return; }
+    if (taughtRes.status === 'fulfilled') { setTaught(taughtRes.value); }
+    else { console.warn('[usePlaces] taught places load failed', taughtRes.reason); }
+    if (countsRes.status === 'fulfilled') { setLearned(computeLearnedPlaces(countsRes.value)); }
+    else { console.warn('[usePlaces] learned places load failed', countsRes.reason); }
+    if (tripsRes.status === 'fulfilled') { setTrips(tripsRes.value); }
+    else { console.warn('[usePlaces] trips load failed', tripsRes.reason); }
+    hasLoadedRef.current = true;
+    setLoading(false);
   }, [uid]);
 
   // Refetch on focus, not just mount — returning from TripPlanner (a new trip)
