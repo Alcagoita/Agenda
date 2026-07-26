@@ -72,7 +72,7 @@ export default function TripPlannerScreen() {
     radiusKey, setRadiusKey, estimatedBytes, previewUrl,
     confirmDownload, error, goBack, isEditing, editInitialStep,
   } = useTripPlanner(
-    () => navigation.navigate('PlacesIKnow'),
+    () => navigation.navigate(route.params?.doneReturnTo ?? 'PlacesIKnow'),
     route.params?.prefillStartDate,
     route.params?.prefillDestinationQuery,
     editOptions,

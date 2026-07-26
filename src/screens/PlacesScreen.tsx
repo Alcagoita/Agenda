@@ -118,7 +118,7 @@ export default function PlacesScreen() {
                   icon={SuitcaseIcon}
                   line={COPY.places.emptyPlanned}
                   palette={palette}
-                  action={{ label: COPY.places.tripsAddAction, onPress: () => navigation.navigate('TripPlanner') }}
+                  action={{ label: COPY.places.tripsAddAction, onPress: () => navigation.navigate('TripPlanner', { doneReturnTo: 'Places' }) }}
                 />
               ) : (
                 <>
@@ -127,7 +127,7 @@ export default function PlacesScreen() {
                   ))}
                   {/* Add button AFTER the bounded list of planned trips. */}
                   <View style={styles.tripsAddWrap}>
-                    <AddButton label={COPY.places.tripsAddAction} onPress={() => navigation.navigate('TripPlanner')} palette={palette} />
+                    <AddButton label={COPY.places.tripsAddAction} onPress={() => navigation.navigate('TripPlanner', { doneReturnTo: 'Places' })} palette={palette} />
                   </View>
                 </>
               )}

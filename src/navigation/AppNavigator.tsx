@@ -77,6 +77,9 @@ export type RootStackParamList = {
     prefillDestinationQuery?: string;
     editTripId?: string;
     initialStep?: 'dates' | 'radius';
+    /** Where to land after a successful download — defaults to PlacesIKnow. The
+     *  Places screen (KAN-304) passes 'Places' so back returns there, refreshed. */
+    doneReturnTo?: 'Places' | 'PlacesIKnow';
   } | undefined;
   /** "Places I know" — the always-on habitat area + downloaded trips, with refresh/delete (KAN-234). */
   PlacesIKnow: undefined;

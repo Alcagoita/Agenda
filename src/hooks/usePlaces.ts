@@ -9,12 +9,13 @@
  * One-shot fetches (repo rule: no persistent onSnapshot). Exposes teach/forget
  * actions that refresh the affected list.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import {
   getTaughtPlaces, addTaughtPlace, removeTaughtPlace,
-  getLearnedPlaceCounts, getTrips,
+  getLearnedPlaceCounts, getTrips, Timestamp,
 } from '../services/firestore';
 import type { TaughtPlace } from '../services/firestore/taughtPlaces';
 import { computeLearnedPlaces } from '../services/learnedPlaces';
@@ -47,6 +48,7 @@ export function usePlaces(): PlacesState {
   uidRef.current = uid;
 
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [taught, setTaught] = useState<TaughtPlace[]>([]);
   const [learned, setLearned] = useState<ReturnType<typeof computeLearnedPlaces>>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -60,7 +62,7 @@ export function usePlaces(): PlacesState {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedRef.current) { setLoading(true); } // spinner only on first load, not on every focus refetch
     try {
       const [taughtPlaces, counts, allTrips] = await Promise.all([
         getTaughtPlaces(uid),
@@ -74,11 +76,13 @@ export function usePlaces(): PlacesState {
     } catch (err) {
       if (uidRef.current === uid) { console.warn('[usePlaces] refresh failed', err); }
     } finally {
-      if (uidRef.current === uid) { setLoading(false); }
+      if (uidRef.current === uid) { hasLoadedRef.current = true; setLoading(false); }
     }
   }, [uid]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  // Refetch on focus, not just mount — returning from TripPlanner (a new trip)
+  // or HomeAddress must show the updated lists.
+  useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
 
   const { favourites, usuals } = useMemo(() => splitPlaces(taught, learned), [taught, learned]);
 
@@ -94,10 +98,15 @@ export function usePlaces(): PlacesState {
 
   const addPlace = useCallback(async (poiType: string, name: string) => {
     if (!uid) { return; }
+    // Optimistic — show the favourite immediately, then persist + reconcile.
+    const tempId = `temp_${Date.now()}`;
+    const optimistic: TaughtPlace = { id: tempId, poiType, name, createdAt: Timestamp.now() };
+    setTaught(prev => [optimistic, ...prev]);
     try {
       await addTaughtPlace(uid, { poiType, name });
-      await refresh();
+      await refresh(); // swap the temp row for the real persisted one
     } catch (err) {
+      setTaught(prev => prev.filter(p => p.id !== tempId)); // roll back on failure
       console.warn('[usePlaces] addPlace failed', err);
     }
   }, [uid, refresh]);
