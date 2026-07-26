@@ -145,9 +145,10 @@ export default function TodayScreen() {
   // ── Lantern — persistent place-familiarity header (KAN-301) ───────────────────
   const lanternState = useLanternState(placeContext, coords, permissionGranted);
   const onLanternPill = useCallback(() => {
-    // Only the unset state has a destination for now — it points at the home
-    // address flow. The other states' pill is built here but wired by KAN-304.
+    // Unset points at the home-address flow; every other state opens Places
+    // (KAN-304).
     if (lanternState.kind === 'unset') { navigation.navigate('HomeAddress'); }
+    else { navigation.navigate('Places'); }
   }, [lanternState.kind, navigation]);
 
   // ── Task display order: undone first, done at bottom ─────────────────────────

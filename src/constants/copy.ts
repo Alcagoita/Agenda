@@ -426,6 +426,40 @@ const en = {
     setHomePillA11y: 'Tell me where home is',
   },
 
+  // ─── Places — screen behind the Lantern pill (KAN-304) ───────────────────────
+  places: {
+    screenTitle: 'Places',
+    backA11y: 'Back',
+    sectionPlaces: 'Places I know',
+    sectionTrips: 'Trips',
+    sectionPastTrips: "Places I've been",
+    allPlaces: (n: number) => `All ${n} places`,
+    allPlacesA11y: (n: number) => `See all ${n} places`,
+    teachAction: 'Teach it a new place',
+    taughtMarkerA11y: 'You taught this place',
+    removeA11y: (name: string) => `Forget ${name}`,
+    // Empty states
+    emptyPlaces: 'The places you go will show up here.',
+    emptyTrips: 'Somewhere you’re headed will show up here.',
+    emptyTripsAction: 'Going somewhere?',
+    emptyPastTrips: 'Places you’ve been will show up here.',
+    // Full directory
+    directoryTitle: 'All places',
+    searchPlaceholder: 'Search places',
+    directoryEmpty: 'No places match.',
+    // Teach flow
+    teachTitle: 'Teach a place',
+    teachTypeLabel: 'What kind of place?',
+    teachNameLabel: 'Which one do you go to?',
+    teachNamePlaceholder: 'Name it — like Whole Foods',
+    teachSaveAction: 'Save',
+    teachCancelA11y: 'Cancel',
+    forgetTripTitle: (dest: string) => `Forget ${dest}?`,
+    forgetTripBody: 'The memory goes; nothing else changes.',
+    forgetTripConfirm: 'Forget this trip',
+    forgetTripCancel: 'Keep it',
+  },
+
   // ─── Settings (KAN-252) ─────────────────────────────────────────────────────
   settings: {
     screenTitle: 'Settings',
@@ -1483,6 +1517,37 @@ const ptPT: typeof en = {
     cantFindYou: 'Não te encontro',
     placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
     setHomePillA11y: 'Diz-me onde é casa',
+  },
+
+  // ─── Places — ecrã atrás do botão da Lanterna (KAN-304) ──────────────────────
+  places: {
+    screenTitle: 'Sítios',
+    backA11y: 'Voltar',
+    sectionPlaces: 'Sítios que conheço',
+    sectionTrips: 'Viagens',
+    sectionPastTrips: 'Sítios onde estive',
+    allPlaces: (n: number) => `Todos os ${n} sítios`,
+    allPlacesA11y: (n: number) => `Ver todos os ${n} sítios`,
+    teachAction: 'Ensina-lhe um sítio novo',
+    taughtMarkerA11y: 'Ensinaste este sítio',
+    removeA11y: (name: string) => `Esquecer ${name}`,
+    emptyPlaces: 'Os sítios onde vais aparecem aqui.',
+    emptyTrips: 'Um sítio para onde vás aparece aqui.',
+    emptyTripsAction: 'Vais a algum lado?',
+    emptyPastTrips: 'Os sítios onde estiveste aparecem aqui.',
+    directoryTitle: 'Todos os sítios',
+    searchPlaceholder: 'Procurar sítios',
+    directoryEmpty: 'Nenhum sítio corresponde.',
+    teachTitle: 'Ensinar um sítio',
+    teachTypeLabel: 'Que tipo de sítio?',
+    teachNameLabel: 'A qual costumas ir?',
+    teachNamePlaceholder: 'Dá-lhe um nome — tipo Whole Foods',
+    teachSaveAction: 'Guardar',
+    teachCancelA11y: 'Cancelar',
+    forgetTripTitle: (dest: string) => `Esquecer ${dest}?`,
+    forgetTripBody: 'A memória vai-se; o resto fica.',
+    forgetTripConfirm: 'Esquecer esta viagem',
+    forgetTripCancel: 'Manter',
   },
 
   settings: {
