@@ -72,8 +72,12 @@ export async function resolveTaskDestination(
   if (!task.poi) { return null; }
 
   // The offline habitat candidates for this type, nearest first — shared by
-  // the learned-brand match (2) and the plain nearest fallback (3).
-  const candidates = queryHabitatCache(coords.lat, coords.lng, [task.poi], ROUTE_MAX_RADIUS_M)[task.poi] ?? [];
+  // the learned-brand match (2) and the plain nearest fallback (3). Uncapped
+  // (maxResultsPerType: null): a branch of the learned brand could sit past the
+  // default per-type cap and would otherwise be missed by the name match below.
+  const candidates = queryHabitatCache(
+    coords.lat, coords.lng, [task.poi], ROUTE_MAX_RADIUS_M, { maxResultsPerType: null },
+  )[task.poi] ?? [];
 
   // 2. Learned brand — the user's preferred brand for this type wins even if a
   // same-type stranger is closer (KAN-304: match by brand name, not place id).

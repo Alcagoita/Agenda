@@ -249,20 +249,23 @@ function TeachSheet({ visible, palette, onClose, onSave }: {
   onClose: () => void;
   onSave: (poiType: string, name: string) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
   const canSave = type != null && name.trim().length > 0;
 
   const reset = () => { setType(null); setName(''); };
+  // Every dismissal clears the form, so reopening always starts empty.
+  const handleClose = () => { reset(); onClose(); };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={[styles.sheetScrim, { backgroundColor: palette.scrim }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={COPY.places.teachCancelA11y} />
-        <View style={[styles.sheet, { backgroundColor: palette.bg }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityLabel={COPY.places.teachCancelA11y} />
+        <View style={[styles.sheet, { backgroundColor: palette.bg, paddingBottom: spacing.page + insets.bottom }]}>
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: palette.text }]}>{COPY.places.teachTitle}</Text>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
+            <Pressable onPress={handleClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
               <CloseIcon color={palette.muted} size={18} />
             </Pressable>
           </View>
@@ -334,7 +337,7 @@ const styles = StyleSheet.create({
   iconTile: { width: 36, height: 36, borderRadius: radii.listIcon, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },
-  rowSub: { fontSize: 12, fontFamily: 'Geist-Regular' },
+  rowSub: { fontSize: 12, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'] },
   brandName: { flex: 1, fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },
   removeBtn: { paddingHorizontal: 4, paddingVertical: 4 },
   removeX: { fontSize: 22, lineHeight: 22 },
@@ -343,14 +346,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     minHeight: 44, paddingHorizontal: 12, borderRadius: radii.ctaBtn, borderWidth: 1,
   },
-  overflowLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
+  overflowLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500', fontVariant: ['tabular-nums'] },
   teachRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     minHeight: 44, paddingHorizontal: 12, borderRadius: radii.ctaBtn, borderWidth: 1,
   },
   teachLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
 
-  yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 6 },
+  yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 6, fontVariant: ['tabular-nums'] },
 
   emptyPanel: {
     alignItems: 'center', gap: 8, paddingVertical: 24, paddingHorizontal: 16, borderRadius: radii.card,

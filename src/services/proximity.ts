@@ -93,7 +93,7 @@ import { todayISO } from '../utils/date';
 import { recordLiveResult, refreshHabitatCacheIfStale, queryHabitatCache, findExistingPlaceId, hasCachedPlaces } from './habitatCache';
 import { saveProximitySnapshot, loadProximitySnapshot } from './proximitySnapshot';
 import { useToastStore } from '../store/toastStore';
-import { LearnedBrand, getLearnedPlaceForPoiType } from './learnedPlaces';
+import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //

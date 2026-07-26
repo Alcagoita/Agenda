@@ -82,6 +82,15 @@ describe('computeLearnedPlaces (brand aggregation)', () => {
     ]);
   });
 
+  it('breaks equal visit counts alphabetically by name', () => {
+    // Inserted in reverse-alphabetical order; equal counts → alphabetical out.
+    const ranked = computeLearnedPlaces([
+      count('z1', 'Zephyr', 'cafe', 4),
+      count('a1', 'Alpha', 'cafe', 4),
+    ]);
+    expect(ranked.map(b => b.name)).toEqual(['Alpha', 'Zephyr']);
+  });
+
   it('returns an empty array for no counts', () => {
     expect(computeLearnedPlaces([])).toEqual([]);
   });

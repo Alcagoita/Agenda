@@ -50,7 +50,14 @@ export function usePlaces(): PlacesState {
   const [trips, setTrips] = useState<Trip[]>([]);
 
   const refresh = useCallback(async () => {
-    if (!uid) { setLoading(false); return; }
+    if (!uid) {
+      // Signed out — drop the previous account's data so it never lingers.
+      setTaught([]);
+      setLearned([]);
+      setTrips([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [taughtPlaces, counts, allTrips] = await Promise.all([

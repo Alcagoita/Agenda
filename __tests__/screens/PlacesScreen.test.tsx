@@ -6,8 +6,9 @@
  * "Teach it a new place" action (AC7).
  */
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 import { COPY } from '../../src/constants/copy';
+import { poiCatalogLabel } from '../../src/types';
 
 let mockReturn: ReturnType<typeof makeState>;
 function makeState(over: Partial<ReturnType<typeof base>> = {}) { return { ...base(), ...over }; }
@@ -75,5 +76,31 @@ describe('PlacesScreen', () => {
     mockReturn = makeState({ places: [{ poiType: 'cafe', name: 'Sightglass', taught: true, id: 't1' }] });
     render(<PlacesScreen />);
     expect(screen.getByLabelText(COPY.places.taughtMarkerA11y)).toBeTruthy();
+  });
+
+  it('teaches a new brand — submits the normalized (type, name) (AC7)', () => {
+    const addPlace = jest.fn();
+    mockReturn = makeState({ addPlace });
+    render(<PlacesScreen />);
+
+    fireEvent.press(screen.getByText(COPY.places.teachAction));                    // open sheet
+    fireEvent.press(screen.getByLabelText(poiCatalogLabel('cafe' as never)));      // pick a type
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachNamePlaceholder), '  Sightglass  ');
+    fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
+
+    expect(addPlace).toHaveBeenCalledWith('cafe', 'Sightglass'); // trimmed
+  });
+
+  it('resets the teach form when dismissed and reopened', () => {
+    mockReturn = makeState();
+    render(<PlacesScreen />);
+
+    fireEvent.press(screen.getByText(COPY.places.teachAction));
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachNamePlaceholder), 'Half-typed');
+    // Dismiss via the close control, then reopen.
+    fireEvent.press(screen.getAllByLabelText(COPY.places.teachCancelA11y)[0]);
+    fireEvent.press(screen.getByText(COPY.places.teachAction));
+
+    expect(screen.getByPlaceholderText(COPY.places.teachNamePlaceholder).props.value).toBe('');
   });
 });
