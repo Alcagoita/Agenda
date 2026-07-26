@@ -2,8 +2,8 @@
  * AllPlacesScreen — KAN-304
  *
  * The full brand directory, reached from the Places screen's "All N places"
- * overflow row. Every brand (taught + learned), searchable by name, where a
- * user with many places teaches or forgets them.
+ * overflow row. Every brand (taught + learned), searchable by name. This is the
+ * management surface: teaching AND removing (forgetting) both live here.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -14,7 +14,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
-import { ChevronLeftIcon, FilledStarIcon, PoiIcon } from '../components/AppIcon';
+import { ChevronLeftIcon, PlusIcon, FilledStarIcon, PoiIcon } from '../components/AppIcon';
+import TeachSheet from '../components/TeachSheet';
 import { usePlaces } from '../hooks/usePlaces';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { COPY } from '../constants/copy';
@@ -25,8 +26,9 @@ export default function AllPlacesScreen() {
   const { palette } = useTheme();
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const { loading, places, removePlace } = usePlaces();
+  const { loading, places, addPlace, removePlace } = usePlaces();
   const [query, setQuery] = useState('');
+  const [teaching, setTeaching] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -64,13 +66,22 @@ export default function AllPlacesScreen() {
         <View style={styles.loadingWrap}><ActivityIndicator color={palette.accent} /></View>
       ) : (
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
+          <Pressable
+            style={styles.teachRow}
+            onPress={() => setTeaching(true)}
+            accessibilityRole="button"
+            accessibilityLabel={COPY.places.teachAction}>
+            <PlusIcon color={palette.accent} size={18} />
+            <Text style={[styles.teachLabel, { color: palette.accent }]}>{COPY.places.teachAction}</Text>
+          </Pressable>
+
           {filtered.length === 0 ? (
             <Text style={[styles.emptyText, { color: palette.muted }]}>{COPY.places.directoryEmpty}</Text>
           ) : (
             filtered.map(place => (
               <View
                 key={`${place.poiType} ${place.name}`}
-                style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                style={[styles.row, { borderBottomColor: palette.line }]}>
                 <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
                   <PoiIcon type={place.poiType} color={palette.muted} size={20} />
                 </View>
@@ -95,6 +106,12 @@ export default function AllPlacesScreen() {
           )}
         </ScrollView>
       )}
+
+      <TeachSheet
+        visible={teaching}
+        onClose={() => setTeaching(false)}
+        onSave={(poiType, name) => { addPlace(poiType, name); setTeaching(false); }}
+      />
     </View>
   );
 }
@@ -113,10 +130,12 @@ const styles = StyleSheet.create({
     fontSize: 15, fontFamily: 'Geist-Regular',
   },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: spacing.page, paddingTop: 12, gap: 10 },
+  content: { paddingHorizontal: spacing.page, paddingTop: 4 },
+  teachRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingVertical: 12 },
+  teachLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: radii.card, borderWidth: 1, padding: 12,
+    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconTile: { width: 36, height: 36, borderRadius: radii.listIcon, alignItems: 'center', justifyContent: 'center' },
   brandName: { flex: 1, fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },

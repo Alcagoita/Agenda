@@ -39,6 +39,7 @@ jest.mock('@react-navigation/native-stack', () => ({}));
 jest.mock('../../src/components/AppIcon', () => ({
   ChevronLeftIcon: () => null, ChevronRightIcon: () => null, PlusIcon: () => null,
   CloseIcon: () => null, SuitcaseIcon: () => null, FilledStarIcon: () => null, PoiIcon: () => null,
+  PinIcon: () => null, ClockIcon: () => null,
 }));
 
 import PlacesScreen from '../../src/screens/PlacesScreen';
@@ -76,6 +77,12 @@ describe('PlacesScreen', () => {
     mockReturn = makeState({ places: [{ poiType: 'cafe', name: 'Sightglass', taught: true, id: 't1' }] });
     render(<PlacesScreen />);
     expect(screen.getByLabelText(COPY.places.taughtMarkerA11y)).toBeTruthy();
+  });
+
+  it('renders NO remove control — looking, not managing (removal lives in the directory)', () => {
+    mockReturn = makeState({ places: [{ poiType: 'cafe', name: 'Sightglass', taught: true, id: 't1' }] });
+    render(<PlacesScreen />);
+    expect(screen.queryByLabelText(COPY.places.removeA11y('Sightglass'))).toBeNull();
   });
 
   it('teaches a new brand — submits the normalized (type, name) (AC7)', () => {

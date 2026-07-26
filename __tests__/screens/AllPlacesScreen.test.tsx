@@ -33,6 +33,7 @@ jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ goBack: j
 jest.mock('@react-navigation/native-stack', () => ({}));
 jest.mock('../../src/components/AppIcon', () => ({
   ChevronLeftIcon: () => null, FilledStarIcon: () => null, PoiIcon: () => null,
+  PlusIcon: () => null, CloseIcon: () => null,
 }));
 
 import AllPlacesScreen from '../../src/screens/AllPlacesScreen';
@@ -75,5 +76,11 @@ describe('AllPlacesScreen', () => {
     mockReturn = makeState({ loading: true, places: PLACES });
     render(<AllPlacesScreen />);
     expect(screen.queryByText('Sightglass')).toBeNull();
+  });
+
+  it('offers teaching (the directory is the management surface)', () => {
+    mockReturn = makeState({ places: PLACES });
+    render(<AllPlacesScreen />);
+    expect(screen.getByText(COPY.places.teachAction)).toBeTruthy();
   });
 });

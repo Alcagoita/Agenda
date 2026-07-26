@@ -428,7 +428,8 @@ const en = {
 
   // ─── Places — screen behind the Lantern pill (KAN-304) ───────────────────────
   places: {
-    screenTitle: 'Places',
+    // Shares its name with the Lantern pill that opens it (KAN-301).
+    screenTitle: 'Places I know',
     backA11y: 'Back',
     sectionPlaces: 'Places I know',
     sectionTrips: 'Trips',
@@ -1521,7 +1522,7 @@ const ptPT: typeof en = {
 
   // ─── Places — ecrã atrás do botão da Lanterna (KAN-304) ──────────────────────
   places: {
-    screenTitle: 'Sítios',
+    screenTitle: 'Sítios que conheço',
     backA11y: 'Voltar',
     sectionPlaces: 'Sítios que conheço',
     sectionTrips: 'Viagens',
