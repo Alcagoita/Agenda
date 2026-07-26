@@ -15,12 +15,13 @@ import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import {
   getTaughtPlaces, addTaughtPlace, removeTaughtPlace,
-  getLearnedPlaceCounts, getTrips, Timestamp,
+  getLearnedPlaceCounts, removeLearnedBrand, getTrips, getCategories, Timestamp,
 } from '../services/firestore';
 import type { TaughtPlace } from '../services/firestore/taughtPlaces';
 import { computeLearnedPlaces } from '../services/learnedPlaces';
 import { splitPlaces, type PlaceEntry } from '../services/places';
 import { forgetTrip as forgetTripAction } from '../services/tripActions';
+import { refreshTripArea } from '../services/tripDownload';
 import { groupTripsByYear, type TripYearGroup } from './useWhereWeveBeen';
 import { isTripPast, isPastMemorableTrip } from '../utils/contextChip';
 import { todayISO } from '../utils/date';
@@ -37,8 +38,15 @@ export interface PlacesState {
   /** Past trips, grouped by year. */
   pastTripGroups: TripYearGroup[];
   addPlace: (poiType: string, name: string) => void;
+  /** Remove a taught favourite by its doc id. */
   removePlace: (id: string) => void;
+  /** Forget a learned "usual" brand (deletes its visit tallies). */
+  removeUsual: (poiType: string, name: string) => void;
   forgetTrip: (trip: Trip) => void;
+  /** Re-download a planned trip's area. */
+  refreshTrip: (trip: Trip) => void;
+  /** Trip id currently re-downloading, or null. */
+  refreshingTripId: string | null;
   refresh: () => Promise<void>;
 }
 
@@ -52,6 +60,8 @@ export function usePlaces(): PlacesState {
   const [taught, setTaught] = useState<TaughtPlace[]>([]);
   const [learned, setLearned] = useState<ReturnType<typeof computeLearnedPlaces>>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [customCatPoiTypes, setCustomCatPoiTypes] = useState<string[]>([]);
+  const [refreshingTripId, setRefreshingTripId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!uid) {
@@ -64,11 +74,12 @@ export function usePlaces(): PlacesState {
     }
     if (!hasLoadedRef.current) { setLoading(true); } // spinner only on first load, not on every focus refetch
     // Settle each read independently: one collection failing (e.g. a rules gap)
-    // must not blank the other two lists.
-    const [taughtRes, countsRes, tripsRes] = await Promise.allSettled([
+    // must not blank the other lists.
+    const [taughtRes, countsRes, tripsRes, catsRes] = await Promise.allSettled([
       getTaughtPlaces(uid),
       getLearnedPlaceCounts(uid),
       getTrips(uid),
+      getCategories(uid),
     ]);
     if (uidRef.current !== uid) { return; }
     if (taughtRes.status === 'fulfilled') { setTaught(taughtRes.value); }
@@ -77,6 +88,7 @@ export function usePlaces(): PlacesState {
     else { console.warn('[usePlaces] learned places load failed', countsRes.reason); }
     if (tripsRes.status === 'fulfilled') { setTrips(tripsRes.value); }
     else { console.warn('[usePlaces] trips load failed', tripsRes.reason); }
+    if (catsRes.status === 'fulfilled') { setCustomCatPoiTypes(catsRes.value.map(c => c.poi).filter((p): p is string => !!p)); }
     hasLoadedRef.current = true;
     setLoading(false);
   }, [uid]);
@@ -89,7 +101,10 @@ export function usePlaces(): PlacesState {
 
   const today = todayISO();
   const activeTrips = useMemo(
-    () => trips.filter(t => t.kind !== 'offgrid' && !isTripPast(t, today)),
+    () => trips
+      .filter(t => t.kind !== 'offgrid' && !isTripPast(t, today))
+      // Closest first; trips without a start date sort last.
+      .sort((a, b) => (a.startDate ?? '9999').localeCompare(b.startDate ?? '9999')),
     [trips, today],
   );
   const pastTripGroups = useMemo(
@@ -108,13 +123,12 @@ export function usePlaces(): PlacesState {
     const tempId = `temp_${Date.now()}`;
     const optimistic: TaughtPlace = { id: tempId, poiType, name, createdAt: Timestamp.now() };
     setTaught(prev => [optimistic, ...prev]);
-    // Fire-and-forget. On error (a real rejection, not an offline queue) roll
-    // the row back. A later focus refetch reconciles the temp id with the real
-    // cached doc (splitPlaces dedupes by brand in the meantime).
-    addTaughtPlace(uid, { poiType, name }).catch(err => {
-      setTaught(prev => prev.filter(p => p.id !== tempId));
-      console.warn('[usePlaces] addPlace failed', err);
-    });
+    // Fire-and-forget; DON'T roll back on rejection. RN Firebase rejects writes
+    // while offline even though the mutation is queued in the local cache and
+    // will replay on reconnect — rolling back would make the row vanish ~1s
+    // after it appeared. A later focus refetch reconciles the temp id with the
+    // real cached doc (splitPlaces dedupes by brand meanwhile).
+    addTaughtPlace(uid, { poiType, name }).catch(err => console.warn('[usePlaces] addPlace queued/failed', err));
   }, [uid]);
 
   const removePlace = useCallback((id: string) => {
@@ -123,11 +137,28 @@ export function usePlaces(): PlacesState {
     removeTaughtPlace(uid, id).catch(err => console.warn('[usePlaces] removePlace failed', err));
   }, [uid]);
 
+  const removeUsual = useCallback((poiType: string, name: string) => {
+    if (!uid) { return; }
+    setLearned(prev => prev.filter(b => !(b.poiType === poiType && b.name === name))); // local first
+    removeLearnedBrand(uid, poiType, name).catch(err => console.warn('[usePlaces] removeUsual failed', err));
+  }, [uid]);
+
   const forgetTrip = useCallback((trip: Trip) => {
     if (!uid) { return; }
     setTrips(prev => prev.filter(t => t.id !== trip.id)); // local first
     forgetTripAction(uid, trip).catch(err => console.warn('[usePlaces] forgetTrip failed', err));
   }, [uid]);
 
-  return { loading, favourites, usuals, activeTrips, pastTripGroups, addPlace, removePlace, forgetTrip, refresh };
+  const refreshTrip = useCallback((trip: Trip) => {
+    if (!uid) { return; }
+    setRefreshingTripId(trip.id);
+    refreshTripArea(uid, trip, customCatPoiTypes)
+      .catch(err => console.warn('[usePlaces] refreshTrip failed', err))
+      .finally(() => { if (uidRef.current === uid) { setRefreshingTripId(null); } });
+  }, [uid, customCatPoiTypes]);
+
+  return {
+    loading, favourites, usuals, activeTrips, pastTripGroups,
+    addPlace, removePlace, removeUsual, forgetTrip, refreshTrip, refreshingTripId, refresh,
+  };
 }

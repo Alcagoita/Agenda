@@ -427,6 +427,17 @@ export async function getLearnedPlaceCounts(uid: string): Promise<LearnedPlace[]
 }
 
 /**
+ * KAN-304 — forget a learned brand: delete every per-place-id visit tally that
+ * shares this (POI type, name), across branches. The brand may re-learn later
+ * if the user keeps brushing there; that's fine.
+ */
+export async function removeLearnedBrand(uid: string, poiType: string, name: string): Promise<void> {
+  const counts = await getLearnedPlaceCounts(uid);
+  const matches = counts.filter(c => c.poiType === poiType && c.name === name);
+  await Promise.all(matches.map(c => deleteDoc(learnedPlaceCountRef(uid, c.placeId))));
+}
+
+/**
  * One-time migration (KAN-240): tallies every historical `completedPlaceId`
  * brush (the same unbounded scan getCompletedTasksWithPlace used to run on
  * every toggle) into `/users/{uid}/learnedPlaceCounts/{placeId}`, for users

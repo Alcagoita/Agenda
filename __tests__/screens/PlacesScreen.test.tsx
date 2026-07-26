@@ -20,7 +20,9 @@ function base() {
     usuals: [] as Array<{ poiType: string; name: string; taught: boolean; id?: string }>,
     activeTrips: [] as unknown[],
     pastTripGroups: [] as unknown[],
-    addPlace: jest.fn(), removePlace: jest.fn(), forgetTrip: jest.fn(), refresh: jest.fn(),
+    refreshingTripId: null as string | null,
+    addPlace: jest.fn(), removePlace: jest.fn(), removeUsual: jest.fn(),
+    forgetTrip: jest.fn(), refreshTrip: jest.fn(), refresh: jest.fn(),
   };
 }
 function makeState(over: Partial<ReturnType<typeof base>> = {}) { return { ...base(), ...over }; }
@@ -90,10 +92,20 @@ describe('PlacesScreen — Places tab', () => {
     expect(screen.getByText('Brand 39')).toBeTruthy();
   });
 
-  it('renders no visible remove (×) control on rows (AC7)', () => {
-    mockReturn = makeState({ favourites: [{ poiType: 'cafe', name: 'Sightglass', taught: true, id: 'f1' }] });
+  it('removes a favourite from its × control', () => {
+    const removePlace = jest.fn();
+    mockReturn = makeState({ favourites: [{ poiType: 'cafe', name: 'Sightglass', taught: true, id: 'f1' }], removePlace });
     render(<PlacesScreen />);
-    expect(screen.queryByText('×')).toBeNull();
+    fireEvent.press(screen.getByLabelText(COPY.places.forgetA11y('Sightglass')));
+    expect(removePlace).toHaveBeenCalledWith('f1');
+  });
+
+  it('removes a usual by (poiType, name) from its × control', () => {
+    const removeUsual = jest.fn();
+    mockReturn = makeState({ usuals: [{ poiType: 'supermarket', name: 'Pingo Doce', taught: false }], removeUsual });
+    render(<PlacesScreen />);
+    fireEvent.press(screen.getByLabelText(COPY.places.forgetA11y('Pingo Doce')));
+    expect(removeUsual).toHaveBeenCalledWith('supermarket', 'Pingo Doce');
   });
 
   it('puts the teach button above the (empty) Favourites section (AC8)', () => {

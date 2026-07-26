@@ -48,18 +48,17 @@ export default function PlacesScreen() {
   const { palette } = useTheme();
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const { loading, favourites, usuals, activeTrips, pastTripGroups, addPlace, removePlace, forgetTrip } = usePlaces();
+  const {
+    loading, favourites, usuals, activeTrips, pastTripGroups,
+    addPlace, removePlace, removeUsual, forgetTrip, refreshTrip, refreshingTripId,
+  } = usePlaces();
   const [tab, setTab] = useState<'places' | 'trips'>('places');
   const [teaching, setTeaching] = useState(false);
   const nextUpId = nextUpTripId(activeTrips);
 
-  const confirmForgetPlace = (place: PlaceEntry) => {
-    if (!place.id) { return; }
-    Alert.alert(COPY.places.forgetPlaceTitle(place.name), COPY.places.forgetPlaceBody, [
-      { text: COPY.places.forgetPlaceCancel, style: 'cancel' },
-      { text: COPY.places.forgetPlaceConfirm, style: 'destructive', onPress: () => removePlace(place.id!) },
-    ]);
-  };
+  const editTrip = (trip: Trip) =>
+    navigation.navigate('TripPlanner', { editTripId: trip.id, initialStep: 'dates', doneReturnTo: 'Places' });
+
   const confirmForgetTrip = (trip: Trip) => {
     Alert.alert(COPY.places.forgetTripTitle(trip.destination), COPY.places.forgetTripBody, [
       { text: COPY.places.forgetTripCancel, style: 'cancel' },
@@ -99,7 +98,7 @@ export default function PlacesScreen() {
                 <EmptyPanel icon={StarIcon} line={COPY.places.emptyFavourites} palette={palette} />
               ) : (
                 favourites.map(p => (
-                  <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} onLongPress={() => confirmForgetPlace(p)} />
+                  <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} onRemove={() => removePlace(p.id!)} />
                 ))
               )}
 
@@ -107,7 +106,9 @@ export default function PlacesScreen() {
               {usuals.length === 0 ? (
                 <EmptyPanel icon={RefreshIcon} line={COPY.places.emptyUsuals} palette={palette} />
               ) : (
-                usuals.map(p => <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} />)
+                usuals.map(p => (
+                  <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} onRemove={() => removeUsual(p.poiType, p.name)} />
+                ))
               )}
             </>
           ) : (
@@ -123,7 +124,16 @@ export default function PlacesScreen() {
               ) : (
                 <>
                   {activeTrips.map(trip => (
-                    <TripCard key={trip.id} trip={trip} nextUp={trip.id === nextUpId} palette={palette} />
+                    <TripCard
+                      key={trip.id}
+                      trip={trip}
+                      nextUp={trip.id === nextUpId}
+                      palette={palette}
+                      refreshing={refreshingTripId === trip.id}
+                      onEdit={() => editTrip(trip)}
+                      onRefresh={() => refreshTrip(trip)}
+                      onRemove={() => confirmForgetTrip(trip)}
+                    />
                   ))}
                   {/* Add button AFTER the bounded list of planned trips. */}
                   <View style={styles.tripsAddWrap}>
@@ -143,7 +153,7 @@ export default function PlacesScreen() {
                   <View key={group.year}>
                     <Text style={[styles.yearLabel, { color: palette.faint }]}>{group.year}</Text>
                     {group.trips.map(trip => (
-                      <PastTripRow key={trip.id} trip={trip} palette={palette} onLongPress={() => confirmForgetTrip(trip)} />
+                      <PastTripRow key={trip.id} trip={trip} palette={palette} onRemove={() => confirmForgetTrip(trip)} />
                     ))}
                   </View>
                 ))
@@ -179,16 +189,20 @@ function AddButton({ label, onPress, palette }: { label: string; onPress: () => 
   );
 }
 
-// ── Brand row — TaskRow geometry, two lines, no card, no visible remove ─────────
-function PlaceRow({ place, palette, onLongPress }: { place: PlaceEntry; palette: Palette; onLongPress?: () => void }) {
+// ── Small × remove control, shared by every row/card ────────────────────────────
+function RemoveX({ onPress, label, palette }: { onPress: () => void; label: string; palette: Palette }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={10} style={styles.removeBtn} accessibilityRole="button" accessibilityLabel={label}>
+      <Text style={[styles.removeX, { color: palette.muted }]}>×</Text>
+    </Pressable>
+  );
+}
+
+// ── Brand row — TaskRow geometry, two lines, no card ────────────────────────────
+function PlaceRow({ place, palette, onRemove }: { place: PlaceEntry; palette: Palette; onRemove: () => void }) {
   const secondary = place.taught ? typeLabel(place.poiType) : COPY.places.usualSecondary(typeLabel(place.poiType));
   return (
-    <Pressable
-      style={[styles.row, { borderBottomColor: palette.line }]}
-      onLongPress={onLongPress}
-      disabled={!onLongPress}
-      accessibilityRole={onLongPress ? 'button' : 'text'}
-      accessibilityLabel={onLongPress ? COPY.places.forgetA11y(place.name) : undefined}>
+    <View style={[styles.row, { borderBottomColor: palette.line }]}>
       <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
         <PoiIcon type={place.poiType} color={palette.muted} size={20} />
       </View>
@@ -196,17 +210,14 @@ function PlaceRow({ place, palette, onLongPress }: { place: PlaceEntry; palette:
         <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={1}>{place.name}</Text>
         <Text style={[styles.rowSub, { color: palette.muted }]} numberOfLines={1}>{secondary}</Text>
       </View>
-    </Pressable>
+      <RemoveX onPress={onRemove} label={COPY.places.forgetA11y(place.name)} palette={palette} />
+    </View>
   );
 }
 
-function PastTripRow({ trip, palette, onLongPress }: { trip: Trip; palette: Palette; onLongPress: () => void }) {
+function PastTripRow({ trip, palette, onRemove }: { trip: Trip; palette: Palette; onRemove: () => void }) {
   return (
-    <Pressable
-      style={[styles.row, { borderBottomColor: palette.line }]}
-      onLongPress={onLongPress}
-      accessibilityRole="button"
-      accessibilityLabel={COPY.places.forgetA11y(trip.destination)}>
+    <View style={[styles.row, { borderBottomColor: palette.line }]}>
       <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
         <PinIcon color={palette.muted} size={20} />
       </View>
@@ -214,23 +225,49 @@ function PastTripRow({ trip, palette, onLongPress }: { trip: Trip; palette: Pale
         <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={1}>{trip.destination}</Text>
         <Text style={[styles.rowSub, { color: palette.muted }]} numberOfLines={1}>{tripDates(trip)}</Text>
       </View>
-    </Pressable>
+      <RemoveX onPress={onRemove} label={COPY.places.forgetA11y(trip.destination)} palette={palette} />
+    </View>
   );
 }
 
-function TripCard({ trip, nextUp, palette }: { trip: Trip; nextUp: boolean; palette: Palette }) {
+// ── Planned trip card — tap to edit dates; refresh + remove inline ──────────────
+function TripCard({ trip, nextUp, palette, refreshing, onEdit, onRefresh, onRemove }: {
+  trip: Trip; nextUp: boolean; palette: Palette; refreshing: boolean;
+  onEdit: () => void; onRefresh: () => void; onRemove: () => void;
+}) {
   return (
-    <View
+    <Pressable
+      onPress={onEdit}
+      accessibilityRole="button"
+      accessibilityLabel={COPY.tripPlanner.changeTripDatesA11y(trip.destination)}
       style={[
         styles.tripCard,
         nextUp
           ? { backgroundColor: palette.nearTint, borderColor: palette.nearBorder }
           : { backgroundColor: palette.surface, borderColor: palette.line },
       ]}>
-      {nextUp && <Text style={[styles.nextUp, { color: palette.nearText }]}>{COPY.places.nextUp}</Text>}
+      <View style={styles.tripHeaderRow}>
+        {nextUp
+          ? <Text style={[styles.nextUp, { color: palette.nearText }]}>{COPY.places.nextUp}</Text>
+          : <View />}
+        <View style={styles.tripActions}>
+          {refreshing ? (
+            <ActivityIndicator size="small" color={palette.muted} />
+          ) : (
+            <Pressable
+              onPress={onRefresh}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={COPY.tripPlanner.refreshTripA11y(trip.destination)}>
+              <RefreshIcon color={palette.accent} size={16} />
+            </Pressable>
+          )}
+          <RemoveX onPress={onRemove} label={COPY.places.forgetA11y(trip.destination)} palette={palette} />
+        </View>
+      </View>
       <Text style={[styles.tripDest, { color: palette.text }]} numberOfLines={1}>{trip.destination}</Text>
       <Text style={[styles.tripDatesText, { color: palette.muted }]} numberOfLines={1}>{tripDates(trip)}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -275,6 +312,8 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },
   rowSub: { fontSize: 13, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'] },
+  removeBtn: { paddingHorizontal: 4, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },
+  removeX: { fontSize: 22, lineHeight: 24 },
 
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -284,7 +323,9 @@ const styles = StyleSheet.create({
   tripsAddWrap: { marginTop: 10 },
 
   tripCard: { borderRadius: radii.card, borderWidth: 1, padding: 14, marginTop: 10 },
-  nextUp: { position: 'absolute', top: 10, right: 12, fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
+  tripHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 20, marginBottom: 2 },
+  tripActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nextUp: { fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
   tripDest: { fontSize: 16, fontFamily: 'Geist-Medium', fontWeight: '500' },
   tripDatesText: { fontSize: 13, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'], marginTop: 3 },
 
