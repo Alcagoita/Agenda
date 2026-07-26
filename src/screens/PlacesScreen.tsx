@@ -7,9 +7,9 @@
  *   • Trips — planned trips (nearest one flagged "Next up"), a "Going somewhere?"
  *     button, a separation band, then "Where you've been" (past trips by year).
  *
- * For looking, not managing: rows match TaskRow geometry (plain list items,
- * hairline divider, no cards) and carry no visible remove control — forgetting
- * a favourite or a past trip is a long-press with a confirm.
+ * Rows match TaskRow geometry (plain list items, hairline divider, no cards).
+ * Every row carries a × to remove it; planned-trip cards also expose the
+ * KAN-266 in-place edits (change dates, grow the learned area) and a refresh.
  */
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -56,8 +56,10 @@ export default function PlacesScreen() {
   const [teaching, setTeaching] = useState(false);
   const nextUpId = nextUpTripId(activeTrips);
 
-  const editTrip = (trip: Trip) =>
+  const editTripDates = (trip: Trip) =>
     navigation.navigate('TripPlanner', { editTripId: trip.id, initialStep: 'dates', doneReturnTo: 'Places' });
+  const editTripArea = (trip: Trip) =>
+    navigation.navigate('TripPlanner', { editTripId: trip.id, initialStep: 'radius', doneReturnTo: 'Places' });
 
   const confirmForgetTrip = (trip: Trip) => {
     Alert.alert(COPY.places.forgetTripTitle(trip.destination), COPY.places.forgetTripBody, [
@@ -130,7 +132,8 @@ export default function PlacesScreen() {
                       nextUp={trip.id === nextUpId}
                       palette={palette}
                       refreshing={refreshingTripId === trip.id}
-                      onEdit={() => editTrip(trip)}
+                      onEditDates={() => editTripDates(trip)}
+                      onEditArea={() => editTripArea(trip)}
                       onRefresh={() => refreshTrip(trip)}
                       onRemove={() => confirmForgetTrip(trip)}
                     />
@@ -230,16 +233,14 @@ function PastTripRow({ trip, palette, onRemove }: { trip: Trip; palette: Palette
   );
 }
 
-// ── Planned trip card — tap to edit dates; refresh + remove inline ──────────────
-function TripCard({ trip, nextUp, palette, refreshing, onEdit, onRefresh, onRemove }: {
+// ── Planned trip card — KAN-266 actions: edit dates, edit area, refresh, remove ──
+function TripCard({ trip, nextUp, palette, refreshing, onEditDates, onEditArea, onRefresh, onRemove }: {
   trip: Trip; nextUp: boolean; palette: Palette; refreshing: boolean;
-  onEdit: () => void; onRefresh: () => void; onRemove: () => void;
+  onEditDates: () => void; onEditArea: () => void; onRefresh: () => void; onRemove: () => void;
 }) {
+  const hasDates = !!(trip.startDate || trip.endDate);
   return (
-    <Pressable
-      onPress={onEdit}
-      accessibilityRole="button"
-      accessibilityLabel={COPY.tripPlanner.changeTripDatesA11y(trip.destination)}
+    <View
       style={[
         styles.tripCard,
         nextUp
@@ -267,7 +268,28 @@ function TripCard({ trip, nextUp, palette, refreshing, onEdit, onRefresh, onRemo
       </View>
       <Text style={[styles.tripDest, { color: palette.text }]} numberOfLines={1}>{trip.destination}</Text>
       <Text style={[styles.tripDatesText, { color: palette.muted }]} numberOfLines={1}>{tripDates(trip)}</Text>
-    </Pressable>
+
+      {/* KAN-266 — change dates / grow the learned area, in place (no recreate). */}
+      <View style={styles.inlineActions}>
+        <Pressable
+          onPress={onEditDates}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={COPY.tripPlanner.changeTripDatesA11y(trip.destination)}>
+          <Text style={[styles.inlineActionLabel, { color: palette.accent }]}>
+            {hasDates ? COPY.tripPlanner.changeTripDates : COPY.tripPlanner.addTripDates}
+          </Text>
+        </Pressable>
+        <Text style={[styles.actionDot, { color: palette.faint }]}>·</Text>
+        <Pressable
+          onPress={onEditArea}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={COPY.tripPlanner.learnBiggerAreaA11y(trip.destination)}>
+          <Text style={[styles.inlineActionLabel, { color: palette.accent }]}>{COPY.tripPlanner.learnBiggerArea}</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -328,6 +350,9 @@ const styles = StyleSheet.create({
   nextUp: { fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
   tripDest: { fontSize: 16, fontFamily: 'Geist-Medium', fontWeight: '500' },
   tripDatesText: { fontSize: 13, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'], marginTop: 3 },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  inlineActionLabel: { fontSize: 13, fontFamily: 'Geist-Medium', fontWeight: '500' },
+  actionDot: { fontSize: 13 },
 
   // Full-bleed band separating ahead from behind.
   separator: { height: 8, marginTop: 22, marginHorizontal: -spacing.page },

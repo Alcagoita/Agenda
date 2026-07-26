@@ -132,6 +132,14 @@ describe('PlacesScreen — Trips tab', () => {
     expect(screen.getAllByText(COPY.places.nextUp)).toHaveLength(1);
   });
 
+  it('exposes the KAN-266 edit-dates and edit-area actions on a planned trip', () => {
+    mockReturn = makeState({ activeTrips: [trip('a', 'Faro', '2026-09-01')] });
+    render(<PlacesScreen />);
+    goToTrips();
+    expect(screen.getByText(COPY.tripPlanner.changeTripDates)).toBeTruthy();
+    expect(screen.getByText(COPY.tripPlanner.learnBiggerArea)).toBeTruthy();
+  });
+
   it('renders a separation band between planned and past trips (AC10)', () => {
     mockReturn = makeState({ activeTrips: [trip('a', 'Faro', '2026-09-01')] });
     render(<PlacesScreen />);
