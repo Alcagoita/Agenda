@@ -549,6 +549,15 @@ function findActivePlaceContext(lat: number, lng: number): PlaceContext {
 
 let _placeContextTap: ((ctx: PlaceContext) => void) | null = null;
 
+/** KAN-304 — the place context resolved at the last position fix. Read at brush
+ *  time to stamp the active trip id onto a completed task. */
+let _lastPlaceContext: PlaceContext = null;
+
+/** The mall/trip context (or null) from the last position fix. */
+export function getActivePlaceContext(): PlaceContext {
+  return _lastPlaceContext;
+}
+
 /**
  * KAN-242 — register a tap fired with the resolved place context on every
  * position fix taken by runProximitySearch, independent of onUpdate/
@@ -604,7 +613,8 @@ async function runProximitySearch(
 
     if (uniquePoiTypes.length === 0) {
       _locationTap?.(coords.lat, coords.lng, coords.accuracy);
-      _placeContextTap?.(findActivePlaceContext(coords.lat, coords.lng));
+      _lastPlaceContext = findActivePlaceContext(coords.lat, coords.lng);
+      _placeContextTap?.(_lastPlaceContext);
       _currentNearbyType = null;
       _lastAllPlaces = {};
       // No undone POI tasks left to prompt for — nothing to fire, just
@@ -1074,6 +1084,7 @@ export function resetProximityState(): void {
   _customCategoryPoiTypes = [];
   _activeTrips = [];
   _mallSnapshot = null;
+  _lastPlaceContext = null;
 
   geofenceEntryTimes.clear();
 }

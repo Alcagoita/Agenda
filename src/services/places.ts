@@ -1,28 +1,31 @@
 /**
- * places.ts — the unified "Places I know" list (KAN-304).
+ * places.ts — the brand lists for the Places tab (KAN-304).
  *
- * Combines the brands the user explicitly taught (taughtPlaces.ts) with the
- * ones inferred from brushes (learnedPlaces.ts) into one ranked list of brand
- * entries. Taught brands come first — explicit beats inferred — and carry a
- * marker so the user can tell which are theirs to remove. A brand that is both
- * taught and learned appears once, as taught.
+ * Splits the brands the user explicitly taught (taughtPlaces.ts, "Favourites")
+ * from the ones inferred from brushes (learnedPlaces.ts, "Your usuals"). The two
+ * are NEVER merged into one list: Favourites are what the user told us, usuals
+ * are what we inferred. A brand that is both taught and learned belongs to
+ * Favourites only (explicit beats inferred).
  *
- * Pure and synchronous so the capping, ordering and dedup are unit-testable
- * without Firestore.
+ * Pure and synchronous so the split and dedup are unit-testable without
+ * Firestore. No caps — both lists grow without limit and the screen scrolls.
  */
 import type { LearnedBrand } from './learnedPlaces';
 import type { TaughtPlace } from './firestore/taughtPlaces';
-
-/** Max rows the Places-I-know section shows before an overflow row (AC5). */
-export const PLACES_SECTION_CAP = 5;
+import type { Trip } from '../types';
 
 export interface PlaceEntry {
   poiType: string;
   name: string;
-  /** True when the user taught this brand (vs. inferred from brushes). */
+  /** True when the user taught this brand (Favourites) vs. inferred (Your usuals). */
   taught: boolean;
   /** The taught-place doc id, for removal — present only on taught entries. */
   id?: string;
+}
+
+export interface SplitPlaces {
+  favourites: PlaceEntry[];
+  usuals: PlaceEntry[];
 }
 
 /** Case/space-insensitive brand identity within a POI type. */
@@ -31,44 +34,39 @@ function brandKey(poiType: string, name: string): string {
 }
 
 /**
- * Taught brands first (in the order given — newest first), then learned brands
- * that aren't already taught. Never two entries for the same (POI type, name).
+ * Favourites (taught) and Your usuals (learned, minus any brand already taught).
+ * Neither list is capped; order within each is preserved from the input.
  */
-export function mergePlaces(taught: TaughtPlace[], learned: LearnedBrand[]): PlaceEntry[] {
-  const seen = new Set<string>();
-  const entries: PlaceEntry[] = [];
+export function splitPlaces(taught: TaughtPlace[], learned: LearnedBrand[]): SplitPlaces {
+  const favourites: PlaceEntry[] = [];
+  const taughtKeys = new Set<string>();
 
   for (const t of taught) {
     const key = brandKey(t.poiType, t.name);
-    if (seen.has(key)) { continue; }
-    seen.add(key);
-    entries.push({ poiType: t.poiType, name: t.name, taught: true, id: t.id });
+    if (taughtKeys.has(key)) { continue; }
+    taughtKeys.add(key);
+    favourites.push({ poiType: t.poiType, name: t.name, taught: true, id: t.id });
   }
 
+  const usuals: PlaceEntry[] = [];
+  const seenUsual = new Set<string>();
   for (const l of learned) {
     const key = brandKey(l.poiType, l.name);
-    if (seen.has(key)) { continue; }
-    seen.add(key);
-    entries.push({ poiType: l.poiType, name: l.name, taught: false });
+    if (taughtKeys.has(key) || seenUsual.has(key)) { continue; }
+    seenUsual.add(key);
+    usuals.push({ poiType: l.poiType, name: l.name, taught: false });
   }
 
-  return entries;
+  return { favourites, usuals };
 }
 
-export interface CappedPlaces {
-  /** The rows to render in the section (at most `cap`). */
-  visible: PlaceEntry[];
-  /** Total number of places — shown in the overflow row ("All N places"). */
-  total: number;
-  /** True when there are more than `cap` places (render the overflow row). */
-  hasOverflow: boolean;
-}
-
-/** Caps the section list, reporting whether an overflow row is needed (AC5). */
-export function capPlaces(places: PlaceEntry[], cap: number = PLACES_SECTION_CAP): CappedPlaces {
-  return {
-    visible: places.slice(0, cap),
-    total: places.length,
-    hasOverflow: places.length > cap,
-  };
+/**
+ * The id of the single planned trip that gets the "Next up" treatment: the one
+ * with the earliest start date (trips without a start date sort last). Returns
+ * null for an empty list. Exactly one trip is ever chosen (AC9).
+ */
+export function nextUpTripId(trips: Trip[]): string | null {
+  if (trips.length === 0) { return null; }
+  const sorted = [...trips].sort((a, b) => (a.startDate ?? '9999').localeCompare(b.startDate ?? '9999'));
+  return sorted[0].id;
 }

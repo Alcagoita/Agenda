@@ -1,10 +1,9 @@
 /**
  * TeachSheet — KAN-304
  *
- * "Teach a place" bottom sheet: pick a POI type + name the brand. Shared by
- * PlacesScreen and AllPlacesScreen so the flow, fields and validation are
- * identical everywhere teaching is offered (teaching is additive and available
- * on both screens; removal lives only on the directory).
+ * "Teach a place" bottom sheet: pick a POI type + name the brand. A standalone
+ * component so the flow, fields and validation stay identical wherever teaching
+ * is offered (the Places tab, and any future entry point).
  *
  * Self-contained: owns its own form state and resets on every dismissal, so
  * reopening always starts empty.

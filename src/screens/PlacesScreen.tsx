@@ -1,43 +1,43 @@
 /**
  * PlacesScreen — KAN-304
  *
- * Behind the Lantern's "Places I know" pill (shares its name). One screen,
- * three sections, in order (bounded first, unbounded last):
- *   1. Places I know — taught + learned brands, capped at 5 with an overflow
- *      row into the full directory; a "Teach it a new place" action. (No
- *      section header — the screen title already names it.)
- *   2. Trips — current/upcoming trips.
- *   3. Places I've been — past trips, uncapped.
+ * Behind the Lantern's "Places I know" pill (shares its name). Two tabs:
+ *   • Places — a "Teach it a new place" button, then Favourites (taught) and
+ *     Your usuals (inferred). Never merged. No caps; the list scrolls freely.
+ *   • Trips — planned trips (nearest one flagged "Next up"), a "Going somewhere?"
+ *     button, a separation band, then "Where you've been" (past trips by year).
  *
- * This screen is for looking, not managing: rows are plain list items (no cards)
- * and carry no remove control — teaching and forgetting live in the full
- * directory (AllPlacesScreen). Empty sections render their own faint icon on a
- * surface2 panel plus one line; only Trips' empty state carries an action.
+ * For looking, not managing: rows match TaskRow geometry (plain list items,
+ * hairline divider, no cards) and carry no visible remove control — forgetting
+ * a favourite or a past trip is a long-press with a confirm.
  */
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
 import {
-  ChevronLeftIcon, ChevronRightIcon, PlusIcon, PinIcon, ClockIcon, SuitcaseIcon, FilledStarIcon, PoiIcon,
+  ChevronLeftIcon, PlusIcon, StarIcon, RefreshIcon, SuitcaseIcon, PinIcon, PoiIcon,
 } from '../components/AppIcon';
 import type { IconProps } from '../components/AppIcon/shared';
+import TabControl from '../components/TabControl';
 import TeachSheet from '../components/TeachSheet';
 import { usePlaces } from '../hooks/usePlaces';
-import { capPlaces, type PlaceEntry } from '../services/places';
-import type { Trip } from '../types';
+import { nextUpTripId, type PlaceEntry } from '../services/places';
+import { poiCatalogLabel, type PoiType, type Trip } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { COPY } from '../constants/copy';
 import { formatDateShort } from '../utils/date';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Places'>;
 type IconCmp = (props: IconProps) => React.JSX.Element;
+type Palette = ReturnType<typeof useTheme>['palette'];
 
-const TRIPS_PREVIEW = 2;
-
+function typeLabel(poiType: string): string {
+  return poiCatalogLabel(poiType as PoiType).toLowerCase();
+}
 function tripDates(trip: Trip): string {
   return trip.startDate && trip.endDate
     ? COPY.tripPlanner.tripRowDates(formatDateShort(trip.startDate), formatDateShort(trip.endDate))
@@ -48,94 +48,107 @@ export default function PlacesScreen() {
   const { palette } = useTheme();
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const { loading, places, activeTrips, pastTripGroups, addPlace } = usePlaces();
+  const { loading, favourites, usuals, activeTrips, pastTripGroups, addPlace, removePlace, forgetTrip } = usePlaces();
+  const [tab, setTab] = useState<'places' | 'trips'>('places');
   const [teaching, setTeaching] = useState(false);
+  const nextUpId = nextUpTripId(activeTrips);
 
-  const { visible: visiblePlaces, total, hasOverflow } = capPlaces(places);
+  const confirmForgetPlace = (place: PlaceEntry) => {
+    if (!place.id) { return; }
+    Alert.alert(COPY.places.forgetPlaceTitle(place.name), COPY.places.forgetPlaceBody, [
+      { text: COPY.places.forgetPlaceCancel, style: 'cancel' },
+      { text: COPY.places.forgetPlaceConfirm, style: 'destructive', onPress: () => removePlace(place.id!) },
+    ]);
+  };
+  const confirmForgetTrip = (trip: Trip) => {
+    Alert.alert(COPY.places.forgetTripTitle(trip.destination), COPY.places.forgetTripBody, [
+      { text: COPY.places.forgetTripCancel, style: 'cancel' },
+      { text: COPY.places.forgetTripConfirm, style: 'destructive', onPress: () => forgetTrip(trip) },
+    ]);
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: palette.bg, paddingTop: insets.top }]}>
       <View style={[styles.topBar, { borderBottomColor: palette.line }]}>
-        <Pressable
-          style={styles.navBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel={COPY.places.backA11y}>
+        <Pressable style={styles.navBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={COPY.places.backA11y}>
           <ChevronLeftIcon color={palette.text} size={22} />
         </Pressable>
         <Text style={[styles.title, { color: palette.text }]}>{COPY.places.screenTitle}</Text>
         <View style={styles.navBtn} />
       </View>
 
+      <View style={styles.tabWrap}>
+        <TabControl
+          tabs={[{ key: 'places', label: COPY.places.tabPlaces }, { key: 'trips', label: COPY.places.tabTrips }]}
+          activeKey={tab}
+          onChange={k => setTab(k as 'places' | 'trips')}
+        />
+      </View>
+
       {loading ? (
         <View style={styles.loadingWrap}><ActivityIndicator color={palette.accent} /></View>
       ) : (
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
-
-          {/* 1. Places I know — no header; the screen title names it. */}
-          {visiblePlaces.length === 0 ? (
-            <EmptyPanel icon={PinIcon} line={COPY.places.emptyPlaces} palette={palette} />
-          ) : (
-            visiblePlaces.map(place => (
-              <PlaceRow key={`${place.poiType} ${place.name}`} place={place} palette={palette} />
-            ))
-          )}
-          {hasOverflow && (
-            <Pressable
-              style={[styles.actionRow, { borderBottomColor: palette.line }]}
-              onPress={() => navigation.navigate('AllPlaces')}
-              accessibilityRole="button"
-              accessibilityLabel={COPY.places.allPlacesA11y(total)}>
-              <Text style={[styles.actionLabel, { color: palette.text }]}>{COPY.places.allPlaces(total)}</Text>
-              <ChevronRightIcon color={palette.faint} size={16} strokeWidth={1.8} />
-            </Pressable>
-          )}
-          <Pressable
-            style={styles.teachRow}
-            onPress={() => setTeaching(true)}
-            accessibilityRole="button"
-            accessibilityLabel={COPY.places.teachAction}>
-            <PlusIcon color={palette.accent} size={18} />
-            <Text style={[styles.teachLabel, { color: palette.accent }]}>{COPY.places.teachAction}</Text>
-          </Pressable>
-
-          {/* 2. Trips */}
-          <SectionHeader label={COPY.places.sectionTrips} palette={palette} />
-          {activeTrips.length === 0 ? (
-            <EmptyPanel
-              icon={SuitcaseIcon}
-              line={COPY.places.emptyTrips}
-              palette={palette}
-              action={{ label: COPY.places.emptyTripsAction, onPress: () => navigation.navigate('TripPlanner') }}
-            />
-          ) : (
+          {tab === 'places' ? (
             <>
-              {activeTrips.slice(0, TRIPS_PREVIEW).map(trip => (
-                <TripRow key={trip.id} trip={trip} palette={palette} />
-              ))}
-              {activeTrips.length > TRIPS_PREVIEW && (
-                <Pressable
-                  style={[styles.actionRow, { borderBottomColor: palette.line }]}
-                  onPress={() => navigation.navigate('PlacesIKnow')}
-                  accessibilityRole="button">
-                  <Text style={[styles.actionLabel, { color: palette.text }]}>{COPY.places.allPlaces(activeTrips.length)}</Text>
-                  <ChevronRightIcon color={palette.faint} size={16} strokeWidth={1.8} />
-                </Pressable>
+              {/* Add button ABOVE the unbounded list so it stays reachable. */}
+              <AddButton label={COPY.places.teachAction} onPress={() => setTeaching(true)} palette={palette} />
+
+              <SectionHeader label={COPY.places.sectionFavourites} palette={palette} />
+              {favourites.length === 0 ? (
+                <EmptyPanel icon={StarIcon} line={COPY.places.emptyFavourites} palette={palette} />
+              ) : (
+                favourites.map(p => (
+                  <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} onLongPress={() => confirmForgetPlace(p)} />
+                ))
+              )}
+
+              <SectionHeader label={COPY.places.sectionUsuals} palette={palette} />
+              {usuals.length === 0 ? (
+                <EmptyPanel icon={RefreshIcon} line={COPY.places.emptyUsuals} palette={palette} />
+              ) : (
+                usuals.map(p => <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} />)
               )}
             </>
-          )}
-
-          {/* 3. Places I've been (uncapped, last) */}
-          <SectionHeader label={COPY.places.sectionPastTrips} palette={palette} />
-          {pastTripGroups.length === 0 ? (
-            <EmptyPanel icon={ClockIcon} line={COPY.places.emptyPastTrips} palette={palette} />
           ) : (
-            pastTripGroups.map(group => (
-              <View key={group.year}>
-                <Text style={[styles.yearLabel, { color: palette.faint }]}>{group.year}</Text>
-                {group.trips.map(trip => <TripRow key={trip.id} trip={trip} palette={palette} />)}
-              </View>
-            ))
+            <>
+              {/* Planned trips */}
+              {activeTrips.length === 0 ? (
+                <EmptyPanel
+                  icon={SuitcaseIcon}
+                  line={COPY.places.emptyPlanned}
+                  palette={palette}
+                  action={{ label: COPY.places.tripsAddAction, onPress: () => navigation.navigate('TripPlanner') }}
+                />
+              ) : (
+                <>
+                  {activeTrips.map(trip => (
+                    <TripCard key={trip.id} trip={trip} nextUp={trip.id === nextUpId} palette={palette} />
+                  ))}
+                  {/* Add button AFTER the bounded list of planned trips. */}
+                  <View style={styles.tripsAddWrap}>
+                    <AddButton label={COPY.places.tripsAddAction} onPress={() => navigation.navigate('TripPlanner')} palette={palette} />
+                  </View>
+                </>
+              )}
+
+              {/* Separation: above is ahead, below is behind. */}
+              <View testID="trips-separator" style={[styles.separator, { backgroundColor: palette.surface2 }]} />
+
+              <SectionHeader label={COPY.places.sectionWhereBeen} palette={palette} />
+              {pastTripGroups.length === 0 ? (
+                <EmptyPanel icon={PinIcon} line={COPY.places.emptyPastTrips} palette={palette} />
+              ) : (
+                pastTripGroups.map(group => (
+                  <View key={group.year}>
+                    <Text style={[styles.yearLabel, { color: palette.faint }]}>{group.year}</Text>
+                    {group.trips.map(trip => (
+                      <PastTripRow key={trip.id} trip={trip} palette={palette} onLongPress={() => confirmForgetTrip(trip)} />
+                    ))}
+                  </View>
+                ))
+              )}
+            </>
           )}
         </ScrollView>
       )}
@@ -149,57 +162,93 @@ export default function PlacesScreen() {
   );
 }
 
-type Palette = ReturnType<typeof useTheme>['palette'];
-
 function SectionHeader({ label, palette }: { label: string; palette: Palette }) {
   return <Text style={[styles.sectionTitle, { color: palette.muted }]}>{label}</Text>;
 }
 
-// ── A single brand row — plain list item, no card ──────────────────────────────
-function PlaceRow({ place, palette }: { place: PlaceEntry; palette: Palette }) {
+function AddButton({ label, onPress, palette }: { label: string; onPress: () => void; palette: Palette }) {
   return (
-    <View style={[styles.row, { borderBottomColor: palette.line }]}>
-      <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
-        <PoiIcon type={place.poiType} color={palette.muted} size={20} />
-      </View>
-      <Text style={[styles.brandName, { color: palette.text }]} numberOfLines={1}>{place.name}</Text>
-      {place.taught && (
-        <View accessibilityLabel={COPY.places.taughtMarkerA11y}>
-          <FilledStarIcon color={palette.accent} size={13} />
-        </View>
-      )}
-    </View>
+    <Pressable
+      style={[styles.addBtn, { borderColor: palette.line }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}>
+      <PlusIcon color={palette.text} size={16} />
+      <Text style={[styles.addLabel, { color: palette.text }]}>{label}</Text>
+    </Pressable>
   );
 }
 
-function TripRow({ trip, palette }: { trip: Trip; palette: Palette }) {
+// ── Brand row — TaskRow geometry, two lines, no card, no visible remove ─────────
+function PlaceRow({ place, palette, onLongPress }: { place: PlaceEntry; palette: Palette; onLongPress?: () => void }) {
+  const secondary = place.taught ? typeLabel(place.poiType) : COPY.places.usualSecondary(typeLabel(place.poiType));
   return (
-    <View style={[styles.row, { borderBottomColor: palette.line }]}>
+    <Pressable
+      style={[styles.row, { borderBottomColor: palette.line }]}
+      onLongPress={onLongPress}
+      disabled={!onLongPress}
+      accessibilityRole={onLongPress ? 'button' : 'text'}
+      accessibilityLabel={onLongPress ? COPY.places.forgetA11y(place.name) : undefined}>
       <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
-        <SuitcaseIcon color={palette.muted} size={20} />
+        <PoiIcon type={place.poiType} color={palette.muted} size={20} />
+      </View>
+      <View style={styles.rowText}>
+        <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={1}>{place.name}</Text>
+        <Text style={[styles.rowSub, { color: palette.muted }]} numberOfLines={1}>{secondary}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function PastTripRow({ trip, palette, onLongPress }: { trip: Trip; palette: Palette; onLongPress: () => void }) {
+  return (
+    <Pressable
+      style={[styles.row, { borderBottomColor: palette.line }]}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      accessibilityLabel={COPY.places.forgetA11y(trip.destination)}>
+      <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
+        <PinIcon color={palette.muted} size={20} />
       </View>
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={1}>{trip.destination}</Text>
         <Text style={[styles.rowSub, { color: palette.muted }]} numberOfLines={1}>{tripDates(trip)}</Text>
       </View>
+    </Pressable>
+  );
+}
+
+function TripCard({ trip, nextUp, palette }: { trip: Trip; nextUp: boolean; palette: Palette }) {
+  return (
+    <View
+      style={[
+        styles.tripCard,
+        nextUp
+          ? { backgroundColor: palette.nearTint, borderColor: palette.nearBorder }
+          : { backgroundColor: palette.surface, borderColor: palette.line },
+      ]}>
+      {nextUp && <Text style={[styles.nextUp, { color: palette.nearText }]}>{COPY.places.nextUp}</Text>}
+      <Text style={[styles.tripDest, { color: palette.text }]} numberOfLines={1}>{trip.destination}</Text>
+      <Text style={[styles.tripDatesText, { color: palette.muted }]} numberOfLines={1}>{tripDates(trip)}</Text>
     </View>
   );
 }
 
-// ── Empty-state panel — keeps the surface2 fill so it reads as a placeholder ────
+// ── Empty-state panel — surface2 fill so it reads as a placeholder ──────────────
 function EmptyPanel({ icon: Icon, line, palette, action }: {
-  icon: IconCmp;
-  line: string;
-  palette: Palette;
-  action?: { label: string; onPress: () => void };
+  icon: IconCmp; line: string; palette: Palette; action?: { label: string; onPress: () => void };
 }) {
   return (
     <View style={[styles.emptyPanel, { backgroundColor: palette.surface2 }]}>
       <Icon color={palette.faint} size={22} />
       <Text style={[styles.emptyLine, { color: palette.muted }]}>{line}</Text>
       {action && (
-        <Pressable onPress={action.onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={action.label}>
-          <Text style={[styles.emptyAction, { color: palette.accent }]}>{action.label}</Text>
+        <Pressable
+          style={[styles.emptyActionPill, { borderColor: palette.line }]}
+          onPress={action.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}>
+          <Text style={[styles.emptyActionLabel, { color: palette.text }]}>{action.label}</Text>
         </Pressable>
       )}
     </View>
@@ -214,33 +263,38 @@ const styles = StyleSheet.create({
   },
   navBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 17, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
+  tabWrap: { paddingHorizontal: spacing.page, marginTop: 12 },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: spacing.page, paddingTop: 8 },
+  content: { paddingHorizontal: spacing.page, paddingTop: 12 },
 
-  sectionTitle: { fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold', letterSpacing: 1, marginTop: 24, marginBottom: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold', letterSpacing: 1, marginTop: 22, marginBottom: 4 },
 
-  // Plain list rows separated by a hairline divider — no card background/border.
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  // Rows — match TaskRow: plain list items, hairline divider, no card.
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
   iconTile: { width: 36, height: 36, borderRadius: radii.listIcon, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },
-  rowSub: { fontSize: 12, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'] },
-  brandName: { flex: 1, fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },
+  rowSub: { fontSize: 13, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'] },
 
-  actionRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    minHeight: 44, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 44, borderRadius: radii.ctaBtn, borderWidth: 1,
   },
-  actionLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500', fontVariant: ['tabular-nums'] },
-  teachRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingVertical: 12 },
-  teachLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
+  addLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
+  tripsAddWrap: { marginTop: 10 },
 
-  yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 6, fontVariant: ['tabular-nums'] },
+  tripCard: { borderRadius: radii.card, borderWidth: 1, padding: 14, marginTop: 10 },
+  nextUp: { position: 'absolute', top: 10, right: 12, fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
+  tripDest: { fontSize: 16, fontFamily: 'Geist-Medium', fontWeight: '500' },
+  tripDatesText: { fontSize: 13, fontFamily: 'Geist-Regular', fontVariant: ['tabular-nums'], marginTop: 3 },
+
+  // Full-bleed band separating ahead from behind.
+  separator: { height: 8, marginTop: 22, marginHorizontal: -spacing.page },
+
+  yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
 
   emptyPanel: { alignItems: 'center', gap: 8, paddingVertical: 24, paddingHorizontal: 16, borderRadius: radii.card, marginTop: 4 },
   emptyLine: { fontSize: 13, fontFamily: 'Geist-Regular', textAlign: 'center' },
-  emptyAction: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 2 },
+  emptyActionPill: { marginTop: 4, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1 },
+  emptyActionLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
 });

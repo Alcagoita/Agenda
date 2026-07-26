@@ -36,7 +36,6 @@ import HomeAddressScreen from '../screens/HomeAddressScreen';
 import WhereWeveBeenScreen from '../screens/WhereWeveBeenScreen';
 import ItineraryOptionsScreen from '../screens/ItineraryOptionsScreen';
 import PlacesScreen from '../screens/PlacesScreen';
-import AllPlacesScreen from '../screens/AllPlacesScreen';
 
 export type RootStackParamList = {
   Today: undefined;
@@ -83,8 +82,6 @@ export type RootStackParamList = {
   PlacesIKnow: undefined;
   /** Places — brands + trips + past trips, behind the Lantern pill (KAN-304). */
   Places: undefined;
-  /** Full brand directory, searchable, reached from the Places overflow row (KAN-304). */
-  AllPlaces: undefined;
   /** Explicit home address — set/edit/clear (KAN-247). */
   HomeAddress: undefined;
   /** Off-grid window — "I'll be offline for a while, keep my tasks going" (KAN-246). Now + duration, never dated like TripPlanner. */
@@ -131,7 +128,6 @@ export default function AppNavigator() {
       <Stack.Screen name="OffGrid"                    component={OffGridScreen} />
       <Stack.Screen name="PlacesIKnow"                component={PlacesIKnowScreen} />
       <Stack.Screen name="Places"                     component={PlacesScreen} />
-      <Stack.Screen name="AllPlaces"                  component={AllPlacesScreen} />
       <Stack.Screen name="HomeAddress"                component={HomeAddressScreen} />
       <Stack.Screen name="WhereWeveBeen"              component={WhereWeveBeenScreen} />
       <Stack.Screen name="ItineraryOptions"           component={ItineraryOptionsScreen} />

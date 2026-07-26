@@ -55,6 +55,7 @@ function toSafeVisitCount(value: unknown): number {
 function buildTaskDonePatch(
   done: boolean,
   completedPlace?: { placeId: string; name: string; poiType: string },
+  completedTripId?: string,
 ) {
   const hasPlace = done && !!completedPlace;
   return {
@@ -63,6 +64,8 @@ function buildTaskDonePatch(
     completedPlaceId: hasPlace ? completedPlace!.placeId : deleteField(),
     completedPlaceName: hasPlace ? completedPlace!.name : deleteField(),
     completedPoiType: hasPlace ? completedPlace!.poiType : deleteField(),
+    // KAN-304 — stamp the active trip id (groundwork; never surfaced yet).
+    completedTripId: done && completedTripId ? completedTripId : deleteField(),
   };
 }
 
@@ -266,12 +269,13 @@ export async function setTaskDone(
   taskId: string,
   done: boolean,
   completedPlace?: { placeId: string; name: string; poiType: string },
+  completedTripId?: string,
 ): Promise<void> {
   const hasPlace    = done && !!completedPlace;
   const nextPlaceId = hasPlace ? completedPlace!.placeId : undefined;
   const db   = getFirestore();
   const tRef = taskRef(uid, taskId);
-  const taskPatch = buildTaskDonePatch(done, completedPlace);
+  const taskPatch = buildTaskDonePatch(done, completedPlace, completedTripId);
 
   try {
     await runTransaction(db, async (tx) => {

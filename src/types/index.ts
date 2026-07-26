@@ -196,6 +196,13 @@ export interface Task {
   /** POI type of `completedPlaceId`, snapshotted at brush time. */
   completedPoiType?: string;
   /**
+   * KAN-304 — the id of the trip whose area the user was inside when this task
+   * was brushed, if any (live `PlaceContext.kind === 'trip'` at brush time).
+   * Groundwork for later "things to do where you've been" — stored, never yet
+   * surfaced.
+   */
+  completedTripId?: string;
+  /**
    * The date (YYYY-MM-DD) on which a geofence-entry notification was last
    * fired for this task. Suppresses repeat alerts on the same day (KAN-24).
    */

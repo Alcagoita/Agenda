@@ -14,12 +14,12 @@ import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import {
   getTaughtPlaces, addTaughtPlace, removeTaughtPlace,
-  getLearnedPlaceCounts, getTrips, deleteTrip as deleteTripDoc,
+  getLearnedPlaceCounts, getTrips,
 } from '../services/firestore';
 import type { TaughtPlace } from '../services/firestore/taughtPlaces';
 import { computeLearnedPlaces } from '../services/learnedPlaces';
-import { deleteTripAreaPlaces } from '../services/habitatCache';
-import { mergePlaces, type PlaceEntry } from '../services/places';
+import { splitPlaces, type PlaceEntry } from '../services/places';
+import { forgetTrip as forgetTripAction } from '../services/tripActions';
 import { groupTripsByYear, type TripYearGroup } from './useWhereWeveBeen';
 import { isTripPast, isPastMemorableTrip } from '../utils/contextChip';
 import { todayISO } from '../utils/date';
@@ -27,8 +27,10 @@ import type { Trip } from '../types';
 
 export interface PlacesState {
   loading: boolean;
-  /** Merged taught + learned brands, taught first. */
-  places: PlaceEntry[];
+  /** Brands the user taught ("Favourites"). */
+  favourites: PlaceEntry[];
+  /** Brands inferred from brushes ("Your usuals"), excluding any already taught. */
+  usuals: PlaceEntry[];
   /** Current/upcoming trips (destination + dates). */
   activeTrips: Trip[];
   /** Past trips, grouped by year. */
@@ -78,7 +80,7 @@ export function usePlaces(): PlacesState {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const places = useMemo(() => mergePlaces(taught, learned), [taught, learned]);
+  const { favourites, usuals } = useMemo(() => splitPlaces(taught, learned), [taught, learned]);
 
   const today = todayISO();
   const activeTrips = useMemo(
@@ -113,13 +115,12 @@ export function usePlaces(): PlacesState {
   const forgetTrip = useCallback(async (trip: Trip) => {
     if (!uid) { return; }
     try {
-      await deleteTripDoc(uid, trip.id);
-      deleteTripAreaPlaces(trip.cacheAreaId);
+      await forgetTripAction(uid, trip);
       setTrips(prev => prev.filter(t => t.id !== trip.id));
     } catch (err) {
       console.warn('[usePlaces] forgetTrip failed', err);
     }
   }, [uid]);
 
-  return { loading, places, activeTrips, pastTripGroups, addPlace, removePlace, forgetTrip, refresh };
+  return { loading, favourites, usuals, activeTrips, pastTripGroups, addPlace, removePlace, forgetTrip, refresh };
 }
