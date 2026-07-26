@@ -36,9 +36,9 @@ export interface PlacesState {
   activeTrips: Trip[];
   /** Past trips, grouped by year. */
   pastTripGroups: TripYearGroup[];
-  addPlace: (poiType: string, name: string) => Promise<void>;
-  removePlace: (id: string) => Promise<void>;
-  forgetTrip: (trip: Trip) => Promise<void>;
+  addPlace: (poiType: string, name: string) => void;
+  removePlace: (id: string) => void;
+  forgetTrip: (trip: Trip) => void;
   refresh: () => Promise<void>;
 }
 
@@ -97,39 +97,36 @@ export function usePlaces(): PlacesState {
     [trips, today],
   );
 
-  const addPlace = useCallback(async (poiType: string, name: string) => {
+  // All three actions are LOCAL-FIRST: update state now so it works fully
+  // offline, then fire the Firestore write and let it sync when there's a
+  // connection. We never await the write before updating the UI — offline,
+  // addDoc/deleteDoc promises stay pending until reconnect, so awaiting would
+  // freeze the list. Firestore's offline cache persists the change across
+  // restarts and replays it to the server on reconnect.
+  const addPlace = useCallback((poiType: string, name: string) => {
     if (!uid) { return; }
-    // Optimistic — show the favourite immediately, then persist + reconcile.
     const tempId = `temp_${Date.now()}`;
     const optimistic: TaughtPlace = { id: tempId, poiType, name, createdAt: Timestamp.now() };
     setTaught(prev => [optimistic, ...prev]);
-    try {
-      await addTaughtPlace(uid, { poiType, name });
-      await refresh(); // swap the temp row for the real persisted one
-    } catch (err) {
-      setTaught(prev => prev.filter(p => p.id !== tempId)); // roll back on failure
+    // Fire-and-forget. On error (a real rejection, not an offline queue) roll
+    // the row back. A later focus refetch reconciles the temp id with the real
+    // cached doc (splitPlaces dedupes by brand in the meantime).
+    addTaughtPlace(uid, { poiType, name }).catch(err => {
+      setTaught(prev => prev.filter(p => p.id !== tempId));
       console.warn('[usePlaces] addPlace failed', err);
-    }
-  }, [uid, refresh]);
-
-  const removePlace = useCallback(async (id: string) => {
-    if (!uid) { return; }
-    try {
-      await removeTaughtPlace(uid, id);
-      setTaught(prev => prev.filter(p => p.id !== id));
-    } catch (err) {
-      console.warn('[usePlaces] removePlace failed', err);
-    }
+    });
   }, [uid]);
 
-  const forgetTrip = useCallback(async (trip: Trip) => {
+  const removePlace = useCallback((id: string) => {
     if (!uid) { return; }
-    try {
-      await forgetTripAction(uid, trip);
-      setTrips(prev => prev.filter(t => t.id !== trip.id));
-    } catch (err) {
-      console.warn('[usePlaces] forgetTrip failed', err);
-    }
+    setTaught(prev => prev.filter(p => p.id !== id)); // local first
+    removeTaughtPlace(uid, id).catch(err => console.warn('[usePlaces] removePlace failed', err));
+  }, [uid]);
+
+  const forgetTrip = useCallback((trip: Trip) => {
+    if (!uid) { return; }
+    setTrips(prev => prev.filter(t => t.id !== trip.id)); // local first
+    forgetTripAction(uid, trip).catch(err => console.warn('[usePlaces] forgetTrip failed', err));
   }, [uid]);
 
   return { loading, favourites, usuals, activeTrips, pastTripGroups, addPlace, removePlace, forgetTrip, refresh };
