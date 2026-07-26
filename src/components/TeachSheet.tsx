@@ -41,7 +41,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
         <View style={[styles.sheet, { backgroundColor: palette.bg, paddingBottom: spacing.page + insets.bottom }]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: palette.text }]}>{COPY.places.teachTitle}</Text>
-            <Pressable onPress={handleClose} hitSlop={8} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
+            <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
               <CloseIcon color={palette.muted} size={18} />
             </Pressable>
           </View>
@@ -96,11 +96,12 @@ const styles = StyleSheet.create({
   scrim: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.page, gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  closeBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
   title: { fontSize: 17, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
   fieldLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 4 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44,
     paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1,
   },
   typeChipLabel: { fontSize: 13, fontFamily: 'Geist-Medium', fontWeight: '500' },

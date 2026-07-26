@@ -789,7 +789,11 @@ function processProximityTick(
   onUpdate: ProximityCallback,
 ): void {
   _locationTap?.(coords.lat, coords.lng, coords.accuracy ?? 0);
-  _placeContextTap?.(findActivePlaceContext(coords.lat, coords.lng));
+  // Store before tapping so getActivePlaceContext() (task completion's
+  // completedTripId stamp) reads this tick's context, not a stale one — the
+  // empty-POI branch above does the same.
+  _lastPlaceContext = findActivePlaceContext(coords.lat, coords.lng);
+  _placeContextTap?.(_lastPlaceContext);
 
   // Split results: orange hero (< 100 m) vs. grey approaching (100–400 m).
   let heroType:  string | null = null;

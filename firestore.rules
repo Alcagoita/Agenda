@@ -154,6 +154,14 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
+    // Taught places / favourites (KAN-304) — exactly (poiType, name, createdAt).
+    function validPlaceData(data) {
+      return data.keys().hasOnly(['poiType', 'name', 'createdAt'])
+        && validNonEmptyString(data.poiType, 100)
+        && validNonEmptyString(data.name, 120)
+        && data.createdAt is timestamp;
+    }
+
     function validMallSnapshotData(data) {
       return data.keys().hasOnly([
           'placeId',
@@ -352,7 +360,9 @@ service cloud.firestore {
 
       // ─── Taught places / favourites (KAN-304) ────────────────────────────────
       match /places/{placeId} {
-        allow read, create, update, delete: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && validPlaceData(request.resource.data);
       }
 
       // ─── Mall snapshot (KAN-237) ─────────────────────────────────────────────
