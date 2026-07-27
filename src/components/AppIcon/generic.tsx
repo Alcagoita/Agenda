@@ -323,6 +323,24 @@ export function PinIcon({ color, size = 24 }: IconProps) {
   );
 }
 
+// ── Footsteps: the places you usually go (KAN-304 "Your usuals") ────────────────
+export function FootstepsIcon({ color, size = 24 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Left foot — toe sole + heel arc */}
+      <Path
+        d="M6 3.6c1.5 0 2.4 1.3 2.4 3.1 0 1.7-.5 3.4-1.2 4.6-.4.7-1.6.7-2.1 0-.7-1.2-1.4-2.9-1.4-4.6 0-1.8.9-3.1 2.3-3.1z"
+        stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+      <Path d="M4.6 13.6c1 .5 2.4.5 3.3 0" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+      {/* Right foot — offset down and right, a step ahead */}
+      <Path
+        d="M16.6 9c1.5 0 2.4 1.3 2.4 3.1 0 1.7-.5 3.4-1.2 4.6-.4.7-1.6.7-2.1 0-.7-1.2-1.4-2.9-1.4-4.6 0-1.8.9-3.1 2.3-3.1z"
+        stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+      <Path d="M15.2 19c1 .5 2.4.5 3.3 0" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 // ── Trip: folded map + location marker (KAN-304 Trips tab) ──────────────────────
 export function TripMapIcon({ color, size = 24 }: IconProps) {
   return (

@@ -19,7 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
 import {
-  ChevronLeftIcon, PlusIcon, StarIcon, RefreshIcon, SuitcaseIcon, PinIcon, PoiIcon, TripMapIcon,
+  ChevronLeftIcon, PlusIcon, StarIcon, SuitcaseIcon, PinIcon, PoiIcon, TripMapIcon, FootstepsIcon,
 } from '../components/AppIcon';
 import type { IconProps } from '../components/AppIcon/shared';
 import TabControl from '../components/TabControl';
@@ -109,7 +109,7 @@ export default function PlacesScreen() {
 
               <SectionHeader label={COPY.places.sectionUsuals} palette={palette} />
               {usuals.length === 0 ? (
-                <EmptyPanel icon={RefreshIcon} line={COPY.places.emptyUsuals} palette={palette} />
+                <EmptyPanel icon={FootstepsIcon} line={COPY.places.emptyUsuals} palette={palette} />
               ) : (
                 usuals.map(p => (
                   <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} onRemove={() => removeUsual(p.poiType, p.name)} />
