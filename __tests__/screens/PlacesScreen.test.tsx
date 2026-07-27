@@ -43,6 +43,7 @@ jest.mock('@react-navigation/native-stack', () => ({}));
 jest.mock('../../src/components/AppIcon', () => ({
   ChevronLeftIcon: () => null, PlusIcon: () => null, StarIcon: () => null, RefreshIcon: () => null,
   SuitcaseIcon: () => null, PinIcon: () => null, PoiIcon: () => null, CloseIcon: () => null,
+  TripMapIcon: () => null,
 }));
 
 import PlacesScreen from '../../src/screens/PlacesScreen';

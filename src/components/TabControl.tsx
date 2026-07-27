@@ -9,10 +9,13 @@
 import React, { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme';
+import type { IconProps } from './AppIcon/shared';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export interface TabItem { key: string; label: string; }
+type IconCmp = (props: IconProps) => React.JSX.Element;
+
+export interface TabItem { key: string; label: string; icon?: IconCmp; }
 
 export interface TabControlProps {
   tabs: TabItem[];
@@ -28,6 +31,7 @@ export default function TabControl({ tabs, activeKey, onChange }: TabControlProp
         <TabPill
           key={tab.key}
           label={tab.label}
+          icon={tab.icon}
           active={tab.key === activeKey}
           onPress={() => onChange(tab.key)}
           textColor={palette.text}
@@ -39,11 +43,12 @@ export default function TabControl({ tabs, activeKey, onChange }: TabControlProp
   );
 }
 
-function TabPill({ label, active, onPress, textColor, bgColor, lineColor }: {
-  label: string; active: boolean; onPress: () => void;
+function TabPill({ label, icon: Icon, active, onPress, textColor, bgColor, lineColor }: {
+  label: string; icon?: IconCmp; active: boolean; onPress: () => void;
   textColor: string; bgColor: string; lineColor: string;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
+  const fg = active ? bgColor : textColor;
   return (
     <AnimatedPressable
       onPress={onPress}
@@ -59,13 +64,14 @@ function TabPill({ label, active, onPress, textColor, bgColor, lineColor }: {
           : { backgroundColor: 'transparent', borderWidth: 1, borderColor: lineColor },
         { transform: [{ scale }] },
       ]}>
-      <Text style={[styles.label, { color: active ? bgColor : textColor }]}>{label}</Text>
+      {Icon && <Icon color={fg} size={18} />}
+      <Text style={[styles.label, { color: fg }]}>{label}</Text>
     </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10 },
-  pill: { flex: 1, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  pill: { flex: 1, flexDirection: 'row', gap: 8, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 15, fontWeight: '500', fontFamily: 'Geist-Medium' },
 });

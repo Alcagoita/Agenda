@@ -19,7 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
 import {
-  ChevronLeftIcon, PlusIcon, StarIcon, RefreshIcon, SuitcaseIcon, PinIcon, PoiIcon,
+  ChevronLeftIcon, PlusIcon, StarIcon, RefreshIcon, SuitcaseIcon, PinIcon, PoiIcon, TripMapIcon,
 } from '../components/AppIcon';
 import type { IconProps } from '../components/AppIcon/shared';
 import TabControl from '../components/TabControl';
@@ -80,7 +80,10 @@ export default function PlacesScreen() {
 
       <View style={styles.tabWrap}>
         <TabControl
-          tabs={[{ key: 'places', label: COPY.places.tabPlaces }, { key: 'trips', label: COPY.places.tabTrips }]}
+          tabs={[
+            { key: 'places', label: COPY.places.tabPlaces, icon: PinIcon },
+            { key: 'trips', label: COPY.places.tabTrips, icon: TripMapIcon },
+          ]}
           activeKey={tab}
           onChange={k => setTab(k as 'places' | 'trips')}
         />
