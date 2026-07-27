@@ -442,6 +442,7 @@ const en = {
     // Trips tab
     tripsAddAction: 'Going somewhere?',
     nextUp: 'Next up',
+    sectionWhereGoing: "Where you're going",
     sectionWhereBeen: "Where you've been",
     // Empty states (one icon + line each)
     emptyFavourites: "Star a place and it'll wait here for you.",
@@ -1538,6 +1539,7 @@ const ptPT: typeof en = {
     usualSecondary: (typeLabel: string) => `o teu ${typeLabel} do costume`,
     tripsAddAction: 'Vais a algum lado?',
     nextUp: 'A seguir',
+    sectionWhereGoing: 'Onde vais',
     sectionWhereBeen: 'Onde estiveste',
     emptyFavourites: 'Marca um sítio com estrela e ele fica aqui à tua espera.',
     emptyUsuals: 'Os sítios onde voltas sempre aparecem aqui sozinhos.',

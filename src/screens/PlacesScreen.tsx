@@ -95,10 +95,9 @@ export default function PlacesScreen() {
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
           {tab === 'places' ? (
             <>
-              {/* Add button ABOVE the unbounded list so it stays reachable. */}
-              <AddButton label={COPY.places.teachAction} onPress={() => setTeaching(true)} palette={palette} />
-
               <SectionHeader label={COPY.places.sectionFavourites} palette={palette} />
+              {/* Add button sits directly under the Favourites title. */}
+              <AddButton label={COPY.places.teachAction} onPress={() => setTeaching(true)} palette={palette} />
               {favourites.length === 0 ? (
                 <EmptyPanel icon={StarIcon} line={COPY.places.emptyFavourites} palette={palette} />
               ) : (
@@ -119,6 +118,7 @@ export default function PlacesScreen() {
           ) : (
             <>
               {/* Planned trips */}
+              <SectionHeader label={COPY.places.sectionWhereGoing} palette={palette} />
               {activeTrips.length === 0 ? (
                 <EmptyPanel
                   icon={SuitcaseIcon}
