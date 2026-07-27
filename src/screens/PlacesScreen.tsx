@@ -119,6 +119,7 @@ export default function PlacesScreen() {
             <>
               {/* Planned trips */}
               <SectionHeader label={COPY.places.sectionWhereGoing} palette={palette} />
+              <Text style={[styles.yearLabel, { color: palette.faint }]}>{COPY.places.whereGoingSub}</Text>
               {activeTrips.length === 0 ? (
                 <EmptyPanel
                   icon={SuitcaseIcon}

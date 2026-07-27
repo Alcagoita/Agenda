@@ -45,6 +45,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
               <CloseIcon color={palette.muted} size={18} />
             </Pressable>
           </View>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>{COPY.places.teachSubtitle}</Text>
 
           <Text style={[styles.fieldLabel, { color: palette.muted }]}>{COPY.places.teachTypeLabel}</Text>
           <View style={styles.typeGrid}>
@@ -98,6 +99,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   closeBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
   title: { fontSize: 17, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
+  subtitle: { fontSize: 13, fontFamily: 'Geist-Regular', marginTop: -4 },
   fieldLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 4 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: {
