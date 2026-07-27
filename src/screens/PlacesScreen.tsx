@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
-import { spacing, radius as radii } from '../theme/tokens';
+import { spacing, radius as radii, sectionTitleStyle } from '../theme/tokens';
 import {
   ChevronLeftIcon, PlusIcon, StarIcon, SuitcaseIcon, PinIcon, PoiIcon, TripMapIcon, FootstepsIcon,
 } from '../components/AppIcon';
@@ -96,8 +96,6 @@ export default function PlacesScreen() {
           {tab === 'places' ? (
             <>
               <SectionHeader label={COPY.places.sectionFavourites} palette={palette} />
-              {/* Add button sits directly under the Favourites title. */}
-              <AddButton label={COPY.places.teachAction} onPress={() => setTeaching(true)} palette={palette} />
               {favourites.length === 0 ? (
                 <EmptyPanel icon={StarIcon} line={COPY.places.emptyFavourites} palette={palette} />
               ) : (
@@ -105,6 +103,10 @@ export default function PlacesScreen() {
                   <PlaceRow key={`${p.poiType} ${p.name}`} place={p} palette={palette} onRemove={() => removePlace(p.id!)} />
                 ))
               )}
+              {/* Add button UNDER the list, so the items stay the focus. */}
+              <View style={styles.favAddWrap}>
+                <AddButton label={COPY.places.teachAction} onPress={() => setTeaching(true)} palette={palette} />
+              </View>
 
               <SectionHeader label={COPY.places.sectionUsuals} palette={palette} />
               {usuals.length === 0 ? (
@@ -178,7 +180,7 @@ export default function PlacesScreen() {
 }
 
 function SectionHeader({ label, palette }: { label: string; palette: Palette }) {
-  return <Text style={[styles.sectionTitle, { color: palette.muted }]}>{label}</Text>;
+  return <Text style={[sectionTitleStyle, { color: palette.muted }]}>{label}</Text>;
 }
 
 function AddButton({ label, onPress, palette }: { label: string; onPress: () => void; palette: Palette }) {
@@ -321,7 +323,6 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.page, paddingTop: 12 },
 
-  sectionTitle: { fontSize: 11, fontWeight: '600', fontFamily: 'Geist-SemiBold', letterSpacing: 1, marginTop: 22, marginBottom: 4 },
 
   // Rows — match TaskRow: plain list items, hairline divider, no card.
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
@@ -338,6 +339,7 @@ const styles = StyleSheet.create({
   },
   addLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
   tripsAddWrap: { marginTop: 10 },
+  favAddWrap: { marginTop: 12 },
 
   tripCard: { borderRadius: radii.card, borderWidth: 1, padding: 14, marginTop: 10, rowGap: 4 },
   tripLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 24 },
