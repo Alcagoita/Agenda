@@ -270,7 +270,8 @@ export const sectionTitleStyle: TextStyle = {
   fontSize: 11,
   fontWeight: '600',
   fontFamily: 'Geist-SemiBold',
-  letterSpacing: 0.8,
+  letterSpacing: 1,
+  textTransform: 'uppercase',
   marginTop: 20,
   marginBottom: 10,
 };
