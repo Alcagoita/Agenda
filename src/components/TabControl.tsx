@@ -1,14 +1,14 @@
 /**
  * TabControl — KAN-304
  *
- * A row of equal-width pill tabs. No animated slider — the active pill simply
- * inverts (background P.text, label P.bg); inactive pills are transparent with a
- * 1px P.line border. New pattern with no precedent in the app; built to the
- * ticket's exact values.
+ * A row of equal-width tabs, styled to match the Social hub ("Friends") quick
+ * actions so the two screens read as the same app: 52-tall rounded-rectangles,
+ * active = inverted (P.text bg, P.bg label), inactive = P.surface2 grey.
  */
 import React, { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme';
+import { radius as radii } from '../theme/tokens';
 import type { IconProps } from './AppIcon/shared';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -36,16 +36,16 @@ export default function TabControl({ tabs, activeKey, onChange }: TabControlProp
           onPress={() => onChange(tab.key)}
           textColor={palette.text}
           bgColor={palette.bg}
-          lineColor={palette.line}
+          inactiveBg={palette.surface2}
         />
       ))}
     </View>
   );
 }
 
-function TabPill({ label, icon: Icon, active, onPress, textColor, bgColor, lineColor }: {
+function TabPill({ label, icon: Icon, active, onPress, textColor, bgColor, inactiveBg }: {
   label: string; icon?: IconCmp; active: boolean; onPress: () => void;
-  textColor: string; bgColor: string; lineColor: string;
+  textColor: string; bgColor: string; inactiveBg: string;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const fg = active ? bgColor : textColor;
@@ -58,10 +58,8 @@ function TabPill({ label, icon: Icon, active, onPress, textColor, bgColor, lineC
       accessibilityState={{ selected: active }}
       accessibilityLabel={label}
       style={[
-        styles.pill,
-        active
-          ? { backgroundColor: textColor }
-          : { backgroundColor: 'transparent', borderWidth: 1, borderColor: lineColor },
+        styles.tab,
+        { backgroundColor: active ? textColor : inactiveBg },
         { transform: [{ scale }] },
       ]}>
       {Icon && <Icon color={fg} size={18} />}
@@ -71,7 +69,7 @@ function TabPill({ label, icon: Icon, active, onPress, textColor, bgColor, lineC
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10 },
-  pill: { flex: 1, flexDirection: 'row', gap: 8, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 15, fontWeight: '500', fontFamily: 'Geist-Medium' },
+  row: { flexDirection: 'row', gap: 12 },
+  tab: { flex: 1, flexDirection: 'row', gap: 8, height: 52, borderRadius: radii.ctaBtn, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 14, fontWeight: '500', fontFamily: 'Geist-Medium' },
 });
