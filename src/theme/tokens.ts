@@ -267,7 +267,7 @@ export const radius = {
  * (usually `palette.muted`) at the call site.
  */
 export const sectionTitleStyle: TextStyle = {
-  fontSize: 11,
+  fontSize: 14,
   fontWeight: '600',
   fontFamily: 'Geist-SemiBold',
   letterSpacing: 1,

@@ -9,6 +9,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SuitcaseIcon, PinIcon } from '../components/AppIcon';
+import { sectionTitleStyle } from '../theme/tokens';
 import SectionHeader from '../components/places/SectionHeader';
 import AddButton from '../components/places/AddButton';
 import EmptyPanel from '../components/places/EmptyPanel';
@@ -77,7 +78,8 @@ export default function TripsTab({ palette, activeTrips, pastTripGroups, onForge
         </>
       )}
 
-      <SectionHeader label={COPY.places.sectionWhereBeen} palette={palette} />
+      {/* Double the gap before the second section. */}
+      <SectionHeader label={COPY.places.sectionWhereBeen} palette={palette} style={styles.secondSection} />
       {pastTripGroups.length === 0 ? (
         <EmptyPanel icon={PinIcon} line={COPY.places.emptyPastTrips} palette={palette} />
       ) : (
@@ -95,7 +97,8 @@ export default function TripsTab({ palette, activeTrips, pastTripGroups, onForge
 }
 
 const styles = StyleSheet.create({
-  subLine: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
+  subLine: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
   yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
   tripsAddWrap: { marginTop: 10 },
+  secondSection: { marginTop: (sectionTitleStyle.marginTop as number) * 2 },
 });

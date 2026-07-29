@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { sectionTitleStyle } from '../theme/tokens';
 import { StarIcon, FootstepsIcon } from '../components/AppIcon';
 import SectionHeader from '../components/places/SectionHeader';
 import AddButton from '../components/places/AddButton';
@@ -37,7 +38,8 @@ export default function PlacesTab({ palette, favourites, usuals, onTeach, onRemo
         <AddButton label={COPY.places.teachAction} onPress={onTeach} palette={palette} />
       </View>
 
-      <SectionHeader label={COPY.places.sectionUsuals} palette={palette} />
+      {/* Double the gap before the second section. */}
+      <SectionHeader label={COPY.places.sectionUsuals} palette={palette} style={styles.secondSection} />
       {usuals.length === 0 ? (
         <EmptyPanel icon={FootstepsIcon} line={COPY.places.emptyUsuals} palette={palette} />
       ) : (
@@ -51,4 +53,7 @@ export default function PlacesTab({ palette, favourites, usuals, onTeach, onRemo
 
 const styles = StyleSheet.create({
   favAddWrap: { marginTop: 12 },
+  // 2× the shared section-header top margin, to open up the gap before the
+  // second section.
+  secondSection: { marginTop: (sectionTitleStyle.marginTop as number) * 2 },
 });
