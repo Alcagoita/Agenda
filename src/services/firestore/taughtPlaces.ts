@@ -9,9 +9,10 @@
  * One-shot reads/writes only (repo rule: no persistent onSnapshot for this
  * kind of small, user-managed list).
  */
-import { getDocs, addDoc, deleteDoc, Timestamp } from '@react-native-firebase/firestore';
+import { getDocs, setDoc, deleteDoc, Timestamp } from '@react-native-firebase/firestore';
 import { taughtPlacesRef, taughtPlaceRef } from './refs';
 import { mapSnapshotDocs } from './snapshot';
+import { normalize } from '../poiInference';
 
 export interface TaughtPlace {
   id: string;
@@ -22,14 +23,27 @@ export interface TaughtPlace {
   createdAt: Timestamp;
 }
 
-/** Adds a taught brand and returns its new id. */
+/**
+ * Deterministic doc id for a taught brand, keyed by its normalized
+ * (POI type, name). Making the id a pure function of the brand keeps teaching
+ * idempotent — re-teaching the same brand overwrites one doc instead of
+ * creating a hidden duplicate — and lets an optimistic row use the SAME id the
+ * real doc will have, so a remove issued before the write lands still targets
+ * (and cancels) the right doc rather than a throwaway temp id.
+ */
+export function taughtPlaceId(poiType: string, name: string): string {
+  return `${poiType}_${normalize(name).replace(/\s+/g, '_')}`;
+}
+
+/** Adds (or re-adds) a taught brand at its deterministic id; returns that id. */
 export async function addTaughtPlace(uid: string, place: { poiType: string; name: string }): Promise<string> {
-  const ref = await addDoc(taughtPlacesRef(uid), {
+  const id = taughtPlaceId(place.poiType, place.name);
+  await setDoc(taughtPlaceRef(uid, id), {
     poiType: place.poiType,
     name: place.name,
     createdAt: Timestamp.now(),
   });
-  return ref.id;
+  return id;
 }
 
 /** Every taught brand for the user, newest first. */

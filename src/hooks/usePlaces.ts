@@ -17,7 +17,7 @@ import {
   getTaughtPlaces, addTaughtPlace, removeTaughtPlace,
   getLearnedPlaceCounts, removeLearnedBrand, getTrips, getCategories, Timestamp,
 } from '../services/firestore';
-import type { TaughtPlace } from '../services/firestore/taughtPlaces';
+import { taughtPlaceId, type TaughtPlace } from '../services/firestore/taughtPlaces';
 import { computeLearnedPlaces } from '../services/learnedPlaces';
 import { splitPlaces, type PlaceEntry } from '../services/places';
 import { forgetTrip as forgetTripAction } from '../services/tripActions';
@@ -120,14 +120,16 @@ export function usePlaces(): PlacesState {
   // restarts and replays it to the server on reconnect.
   const addPlace = useCallback((poiType: string, name: string) => {
     if (!uid) { return; }
-    const tempId = `temp_${Date.now()}`;
-    const optimistic: TaughtPlace = { id: tempId, poiType, name, createdAt: Timestamp.now() };
-    setTaught(prev => [optimistic, ...prev]);
+    // Deterministic id: the optimistic row uses the SAME id the real doc will
+    // get, so a remove issued before the write lands cancels the right doc (no
+    // resurrection), and re-teaching overwrites instead of duplicating.
+    const id = taughtPlaceId(poiType, name);
+    const optimistic: TaughtPlace = { id, poiType, name, createdAt: Timestamp.now() };
+    setTaught(prev => (prev.some(p => p.id === id) ? prev : [optimistic, ...prev]));
     // Fire-and-forget; DON'T roll back on rejection. RN Firebase rejects writes
     // while offline even though the mutation is queued in the local cache and
     // will replay on reconnect — rolling back would make the row vanish ~1s
-    // after it appeared. A later focus refetch reconciles the temp id with the
-    // real cached doc (splitPlaces dedupes by brand meanwhile).
+    // after it appeared. A later focus refetch reconciles with the cached doc.
     addTaughtPlace(uid, { poiType, name }).catch(err => console.warn('[usePlaces] addPlace queued/failed', err));
   }, [uid]);
 

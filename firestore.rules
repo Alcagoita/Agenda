@@ -80,6 +80,7 @@ service cloud.firestore {
           'completedPlaceId',
           'completedPlaceName',
           'completedPoiType',
+          'completedTripId',
           'poiAlertSeenDate',
           'exitPromptSeenDate',
           'createdAt',
@@ -100,6 +101,7 @@ service cloud.firestore {
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
         && (!('completedPoiType' in data.keys()) || validString(data.completedPoiType, 100))
+        && (!('completedTripId' in data.keys()) || validString(data.completedTripId, 200))
         && (!('poiAlertSeenDate' in data.keys()) || validDateString(data.poiAlertSeenDate))
         && (!('exitPromptSeenDate' in data.keys()) || validDateString(data.exitPromptSeenDate))
         && data.createdAt is timestamp
