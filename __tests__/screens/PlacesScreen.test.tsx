@@ -141,13 +141,6 @@ describe('PlacesScreen — Trips tab', () => {
     expect(screen.getByText(COPY.tripPlanner.learnBiggerArea)).toBeTruthy();
   });
 
-  it('renders a separation band between planned and past trips (AC10)', () => {
-    mockReturn = makeState({ activeTrips: [trip('a', 'Faro', '2026-09-01')] });
-    render(<PlacesScreen />);
-    goToTrips();
-    expect(screen.getByTestId('trips-separator')).toBeTruthy();
-  });
-
   it('shows the planned + past empty states with their own lines (AC13)', () => {
     mockReturn = makeState();
     render(<PlacesScreen />);

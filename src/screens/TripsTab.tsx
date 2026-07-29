@@ -9,7 +9,6 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SuitcaseIcon, PinIcon } from '../components/AppIcon';
-import { spacing } from '../theme/tokens';
 import SectionHeader from '../components/places/SectionHeader';
 import AddButton from '../components/places/AddButton';
 import EmptyPanel from '../components/places/EmptyPanel';
@@ -78,9 +77,6 @@ export default function TripsTab({ palette, activeTrips, pastTripGroups, onForge
         </>
       )}
 
-      {/* Separation: above is ahead, below is behind. */}
-      <View testID="trips-separator" style={[styles.separator, { backgroundColor: palette.surface2 }]} />
-
       <SectionHeader label={COPY.places.sectionWhereBeen} palette={palette} />
       {pastTripGroups.length === 0 ? (
         <EmptyPanel icon={PinIcon} line={COPY.places.emptyPastTrips} palette={palette} />
@@ -102,5 +98,4 @@ const styles = StyleSheet.create({
   subLine: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
   yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
   tripsAddWrap: { marginTop: 10 },
-  separator: { height: 8, marginTop: 22, marginHorizontal: -spacing.page },
 });
