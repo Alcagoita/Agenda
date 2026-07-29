@@ -97,7 +97,7 @@ export default function TripsTab({ palette, activeTrips, pastTripGroups, onForge
 }
 
 const styles = StyleSheet.create({
-  subLine: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
+  subLine: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
   yearLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 10, fontVariant: ['tabular-nums'] },
   tripsAddWrap: { marginTop: 10 },
   secondSection: { marginTop: (sectionTitleStyle.marginTop as number) * 2 },
