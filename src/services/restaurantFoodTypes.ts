@@ -129,14 +129,31 @@ export function restaurantFoodTypeSuggestions(query: string): RestaurantFoodType
   const normalized = normalize(query);
   if (!normalized) { return listRestaurantFoodTypes(); }
 
-  return listRestaurantFoodTypes().filter(foodType => {
+  return listRestaurantFoodTypes().map((foodType, index) => {
     const entry = RESTAURANT_FOOD_DICTIONARY[foodType];
-    return (
-      normalize(entry.label).includes(normalized) ||
-      normalize(entry.labelPt ?? '').includes(normalized) ||
-      entry.aliases.some(alias => normalize(alias).includes(normalized))
-    );
-  });
+    const labels = [entry.label, entry.labelPt ?? ''];
+    const score = labels
+      .map(label => visibleLabelMatchScore(label, normalized))
+      .filter((value): value is number => value != null)
+      .sort((a, b) => a - b)[0] ?? null;
+    return { foodType, index, score };
+  })
+    .filter((match): match is { foodType: RestaurantFoodType; index: number; score: number } => match.score != null)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map(match => match.foodType);
+}
+
+function visibleLabelMatchScore(label: string, normalizedQuery: string): number | null {
+  const normalizedLabel = normalize(label);
+  if (!normalizedLabel) { return null; }
+  const words = normalizedLabel.split(' ');
+
+  if (normalizedLabel === normalizedQuery) { return 0; }
+  if (words.some(word => word.startsWith(normalizedQuery))) { return 1; }
+  if (normalizedLabel.startsWith(normalizedQuery)) { return 2; }
+  if (words.some(word => word.includes(normalizedQuery))) { return 3; }
+  if (normalizedLabel.includes(normalizedQuery)) { return 4; }
+  return null;
 }
 
 export function restaurantPlaceMatchesFoodType(

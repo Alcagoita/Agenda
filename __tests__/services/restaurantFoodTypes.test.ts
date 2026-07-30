@@ -3,6 +3,7 @@ import {
   groupRestaurantPlaceCandidates,
   inferRestaurantFoodType,
   inferRestaurantFoodTypeForPoiInference,
+  restaurantFoodTypeSuggestions,
   restaurantPlaceMatchesFoodType,
   restaurantTaskMatchesAnyPlace,
 } from '../../src/services/restaurantFoodTypes';
@@ -25,6 +26,12 @@ describe('restaurantFoodTypes', () => {
     expect(restaurantPlaceMatchesFoodType('Yakuza by Olivier Lisboa', 'sushi')).toBe(true);
     expect(restaurantPlaceMatchesFoodType('SushiCafe Amoreiras', 'sushi')).toBe(true);
     expect(restaurantPlaceMatchesFoodType('Portugália', 'sushi')).toBe(false);
+  });
+
+  it('suggests food types by visible label correspondence, not hidden aliases', () => {
+    expect(restaurantFoodTypeSuggestions('Po')).toEqual(['portuguese']);
+    expect(restaurantFoodTypeSuggestions('It')).toEqual(['italian']);
+    expect(restaurantFoodTypeSuggestions('Su')).toEqual(['sushi']);
   });
 
   it('filters restaurant places only when a restaurant task has food intent', () => {

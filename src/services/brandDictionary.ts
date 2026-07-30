@@ -14,6 +14,23 @@ function compact(value: string): string {
   return normalize(value).replace(/\s/g, '');
 }
 
+function matchScore(value: string, query: string): number | null {
+  const normalizedValue = normalize(value);
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) { return 0; }
+
+  const compactValue = compact(value);
+  const compactQuery = compact(query);
+  const words = normalizedValue.split(' ');
+
+  if (normalizedValue === normalizedQuery || compactValue === compactQuery) { return 0; }
+  if (words.some(word => word.startsWith(normalizedQuery))) { return 1; }
+  if (normalizedValue.startsWith(normalizedQuery) || compactValue.startsWith(compactQuery)) { return 2; }
+  if (words.some(word => word.includes(normalizedQuery))) { return 3; }
+  if (normalizedValue.includes(normalizedQuery) || compactValue.includes(compactQuery)) { return 4; }
+  return null;
+}
+
 export function getBrandSuggestions(
   poiType: string | null | undefined,
   query: string,
@@ -21,14 +38,14 @@ export function getBrandSuggestions(
 ): string[] {
   const brands = brandsForType(poiType);
   const normalizedQuery = normalize(query);
-  const compactQuery = compact(query);
-  const matches = normalizedQuery
-    ? brands.filter(brand => (
-      normalize(brand).includes(normalizedQuery) ||
-      (compactQuery.length > 0 && compact(brand).includes(compactQuery))
-    ))
-    : brands;
-  return matches.slice(0, limit);
+  if (!normalizedQuery) { return brands.slice(0, limit); }
+
+  return brands
+    .map((brand, index) => ({ brand, index, score: matchScore(brand, query) }))
+    .filter((match): match is { brand: string; index: number; score: number } => match.score != null)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map(match => match.brand)
+    .slice(0, limit);
 }
 
 export function getCanonicalBrand(

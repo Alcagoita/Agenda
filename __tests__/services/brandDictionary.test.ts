@@ -10,6 +10,15 @@ describe('brandDictionary', () => {
     expect(getBrandSuggestions('cafe', 'CAFE')).toEqual(['Café A Brasileira']);
   });
 
+  it('orders suggestions by visible brand correspondence', () => {
+    expect(getBrandSuggestions('cafe', 'co').slice(0, 3)).toEqual([
+      'Costa Coffee',
+      'Copenhagen Coffee Lab',
+      'Fabrica Coffee Roasters',
+    ]);
+    expect(getBrandSuggestions('cafe', 'po')).toEqual(['A Padaria Portuguesa']);
+  });
+
   it('returns canonical spelling for exact normalized matches', () => {
     expect(getCanonicalBrand('restaurant', 'mcdonalds')).toBe("McDonald's");
     expect(getCanonicalBrand('supermarket', 'pingo doce')).toBe('Pingo Doce');
