@@ -56,6 +56,7 @@ import { getIncomingSharedTasksCount } from '../services/sharing';
 import { checkAndRunTripPreRefresh } from '../services/tripDownload';
 import { deleteExpiredTripPlaces, refreshHabitatCacheIfStale } from '../services/habitatCache';
 import { getMallSnapshot } from '../services/mallSnapshots';
+import { setHomeLocation } from '../services/home';
 import { ALL_POI_TYPES, CLUSTER_LEISURE_TYPES } from '../types';
 import { todayISO } from '../utils/date';
 import { lightPalette } from '../theme/tokens';
@@ -345,6 +346,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
     let cancelled = false;
 
     if (!user) {
+      setHomeLocation(null);
       markReady();
       return () => { cancelled = true; };
     }
@@ -416,6 +418,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         const socialUnreadCount = socialUnreadCountResult.status === 'fulfilled' ? socialUnreadCountResult.value : 0;
         const trips = tripsResult.status === 'fulfilled' ? tripsResult.value : [];
         const mallSnapshot = mallSnapshotResult.status === 'fulfilled' ? mallSnapshotResult.value : null;
+        setHomeLocation(userData?.home ?? null);
 
         useAppStore.getState().setBootData({
           ownerUid: uid,

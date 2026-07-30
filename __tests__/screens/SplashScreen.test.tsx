@@ -48,6 +48,11 @@ jest.mock('../../src/services/mallSnapshots', () => ({
   getMallSnapshot: (...args: unknown[]) => mockGetMallSnapshot(...args),
 }));
 
+const mockSetHomeLocation = jest.fn();
+jest.mock('../../src/services/home', () => ({
+  setHomeLocation: (...args: unknown[]) => mockSetHomeLocation(...args),
+}));
+
 jest.mock('../../src/utils/date', () => ({
   todayISO: () => '2026-06-15',
 }));
@@ -112,6 +117,7 @@ beforeEach(() => {
   mockCheckAndRunTripPreRefresh.mockResolvedValue(undefined);
   mockDeleteExpiredTripPlaces.mockReturnValue(undefined);
   mockRefreshHabitatCacheIfStale.mockResolvedValue(undefined);
+  mockSetHomeLocation.mockClear();
 });
 
 afterEach(() => {
@@ -258,6 +264,24 @@ describe('SplashScreen', () => {
 
     // ── Home anchor habitat prefetch (KAN-247) ──
     describe('home anchor habitat prefetch', () => {
+      it('feeds home.ts during boot before exiting so Lantern never sees home as unset (KAN-307)', async () => {
+        const home = { address: '221B Baker Street', lat: 51.5, lng: -0.1 };
+        const onExit = jest.fn();
+        mockGetUser.mockResolvedValue({
+          uid: 'u1', username: 'alice', onboardingDone: true, home,
+        });
+
+        render(<SplashScreen onExit={onExit} />);
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        act(() => { jest.advanceTimersByTime(4_100); });
+
+        expect(mockSetHomeLocation).toHaveBeenCalledWith(home);
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(mockSetHomeLocation.mock.invocationCallOrder[0]).toBeLessThan(
+          onExit.mock.invocationCallOrder[0],
+        );
+      });
+
       it('prefetches the habitat cache around home when a home anchor is set', async () => {
         mockGetUser.mockResolvedValue({
           uid: 'u1', username: 'alice', onboardingDone: true,
@@ -327,6 +351,13 @@ describe('SplashScreen', () => {
       await act(async () => { await Promise.resolve(); });
 
       expect(useAppStore.getState().bootData).toBeNull();
+    });
+
+    it('clears the in-memory home anchor', async () => {
+      render(<SplashScreen onExit={jest.fn()} />);
+      await act(async () => { await Promise.resolve(); });
+
+      expect(mockSetHomeLocation).toHaveBeenCalledWith(null);
     });
 
     it('calls onExit after the abort timer', async () => {
