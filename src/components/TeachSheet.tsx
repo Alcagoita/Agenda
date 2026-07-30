@@ -8,7 +8,7 @@
  * Self-contained: owns its own form state and resets on every dismissal, so
  * reopening always starts empty.
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
@@ -16,6 +16,7 @@ import { spacing, radius as radii } from '../theme/tokens';
 import { CloseIcon, PoiIcon } from './AppIcon';
 import { TEACHABLE_POI_TYPES, poiCatalogLabel, type PoiType } from '../types';
 import { COPY } from '../constants/copy';
+import { getBrandSuggestions, getCanonicalBrand } from '../services/brandDictionary';
 
 export interface TeachSheetProps {
   visible: boolean;
@@ -26,11 +27,27 @@ export interface TeachSheetProps {
 export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps) {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
+  const themedStyles = useMemo(() => StyleSheet.create({
+    suggestionRow: {
+      borderColor: palette.line,
+      backgroundColor: palette.surface,
+    },
+    suggestionRowSelected: {
+      borderColor: palette.accent,
+      backgroundColor: palette.nearTint,
+    },
+    saveBtn: {
+      backgroundColor: palette.accent,
+    },
+  }), [palette]);
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
-  const canSave = type != null && name.trim().length > 0;
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
+  const canonicalName = getCanonicalBrand(type, name);
+  const suggestions = getBrandSuggestions(type, name);
+  const canSave = type != null && selectedBrand != null && selectedBrand === canonicalName;
 
-  const reset = () => { setType(null); setName(''); };
+  const reset = () => { setType(null); setName(''); setSelectedBrand(null); };
   // Every dismissal clears the form, so reopening always starts empty.
   const handleClose = () => { reset(); onClose(); };
 
@@ -54,7 +71,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
               return (
                 <Pressable
                   key={t}
-                  onPress={() => setType(t)}
+                  onPress={() => { setType(t); setName(''); setSelectedBrand(null); }}
                   style={[
                     styles.typeChip,
                     { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
@@ -75,14 +92,37 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
             placeholder={COPY.places.teachNamePlaceholder}
             placeholderTextColor={palette.muted}
             value={name}
-            onChangeText={setName}
+            onChangeText={value => { setName(value); setSelectedBrand(null); }}
             returnKeyType="done"
           />
+          {type && suggestions.length > 0 && (
+            <View style={styles.suggestionList}>
+              {suggestions.map(brand => {
+                const selected = brand === selectedBrand;
+                return (
+                  <Pressable
+                    key={brand}
+                    onPress={() => { setName(brand); setSelectedBrand(brand); }}
+                    style={[
+                      styles.suggestionRow,
+                      selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={brand}>
+                    <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
+                      {brand}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           <Pressable
-            style={[styles.saveBtn, { backgroundColor: palette.accent, opacity: canSave ? 1 : 0.5 }]}
+            style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
             disabled={!canSave}
-            onPress={() => { if (canSave && type) { onSave(type, name.trim()); reset(); } }}
+            onPress={() => { if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); } }}
             accessibilityRole="button"
             accessibilityLabel={COPY.places.teachSaveAction}>
             <Text style={[styles.saveLabel, { color: palette.onAccent }]}>{COPY.places.teachSaveAction}</Text>
@@ -111,6 +151,16 @@ const styles = StyleSheet.create({
     height: 46, borderRadius: radii.ctaBtn, borderWidth: 1, paddingHorizontal: 14,
     fontSize: 15, fontFamily: 'Geist-Regular',
   },
+  suggestionList: { gap: 8, marginTop: -4 },
+  suggestionRow: {
+    minHeight: 44,
+    borderRadius: radii.ctaBtn,
+    borderWidth: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  suggestionLabel: { fontSize: 14, fontFamily: 'Geist-Medium', fontWeight: '500' },
   saveBtn: { height: 50, borderRadius: radii.ctaBtn, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  saveBtnDisabled: { opacity: 0.5 },
   saveLabel: { fontSize: 16, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
 });
