@@ -23,6 +23,53 @@ describe('COPY language switching', () => {
   });
 });
 
+describe('COPY — notification preferences', () => {
+  beforeEach(() => {
+    setCopyLanguage('en');
+  });
+
+  afterEach(() => {
+    setCopyLanguage('en');
+  });
+
+  it('keeps the English notification preferences block distinct from pt-PT', () => {
+    const keys = [
+      'screenTitle',
+      'backA11y',
+      'loadingA11y',
+      'sectionDaily',
+      'sectionStreaks',
+      'sectionSummary',
+      'sectionEngagement',
+      'sectionLocation',
+      'sectionAchievements',
+      'eodLabel',
+      'eodSublabel',
+      'streakLabel',
+      'streakSublabel',
+      'weeklyLabel',
+      'weeklySublabel',
+      'reengageLabel',
+      'reengageSublabel',
+      'exitPromptLabel',
+      'exitPromptSublabel',
+      'achievementNudgesLabel',
+      'achievementNudgesSublabel',
+      'reminderTimeLabel',
+    ] as const;
+
+    setCopyLanguage('en');
+    const englishValues = keys.map(key => COPY.notificationPreferences[key]);
+    const englishReminderTime = COPY.notificationPreferences.reminderTimeA11y('20:00');
+
+    setCopyLanguage('pt-PT');
+    keys.forEach((key, index) => {
+      expect(englishValues[index]).not.toBe(COPY.notificationPreferences[key]);
+    });
+    expect(englishReminderTime).not.toBe(COPY.notificationPreferences.reminderTimeA11y('20:00'));
+  });
+});
+
 describe('COPY — pt-PT localized count strings', () => {
   beforeEach(() => {
     setCopyLanguage('pt-PT');
