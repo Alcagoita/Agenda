@@ -51,6 +51,7 @@ import { Task } from '../types';
 import { ChevronRightIcon, PoiIcon, RefreshIcon } from './AppIcon';
 import { logTap } from '../services/analytics';
 import { COPY } from '../constants/copy';
+import { restaurantTaskMatchesAnyPlace } from '../services/restaurantFoodTypes';
 
 // Distance threshold that separates the orange hero zone from the grey zone.
 const HERO_RADIUS_M = 100;
@@ -377,6 +378,7 @@ function NearbyCard({
       if (!t.poi) { return acc; }
       const places = poiPlaces[t.poi];
       if (!places?.length || places[0].distanceMeters >= HERO_RADIUS_M) { return acc; }
+      if (!restaurantTaskMatchesAnyPlace(t, places)) { return acc; }
       if (acc.find(e => e.poiType === t.poi)) { return acc; }
       acc.push({ task: t, places, poiType: t.poi });
       return acc;
@@ -390,7 +392,8 @@ function NearbyCard({
   const heroPoiTypes = new Set(heroEntries.map(e => e.poiType));
   const greyTasks = poiTasks.filter(t => {
     if (!t.poi || heroPoiTypes.has(t.poi)) { return false; }
-    return !!poiPlaces[t.poi]?.length;
+    const places = poiPlaces[t.poi];
+    return !!places?.length && restaurantTaskMatchesAnyPlace(t, places);
   }).sort((a, b) => nearestDistanceForTask(a, poiPlaces) - nearestDistanceForTask(b, poiPlaces));
 
   const hasContent = poiTasks.length > 0 && (heroEntries.length > 0 || greyTasks.length > 0);

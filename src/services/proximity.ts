@@ -94,6 +94,7 @@ import { recordLiveResult, refreshHabitatCacheIfStale, queryHabitatCache, findEx
 import { saveProximitySnapshot, loadProximitySnapshot } from './proximitySnapshot';
 import { useToastStore } from '../store/toastStore';
 import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
+import { filterRestaurantPlacesForTasks, restaurantTaskMatchesPlaceName } from './restaurantFoodTypes';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -802,7 +803,7 @@ function processProximityTick(
   const allPlaces: PlacesMap = {};
 
   for (const poiType of uniquePoiTypes) {
-    const places = results[poiType] ?? [];
+    const places = filterRestaurantPlacesForTasks(poiType, results[poiType] ?? [], undonePoiTasks);
 
     // Reconcile live results against the cache's cross-source identity
     // (KAN-229): a place already known to both Google and the OSM cache
@@ -890,7 +891,9 @@ function processProximityTick(
   if (heroType !== null && heroType !== _currentNearbyType) {
     const today    = todayISO();
     const eligible = undonePoiTasks.filter(
-      t => t.poi === heroType && t.poiAlertSeenDate !== today,
+      t => t.poi === heroType &&
+        t.poiAlertSeenDate !== today &&
+        (!heroPlace || restaurantTaskMatchesPlaceName(t, heroPlace.name)),
     );
     if (
       eligible.length > 0 &&

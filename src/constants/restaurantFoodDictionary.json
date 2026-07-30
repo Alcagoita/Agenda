@@ -1,0 +1,132 @@
+{
+  "sushi": {
+    "label": "Sushi",
+    "aliases": ["sushi", "japanese", "japonês", "japones"],
+    "restaurants": [
+      "Yakuza by Olivier",
+      "Aron Sushi",
+      "Confraria",
+      "SushiCafé",
+      "Noori",
+      "Sushicome",
+      "Sushi Factory",
+      "Sushi Shop",
+      "Go Juu",
+      "Koppu Ramen"
+    ]
+  },
+  "vegetarian": {
+    "label": "Vegetarian",
+    "aliases": ["vegetarian", "vegetarian food", "vegan", "vegetariano", "vegetariana", "vegano", "vegana"],
+    "restaurants": [
+      "The Green Affair",
+      "O Botanista",
+      "Jardim das Cerejas",
+      "Eight - The Health Lounge",
+      "Ao 26",
+      "PSI",
+      "My Mother's Daughters",
+      "Organi Chiado",
+      "Legumi Sushi Vegan"
+    ]
+  },
+  "portuguese": {
+    "label": "Portuguese",
+    "aliases": ["portuguese", "português", "portuguesa", "tasca", "comida portuguesa"],
+    "restaurants": [
+      "Portugália",
+      "A Valenciana",
+      "Adega da Tia Matilde",
+      "Solar dos Presuntos",
+      "Laurentina",
+      "Cervejaria Ramiro",
+      "Zé da Mouraria",
+      "Tasca da Esquina"
+    ]
+  },
+  "italian": {
+    "label": "Italian",
+    "aliases": ["italian", "italiano", "italiana", "pasta", "pizza"],
+    "restaurants": [
+      "ZeroZero",
+      "Mercantina",
+      "La Trattoria",
+      "Capricciosa",
+      "Pizzeria Romana Bio",
+      "Luzzo",
+      "Pizza Hut",
+      "Telepizza"
+    ]
+  },
+  "burger": {
+    "label": "Burgers",
+    "aliases": ["burger", "burgers", "hamburger", "hambúrguer", "hamburguer", "hambúrgueres", "hamburgueres"],
+    "restaurants": [
+      "H3",
+      "Honorato",
+      "McDonald's",
+      "Burger King",
+      "Ground Burger",
+      "A Cultura do Hambúrguer",
+      "Dallas Burger Joint"
+    ]
+  },
+  "healthy": {
+    "label": "Healthy",
+    "aliases": ["healthy", "salad", "salads", "saudável", "saudavel", "salada", "saladas"],
+    "restaurants": [
+      "Vitaminas",
+      "Go Natural",
+      "The Green Affair",
+      "Eight - The Health Lounge",
+      "Local",
+      "Nicolau",
+      "Honest Greens"
+    ]
+  },
+  "indian": {
+    "label": "Indian",
+    "aliases": ["indian", "indiano", "indiana", "caril", "curry"],
+    "restaurants": [
+      "Natraj",
+      "Chutnify",
+      "Jesus é Goês",
+      "Tamarind",
+      "The Old House",
+      "Passage To India"
+    ]
+  },
+  "thai": {
+    "label": "Thai",
+    "aliases": ["thai", "tailandês", "tailandes", "tailandesa"],
+    "restaurants": [
+      "Boa-Bao",
+      "Thai Garden",
+      "Soão",
+      "Sala Thai",
+      "Wok to Walk"
+    ]
+  },
+  "mexican": {
+    "label": "Mexican",
+    "aliases": ["mexican", "mexicano", "mexicana", "taco", "tacos", "burrito", "burritos"],
+    "restaurants": [
+      "Taco Bell",
+      "Coyo Taco",
+      "Guacamole",
+      "Pistola y Corazon",
+      "El Paso"
+    ]
+  },
+  "steak": {
+    "label": "Steak",
+    "aliases": ["steak", "steakhouse", "meat", "carne", "bife", "bifes"],
+    "restaurants": [
+      "Sala de Corte",
+      "Atalho Real",
+      "Block House",
+      "Butchers",
+      "K.O.B by Olivier"
+    ]
+  }
+}

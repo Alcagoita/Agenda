@@ -60,6 +60,8 @@ import { useLanternState } from '../../hooks/useLanternState';
 import { consumeTasksDirty } from '../../services/taskMutationSignal';
 import { COPY } from '../../constants/copy';
 import { localDateISO } from '../../utils/date';
+import { restaurantTaskMatchesAnyPlace } from '../../services/restaurantFoodTypes';
+import type { PlacesMap } from '../../services/proximity';
 import {
   SECTION_H_REST,
   buildEmptyMessages,
@@ -74,6 +76,12 @@ import { SkeletonRow } from './SkeletonRow';
 import { styles } from './styles';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Today'>;
+
+function taskHasNearbyPlace(task: { poi?: string | null; title: string }, places: PlacesMap): boolean {
+  if (!task.poi) { return false; }
+  const nearbyPlaces = places[task.poi];
+  return !!nearbyPlaces?.length && restaurantTaskMatchesAnyPlace(task, nearbyPlaces);
+}
 
 export default function TodayScreen() {
   const { palette, language } = useTheme();
@@ -179,7 +187,7 @@ export default function TodayScreen() {
     if (!nearbyReady) { return false; }
     const eligible = sortedTasks.filter(t => !t.done && t.kind !== 'birthday' && t.poi);
     if (eligible.length < 2) { return false; }
-    return eligible.some(t => !poiPlaces[t.poi!]?.length);
+    return eligible.some(t => !taskHasNearbyPlace(t, poiPlaces));
   }, [nearbyReady, sortedTasks, poiPlaces]);
 
   // Stable row-press handler — an inline arrow here would change identity every
@@ -230,7 +238,7 @@ export default function TodayScreen() {
           // from poiPlaces), so "Take me there" is available for it. Gated
           // on nearbyReady — see oneTripVisible's comment above, same
           // "don't show it just to yank it away" reasoning.
-          isFar={nearbyReady && !!item.poi && !poiPlaces[item.poi]?.length}
+          isFar={nearbyReady && !!item.poi && !taskHasNearbyPlace(item, poiPlaces)}
           onToggle={handleToggle}
           onPress={handleTaskPress}
           customCategories={customCategories}

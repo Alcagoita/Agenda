@@ -48,13 +48,14 @@ jest.mock('../../src/services/maps', () => ({
 }));
 
 jest.mock('@notifee/react-native', () => ({
+  __esModule: true,
   default: { createChannel: jest.fn(), displayNotification: jest.fn() },
   AndroidImportance: { HIGH: 4 },
 }));
 
 jest.mock('../../src/services/firestore', () => ({
-  markAllPoiAlertsSeen: jest.fn(),
-  markExitPromptSeen: jest.fn(),
+  markAllPoiAlertsSeen: jest.fn().mockResolvedValue(undefined),
+  markExitPromptSeen: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../src/services/notifications', () => ({
@@ -75,9 +76,9 @@ const makePosition = (lat: number, lng: number) => ({
   timestamp: 1_700_000_000,
 });
 
-const makeTask = (id: string, poi: string): Task => ({
+const makeTask = (id: string, poi: string, title: string = `Task ${id}`): Task => ({
   id,
-  title: `Task ${id}`,
+  title,
   category: 'errands',
   done: false,
   date: '2026-06-27',
@@ -142,5 +143,37 @@ describe('runProximitySearch — multiple results per type', () => {
 
     const [, , allPlaces] = mockOnUpdate.mock.calls[0];
     expect(allPlaces.cafe).toBeUndefined();
+  });
+
+  it('keeps restaurant food-intent tasks matched to the bundled restaurant list', async () => {
+    const restaurants = [
+      makePlace('r1', 'Portugália', 30),
+      makePlace('r2', 'Yakuza by Olivier', 80),
+    ];
+    mockSearchNearbyPlaces.mockResolvedValue({ restaurant: restaurants });
+
+    await runProximitySearch('uid-1', [
+      makeTask('t1', 'restaurant', 'Go out to sushi'),
+    ], mockOnUpdate);
+
+    const [heroType, heroPlace, allPlaces] = mockOnUpdate.mock.calls[0];
+    expect(heroType).toBe('restaurant');
+    expect(heroPlace?.name).toBe('Yakuza by Olivier');
+    expect(allPlaces.restaurant).toEqual([restaurants[1]]);
+  });
+
+  it('does not show an unrelated restaurant for a food-intent restaurant task', async () => {
+    mockSearchNearbyPlaces.mockResolvedValue({
+      restaurant: [makePlace('r1', 'Portugália', 30)],
+    });
+
+    await runProximitySearch('uid-1', [
+      makeTask('t1', 'restaurant', 'Go out to sushi'),
+    ], mockOnUpdate);
+
+    const [heroType, heroPlace, allPlaces] = mockOnUpdate.mock.calls[0];
+    expect(heroType).toBeNull();
+    expect(heroPlace).toBeNull();
+    expect(allPlaces.restaurant).toBeUndefined();
   });
 });
