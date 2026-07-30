@@ -28,6 +28,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('../../src/components/AppIcon', () => ({
   CloseIcon: () => null,
+  FoodTypeIcon: () => null,
   PoiIcon: () => null,
 }));
 
@@ -120,6 +121,9 @@ describe('TeachSheet', () => {
     render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);
 
     fireEvent.press(screen.getByLabelText(COPY.places.teachFoodType));
+    expect(screen.queryByText('Sushi')).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachFoodTypePlaceholder), '   ');
+    expect(screen.queryByText('Sushi')).toBeNull();
     fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachFoodTypePlaceholder), 'sush');
     fireEvent.press(screen.getByText('Sushi'));
     fireEvent.press(screen.getByText(COPY.places.teachSaveAction));

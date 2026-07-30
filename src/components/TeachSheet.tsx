@@ -13,7 +13,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
-import { CloseIcon, PoiIcon } from './AppIcon';
+import { CloseIcon, FoodTypeIcon, PoiIcon } from './AppIcon';
 import { TEACHABLE_POI_TYPES, poiCatalogLabel, type PoiType } from '../types';
 import { COPY } from '../constants/copy';
 import { getBrandSuggestions, getCanonicalBrand } from '../services/brandDictionary';
@@ -53,7 +53,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
   const [selectedFoodType, setSelectedFoodType] = useState<RestaurantFoodType | null>(null);
   const canonicalName = kind === 'place' ? getCanonicalBrand(type, name) : null;
   const brandSuggestions = kind === 'place' ? getBrandSuggestions(type, name) : [];
-  const foodSuggestions = kind === 'food' ? restaurantFoodTypeSuggestions(name) : [];
+  const foodSuggestions = kind === 'food' && name.trim().length > 0 ? restaurantFoodTypeSuggestions(name) : [];
   const shouldShowBrandSuggestions = kind === 'place' && type != null && name.trim().length > 0 && brandSuggestions.length > 0;
   const shouldShowFoodSuggestions = kind === 'food' && foodSuggestions.length > 0;
   const canSave = kind === 'food'
@@ -109,7 +109,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
               accessibilityRole="button"
               accessibilityState={{ selected: kind === 'food' }}
               accessibilityLabel={COPY.places.teachFoodType}>
-              <PoiIcon type="restaurant" color={kind === 'food' ? palette.nearText : palette.muted} size={18} />
+              <FoodTypeIcon color={kind === 'food' ? palette.nearText : palette.muted} size={18} />
               <Text style={[styles.typeChipLabel, { color: kind === 'food' ? palette.nearText : palette.text }]}>
                 {COPY.places.teachFoodType}
               </Text>
