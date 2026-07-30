@@ -80,6 +80,7 @@ service cloud.firestore {
           'completedPlaceId',
           'completedPlaceName',
           'completedPoiType',
+          'completedTripId',
           'poiAlertSeenDate',
           'exitPromptSeenDate',
           'createdAt',
@@ -100,6 +101,7 @@ service cloud.firestore {
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
         && (!('completedPoiType' in data.keys()) || validString(data.completedPoiType, 100))
+        && (!('completedTripId' in data.keys()) || validString(data.completedTripId, 200))
         && (!('poiAlertSeenDate' in data.keys()) || validDateString(data.poiAlertSeenDate))
         && (!('exitPromptSeenDate' in data.keys()) || validDateString(data.exitPromptSeenDate))
         && data.createdAt is timestamp
@@ -151,6 +153,14 @@ service cloud.firestore {
         && data.expiresAt > 0
         && (!('preRefreshedAt' in data.keys()) || (data.preRefreshedAt is int && data.preRefreshedAt > 0))
         && (!('kind' in data.keys()) || data.kind == 'offgrid')
+        && data.createdAt is timestamp;
+    }
+
+    // Taught places / favourites (KAN-304) — exactly (poiType, name, createdAt).
+    function validPlaceData(data) {
+      return data.keys().hasOnly(['poiType', 'name', 'createdAt'])
+        && validNonEmptyString(data.poiType, 100)
+        && validNonEmptyString(data.name, 120)
         && data.createdAt is timestamp;
     }
 
@@ -348,6 +358,13 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && validTripData(request.resource.data);
+      }
+
+      // ─── Taught places / favourites (KAN-304) ────────────────────────────────
+      match /places/{placeId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && validPlaceData(request.resource.data);
       }
 
       // ─── Mall snapshot (KAN-237) ─────────────────────────────────────────────

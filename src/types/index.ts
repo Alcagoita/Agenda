@@ -146,6 +146,16 @@ export function isCatalogPoiType(value: string | null | undefined): value is Poi
  */
 export const ALL_POI_TYPES: PoiType[] = POI_CATALOG.map(c => c.type);
 
+/**
+ * POI types worth teaching a *brand* for (KAN-304): places that come as
+ * multiple, chain-able stores where naming a favourite makes sense — a café,
+ * a market, a gym. Excludes one-off/utility types (ATM, park, post, bus…)
+ * where a brand name carries no signal. May grow later.
+ */
+export const TEACHABLE_POI_TYPES: PoiType[] = [
+  'cafe', 'supermarket', 'gas', 'gym', 'restaurant', 'salon',
+];
+
 /** /users/{uid}/pois/{poiType} */
 export interface PoiPreference {
   /**
@@ -195,6 +205,13 @@ export interface Task {
   completedPlaceName?: string;
   /** POI type of `completedPlaceId`, snapshotted at brush time. */
   completedPoiType?: string;
+  /**
+   * KAN-304 — the id of the trip whose area the user was inside when this task
+   * was brushed, if any (live `PlaceContext.kind === 'trip'` at brush time).
+   * Groundwork for later "things to do where you've been" — stored, never yet
+   * surfaced.
+   */
+  completedTripId?: string;
   /**
    * The date (YYYY-MM-DD) on which a geofence-entry notification was last
    * fired for this task. Suppresses repeat alerts on the same day (KAN-24).

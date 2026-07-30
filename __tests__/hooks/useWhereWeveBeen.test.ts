@@ -179,7 +179,11 @@ describe('useWhereWeveBeen — forgetTrip', () => {
     const { result } = renderHook(() => useWhereWeveBeen());
     await waitFor(() => expect(result.current.yearGroups).toHaveLength(1));
 
-    await expect(act(async () => { await result.current.forgetTrip(trip); })).resolves.toBeUndefined();
+    // Await the call INSIDE act so the (now one-hop-deeper) forgetTrip →
+    // forgetTripAction → deleteTrip rejection fully flushes before we assert.
+    await act(async () => {
+      await expect(result.current.forgetTrip(trip)).resolves.toBeUndefined();
+    });
 
     expect(warnSpy).toHaveBeenCalledWith('[useWhereWeveBeen] forgetTrip failed', expect.any(Error));
     warnSpy.mockRestore();

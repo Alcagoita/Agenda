@@ -93,7 +93,7 @@ import { todayISO } from '../utils/date';
 import { recordLiveResult, refreshHabitatCacheIfStale, queryHabitatCache, findExistingPlaceId, hasCachedPlaces } from './habitatCache';
 import { saveProximitySnapshot, loadProximitySnapshot } from './proximitySnapshot';
 import { useToastStore } from '../store/toastStore';
-import { LearnedPlace, getLearnedPlaceForPoiType } from './learnedPlaces';
+import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -237,7 +237,7 @@ export function shouldShowCoverageInvitation(invitationShownCount: number): bool
 }
 
 /** KAN-230 — on-device learned-place ranking, fed in from outside (see setLearnedPlaces). */
-let _learnedPlaces: LearnedPlace[] = [];
+let _learnedPlaces: LearnedBrand[] = [];
 
 /** KAN-238 — user's custom category place types, fed in from outside (see setCustomCategoryPoiTypes). */
 let _customCategoryPoiTypes: string[] = [];
@@ -333,7 +333,7 @@ export function updateNotifNearbyEnabled(enabled: boolean): void {
 }
 
 /** KAN-230 — feed in the on-device learned-place ranking. Pass null/empty to clear (e.g. on sign-out). */
-export function setLearnedPlaces(places: LearnedPlace[] | null): void {
+export function setLearnedPlaces(places: LearnedBrand[] | null): void {
   _learnedPlaces = places ?? [];
 }
 
@@ -549,6 +549,15 @@ function findActivePlaceContext(lat: number, lng: number): PlaceContext {
 
 let _placeContextTap: ((ctx: PlaceContext) => void) | null = null;
 
+/** KAN-304 — the place context resolved at the last position fix. Read at brush
+ *  time to stamp the active trip id onto a completed task. */
+let _lastPlaceContext: PlaceContext = null;
+
+/** The mall/trip context (or null) from the last position fix. */
+export function getActivePlaceContext(): PlaceContext {
+  return _lastPlaceContext;
+}
+
 /**
  * KAN-242 — register a tap fired with the resolved place context on every
  * position fix taken by runProximitySearch, independent of onUpdate/
@@ -604,7 +613,8 @@ async function runProximitySearch(
 
     if (uniquePoiTypes.length === 0) {
       _locationTap?.(coords.lat, coords.lng, coords.accuracy);
-      _placeContextTap?.(findActivePlaceContext(coords.lat, coords.lng));
+      _lastPlaceContext = findActivePlaceContext(coords.lat, coords.lng);
+      _placeContextTap?.(_lastPlaceContext);
       _currentNearbyType = null;
       _lastAllPlaces = {};
       // No undone POI tasks left to prompt for — nothing to fire, just
@@ -779,7 +789,11 @@ function processProximityTick(
   onUpdate: ProximityCallback,
 ): void {
   _locationTap?.(coords.lat, coords.lng, coords.accuracy ?? 0);
-  _placeContextTap?.(findActivePlaceContext(coords.lat, coords.lng));
+  // Store before tapping so getActivePlaceContext() (task completion's
+  // completedTripId stamp) reads this tick's context, not a stale one — the
+  // empty-POI branch above does the same.
+  _lastPlaceContext = findActivePlaceContext(coords.lat, coords.lng);
+  _placeContextTap?.(_lastPlaceContext);
 
   // Split results: orange hero (< 100 m) vs. grey approaching (100–400 m).
   let heroType:  string | null = null;
@@ -859,17 +873,13 @@ function processProximityTick(
     const winningType = heroType;
     const learnedForType = getLearnedPlaceForPoiType(_learnedPlaces, winningType);
     const currentPlaces = allPlaces[winningType] ?? [];
-    if (learnedForType && currentPlaces[0]?.placeId !== learnedForType.placeId) {
+    // KAN-304 — prefer the learned BRAND (by name), not a specific place id, so
+    // any branch of the user's preferred brand represents the type.
+    if (learnedForType && currentPlaces[0]?.name !== learnedForType.name) {
       for (const candidate of currentPlaces.slice(1)) {
-        let candidateId = candidate.placeId;
-        if (!answeredFromCache) {
-          const existingId = findExistingPlaceId(winningType, candidate.name, candidate.lat, candidate.lng);
-          if (existingId) { candidateId = existingId; }
-        }
-        if (candidateId === learnedForType.placeId && candidate.distanceMeters < HERO_RADIUS_M) {
-          const promoted = { ...candidate, placeId: candidateId };
-          allPlaces[winningType] = [promoted, ...currentPlaces.filter(p => p !== candidate)];
-          heroPlace = promoted;
+        if (candidate.name === learnedForType.name && candidate.distanceMeters < HERO_RADIUS_M) {
+          allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
+          heroPlace = candidate;
           break;
         }
       }
@@ -1078,6 +1088,7 @@ export function resetProximityState(): void {
   _customCategoryPoiTypes = [];
   _activeTrips = [];
   _mallSnapshot = null;
+  _lastPlaceContext = null;
 
   geofenceEntryTimes.clear();
 }

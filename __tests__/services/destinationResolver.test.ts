@@ -1,9 +1,10 @@
 /**
  * KAN-281 — destinationResolver.ts
  *
- * Four branches, first match wins: pinned poiPlaceId > learned place >
+ * Four branches, first match wins: pinned poiPlaceId > learned brand >
  * habitat cache > pre-fetched live results. No live network call happens
  * inside this module — branch 4 only reads whatever liveResults it's given.
+ * KAN-304: the learned branch matches a habitat candidate by BRAND NAME.
  */
 
 const mockGetPlaceDetails = jest.fn();
@@ -14,15 +15,13 @@ jest.mock('../../src/services/maps', () => ({
 }));
 
 const mockQueryHabitatCache = jest.fn();
-const mockGetHabitatPlaceById = jest.fn();
 jest.mock('../../src/services/habitatCache', () => ({
-  queryHabitatCache:   (...args: unknown[]) => mockQueryHabitatCache(...args),
-  getHabitatPlaceById: (...args: unknown[]) => mockGetHabitatPlaceById(...args),
+  queryHabitatCache: (...args: unknown[]) => mockQueryHabitatCache(...args),
 }));
 
 import { resolveTaskDestination } from '../../src/services/destinationResolver';
 import type { Task } from '../../src/types';
-import type { LearnedPlace } from '../../src/services/learnedPlaces';
+import type { LearnedBrand } from '../../src/services/learnedPlaces';
 
 const COORDS = { lat: 38.7, lng: -9.1 };
 
@@ -62,23 +61,25 @@ describe('resolveTaskDestination', () => {
     expect(result).toEqual({ internalId: 'cache-1', name: 'Cached Pharmacy', lat: 38.72, lng: -9.12, distanceMeters: 900, source: 'cache' });
   });
 
-  it('prefers a learned place over a closer cached candidate', async () => {
-    const learned: LearnedPlace[] = [{ placeId: 'internal-1', name: 'Farmácia Silva', poiType: 'pharmacy', visitCount: 5 }];
-    mockGetHabitatPlaceById.mockReturnValue({ placeId: 'internal-1', name: 'Farmácia Silva', lat: 38.71, lng: -9.11, distanceMeters: 0 });
+  it('prefers the learned brand over a closer same-type stranger (matched by name)', async () => {
+    const learned: LearnedBrand[] = [{ name: 'Farmácia Silva', poiType: 'pharmacy', visitCount: 5 }];
+    // Nearer stranger first, then a branch of the learned brand — the brand wins.
     mockQueryHabitatCache.mockReturnValue({
-      pharmacy: [{ placeId: 'cache-1', name: 'Nearer Pharmacy', lat: 38.701, lng: -9.101, distanceMeters: 50 }],
+      pharmacy: [
+        { placeId: 'cache-near', name: 'Nearer Pharmacy', lat: 38.701, lng: -9.101, distanceMeters: 50 },
+        { placeId: 'branch-2',   name: 'Farmácia Silva',  lat: 38.71,  lng: -9.11,  distanceMeters: 300 },
+      ],
     });
 
     const result = await resolveTaskDestination(makeTask(), COORDS, learned);
 
     expect(result?.source).toBe('learned');
     expect(result?.name).toBe('Farmácia Silva');
-    expect(mockQueryHabitatCache).not.toHaveBeenCalled();
+    expect(result?.internalId).toBe('branch-2'); // the in-range branch, not any stored id
   });
 
-  it('falls through to cache when the learned place has no resolvable coordinates', async () => {
-    const learned: LearnedPlace[] = [{ placeId: 'internal-1', name: 'Farmácia Silva', poiType: 'pharmacy', visitCount: 5 }];
-    mockGetHabitatPlaceById.mockReturnValue(null); // evicted from the habitat cache
+  it('falls through to cache when no branch of the learned brand is in range', async () => {
+    const learned: LearnedBrand[] = [{ name: 'Farmácia Silva', poiType: 'pharmacy', visitCount: 5 }];
     mockQueryHabitatCache.mockReturnValue({
       pharmacy: [{ placeId: 'cache-1', name: 'Cached Pharmacy', lat: 38.72, lng: -9.12, distanceMeters: 900 }],
     });

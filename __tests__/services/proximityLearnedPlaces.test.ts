@@ -146,7 +146,7 @@ describe('below-threshold behavior is unchanged', () => {
 
 describe('a learned place gets top priority within its own hero range', () => {
   it('prefers the learned place over a closer stranger of the same type, when the learned place is itself within HERO_RADIUS_M', async () => {
-    setLearnedPlaces([{ placeId: 'atm-learned', name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
     mockAtmPlaces([
       { id: 'atm-stranger', name: 'Random ATM',  distanceMeters: 20 }, // closer, but not learned
       { id: 'atm-learned',  name: 'My Usual ATM', distanceMeters: 90 }, // learned, still hero-eligible (<100m)
@@ -162,8 +162,27 @@ describe('a learned place gets top priority within its own hero range', () => {
     );
   });
 
+  it('promotes any branch of the learned brand — matches by name, not place id (KAN-304)', async () => {
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    mockAtmPlaces([
+      { id: 'atm-stranger', name: 'Random ATM',  distanceMeters: 20 },
+      // A DIFFERENT branch id than anything ever brushed — same brand name, so
+      // the brand preference must still promote it.
+      { id: 'atm-other-branch', name: 'My Usual ATM', distanceMeters: 90 },
+    ]);
+
+    const onUpdate = jest.fn();
+    await runProximitySearch('uid-1', [makeTask()], onUpdate);
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'atm',
+      expect.objectContaining({ placeId: 'atm-other-branch', name: 'My Usual ATM' }),
+      expect.anything(),
+    );
+  });
+
   it('does not duplicate the learned place in the carousel after promoting it from a later position', async () => {
-    setLearnedPlaces([{ placeId: 'atm-learned', name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
     mockAtmPlaces([
       { id: 'atm-stranger', name: 'Random ATM',  distanceMeters: 20 },
       { id: 'atm-learned',  name: 'My Usual ATM', distanceMeters: 90 },
@@ -178,7 +197,7 @@ describe('a learned place gets top priority within its own hero range', () => {
   });
 
   it('does not promote a learned place that is outside HERO_RADIUS_M over a closer hero-eligible stranger', async () => {
-    setLearnedPlaces([{ placeId: 'atm-learned', name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
     mockAtmPlaces([
       { id: 'atm-stranger', name: 'Random ATM',  distanceMeters: 20 },  // hero-eligible on its own
       { id: 'atm-learned',  name: 'My Usual ATM', distanceMeters: 150 }, // learned, but NOT hero-eligible
@@ -197,7 +216,7 @@ describe('a learned place gets top priority within its own hero range', () => {
   });
 
   it('a type whose TRUE nearest already wins the cross-type hero race keeps winning after its own learned-place promotion (regression: promotion must not feed an inflated distance back into cross-type comparison)', async () => {
-    setLearnedPlaces([{ placeId: 'atm-learned', name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
     // atm's TRUE nearest (20 m) already beats cafe's nearest (50 m) — that
     // must decide the cross-type race BEFORE atm's own learned place (90 m,
     // still hero-eligible) gets swapped in for display.
@@ -227,7 +246,7 @@ describe('a learned place gets top priority within its own hero range', () => {
 
 describe('clearing the learned-place ranking', () => {
   it('setLearnedPlaces(null) reverts to plain distance ordering', async () => {
-    setLearnedPlaces([{ placeId: 'atm-learned', name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
     setLearnedPlaces(null);
 
     mockAtmPlaces([
@@ -242,7 +261,7 @@ describe('clearing the learned-place ranking', () => {
   });
 
   it('resetProximityState() clears the learned-place ranking', async () => {
-    setLearnedPlaces([{ placeId: 'atm-learned', name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
+    setLearnedPlaces([{ name: 'My Usual ATM', poiType: 'atm', visitCount: 5 }]);
     resetProximityState();
 
     mockAtmPlaces([

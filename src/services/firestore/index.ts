@@ -23,6 +23,7 @@ export * from './social';
 export * from './learnedKeywords';
 export * from './poiInferenceMisses';
 export * from './trips';
+export * from './taughtPlaces';
 
 // ─── Re-exports for convenience ───────────────────────────────────────────────
 

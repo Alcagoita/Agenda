@@ -426,6 +426,50 @@ const en = {
     setHomePillA11y: 'Tell me where home is',
   },
 
+  // ─── Places — screen behind the Lantern pill (KAN-304) ───────────────────────
+  places: {
+    // Shares its name with the Lantern pill that opens it (KAN-301).
+    screenTitle: 'Places I know',
+    backA11y: 'Back',
+    // Tabs
+    tabPlaces: 'Places',
+    tabTrips: 'Trips',
+    // Places tab
+    teachAction: 'Somewhere you like?',
+    sectionFavourites: 'Favourites',
+    sectionUsuals: 'Your usuals',
+    usualSecondary: (typeLabel: string) => `your usual ${typeLabel}`,
+    // Trips tab
+    tripsAddAction: 'Going somewhere?',
+    nextUp: 'Next up',
+    sectionWhereGoing: "Where you're going",
+    whereGoingSub: "I'll know my way around, even with no signal.",
+    sectionWhereBeen: "Where you've been",
+    // Empty states (one icon + line each)
+    emptyFavourites: "Star a place and it'll wait here for you.",
+    emptyUsuals: 'The places you keep going back to turn up here on their own.',
+    emptyPlanned: "Tell me before you go and I'll learn the place ahead of time.",
+    emptyPastTrips: "Trips you've finished come to rest here.",
+    // Teach flow (TeachSheet)
+    teachTitle: 'Somewhere you like?',
+    teachSubtitle: "When there's more than one, I'll pick yours.",
+    teachTypeLabel: 'What kind of place?',
+    teachNameLabel: 'Which one do you go to?',
+    teachNamePlaceholder: 'Type a brand — like Whole Foods',
+    teachSaveAction: 'Add it',
+    teachCancelA11y: 'Cancel',
+    // Long-press forget
+    forgetA11y: (name: string) => `Forget ${name}`,
+    forgetPlaceTitle: (name: string) => `Forget ${name}?`,
+    forgetPlaceBody: "I'll stop putting it first.",
+    forgetPlaceConfirm: 'Forget it',
+    forgetPlaceCancel: 'Keep it',
+    forgetTripTitle: (dest: string) => `Forget ${dest}?`,
+    forgetTripBody: 'The memory goes; nothing else changes.',
+    forgetTripConfirm: 'Forget this trip',
+    forgetTripCancel: 'Keep it',
+  },
+
   // ─── Settings (KAN-252) ─────────────────────────────────────────────────────
   settings: {
     screenTitle: 'Settings',
@@ -1483,6 +1527,43 @@ const ptPT: typeof en = {
     cantFindYou: 'Não te encontro',
     placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
     setHomePillA11y: 'Diz-me onde é casa',
+  },
+
+  // ─── Places — ecrã atrás do botão da Lanterna (KAN-304) ──────────────────────
+  places: {
+    screenTitle: 'Sítios que conheço',
+    backA11y: 'Voltar',
+    tabPlaces: 'Sítios',
+    tabTrips: 'Viagens',
+    teachAction: 'Um sítio de que gostas?',
+    sectionFavourites: 'Favoritos',
+    sectionUsuals: 'Os teus habituais',
+    usualSecondary: (typeLabel: string) => `o teu ${typeLabel} do costume`,
+    tripsAddAction: 'Vais a algum lado?',
+    nextUp: 'A seguir',
+    sectionWhereGoing: 'Onde vais',
+    whereGoingSub: 'Vou saber orientar-me, mesmo sem rede.',
+    sectionWhereBeen: 'Onde estiveste',
+    emptyFavourites: 'Marca um sítio com estrela e ele fica aqui à tua espera.',
+    emptyUsuals: 'Os sítios onde voltas sempre aparecem aqui sozinhos.',
+    emptyPlanned: 'Diz-me antes de ires e aprendo o sítio com antecedência.',
+    emptyPastTrips: 'As viagens que terminaste vêm descansar aqui.',
+    teachTitle: 'Um sítio de que gostas?',
+    teachSubtitle: 'Quando houver mais do que um, escolho o teu.',
+    teachTypeLabel: 'Que tipo de sítio?',
+    teachNameLabel: 'A qual costumas ir?',
+    teachNamePlaceholder: 'Escreve uma marca — tipo Pingo Doce',
+    teachSaveAction: 'Adicionar',
+    teachCancelA11y: 'Cancelar',
+    forgetA11y: (name: string) => `Esquecer ${name}`,
+    forgetPlaceTitle: (name: string) => `Esquecer ${name}?`,
+    forgetPlaceBody: 'Deixo de o pôr à frente.',
+    forgetPlaceConfirm: 'Esquecer',
+    forgetPlaceCancel: 'Manter',
+    forgetTripTitle: (dest: string) => `Esquecer ${dest}?`,
+    forgetTripBody: 'A memória vai-se; o resto fica.',
+    forgetTripConfirm: 'Esquecer esta viagem',
+    forgetTripCancel: 'Manter',
   },
 
   settings: {

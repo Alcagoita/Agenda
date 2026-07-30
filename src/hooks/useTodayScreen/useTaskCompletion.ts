@@ -9,6 +9,8 @@
 import { useCallback } from 'react';
 import { Platform, Vibration, InteractionManager } from 'react-native';
 import { setTaskDone } from '../../services/firestore';
+import { getActivePlaceContext } from '../../services/proximity';
+import { completedTripIdFor } from '../../services/tripStamp';
 import { checkAndFireAchievementNudge } from '../../services/achievements';
 import { getActiveChallengesForUser, incrementCompletedCount } from '../../services/challenges';
 import { cancelTaskReminder } from '../../services/notifications';
@@ -43,11 +45,10 @@ export function useTaskCompletion(
           ? { placeId: nearbyPlace.placeId, name: nearbyPlace.name, poiType: brushedTask.poi }
           : undefined;
 
-      if (completedPlace) {
-        await setTaskDone(uid, taskId, done, completedPlace);
-      } else {
-        await setTaskDone(uid, taskId, done);
-      }
+      // KAN-304 — stamp the active trip id when brushing inside a trip area.
+      const completedTripId = completedTripIdFor(getActivePlaceContext(), done);
+
+      await setTaskDone(uid, taskId, done, completedPlace, completedTripId);
       // Brushing cancels any pending time reminder for this task (KAN-280).
       // Best-effort — never let a notifee failure surface as a toggle failure.
       if (done) {

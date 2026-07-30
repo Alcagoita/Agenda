@@ -22,8 +22,8 @@
  */
 
 import { getDistanceMeters, getPlaceDetails } from './maps';
-import { queryHabitatCache, getHabitatPlaceById } from './habitatCache';
-import { getLearnedPlaceForPoiType, type LearnedPlace } from './learnedPlaces';
+import { queryHabitatCache } from './habitatCache';
+import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
 import type { PlacesMap } from './proximity';
 import type { Task } from '../types';
 
@@ -47,7 +47,7 @@ export interface ResolvedPlace {
 export async function resolveTaskDestination(
   task: Task,
   coords: { lat: number; lng: number },
-  learnedPlaces: LearnedPlace[],
+  learnedPlaces: LearnedBrand[],
   liveResults: PlacesMap = {},
   options: { skipPinned?: boolean } = {},
 ): Promise<ResolvedPlace | null> {
@@ -71,25 +71,34 @@ export async function resolveTaskDestination(
 
   if (!task.poi) { return null; }
 
-  // 2. Learned place — wins even if farther than a closer cached candidate.
-  // Falls through if its own habitat row can't be resolved (e.g. evicted).
+  // The offline habitat candidates for this type, nearest first — shared by
+  // the learned-brand match (2) and the plain nearest fallback (3). Uncapped
+  // (maxResultsPerType: null): a branch of the learned brand could sit past the
+  // default per-type cap and would otherwise be missed by the name match below.
+  const candidates = queryHabitatCache(
+    coords.lat, coords.lng, [task.poi], ROUTE_MAX_RADIUS_M, { maxResultsPerType: null },
+  )[task.poi] ?? [];
+
+  // 2. Learned brand — the user's preferred brand for this type wins even if a
+  // same-type stranger is closer (KAN-304: match by brand name, not place id).
+  // Falls through if no branch of that brand is currently in range.
   const learned = getLearnedPlaceForPoiType(learnedPlaces, task.poi);
   if (learned) {
-    const place = getHabitatPlaceById(learned.placeId);
-    if (place) {
+    const match = candidates.find(c => c.name === learned.name);
+    if (match) {
       return {
-        internalId:     learned.placeId,
-        name:           learned.name,
-        lat:            place.lat,
-        lng:            place.lng,
-        distanceMeters: getDistanceMeters(coords.lat, coords.lng, place.lat, place.lng),
+        internalId:     match.placeId,
+        name:           match.name,
+        lat:            match.lat,
+        lng:            match.lng,
+        distanceMeters: match.distanceMeters,
         source:         'learned',
       };
     }
   }
 
   // 3. Nearest matching place from the offline habitat cache.
-  const cached = queryHabitatCache(coords.lat, coords.lng, [task.poi], ROUTE_MAX_RADIUS_M)[task.poi]?.[0];
+  const cached = candidates[0];
   if (cached) {
     return {
       internalId:     cached.placeId,

@@ -11,8 +11,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import { getTrips, deleteTrip as deleteTripDoc } from '../services/firestore';
-import { deleteTripAreaPlaces } from '../services/habitatCache';
+import { getTrips } from '../services/firestore';
+import { forgetTrip as forgetTripAction } from '../services/tripActions';
 import { isPastMemorableTrip } from '../utils/contextChip';
 import { todayISO } from '../utils/date';
 import type { Trip } from '../types';
@@ -79,8 +79,7 @@ export function useWhereWeveBeen(): WhereWeveBeenState {
   const forgetTrip = useCallback(async (trip: Trip) => {
     if (!uid) { return; }
     try {
-      await deleteTripDoc(uid, trip.id);
-      deleteTripAreaPlaces(trip.cacheAreaId); // sync, never throws — see habitatCache.ts
+      await forgetTripAction(uid, trip);
       setTrips(prev => prev.filter(t => t.id !== trip.id));
     } catch (err) {
       console.warn('[useWhereWeveBeen] forgetTrip failed', err);

@@ -6,6 +6,7 @@
  *  - Always consume via useTheme() so light/dark switching works automatically.
  */
 
+import type { TextStyle } from 'react-native';
 import { COPY } from '../constants/copy';
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
@@ -256,6 +257,24 @@ export const radius = {
    *  18px box into a pill; a checkbox needs to still read as square. */
   checkbox: 6,
 } as const;
+
+// ─── Reusable text styles ─────────────────────────────────────────────────────
+
+/**
+ * Uppercase-ish section heading used above list groups (the "SHARED TASKS" /
+ * "FOLLOWING" / "Favourites" / "Where you're going" headers). Matches the
+ * Social hub so every screen's sections read the same. Apply a colour
+ * (usually `palette.muted`) at the call site.
+ */
+export const sectionTitleStyle: TextStyle = {
+  fontSize: 13,
+  fontWeight: '600',
+  fontFamily: 'Geist-SemiBold',
+  letterSpacing: 1,
+  textTransform: 'uppercase',
+  marginTop: 20,
+  marginBottom: 10,
+};
 
 // ─── Shadows ──────────────────────────────────────────────────────────────────
 

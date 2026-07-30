@@ -99,6 +99,15 @@ export function learnedKeywordId(keyword: string, lang: SupportedLang): string {
   return `${lang}:${normalize(keyword)}`;
 }
 
+/** users/{uid}/places/{id} — brands the user explicitly taught the app (KAN-304). */
+export function taughtPlacesRef(uid: string) {
+  return collection(getFirestore(), 'users', uid, 'places');
+}
+
+export function taughtPlaceRef(uid: string, id: string) {
+  return doc(getFirestore(), 'users', uid, 'places', id);
+}
+
 /** users/{uid}/trips/{tripId} — manually-downloaded offline travel areas (KAN-234). */
 export function tripsRef(uid: string) {
   return collection(getFirestore(), 'users', uid, 'trips');

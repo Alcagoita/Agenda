@@ -35,6 +35,7 @@ import PlacesIKnowScreen from '../screens/PlacesIKnowScreen';
 import HomeAddressScreen from '../screens/HomeAddressScreen';
 import WhereWeveBeenScreen from '../screens/WhereWeveBeenScreen';
 import ItineraryOptionsScreen from '../screens/ItineraryOptionsScreen';
+import PlacesScreen from '../screens/PlacesScreen';
 
 export type RootStackParamList = {
   Today: undefined;
@@ -76,9 +77,14 @@ export type RootStackParamList = {
     prefillDestinationQuery?: string;
     editTripId?: string;
     initialStep?: 'dates' | 'radius';
+    /** Where to land after a successful download — defaults to PlacesIKnow. The
+     *  Places screen (KAN-304) passes 'Places' so back returns there, refreshed. */
+    doneReturnTo?: 'Places' | 'PlacesIKnow';
   } | undefined;
   /** "Places I know" — the always-on habitat area + downloaded trips, with refresh/delete (KAN-234). */
   PlacesIKnow: undefined;
+  /** Places — brands + trips + past trips, behind the Lantern pill (KAN-304). */
+  Places: undefined;
   /** Explicit home address — set/edit/clear (KAN-247). */
   HomeAddress: undefined;
   /** Off-grid window — "I'll be offline for a while, keep my tasks going" (KAN-246). Now + duration, never dated like TripPlanner. */
@@ -124,6 +130,7 @@ export default function AppNavigator() {
       <Stack.Screen name="TripPlanner"                component={TripPlannerScreen} />
       <Stack.Screen name="OffGrid"                    component={OffGridScreen} />
       <Stack.Screen name="PlacesIKnow"                component={PlacesIKnowScreen} />
+      <Stack.Screen name="Places"                     component={PlacesScreen} />
       <Stack.Screen name="HomeAddress"                component={HomeAddressScreen} />
       <Stack.Screen name="WhereWeveBeen"              component={WhereWeveBeenScreen} />
       <Stack.Screen name="ItineraryOptions"           component={ItineraryOptionsScreen} />

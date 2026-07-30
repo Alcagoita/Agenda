@@ -9,10 +9,13 @@
  * threshold, not calendar time, so a user who hits it in a few days gets it
  * in a few days.
  *
- * Venues are keyed by the internal place identity (KAN-228's cross-source
- * id), not a raw Google/OSM id, so a brush recorded online (live Google
- * hero place) and one recorded offline (cache-sourced hero place) for the
- * same physical venue count toward the same learned place.
+ * A learned place is a **(POI type, brand name)** — a preference within a
+ * type, not a specific building (KAN-304). The app already matches on place
+ * types; this is one level finer: near a McDonald's and a Burger King (both
+ * `restaurant`), the app knows Burger King is the preferred brand. Brushes
+ * accumulate per brand *across branches* — three brushes at three different
+ * Whole Foods are the same preference expressed three times — so the raw
+ * per-place-id counts from Firestore are aggregated here by (POI type, name).
  *
  * Below the threshold, nothing changes — no degraded/partial state, no
  * empty state. Learned places only ever add precision on top of today's
@@ -20,14 +23,15 @@
  *
  * Pure and synchronous — visit counts are tallied incrementally in Firestore
  * by setTaskDone's transaction (KAN-240, see getLearnedPlaceCounts in
- * services/firestore/tasks.ts), so this module only filters and ranks the
- * already-aggregated counts. Stays testable against fixtures without any
- * real accumulated usage data.
+ * services/firestore/tasks.ts), so this module only aggregates and ranks the
+ * already-tallied counts. Stays testable against fixtures without any real
+ * accumulated usage data.
  */
 
-/** Visits to the same internal place id before it's promoted to "learned". Tunable. */
+/** Visits to the same brand before it's promoted to "learned". Tunable. */
 export const LEARNED_PLACE_THRESHOLD = 3;
 
+/** A raw per-place-id visit tally, as stored in Firestore (`learnedPlaceCounts`). */
 export interface LearnedPlace {
   placeId: string;
   name: string;
@@ -35,18 +39,36 @@ export interface LearnedPlace {
   visitCount: number;
 }
 
-/**
- * Filters the given per-place visit counts down to venues that have reached
- * LEARNED_PLACE_THRESHOLD visits, ranked by visit count descending
- * (most-visited first).
- */
-export function computeLearnedPlaces(counts: LearnedPlace[]): LearnedPlace[] {
-  return counts
-    .filter(c => c.visitCount >= LEARNED_PLACE_THRESHOLD)
-    .sort((a, b) => b.visitCount - a.visitCount);
+/** A learned brand — the (POI type, name) key the app actually prefers on. */
+export interface LearnedBrand {
+  poiType: string;
+  name: string;
+  visitCount: number;
 }
 
-/** The best-ranked learned place for a given POI type, or null if none qualifies yet. */
-export function getLearnedPlaceForPoiType(learnedPlaces: LearnedPlace[], poiType: string): LearnedPlace | null {
-  return learnedPlaces.find(p => p.poiType === poiType) ?? null;
+/**
+ * Aggregates the raw per-place-id counts by (POI type, name), keeps brands that
+ * have reached LEARNED_PLACE_THRESHOLD across all their branches, and ranks
+ * them by total visit count descending (name as a stable tie-break). The result
+ * never contains two entries with the same POI type and name.
+ */
+export function computeLearnedPlaces(counts: LearnedPlace[]): LearnedBrand[] {
+  const byBrand = new Map<string, LearnedBrand>();
+  for (const c of counts) {
+    const key = `${c.poiType}\u0000${c.name}`;
+    const existing = byBrand.get(key);
+    if (existing) {
+      existing.visitCount += c.visitCount;
+    } else {
+      byBrand.set(key, { poiType: c.poiType, name: c.name, visitCount: c.visitCount });
+    }
+  }
+  return [...byBrand.values()]
+    .filter(b => b.visitCount >= LEARNED_PLACE_THRESHOLD)
+    .sort((a, b) => b.visitCount - a.visitCount || a.name.localeCompare(b.name));
+}
+
+/** The best-ranked learned brand for a given POI type, or null if none qualifies yet. */
+export function getLearnedPlaceForPoiType(learnedBrands: LearnedBrand[], poiType: string): LearnedBrand | null {
+  return learnedBrands.find(b => b.poiType === poiType) ?? null;
 }
