@@ -408,8 +408,8 @@ const en = {
 
   // ─── Lantern — Today place-familiarity header (KAN-301) ──────────────────────
   lantern: {
-    /** Home state word — a relationship, not a place name. */
-    home: 'Home',
+    /** Home state phrase — a relationship, not a place name. */
+    home: 'Around home',
     /** Outside state, offline fallback — never a stale or guessed place name. */
     outside: 'Outside',
     /** No-home-set state label — the question the pill answers. */
@@ -1519,7 +1519,7 @@ const ptPT: typeof en = {
 
   // ─── Lantern — cabeçalho de familiaridade do Hoje (KAN-301) ──────────────────
   lantern: {
-    home: 'Casa',
+    home: 'À volta de casa',
     outside: 'Fora',
     whereIsHome: 'Onde é casa?',
     tellMe: 'Diz-me',
