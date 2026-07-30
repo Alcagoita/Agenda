@@ -70,6 +70,10 @@ describe('TeachSheet', () => {
 
     expect(screen.queryByText('Starbucks')).toBeNull();
 
+    fireEvent.changeText(input, 's');
+
+    expect(screen.queryByText('Starbucks')).toBeNull();
+
     fireEvent.changeText(input, 'star');
 
     expect(screen.getByText('Starbucks')).toBeTruthy();
@@ -123,6 +127,8 @@ describe('TeachSheet', () => {
     fireEvent.press(screen.getByLabelText(COPY.places.teachFoodType));
     expect(screen.queryByText('Sushi')).toBeNull();
     fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachFoodTypePlaceholder), '   ');
+    expect(screen.queryByText('Sushi')).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachFoodTypePlaceholder), 's');
     expect(screen.queryByText('Sushi')).toBeNull();
     fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachFoodTypePlaceholder), 'sush');
     fireEvent.press(screen.getByText('Sushi'));

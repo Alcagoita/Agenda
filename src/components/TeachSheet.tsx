@@ -9,7 +9,7 @@
  * reopening always starts empty.
  */
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
@@ -51,10 +51,11 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
   const [name, setName] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedFoodType, setSelectedFoodType] = useState<RestaurantFoodType | null>(null);
+  const trimmedName = name.trim();
   const canonicalName = kind === 'place' ? getCanonicalBrand(type, name) : null;
-  const brandSuggestions = kind === 'place' ? getBrandSuggestions(type, name) : [];
-  const foodSuggestions = kind === 'food' && name.trim().length > 0 ? restaurantFoodTypeSuggestions(name) : [];
-  const shouldShowBrandSuggestions = kind === 'place' && type != null && name.trim().length > 0 && brandSuggestions.length > 0;
+  const brandSuggestions = kind === 'place' && trimmedName.length >= 2 ? getBrandSuggestions(type, name) : [];
+  const foodSuggestions = kind === 'food' && trimmedName.length >= 2 ? restaurantFoodTypeSuggestions(name) : [];
+  const shouldShowBrandSuggestions = kind === 'place' && type != null && brandSuggestions.length > 0;
   const shouldShowFoodSuggestions = kind === 'food' && foodSuggestions.length > 0;
   const canSave = kind === 'food'
     ? selectedFoodType != null
@@ -69,127 +70,133 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
       <View style={[styles.scrim, { backgroundColor: palette.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityLabel={COPY.places.teachCancelA11y} />
         <View style={[styles.sheet, { backgroundColor: palette.bg, paddingBottom: spacing.page + insets.bottom }]}>
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: palette.text }]}>{COPY.places.teachTitle}</Text>
-            <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
-              <CloseIcon color={palette.muted} size={18} />
-            </Pressable>
-          </View>
-          <Text style={[styles.subtitle, { color: palette.muted }]}>{COPY.places.teachSubtitle}</Text>
+          <ScrollView
+            style={styles.scroller}
+            contentContainerStyle={styles.scrollerContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <View style={styles.header}>
+              <Text style={[styles.title, { color: palette.text }]}>{COPY.places.teachTitle}</Text>
+              <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
+                <CloseIcon color={palette.muted} size={18} />
+              </Pressable>
+            </View>
+            <Text style={[styles.subtitle, { color: palette.muted }]}>{COPY.places.teachSubtitle}</Text>
 
-          <Text style={[styles.fieldLabel, { color: palette.muted }]}>{COPY.places.teachTypeLabel}</Text>
-          <View style={styles.typeGrid}>
-            {TEACHABLE_POI_TYPES.map(t => {
-              const selected = kind === 'place' && t === type;
-              return (
-                <Pressable
-                  key={t}
-                  onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
-                  style={[
-                    styles.typeChip,
-                    { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={poiCatalogLabel(t)}>
-                  <PoiIcon type={t} color={selected ? palette.nearText : palette.muted} size={18} />
-                  <Text style={[styles.typeChipLabel, { color: selected ? palette.nearText : palette.text }]}>{poiCatalogLabel(t)}</Text>
-                </Pressable>
-              );
-            })}
+            <Text style={[styles.fieldLabel, { color: palette.muted }]}>{COPY.places.teachTypeLabel}</Text>
+            <View style={styles.typeGrid}>
+              {TEACHABLE_POI_TYPES.map(t => {
+                const selected = kind === 'place' && t === type;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
+                    style={[
+                      styles.typeChip,
+                      { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={poiCatalogLabel(t)}>
+                    <PoiIcon type={t} color={selected ? palette.nearText : palette.muted} size={18} />
+                    <Text style={[styles.typeChipLabel, { color: selected ? palette.nearText : palette.text }]}>{poiCatalogLabel(t)}</Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
+                style={[
+                  styles.typeChip,
+                  {
+                    borderColor: kind === 'food' ? palette.accent : palette.line,
+                    backgroundColor: kind === 'food' ? palette.nearTint : palette.surface,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: kind === 'food' }}
+                accessibilityLabel={COPY.places.teachFoodType}>
+                <FoodTypeIcon color={kind === 'food' ? palette.nearText : palette.muted} size={18} />
+                <Text style={[styles.typeChipLabel, { color: kind === 'food' ? palette.nearText : palette.text }]}>
+                  {COPY.places.teachFoodType}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: palette.muted }]}>
+              {kind === 'food' ? COPY.places.teachFoodTypeNameLabel : COPY.places.teachNameLabel}
+            </Text>
+            <TextInput
+              style={[styles.nameInput, { color: palette.text, borderColor: palette.line, backgroundColor: palette.surface }]}
+              placeholder={kind === 'food' ? COPY.places.teachFoodTypePlaceholder : COPY.places.teachNamePlaceholder}
+              placeholderTextColor={palette.muted}
+              value={name}
+              onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); }}
+              returnKeyType="done"
+            />
+            {shouldShowBrandSuggestions && (
+              <View style={styles.suggestionList}>
+                {brandSuggestions.map(brand => {
+                  const selected = brand === selectedBrand;
+                  return (
+                    <Pressable
+                      key={brand}
+                      onPress={() => { setName(brand); setSelectedBrand(brand); }}
+                      style={[
+                        styles.suggestionRow,
+                        selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={brand}>
+                      <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
+                        {brand}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            {shouldShowFoodSuggestions && (
+              <View style={styles.suggestionList}>
+                {foodSuggestions.map(foodType => {
+                  const label = restaurantFoodTypeDisplayLabel(foodType, language);
+                  const selected = foodType === selectedFoodType;
+                  return (
+                    <Pressable
+                      key={foodType}
+                      onPress={() => { setName(label); setSelectedFoodType(foodType); }}
+                      style={[
+                        styles.suggestionRow,
+                        selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={label}>
+                      <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
             <Pressable
-              onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
-              style={[
-                styles.typeChip,
-                {
-                  borderColor: kind === 'food' ? palette.accent : palette.line,
-                  backgroundColor: kind === 'food' ? palette.nearTint : palette.surface,
-                },
-              ]}
+              style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
+              disabled={!canSave}
+              onPress={() => {
+                if (kind === 'food' && selectedFoodType) {
+                  onSave('restaurant', restaurantFoodTypeFavouriteName(selectedFoodType));
+                  reset();
+                  return;
+                }
+                if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); }
+              }}
               accessibilityRole="button"
-              accessibilityState={{ selected: kind === 'food' }}
-              accessibilityLabel={COPY.places.teachFoodType}>
-              <FoodTypeIcon color={kind === 'food' ? palette.nearText : palette.muted} size={18} />
-              <Text style={[styles.typeChipLabel, { color: kind === 'food' ? palette.nearText : palette.text }]}>
-                {COPY.places.teachFoodType}
-              </Text>
+              accessibilityLabel={COPY.places.teachSaveAction}>
+              <Text style={[styles.saveLabel, { color: palette.onAccent }]}>{COPY.places.teachSaveAction}</Text>
             </Pressable>
-          </View>
-
-          <Text style={[styles.fieldLabel, { color: palette.muted }]}>
-            {kind === 'food' ? COPY.places.teachFoodTypeNameLabel : COPY.places.teachNameLabel}
-          </Text>
-          <TextInput
-            style={[styles.nameInput, { color: palette.text, borderColor: palette.line, backgroundColor: palette.surface }]}
-            placeholder={kind === 'food' ? COPY.places.teachFoodTypePlaceholder : COPY.places.teachNamePlaceholder}
-            placeholderTextColor={palette.muted}
-            value={name}
-            onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); }}
-            returnKeyType="done"
-          />
-          {shouldShowBrandSuggestions && (
-            <View style={styles.suggestionList}>
-              {brandSuggestions.map(brand => {
-                const selected = brand === selectedBrand;
-                return (
-                  <Pressable
-                    key={brand}
-                    onPress={() => { setName(brand); setSelectedBrand(brand); }}
-                    style={[
-                      styles.suggestionRow,
-                      selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={brand}>
-                    <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
-                      {brand}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-          {shouldShowFoodSuggestions && (
-            <View style={styles.suggestionList}>
-              {foodSuggestions.map(foodType => {
-                const label = restaurantFoodTypeDisplayLabel(foodType, language);
-                const selected = foodType === selectedFoodType;
-                return (
-                  <Pressable
-                    key={foodType}
-                    onPress={() => { setName(label); setSelectedFoodType(foodType); }}
-                    style={[
-                      styles.suggestionRow,
-                      selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={label}>
-                    <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          <Pressable
-            style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
-            disabled={!canSave}
-            onPress={() => {
-              if (kind === 'food' && selectedFoodType) {
-                onSave('restaurant', restaurantFoodTypeFavouriteName(selectedFoodType));
-                reset();
-                return;
-              }
-              if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); }
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={COPY.places.teachSaveAction}>
-            <Text style={[styles.saveLabel, { color: palette.onAccent }]}>{COPY.places.teachSaveAction}</Text>
-          </Pressable>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -198,7 +205,9 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.page, gap: 12 },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '86%', overflow: 'hidden' },
+  scroller: { flexGrow: 0 },
+  scrollerContent: { padding: spacing.page, gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   closeBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
   title: { fontSize: 17, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
