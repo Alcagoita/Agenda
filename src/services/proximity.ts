@@ -98,6 +98,9 @@ import {
   filterRestaurantPlacesForTasks,
   groupRestaurantPlaceCandidates,
   mergeRestaurantPlaceCandidates,
+  parseRestaurantFoodTypeFavouriteName,
+  restaurantPlaceMatchesFoodType,
+  restaurantTaskFoodType,
   restaurantTaskMatchesPlaceName,
 } from './restaurantFoodTypes';
 
@@ -891,9 +894,25 @@ function processProximityTick(
     const winningType = heroType;
     const learnedForType = getLearnedPlaceForPoiType(_learnedPlaces, winningType);
     const currentPlaces = allPlaces[winningType] ?? [];
+    const learnedFoodType = winningType === 'restaurant' && learnedForType
+      ? parseRestaurantFoodTypeFavouriteName(learnedForType.name)
+      : null;
+    const hasExplicitRestaurantFoodType = winningType === 'restaurant' &&
+      undonePoiTasks.some(t => t.poi === 'restaurant' && restaurantTaskFoodType(t) != null);
     // KAN-304 — prefer the learned BRAND (by name), not a specific place id, so
     // any branch of the user's preferred brand represents the type.
-    if (learnedForType && currentPlaces[0]?.name !== learnedForType.name) {
+    if (learnedFoodType && !hasExplicitRestaurantFoodType) {
+      for (const candidate of currentPlaces) {
+        if (
+          restaurantPlaceMatchesFoodType(candidate.name, learnedFoodType) &&
+          candidate.distanceMeters < HERO_RADIUS_M
+        ) {
+          allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
+          heroPlace = candidate;
+          break;
+        }
+      }
+    } else if (learnedForType && !learnedFoodType && currentPlaces[0]?.name !== learnedForType.name) {
       for (const candidate of currentPlaces.slice(1)) {
         if (candidate.name === learnedForType.name && candidate.distanceMeters < HERO_RADIUS_M) {
           allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];

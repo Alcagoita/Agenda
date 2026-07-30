@@ -6,6 +6,7 @@ import { COPY } from '../constants/copy';
 import { formatDateShort } from '../utils/date';
 import { isCatalogPoiType, poiCatalogLabel } from '../types';
 import type { Trip } from '../types';
+import { parseRestaurantFoodTypeFavouriteName, restaurantFoodTypeDisplayLabel } from './restaurantFoodTypes';
 
 /**
  * Lower-cased display label for a POI type. Safe for custom (non-catalog) POI
@@ -14,6 +15,15 @@ import type { Trip } from '../types';
  */
 export function typeLabel(poiType: string): string {
   return (isCatalogPoiType(poiType) ? poiCatalogLabel(poiType) : poiType).toLowerCase();
+}
+
+export function placeEntryTitle(name: string, language?: string): string {
+  const foodType = parseRestaurantFoodTypeFavouriteName(name);
+  return foodType ? restaurantFoodTypeDisplayLabel(foodType, language) : name;
+}
+
+export function placeEntryTypeLabel(poiType: string, name: string): string {
+  return parseRestaurantFoodTypeFavouriteName(name) ? COPY.places.teachFoodType : typeLabel(poiType);
 }
 
 /** "12 Aug – 18 Aug" when dated, else the no-dates line. */

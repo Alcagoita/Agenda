@@ -14,6 +14,7 @@ const RESTAURANT_FOOD_DICTIONARY = require('../constants/restaurantFoodDictionar
 export type RestaurantFoodType = keyof typeof RESTAURANT_FOOD_DICTIONARY & string;
 
 type RestaurantFoodMatch = { key: RestaurantFoodType; alias: string };
+const FOOD_TYPE_FAVOURITE_PREFIX = '__food_type__:';
 
 const RESTAURANT_CONTEXT_TERMS = [
   'eat',
@@ -112,6 +113,30 @@ export function restaurantFoodTypeDisplayLabel(foodType: RestaurantFoodType, lan
 
 export function listRestaurantFoodTypes(): RestaurantFoodType[] {
   return Object.keys(RESTAURANT_FOOD_DICTIONARY) as RestaurantFoodType[];
+}
+
+export function restaurantFoodTypeFavouriteName(foodType: RestaurantFoodType): string {
+  return `${FOOD_TYPE_FAVOURITE_PREFIX}${foodType}`;
+}
+
+export function parseRestaurantFoodTypeFavouriteName(name: string): RestaurantFoodType | null {
+  if (!name.startsWith(FOOD_TYPE_FAVOURITE_PREFIX)) { return null; }
+  const foodType = name.slice(FOOD_TYPE_FAVOURITE_PREFIX.length) as RestaurantFoodType;
+  return RESTAURANT_FOOD_DICTIONARY[foodType] ? foodType : null;
+}
+
+export function restaurantFoodTypeSuggestions(query: string): RestaurantFoodType[] {
+  const normalized = normalize(query);
+  if (!normalized) { return listRestaurantFoodTypes(); }
+
+  return listRestaurantFoodTypes().filter(foodType => {
+    const entry = RESTAURANT_FOOD_DICTIONARY[foodType];
+    return (
+      normalize(entry.label).includes(normalized) ||
+      normalize(entry.labelPt ?? '').includes(normalized) ||
+      entry.aliases.some(alias => normalize(alias).includes(normalized))
+    );
+  });
 }
 
 export function restaurantPlaceMatchesFoodType(

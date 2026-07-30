@@ -2,6 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { COPY } from '../../src/constants/copy';
 import TeachSheet from '../../src/components/TeachSheet';
+import { restaurantFoodTypeFavouriteName } from '../../src/services/restaurantFoodTypes';
 
 jest.mock('../../src/theme', () => ({
   useTheme: () => ({
@@ -17,6 +18,7 @@ jest.mock('../../src/theme', () => ({
       nearTint: '#fdf7f0',
       nearText: '#7a4a20',
     },
+    language: 'en',
   }),
 }));
 
@@ -111,5 +113,17 @@ describe('TeachSheet', () => {
     fireEvent.press(screen.getByLabelText('Market'));
 
     expect(input.props.value).toBe('');
+  });
+
+  it('saves a restaurant food type selected from suggestions', () => {
+    const onSave = jest.fn();
+    render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);
+
+    fireEvent.press(screen.getByLabelText(COPY.places.teachFoodType));
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachFoodTypePlaceholder), 'sush');
+    fireEvent.press(screen.getByText('Sushi'));
+    fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
+
+    expect(onSave).toHaveBeenCalledWith('restaurant', restaurantFoodTypeFavouriteName('sushi'));
   });
 });

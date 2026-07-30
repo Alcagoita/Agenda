@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getLearnedPlaceCounts } from '../../services/firestore';
+import { getLearnedPlaceCounts, getTaughtPlaces } from '../../services/firestore';
 import { computeLearnedPlaces } from '../../services/learnedPlaces';
 import type { LearnedBrand } from '../../services/learnedPlaces';
 
@@ -40,9 +40,17 @@ export function useLearnedPlaces(uid: string | undefined): LearnedPlacesState {
       return;
     }
     try {
-      const counts = await getLearnedPlaceCounts(uid);
+      const [counts, taughtPlaces] = await Promise.all([
+        getLearnedPlaceCounts(uid),
+        getTaughtPlaces(uid),
+      ]);
       if (requestId !== requestIdRef.current) { return; } // superseded — discard
-      setLearnedPlaces(computeLearnedPlaces(counts));
+      const taughtRanking = taughtPlaces.map(place => ({
+        poiType: place.poiType,
+        name: place.name,
+        visitCount: Number.MAX_SAFE_INTEGER,
+      }));
+      setLearnedPlaces([...taughtRanking, ...computeLearnedPlaces(counts)]);
     } catch (err) {
       if (requestId === requestIdRef.current) {
         console.warn('[useLearnedPlaces] refresh failed', err);
@@ -57,7 +65,7 @@ export function useLearnedPlaces(uid: string | undefined): LearnedPlacesState {
   useEffect(() => {
     requestIdRef.current += 1; // discard anything still in flight for the previous uid
     setLearnedPlaces([]);
-    void refresh();
+    refresh();
   }, [refresh]);
 
   return { learnedPlaces, refresh };

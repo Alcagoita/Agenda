@@ -22,6 +22,17 @@ jest.mock('@react-native-community/netinfo', () =>
 // pulls in expo-sqlite (ESM, breaks Jest's transform). Not under test here.
 jest.mock('../../src/services/habitatCache');
 jest.mock('../../src/services/proximitySnapshot');
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(() => ({ hit: false, city: null })),
+  putCachedCity: jest.fn(),
+}));
+
+const mockSearchNearbyPlacesProxy = jest.fn();
+jest.mock('../../src/services/placesFunctions', () => ({
+  searchNearbyPlacesProxy: (...args: unknown[]) => mockSearchNearbyPlacesProxy(...args),
+  placesAutocompleteProxy: jest.fn(),
+  getPlaceDetailsProxy: jest.fn(),
+}));
 
 const mockDisplayNotification = jest.fn().mockResolvedValue(undefined);
 jest.mock('@notifee/react-native', () => ({
@@ -71,6 +82,7 @@ jest.mock('../../src/constants/copy', () => ({
       proximityBody:  (count: number) => `${count} task(s) nearby`,
     },
     offline: { genericBanner: '', noCacheYetBanner: '', uncoveredAreaToast: '' },
+    poiCatalog: new Proxy({}, { get: (_t, key) => String(key) }),
   },
 }));
 
@@ -80,6 +92,7 @@ global.fetch = mockFetch as unknown as typeof fetch;
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { runProximitySearch, resetProximityState, setLearnedPlaces } from '../../src/services/proximity';
+import { restaurantFoodTypeFavouriteName } from '../../src/services/restaurantFoodTypes';
 import type { Task } from '../../src/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,23 +117,25 @@ function mockAtmPlaces(places: Array<{ id: string; name: string; distanceMeters:
   mockPlacesResponse(places.map(p => ({ ...p, type: 'atm' })));
 }
 
+function mockRestaurantPlaces(places: Array<{ id: string; name: string; distanceMeters: number }>) {
+  mockPlacesResponse(places.map(p => ({ ...p, type: 'restaurant' })));
+}
+
 function mockPlacesResponse(places: Array<{ id: string; name: string; distanceMeters: number; type: string }>) {
-  mockFetch.mockResolvedValueOnce({
-    ok:   true,
-    json: async () => ({
-      places: places.map(p => ({
-        id: p.id,
-        displayName: { text: p.name },
-        location: { latitude: LAT_PER_METRE * p.distanceMeters, longitude: 0 },
-        types: [p.type],
-      })),
-    }),
+  mockSearchNearbyPlacesProxy.mockResolvedValueOnce({
+    places: places.map(p => ({
+      id: p.id,
+      displayName: { text: p.name },
+      location: { latitude: LAT_PER_METRE * p.distanceMeters, longitude: 0 },
+      types: [p.type],
+    })),
   });
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockFetch.mockReset();
+  mockSearchNearbyPlacesProxy.mockReset();
   mockGetPosition.mockResolvedValue(ORIGIN);
   jest.spyOn(Date.prototype, 'getHours').mockReturnValue(10);
   resetProximityState();
@@ -239,6 +254,44 @@ describe('a learned place gets top priority within its own hero range', () => {
     expect(onUpdate).toHaveBeenCalledWith(
       'atm',
       expect.objectContaining({ placeId: 'atm-learned' }),
+      expect.anything(),
+    );
+  });
+
+  it('prefers the favourite restaurant food type for a generic restaurant task', async () => {
+    setLearnedPlaces([{ name: restaurantFoodTypeFavouriteName('sushi'), poiType: 'restaurant', visitCount: 5 }]);
+    mockRestaurantPlaces([
+      { id: 'restaurant-portuguese', name: 'Portugália', distanceMeters: 20 },
+      { id: 'restaurant-sushi', name: 'Yakuza by Olivier', distanceMeters: 80 },
+    ]);
+
+    const onUpdate = jest.fn();
+    await runProximitySearch('uid-1', [
+      makeTask({ id: 'dinner', poi: 'restaurant', title: 'Book dinner' }),
+    ], onUpdate);
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'restaurant',
+      expect.objectContaining({ placeId: 'restaurant-sushi', name: 'Yakuza by Olivier' }),
+      expect.anything(),
+    );
+  });
+
+  it('ignores favourite food type when the restaurant task already has a food type', async () => {
+    setLearnedPlaces([{ name: restaurantFoodTypeFavouriteName('portuguese'), poiType: 'restaurant', visitCount: 5 }]);
+    mockRestaurantPlaces([
+      { id: 'restaurant-portuguese', name: 'Portugália', distanceMeters: 20 },
+      { id: 'restaurant-sushi', name: 'Yakuza by Olivier', distanceMeters: 80 },
+    ]);
+
+    const onUpdate = jest.fn();
+    await runProximitySearch('uid-1', [
+      makeTask({ id: 'sushi', poi: 'restaurant', title: 'Go out to sushi' }),
+    ], onUpdate);
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'restaurant',
+      expect.objectContaining({ placeId: 'restaurant-sushi', name: 'Yakuza by Olivier' }),
       expect.anything(),
     );
   });

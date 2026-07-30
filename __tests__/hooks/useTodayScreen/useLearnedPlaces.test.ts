@@ -10,9 +10,11 @@
  */
 
 const mockGetLearnedPlaceCounts = jest.fn();
+const mockGetTaughtPlaces = jest.fn();
 
 jest.mock('../../../src/services/firestore', () => ({
   getLearnedPlaceCounts: (...args: unknown[]) => mockGetLearnedPlaceCounts(...args),
+  getTaughtPlaces: (...args: unknown[]) => mockGetTaughtPlaces(...args),
 }));
 
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -26,6 +28,7 @@ function count(placeId: string, name: string, poiType: string, visitCount: numbe
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockGetTaughtPlaces.mockResolvedValue([]);
 });
 
 describe('useLearnedPlaces', () => {
@@ -42,9 +45,26 @@ describe('useLearnedPlaces', () => {
 
     await waitFor(() => expect(result.current.learnedPlaces).toHaveLength(1));
     expect(result.current.learnedPlaces[0]).toEqual({
-      placeId: 'hp_1', name: 'Corner ATM', poiType: 'atm', visitCount: 3,
+      name: 'Corner ATM', poiType: 'atm', visitCount: 3,
     });
     expect(mockGetLearnedPlaceCounts).toHaveBeenCalledWith('uid-1');
+    expect(mockGetTaughtPlaces).toHaveBeenCalledWith('uid-1');
+  });
+
+  it('puts taught favourites before brush-learned places in the ranking feed', async () => {
+    mockGetLearnedPlaceCounts.mockResolvedValue([count('hp_1', 'Random Sushi', 'restaurant', 3)]);
+    mockGetTaughtPlaces.mockResolvedValue([
+      { id: 'fav', poiType: 'restaurant', name: '__food_type__:sushi', createdAt: { toMillis: () => 1 } },
+    ]);
+
+    const { result } = renderHook(() => useLearnedPlaces('uid-1'));
+
+    await waitFor(() => expect(result.current.learnedPlaces).toHaveLength(2));
+    expect(result.current.learnedPlaces[0]).toEqual({
+      poiType: 'restaurant',
+      name: '__food_type__:sushi',
+      visitCount: Number.MAX_SAFE_INTEGER,
+    });
   });
 
   it('refresh() re-fetches and recomputes the ranking', async () => {
@@ -91,14 +111,14 @@ describe('useLearnedPlaces', () => {
     mockGetLearnedPlaceCounts.mockResolvedValueOnce([count('hp_b', 'Uid B Cafe', 'cafe', 3)]);
     rerender({ uid: 'uid-B' });
     await waitFor(() => expect(result.current.learnedPlaces).toHaveLength(1));
-    expect(result.current.learnedPlaces[0].placeId).toBe('hp_b');
+    expect(result.current.learnedPlaces[0].name).toBe('Uid B Cafe');
 
     // uid-A's fetch finally resolves — must be ignored, not overwrite uid-B's ranking.
     resolveFirstFetch([count('hp_a', 'Uid A ATM', 'atm', 3)]);
     await act(async () => { await Promise.resolve(); });
 
     expect(result.current.learnedPlaces).toHaveLength(1);
-    expect(result.current.learnedPlaces[0].placeId).toBe('hp_b');
+    expect(result.current.learnedPlaces[0].name).toBe('Uid B Cafe');
   });
 
   it('ignores an overlapping refresh() response that resolves out of order', async () => {
@@ -118,12 +138,12 @@ describe('useLearnedPlaces', () => {
     await act(async () => {
       await result.current.refresh();
     });
-    expect(result.current.learnedPlaces[0]?.placeId).toBe('hp_new');
+    expect(result.current.learnedPlaces[0]?.name).toBe('New Place');
 
     // The first (older) refresh finally resolves — must not overwrite the newer result.
     resolveFirst([count('hp_old', 'Old Place', 'cafe', 3)]);
     await act(async () => { await firstRefresh; });
 
-    expect(result.current.learnedPlaces[0]?.placeId).toBe('hp_new');
+    expect(result.current.learnedPlaces[0]?.name).toBe('New Place');
   });
 });
