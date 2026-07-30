@@ -14,6 +14,8 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Buy a t-shirt')).toBe('clothing');
     expect(inferStoreSubtype('Comprar ténis')).toBe('shoes');
     expect(inferStoreSubtype('Comprar carregador')).toBe('electronics');
+    expect(inferStoreSubtype('Buy computer parts')).toBe('electronics');
+    expect(inferStoreSubtype('Comprar peças de computador')).toBe('electronics');
     expect(inferStoreSubtype('Buy a sofa')).toBe('furniture');
     expect(inferStoreSubtype('Buy screws')).toBe('hardware');
     expect(inferStoreSubtype('Buy a bicycle helmet')).toBe('bicycle');

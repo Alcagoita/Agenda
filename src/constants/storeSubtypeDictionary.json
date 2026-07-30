@@ -20,7 +20,7 @@
   "electronics": {
     "label": "Electronics",
     "labelPt": "Eletrónica",
-    "aliases": ["electronics", "charger", "cable", "headphones", "phone", "laptop", "mouse", "keyboard", "battery", "eletronica", "eletrónica", "carregador", "cabo", "auscultadores", "telemovel", "telemóvel", "portatil", "portátil", "rato", "teclado", "bateria"],
+    "aliases": ["electronics", "charger", "cable", "headphones", "phone", "laptop", "computer", "computer parts", "computer components", "pc", "pc parts", "pc components", "graphics card", "cpu", "motherboard", "mouse", "keyboard", "battery", "eletronica", "eletrónica", "carregador", "cabo", "auscultadores", "telemovel", "telemóvel", "portatil", "portátil", "computador", "pecas de computador", "peças de computador", "componentes de computador", "pecas de pc", "peças de pc", "componentes de pc", "placa grafica", "placa gráfica", "processador", "motherboard", "rato", "teclado", "bateria"],
     "stores": ["Worten", "FNAC", "MediaMarkt", "Radio Popular", "iStore", "GMS Store", "PCDIGA", "Chip7", "CeX"]
   },
   "books": {
