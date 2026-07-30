@@ -37,10 +37,10 @@ import {
 import { persistLearnedKeyword } from './firestore';
 import { searchPlaceTypesLocal } from './poiTypeCache';
 import { inferRestaurantFoodTypeForPoiInference } from './restaurantFoodTypes';
+import { inferStoreSubtypeForPoiInference } from './storeSubtypes';
 import vocabJson from '../../assets/poi-model/vocab.json';
 import labelsJson from '../../assets/poi-model/labels.json';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const MODEL_ASSET = require('../../assets/poi-model/poi_classifier.tflite');
 
 // Must match ml/poi-classifier/train_colab.py.
@@ -119,6 +119,7 @@ export async function isLlmAvailable(): Promise<boolean> {
  */
 export function tokenize(title: string): Int32Array {
   const ids = new Int32Array(MAXLEN); // zero-filled = PAD_ID
+  ids.fill(PAD_ID);
   const tokens = normalize(title).split(' ').filter(Boolean);
   const n = Math.min(tokens.length, MAXLEN);
   for (let i = 0; i < n; i++) {
@@ -197,6 +198,8 @@ export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution 
 
   const localSuggestion = searchPlaceTypesLocal(title)[0]?.type ?? null;
   if (localSuggestion) { return localSuggestion; }
+
+  if (inferStoreSubtypeForPoiInference(title)) { return 'store'; }
 
   const en = inferPoiFromRules(title, 'en');
   if (en) { return en; }

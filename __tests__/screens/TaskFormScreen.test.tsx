@@ -160,6 +160,7 @@ type RouteParams = {
   initialDate?: string;
   initialTitle?: string;
   initialPoi?: string;
+  initialStoreSubtype?: string;
   initialPoiExplicitlySelected?: boolean;
 };
 
@@ -729,6 +730,26 @@ describe('TaskFormScreen — save (create)', () => {
       );
     });
   });
+
+  it('saves the selected store subtype in create mode', async () => {
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a t-shirt');
+    fireEvent.press(screen.getByText('Store'));
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Add it'));
+    });
+    await waitFor(() => {
+      expect(mockAddTask).toHaveBeenCalledWith(
+        'user-123',
+        expect.objectContaining({
+          poi:          'store',
+          storeSubtype: 'clothing',
+        }),
+      );
+    });
+  });
 });
 
 // ── Save — edit ───────────────────────────────────────────────────────────────
@@ -756,6 +777,32 @@ describe('TaskFormScreen — save (edit)', () => {
       );
       expect(mockAddTask).not.toHaveBeenCalled();
       expect(mockGoBack).toHaveBeenCalled();
+    });
+  });
+
+  it('hydrates and updates the store subtype in edit mode', async () => {
+    setRouteParams({
+      uid: 'user-123',
+      task: makeTask({ poi: 'store', storeSubtype: 'clothing' }),
+    });
+    mockUpdateTask.mockResolvedValueOnce(undefined);
+    render(<TaskFormScreen />);
+
+    expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
+    fireEvent.press(screen.getByLabelText('Electronics'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Save changes'));
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateTask).toHaveBeenCalledWith(
+        'user-123',
+        'task-1',
+        expect.objectContaining({
+          poi:          'store',
+          storeSubtype: 'electronics',
+        }),
+      );
     });
   });
 });

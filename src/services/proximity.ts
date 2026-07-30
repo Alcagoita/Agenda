@@ -103,6 +103,15 @@ import {
   restaurantTaskFoodType,
   restaurantTaskMatchesPlaceName,
 } from './restaurantFoodTypes';
+import {
+  filterStorePlacesForTasks,
+  groupStorePlaceCandidates,
+  mergeStorePlaceCandidates,
+  parseStoreSubtypeFavouriteName,
+  storePlaceMatchesSubtype,
+  storeTaskMatchesPlaceName,
+  storeTaskSubtype,
+} from './storeSubtypes';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -813,9 +822,12 @@ function processProximityTick(
   for (const poiType of uniquePoiTypes) {
     const rawPlaces = results[poiType] ?? [];
     const restaurantGroups = groupRestaurantPlaceCandidates(poiType, rawPlaces, undonePoiTasks);
+    const storeGroups = groupStorePlaceCandidates(poiType, rawPlaces, undonePoiTasks);
     const places = poiType === 'restaurant'
       ? mergeRestaurantPlaceCandidates(restaurantGroups)
-      : filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks);
+      : poiType === 'store'
+        ? mergeStorePlaceCandidates(storeGroups)
+        : filterStorePlacesForTasks(poiType, filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks), undonePoiTasks);
 
     // Reconcile live results against the cache's cross-source identity
     // (KAN-229): a place already known to both Google and the OSM cache
@@ -857,7 +869,9 @@ function processProximityTick(
     // only which specific PLACE represents the type that already won.
     const heroCandidateLists = poiType === 'restaurant'
       ? restaurantGroups.map(group => group.places)
-      : [places];
+      : poiType === 'store'
+        ? storeGroups.map(group => group.places)
+        : [places];
     for (const candidates of heroCandidateLists) {
       const candidateNearest = candidates[0];
       if (!candidateNearest) { continue; }
@@ -897,8 +911,13 @@ function processProximityTick(
     const learnedFoodType = winningType === 'restaurant' && learnedForType
       ? parseRestaurantFoodTypeFavouriteName(learnedForType.name)
       : null;
+    const learnedStoreSubtype = winningType === 'store' && learnedForType
+      ? parseStoreSubtypeFavouriteName(learnedForType.name)
+      : null;
     const hasExplicitRestaurantFoodType = winningType === 'restaurant' &&
       undonePoiTasks.some(t => t.poi === 'restaurant' && restaurantTaskFoodType(t) != null);
+    const hasExplicitStoreSubtype = winningType === 'store' &&
+      undonePoiTasks.some(t => t.poi === 'store' && storeTaskSubtype(t) != null);
     // KAN-304 — prefer the learned BRAND (by name), not a specific place id, so
     // any branch of the user's preferred brand represents the type.
     if (learnedFoodType && !hasExplicitRestaurantFoodType) {
@@ -912,7 +931,18 @@ function processProximityTick(
           break;
         }
       }
-    } else if (learnedForType && !learnedFoodType && currentPlaces[0]?.name !== learnedForType.name) {
+    } else if (learnedStoreSubtype && !hasExplicitStoreSubtype) {
+      for (const candidate of currentPlaces) {
+        if (
+          storePlaceMatchesSubtype(candidate.name, learnedStoreSubtype) &&
+          candidate.distanceMeters < HERO_RADIUS_M
+        ) {
+          allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
+          heroPlace = candidate;
+          break;
+        }
+      }
+    } else if (learnedForType && !learnedFoodType && !learnedStoreSubtype && currentPlaces[0]?.name !== learnedForType.name) {
       for (const candidate of currentPlaces.slice(1)) {
         if (candidate.name === learnedForType.name && candidate.distanceMeters < HERO_RADIUS_M) {
           allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
@@ -929,7 +959,10 @@ function processProximityTick(
     const eligible = undonePoiTasks.filter(
       t => t.poi === heroType &&
         t.poiAlertSeenDate !== today &&
-        (!heroPlace || restaurantTaskMatchesPlaceName(t, heroPlace.name)),
+        (!heroPlace || (
+          restaurantTaskMatchesPlaceName(t, heroPlace.name) &&
+          storeTaskMatchesPlaceName(t, heroPlace.name)
+        )),
     );
     if (
       eligible.length > 0 &&

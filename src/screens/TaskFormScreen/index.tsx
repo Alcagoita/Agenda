@@ -50,6 +50,8 @@ import { PoiTile } from './PoiTile';
 import { POI_TILE_WIDTH, styles } from './styles';
 import { localPoiLabel } from '../../services/poiTypeCache';
 import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
+import StoreSubtypeSelector from '../../components/StoreSubtypeSelector';
+import type { StoreSubtype } from '../../services/storeSubtypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,7 @@ export interface TaskFormParams {
   initialDate?: string;
   initialTitle?: string;
   initialPoi?: string;
+  initialStoreSubtype?: StoreSubtype;
   initialPoiExplicitlySelected?: boolean;
 }
 
@@ -70,7 +73,7 @@ export default function TaskFormScreen() {
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
 
-  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialPoiExplicitlySelected } = route.params;
+  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialStoreSubtype, initialPoiExplicitlySelected } = route.params;
   const isEdit = !!existingTask;
   const hasExplicitInitialPoi = Boolean(existingTask?.poi || initialPoiExplicitlySelected);
 
@@ -158,6 +161,13 @@ export default function TaskFormScreen() {
     return null;
   });
   const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
+  const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(
+    existingTask?.poi === 'store'
+      ? existingTask.storeSubtype ?? null
+      : initialPoi === 'store'
+        ? initialStoreSubtype ?? null
+        : null,
+  );
   const [focused,       setFocused]       = useState(false);
   const [suggestedPoi, setSuggestedPoi] = useState<string | null>(
     existingTask?.poi ?? (hasExplicitInitialPoi ? null : initialPoi ?? null),
@@ -289,6 +299,7 @@ export default function TaskFormScreen() {
 
   useEffect(() => {
     if (effectivePoi !== 'restaurant') { setRestaurantFoodType(null); }
+    if (effectivePoi !== 'store') { setStoreSubtype(null); }
   }, [effectivePoi]);
 
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
@@ -321,6 +332,7 @@ export default function TaskFormScreen() {
         date,
         ...(time.trim() ? { time: time.trim() } : {}),
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
+        ...(!isBirthday && effectivePoi === 'store' && storeSubtype ? { storeSubtype } : {}),
       };
 
       if (notes.trim()) {
@@ -335,8 +347,12 @@ export default function TaskFormScreen() {
         const updateData: Record<string, unknown> = { ...payload };
         if (isBirthday) {
           updateData.poi = deleteField();
+          updateData.storeSubtype = deleteField();
         } else if (existingTask.kind === 'birthday') {
           updateData.kind = deleteField();
+        }
+        if (!isBirthday && (effectivePoi !== 'store' || !storeSubtype)) {
+          updateData.storeSubtype = deleteField();
         }
         await updateTask(uid, existingTask.id, updateData as Partial<Task>);
         logTap('task_edit', { category: payload.category });
@@ -376,7 +392,7 @@ export default function TaskFormScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [title, category, effectivePoi, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
+  }, [title, category, effectivePoi, storeSubtype, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
 
   // ── Delete (edit mode only) ─────────────────────────────────────────────────
 
@@ -725,6 +741,23 @@ export default function TaskFormScreen() {
               <FoodTypeSelector
                 selected={restaurantFoodType}
                 onSelect={setRestaurantFoodType}
+              />
+            </View>
+          )}
+
+          {effectivePoi === 'store' && (
+            <View style={styles.subtypeSection}>
+              <View style={styles.questionRow}>
+                <Text style={[styles.questionLabel, { color: palette.text }]}>
+                  {COPY.newTaskSheet.subtypeQuestion}
+                </Text>
+                <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                  {COPY.newTaskSheet.catOptional}
+                </Text>
+              </View>
+              <StoreSubtypeSelector
+                selected={storeSubtype}
+                onSelect={setStoreSubtype}
               />
             </View>
           )}

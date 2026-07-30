@@ -125,13 +125,13 @@ export function parseRestaurantFoodTypeFavouriteName(name: string): RestaurantFo
   return RESTAURANT_FOOD_DICTIONARY[foodType] ? foodType : null;
 }
 
-export function restaurantFoodTypeSuggestions(query: string): RestaurantFoodType[] {
+export function restaurantFoodTypeSuggestions(query: string, language?: string): RestaurantFoodType[] {
   const normalized = normalize(query);
   if (!normalized) { return listRestaurantFoodTypes(); }
 
   return listRestaurantFoodTypes().map((foodType, index) => {
     const entry = RESTAURANT_FOOD_DICTIONARY[foodType];
-    const labels = [entry.label, entry.labelPt ?? ''];
+    const labels = language === 'pt-PT' ? [entry.labelPt ?? entry.label] : [entry.label];
     const score = labels
       .map(label => visibleLabelMatchScore(label, normalized))
       .filter((value): value is number => value != null)

@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { COPY } from '../../src/constants/copy';
 import TeachSheet from '../../src/components/TeachSheet';
 import { restaurantFoodTypeFavouriteName } from '../../src/services/restaurantFoodTypes';
+import { storeSubtypeFavouriteName } from '../../src/services/storeSubtypes';
 
 jest.mock('../../src/theme', () => ({
   useTheme: () => ({
@@ -135,5 +136,20 @@ describe('TeachSheet', () => {
     fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
 
     expect(onSave).toHaveBeenCalledWith('restaurant', restaurantFoodTypeFavouriteName('sushi'));
+  });
+
+  it('saves a store subtype selected from suggestions', () => {
+    const onSave = jest.fn();
+    render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);
+
+    fireEvent.press(screen.getByLabelText(COPY.places.teachStoreType));
+    expect(screen.queryByText('Clothing')).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachStoreTypePlaceholder), 'c');
+    expect(screen.queryByText('Clothing')).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachStoreTypePlaceholder), 'cl');
+    fireEvent.press(screen.getByText('Clothing'));
+    fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
+
+    expect(onSave).toHaveBeenCalledWith('store', storeSubtypeFavouriteName('clothing'));
   });
 });

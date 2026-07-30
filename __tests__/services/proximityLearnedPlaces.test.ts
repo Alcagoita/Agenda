@@ -93,6 +93,7 @@ global.fetch = mockFetch as unknown as typeof fetch;
 
 import { runProximitySearch, resetProximityState, setLearnedPlaces } from '../../src/services/proximity';
 import { restaurantFoodTypeFavouriteName } from '../../src/services/restaurantFoodTypes';
+import { storeSubtypeFavouriteName } from '../../src/services/storeSubtypes';
 import type { Task } from '../../src/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,6 +120,10 @@ function mockAtmPlaces(places: Array<{ id: string; name: string; distanceMeters:
 
 function mockRestaurantPlaces(places: Array<{ id: string; name: string; distanceMeters: number }>) {
   mockPlacesResponse(places.map(p => ({ ...p, type: 'restaurant' })));
+}
+
+function mockStorePlaces(places: Array<{ id: string; name: string; distanceMeters: number }>) {
+  mockPlacesResponse(places.map(p => ({ ...p, type: 'store' })));
 }
 
 function mockPlacesResponse(places: Array<{ id: string; name: string; distanceMeters: number; type: string }>) {
@@ -292,6 +297,44 @@ describe('a learned place gets top priority within its own hero range', () => {
     expect(onUpdate).toHaveBeenCalledWith(
       'restaurant',
       expect.objectContaining({ placeId: 'restaurant-sushi', name: 'Yakuza by Olivier' }),
+      expect.anything(),
+    );
+  });
+
+  it('prefers the favourite store subtype for a generic store task', async () => {
+    setLearnedPlaces([{ name: storeSubtypeFavouriteName('clothing'), poiType: 'store', visitCount: 5 }]);
+    mockStorePlaces([
+      { id: 'store-pet', name: 'Aquaplante', distanceMeters: 20 },
+      { id: 'store-clothing', name: 'Zara', distanceMeters: 80 },
+    ]);
+
+    const onUpdate = jest.fn();
+    await runProximitySearch('uid-1', [
+      makeTask({ id: 'shop', poi: 'store', title: 'Buy something' }),
+    ], onUpdate);
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'store',
+      expect.objectContaining({ placeId: 'store-clothing', name: 'Zara' }),
+      expect.anything(),
+    );
+  });
+
+  it('ignores favourite store subtype when the store task already has a subtype', async () => {
+    setLearnedPlaces([{ name: storeSubtypeFavouriteName('pet'), poiType: 'store', visitCount: 5 }]);
+    mockStorePlaces([
+      { id: 'store-pet', name: 'Aquaplante', distanceMeters: 20 },
+      { id: 'store-clothing', name: 'Zara', distanceMeters: 80 },
+    ]);
+
+    const onUpdate = jest.fn();
+    await runProximitySearch('uid-1', [
+      makeTask({ id: 'shirt', poi: 'store', title: 'Buy a t-shirt' }),
+    ], onUpdate);
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'store',
+      expect.objectContaining({ placeId: 'store-clothing', name: 'Zara' }),
       expect.anything(),
     );
   });

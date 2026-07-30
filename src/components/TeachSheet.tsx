@@ -9,7 +9,7 @@
  * reopening always starts empty.
  */
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, type ListRenderItemInfo } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
@@ -23,11 +23,21 @@ import {
   restaurantFoodTypeSuggestions,
   type RestaurantFoodType,
 } from '../services/restaurantFoodTypes';
+import {
+  storeSubtypeDisplayLabel,
+  storeSubtypeFavouriteName,
+  storeSubtypeSuggestions,
+  type StoreSubtype,
+} from '../services/storeSubtypes';
 
 export interface TeachSheetProps {
   visible: boolean;
   onClose: () => void;
   onSave: (poiType: string, name: string) => void;
+}
+
+function SuggestionSeparator() {
+  return <View style={styles.suggestionSeparator} />;
 }
 
 export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps) {
@@ -45,36 +55,81 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
     saveBtn: {
       backgroundColor: palette.accent,
     },
+    storeTypeChip: {
+      borderColor: palette.line,
+      backgroundColor: palette.surface,
+    },
+    storeTypeChipSelected: {
+      borderColor: palette.accent,
+      backgroundColor: palette.nearTint,
+    },
   }), [palette]);
-  const [kind, setKind] = useState<'place' | 'food'>('place');
+  const [kind, setKind] = useState<'place' | 'food' | 'store'>('place');
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedFoodType, setSelectedFoodType] = useState<RestaurantFoodType | null>(null);
+  const [selectedStoreSubtype, setSelectedStoreSubtype] = useState<StoreSubtype | null>(null);
   const trimmedName = name.trim();
   const canonicalName = kind === 'place' ? getCanonicalBrand(type, name) : null;
   const brandSuggestions = kind === 'place' && trimmedName.length >= 2 ? getBrandSuggestions(type, name) : [];
-  const foodSuggestions = kind === 'food' && trimmedName.length >= 2 ? restaurantFoodTypeSuggestions(name) : [];
+  const foodSuggestions = kind === 'food' && trimmedName.length >= 2 ? restaurantFoodTypeSuggestions(name, language) : [];
+  const storeSuggestions = kind === 'store' && trimmedName.length >= 2 ? storeSubtypeSuggestions(name, language) : [];
   const shouldShowBrandSuggestions = kind === 'place' && type != null && brandSuggestions.length > 0;
   const shouldShowFoodSuggestions = kind === 'food' && foodSuggestions.length > 0;
+  const shouldShowStoreSuggestions = kind === 'store' && storeSuggestions.length > 0;
   const canSave = kind === 'food'
     ? selectedFoodType != null
-    : type != null && selectedBrand != null && selectedBrand === canonicalName;
+    : kind === 'store'
+      ? selectedStoreSubtype != null
+      : type != null && selectedBrand != null && selectedBrand === canonicalName;
 
-  const reset = () => { setKind('place'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); };
+  const reset = () => {
+    setKind('place');
+    setType(null);
+    setName('');
+    setSelectedBrand(null);
+    setSelectedFoodType(null);
+    setSelectedStoreSubtype(null);
+  };
   // Every dismissal clears the form, so reopening always starts empty.
   const handleClose = () => { reset(); onClose(); };
+  const renderStoreSuggestion = ({ item: subtype }: ListRenderItemInfo<StoreSubtype>) => {
+    const label = storeSubtypeDisplayLabel(subtype, language);
+    const selected = subtype === selectedStoreSubtype;
+    return (
+      <Pressable
+        onPress={() => { setName(label); setSelectedStoreSubtype(subtype); }}
+        style={[
+          styles.suggestionRow,
+          selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
+        ]}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        accessibilityLabel={label}>
+        <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
+          {label}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={[styles.scrim, { backgroundColor: palette.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityLabel={COPY.places.teachCancelA11y} />
         <View style={[styles.sheet, { backgroundColor: palette.bg, paddingBottom: spacing.page + insets.bottom }]}>
-          <ScrollView
+          <FlatList
+            data={shouldShowStoreSuggestions ? storeSuggestions : []}
+            renderItem={renderStoreSuggestion}
+            keyExtractor={subtype => subtype}
             style={styles.scroller}
             contentContainerStyle={styles.scrollerContent}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={SuggestionSeparator}
+            ListHeaderComponent={(
+              <>
             <View style={styles.header}>
               <Text style={[styles.title, { color: palette.text }]}>{COPY.places.teachTitle}</Text>
               <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
@@ -90,7 +145,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 return (
                   <Pressable
                     key={t}
-                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
+                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
                     style={[
                       styles.typeChip,
                       { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
@@ -104,7 +159,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 );
               })}
               <Pressable
-                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
+                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
                 style={[
                   styles.typeChip,
                   {
@@ -120,17 +175,39 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                   {COPY.places.teachFoodType}
                 </Text>
               </Pressable>
+              <Pressable
+                onPress={() => { setKind('store'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
+                style={[
+                  styles.typeChip,
+                  kind === 'store' ? themedStyles.storeTypeChipSelected : themedStyles.storeTypeChip,
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: kind === 'store' }}
+                accessibilityLabel={COPY.places.teachStoreType}>
+                <PoiIcon type="store" color={kind === 'store' ? palette.nearText : palette.muted} size={18} />
+                <Text style={[styles.typeChipLabel, { color: kind === 'store' ? palette.nearText : palette.text }]}>
+                  {COPY.places.teachStoreType}
+                </Text>
+              </Pressable>
             </View>
 
             <Text style={[styles.fieldLabel, { color: palette.muted }]}>
-              {kind === 'food' ? COPY.places.teachFoodTypeNameLabel : COPY.places.teachNameLabel}
+              {kind === 'food'
+                ? COPY.places.teachFoodTypeNameLabel
+                : kind === 'store'
+                  ? COPY.places.teachStoreTypeNameLabel
+                  : COPY.places.teachNameLabel}
             </Text>
             <TextInput
               style={[styles.nameInput, { color: palette.text, borderColor: palette.line, backgroundColor: palette.surface }]}
-              placeholder={kind === 'food' ? COPY.places.teachFoodTypePlaceholder : COPY.places.teachNamePlaceholder}
+              placeholder={kind === 'food'
+                ? COPY.places.teachFoodTypePlaceholder
+                : kind === 'store'
+                  ? COPY.places.teachStoreTypePlaceholder
+                  : COPY.places.teachNamePlaceholder}
               placeholderTextColor={palette.muted}
               value={name}
-              onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); }}
+              onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
               returnKeyType="done"
             />
             {shouldShowBrandSuggestions && (
@@ -180,7 +257,9 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 })}
               </View>
             )}
-
+              </>
+            )}
+            ListFooterComponent={(
             <Pressable
               style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
               disabled={!canSave}
@@ -190,13 +269,19 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                   reset();
                   return;
                 }
+                if (kind === 'store' && selectedStoreSubtype) {
+                  onSave('store', storeSubtypeFavouriteName(selectedStoreSubtype));
+                  reset();
+                  return;
+                }
                 if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); }
               }}
               accessibilityRole="button"
               accessibilityLabel={COPY.places.teachSaveAction}>
               <Text style={[styles.saveLabel, { color: palette.onAccent }]}>{COPY.places.teachSaveAction}</Text>
             </Pressable>
-          </ScrollView>
+            )}
+          />
         </View>
       </View>
     </Modal>
@@ -224,6 +309,7 @@ const styles = StyleSheet.create({
     fontSize: 15, fontFamily: 'Geist-Regular',
   },
   suggestionList: { gap: 8, marginTop: -4 },
+  suggestionSeparator: { height: 8 },
   suggestionRow: {
     minHeight: 44,
     borderRadius: radii.ctaBtn,

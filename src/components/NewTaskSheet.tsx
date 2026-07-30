@@ -57,6 +57,8 @@ import RotatingTitlePlaceholder from './RotatingTitlePlaceholder';
 import { localPoiLabel } from '../services/poiTypeCache';
 import FoodTypeSelector from './FoodTypeSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
+import StoreSubtypeSelector from './StoreSubtypeSelector';
+import type { StoreSubtype } from '../services/storeSubtypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -218,6 +220,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [category, setCategory] = useState<string | null>(null);
     const [poi,      setPoi]      = useState<string | null>(null);
     const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
+    const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
     // KAN-249 — the raw inference result, frozen the moment the user touches
     // the carousel. Compared against `poi` at submit time to tell a Confirm
     // (poi === suggestedPoi) from a Replace (poi !== suggestedPoi); null means
@@ -288,6 +291,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setCategory(null);
       setPoi(null);
       setRestaurantFoodType(null);
+      setStoreSubtype(null);
       setSuggestedPoi(null);
       setSuggestedTitle(null);
       setPoiTouched(false);
@@ -406,6 +410,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
+      if (poi !== 'store') { setStoreSubtype(null); }
     }, [poi]);
 
     // KAN-249 — the leading suggestion tile's content. `suggestionType` is
@@ -432,6 +437,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           done:     false,
           date:     todayISO(),
           poi,
+          ...(poi === 'store' && storeSubtype ? { storeSubtype } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
         // fired for THIS title. Inference is skipped once the carousel is
@@ -457,7 +463,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         console.warn('[NewTaskSheet] addTask failed', err);
         setSubmitting(false);
       }
-    }, [title, category, poi, suggestedPoi, suggestedTitle, uid, submitting]);
+    }, [title, category, poi, storeSubtype, suggestedPoi, suggestedTitle, uid, submitting]);
 
     const handleMoreDetails = useCallback(() => {
       handleClose();
@@ -465,9 +471,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         uid,
         initialTitle: title.trim() || undefined,
         initialPoi:   poi ?? undefined,
+        initialStoreSubtype: poi === 'store' ? storeSubtype ?? undefined : undefined,
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, poi, poiTouched]);
+    }, [handleClose, uid, title, poi, storeSubtype, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.
@@ -626,6 +633,25 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                     selected={restaurantFoodType}
                     onSelect={setRestaurantFoodType}
                   />
+                  </View>
+                </View>
+              )}
+
+              {poi === 'store' && (
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.subtypeQuestion}
+                    </Text>
+                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                      {COPY.newTaskSheet.catOptional}
+                    </Text>
+                  </View>
+                  <View style={styles.foodTypePad}>
+                    <StoreSubtypeSelector
+                      selected={storeSubtype}
+                      onSelect={setStoreSubtype}
+                    />
                   </View>
                 </View>
               )}
