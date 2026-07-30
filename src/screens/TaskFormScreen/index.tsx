@@ -53,7 +53,6 @@ import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
 import StoreSubtypeSelector from '../../components/StoreSubtypeSelector';
 import {
   inferStoreSubtype,
-  storeSubtypeDisplayLabel,
   type StoreSubtype,
 } from '../../services/storeSubtypes';
 
@@ -66,18 +65,19 @@ export interface TaskFormParams {
   initialTitle?: string;
   initialPoi?: string;
   initialStoreSubtype?: StoreSubtype;
+  initialStoreSubtypeExplicitlySelected?: boolean;
   initialPoiExplicitlySelected?: boolean;
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function TaskFormScreen() {
-  const { palette, language }  = useTheme();
+  const { palette }  = useTheme();
   const navigation   = useNavigation();
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
 
-  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialStoreSubtype, initialPoiExplicitlySelected } = route.params;
+  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialStoreSubtype, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
   const isEdit = !!existingTask;
   const hasExplicitInitialPoi = Boolean(existingTask?.poi || initialPoiExplicitlySelected);
 
@@ -173,7 +173,7 @@ export default function TaskFormScreen() {
         : null,
   );
   const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(
-    Boolean(existingTask?.storeSubtype || initialStoreSubtype),
+    Boolean(existingTask?.storeSubtype || initialStoreSubtypeExplicitlySelected),
   );
   const [focused,       setFocused]       = useState(false);
   const [suggestedPoi, setSuggestedPoi] = useState<string | null>(
@@ -333,8 +333,8 @@ export default function TaskFormScreen() {
   const confirmedSuggestion = suggestionType !== null && suggestionSelected && poiTouched;
   const showSuggestionHint = liveSuggestion || suggestionType === null;
   const suggestionHighlighted = liveSuggestion || suggestionSelected;
-  const storeSubtypeGuessLabel = effectivePoi === 'store' && storeSubtype && !storeSubtypeTouched
-    ? COPY.newTaskSheet.subtypeGuess(storeSubtypeDisplayLabel(storeSubtype, language))
+  const suggestedStoreSubtype = effectivePoi === 'store' && storeSubtype && !storeSubtypeTouched && storeSubtype !== 'any'
+    ? storeSubtype
     : null;
 
   const handleSave = useCallback(async () => {
@@ -769,14 +769,10 @@ export default function TaskFormScreen() {
                 <Text style={[styles.questionLabel, { color: palette.text }]}>
                   {COPY.newTaskSheet.subtypeQuestion}
                 </Text>
-                {storeSubtypeGuessLabel && (
-                  <Text style={[styles.questionOptional, { color: palette.faint }]} numberOfLines={1}>
-                    {storeSubtypeGuessLabel}
-                  </Text>
-                )}
               </View>
               <StoreSubtypeSelector
                 selected={storeSubtype}
+                suggested={suggestedStoreSubtype}
                 onSelect={subtype => {
                   setStoreSubtypeTouched(true);
                   setStoreSubtype(subtype ?? 'any');

@@ -627,6 +627,7 @@ describe('"More details" navigation', () => {
         initialTitle:                 'Buy a t-shirt',
         initialPoi:                   'store',
         initialStoreSubtype:          'clothing',
+        initialStoreSubtypeExplicitlySelected: true,
         initialPoiExplicitlySelected: true,
       });
     }, { timeout: 500 });

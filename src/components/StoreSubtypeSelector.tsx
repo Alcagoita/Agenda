@@ -13,6 +13,7 @@ import {
 
 interface StoreSubtypeSelectorProps {
   selected: StoreSubtype | null;
+  suggested?: StoreSubtype | null;
   onSelect: (subtype: StoreSubtype | null) => void;
 }
 
@@ -125,13 +126,25 @@ function StoreSubtypeIcon({ type, color, size = 16 }: { type: StoreSubtype; colo
   }
 }
 
-export default function StoreSubtypeSelector({ selected, onSelect }: StoreSubtypeSelectorProps) {
-  const { palette, language } = useTheme();
+function orderSubtypes(suggested: StoreSubtype | null | undefined): StoreSubtype[] {
   const subtypes = listStoreSubtypes();
+  if (!suggested || suggested === 'any') { return subtypes; }
+  return [
+    'any',
+    suggested,
+    ...subtypes.filter(type => type !== 'any' && type !== suggested),
+  ] as StoreSubtype[];
+}
+
+export default function StoreSubtypeSelector({ selected, suggested, onSelect }: StoreSubtypeSelectorProps) {
+  const { palette, language } = useTheme();
+  const subtypes = orderSubtypes(suggested);
 
   const renderSubtype = ({ item: type }: ListRenderItemInfo<StoreSubtype>) => {
     const active = selected === type;
-    const fg = active ? palette.nearText : palette.text;
+    const guessed = suggested === type;
+    const highlighted = active || guessed;
+    const fg = highlighted ? palette.nearText : palette.text;
     return (
       <Pressable
         onPress={() => onSelect(type)}
@@ -140,13 +153,14 @@ export default function StoreSubtypeSelector({ selected, onSelect }: StoreSubtyp
         accessibilityState={{ selected: active }}
         style={[
           styles.pill,
+          guessed && styles.pillSuggested,
           {
-            backgroundColor: active ? palette.nearTint2 : palette.surface,
-            borderColor: active ? palette.nearBorder : palette.line,
+            backgroundColor: active ? palette.nearTint2 : guessed ? palette.nearTint : palette.surface,
+            borderColor: highlighted ? palette.nearBorder : palette.line,
           },
         ]}>
-        <View style={[styles.iconPill, { backgroundColor: active ? palette.nearTint : palette.surface2 }]}>
-          <StoreSubtypeIcon type={type} color={active ? palette.nearText : palette.muted} size={15} />
+        <View style={[styles.iconPill, { backgroundColor: highlighted ? palette.nearTint : palette.surface2 }]}>
+          <StoreSubtypeIcon type={type} color={highlighted ? palette.nearText : palette.muted} size={15} />
         </View>
         <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
           {storeSubtypeDisplayLabel(type, language)}
@@ -186,6 +200,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.chip,
     paddingLeft: 7,
     paddingRight: 12,
+  },
+  pillSuggested: {
+    borderStyle: 'dashed',
   },
   iconPill: {
     width: 26,

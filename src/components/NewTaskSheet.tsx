@@ -60,7 +60,6 @@ import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 import StoreSubtypeSelector from './StoreSubtypeSelector';
 import {
   inferStoreSubtype,
-  storeSubtypeDisplayLabel,
   type StoreSubtype,
 } from '../services/storeSubtypes';
 
@@ -216,7 +215,7 @@ function SuggestionTile({ type, label, selected, touched, onPress, palette }: Su
 
 const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
   function NewTaskSheet({ visible, uid, onClose, onTaskAdded, customCategories = [] }, ref) {
-    const { palette, language } = useTheme();
+    const { palette } = useTheme();
     const insets = useSafeAreaInsets();
 
     // Form state
@@ -438,8 +437,8 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         : localPoiLabel(suggestionType))
       : null;
     const suggestionSelected = suggestionType !== null && poi === suggestionType;
-    const storeSubtypeGuessLabel = poi === 'store' && storeSubtype && !storeSubtypeTouched
-      ? COPY.newTaskSheet.subtypeGuess(storeSubtypeDisplayLabel(storeSubtype, language))
+    const suggestedStoreSubtype = poi === 'store' && storeSubtype && !storeSubtypeTouched && storeSubtype !== 'any'
+      ? storeSubtype
       : null;
 
     const handleSubmit = useCallback(async () => {
@@ -488,10 +487,13 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         uid,
         initialTitle: title.trim() || undefined,
         initialPoi:   poi ?? undefined,
-        initialStoreSubtype: poi === 'store' ? storeSubtype ?? undefined : undefined,
+        ...(poi === 'store' ? {
+          initialStoreSubtype: storeSubtype ?? undefined,
+          initialStoreSubtypeExplicitlySelected: storeSubtypeTouched,
+        } : {}),
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, poi, storeSubtype, poiTouched]);
+    }, [handleClose, uid, title, poi, storeSubtype, storeSubtypeTouched, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.
@@ -660,15 +662,11 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                     <Text style={[styles.questionLabel, { color: palette.text }]}>
                       {COPY.newTaskSheet.subtypeQuestion}
                     </Text>
-                    {storeSubtypeGuessLabel && (
-                      <Text style={[styles.questionOptional, { color: palette.faint }]} numberOfLines={1}>
-                        {storeSubtypeGuessLabel}
-                      </Text>
-                    )}
                   </View>
                   <View style={styles.foodTypePad}>
                     <StoreSubtypeSelector
                       selected={storeSubtype}
+                      suggested={suggestedStoreSubtype}
                       onSelect={subtype => {
                         setStoreSubtypeTouched(true);
                         setStoreSubtype(subtype ?? 'any');
