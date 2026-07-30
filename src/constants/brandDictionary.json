@@ -1,0 +1,80 @@
+{
+  "cafe": [
+    "Starbucks",
+    "Costa Coffee",
+    "Copenhagen Coffee Lab",
+    "A Padaria Portuguesa",
+    "Nicolau",
+    "Fabrica Coffee Roasters",
+    "Combi Coffee",
+    "Delta The Coffee House Experience",
+    "Jeronymo",
+    "Café A Brasileira",
+    "The Mill",
+    "Hello Kristof"
+  ],
+  "supermarket": [
+    "Pingo Doce",
+    "Continente",
+    "Lidl",
+    "Aldi",
+    "Auchan",
+    "Mercadona",
+    "Minipreço",
+    "Intermarché",
+    "El Corte Inglés Supercor",
+    "Celeiro",
+    "Go Natural",
+    "Froiz"
+  ],
+  "gas": [
+    "Galp",
+    "BP",
+    "Repsol",
+    "Prio",
+    "Cepsa",
+    "Shell",
+    "Avia",
+    "Intermarché",
+    "Auchan",
+    "Q8"
+  ],
+  "gym": [
+    "Fitness Hut",
+    "Solinca",
+    "Holmes Place",
+    "Go Fit",
+    "Element",
+    "Pump Fitness Spirit",
+    "Time to Fitness",
+    "Urban Sports Club",
+    "Fitness Factory",
+    "Vivafit"
+  ],
+  "restaurant": [
+    "McDonald's",
+    "Burger King",
+    "KFC",
+    "Pizza Hut",
+    "Telepizza",
+    "H3",
+    "Vitaminas",
+    "Honorato",
+    "100 Montaditos",
+    "Taco Bell",
+    "The Food Temple",
+    "Go Natural"
+  ],
+  "salon": [
+    "Jean Louis David",
+    "Llongueras",
+    "Carlos Gago",
+    "Hair Fusion",
+    "Beleza do Bairro",
+    "BodyConcept",
+    "DepilConcept",
+    "Wells",
+    "Nails 4'Us",
+    "Clínica do Pelo"
+  ]
+}
