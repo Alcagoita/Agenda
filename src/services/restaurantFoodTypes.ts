@@ -6,6 +6,7 @@ type RestaurantFoodDictionary = Record<string, {
   aliases: string[];
   restaurants: string[];
 }>;
+type RestaurantPlaceLike = { name: string; restaurantFoodType?: RestaurantFoodType | null };
 type RestaurantTaskLike = { poi?: string | null; title: string };
 type RestaurantTaskWithId = RestaurantTaskLike & { id: string };
 
@@ -157,13 +158,17 @@ function visibleLabelMatchScore(label: string, normalizedQuery: string): number 
 }
 
 export function restaurantPlaceMatchesFoodType(
-  placeName: string,
+  place: string | RestaurantPlaceLike,
   foodType: RestaurantFoodType | null,
 ): boolean {
   if (!foodType) { return true; }
+  if (typeof place !== 'string' && place.restaurantFoodType) {
+    return place.restaurantFoodType === foodType;
+  }
   const entry = RESTAURANT_FOOD_DICTIONARY[foodType];
   if (!entry) { return false; }
 
+  const placeName = typeof place === 'string' ? place : place.name;
   const normalizedPlace = normalize(placeName);
   const compactPlace = compact(placeName);
   if (!normalizedPlace) { return false; }
@@ -180,28 +185,35 @@ export function restaurantPlaceMatchesFoodType(
   });
 }
 
+export function inferRestaurantFoodTypeFromPlaceName(placeName: string): RestaurantFoodType | null {
+  for (const foodType of listRestaurantFoodTypes()) {
+    if (restaurantPlaceMatchesFoodType(placeName, foodType)) { return foodType; }
+  }
+  return null;
+}
+
 export function restaurantTaskFoodType(task: RestaurantTaskLike): RestaurantFoodType | null {
   return task.poi === 'restaurant' ? inferRestaurantFoodType(task.title) : null;
 }
 
 export function restaurantTaskMatchesPlaceName(
   task: RestaurantTaskLike,
-  placeName: string,
+  place: string | RestaurantPlaceLike,
 ): boolean {
   if (task.poi !== 'restaurant') { return true; }
-  return restaurantPlaceMatchesFoodType(placeName, restaurantTaskFoodType(task));
+  return restaurantPlaceMatchesFoodType(place, restaurantTaskFoodType(task));
 }
 
 export function restaurantTaskMatchesAnyPlace(
   task: RestaurantTaskLike,
-  places: Array<{ name: string }>,
+  places: RestaurantPlaceLike[],
 ): boolean {
   if (task.poi !== 'restaurant') { return true; }
   const foodType = restaurantTaskFoodType(task);
-  return foodType == null || places.some(place => restaurantPlaceMatchesFoodType(place.name, foodType));
+  return foodType == null || places.some(place => restaurantPlaceMatchesFoodType(place, foodType));
 }
 
-export function restaurantPlacesForTask<T extends { name: string }>(
+export function restaurantPlacesForTask<T extends RestaurantPlaceLike>(
   task: RestaurantTaskLike,
   places: T[],
 ): T[] {
@@ -209,10 +221,10 @@ export function restaurantPlacesForTask<T extends { name: string }>(
   const foodType = restaurantTaskFoodType(task);
   return foodType == null
     ? places
-    : places.filter(place => restaurantPlaceMatchesFoodType(place.name, foodType));
+    : places.filter(place => restaurantPlaceMatchesFoodType(place, foodType));
 }
 
-export function groupRestaurantPlaceCandidates<T extends { name: string }>(
+export function groupRestaurantPlaceCandidates<T extends RestaurantPlaceLike>(
   poiType: string,
   places: T[],
   tasks: RestaurantTaskWithId[],
@@ -245,7 +257,7 @@ export function mergeRestaurantPlaceCandidates<T extends { placeId: string; name
   });
 }
 
-export function filterRestaurantPlacesForTasks<T extends { name: string }>(
+export function filterRestaurantPlacesForTasks<T extends RestaurantPlaceLike>(
   poiType: string,
   places: T[],
   tasks: RestaurantTaskLike[],
@@ -257,6 +269,6 @@ export function filterRestaurantPlacesForTasks<T extends { name: string }>(
   if (!hasFoodIntent) { return places; }
 
   return places.filter(place =>
-    restaurantTasks.some(task => restaurantTaskMatchesPlaceName(task, place.name)),
+    restaurantTasks.some(task => restaurantTaskMatchesPlaceName(task, place)),
   );
 }

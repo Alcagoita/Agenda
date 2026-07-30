@@ -41,6 +41,11 @@ describe('storeSubtypes', () => {
     expect(storePlaceMatchesSubtype('Aquaplante', 'clothing')).toBe(false);
   });
 
+  it('matches cached stores by stored subtype before falling back to name', () => {
+    expect(storePlaceMatchesSubtype({ name: 'store', storeSubtype: 'clothing' }, 'clothing')).toBe(true);
+    expect(storePlaceMatchesSubtype({ name: 'store', storeSubtype: 'pet' }, 'clothing')).toBe(false);
+  });
+
   it('filters store places only when a store task has subtype intent', () => {
     const places = [
       { name: 'Aquaplante', distanceMeters: 30 },
@@ -50,6 +55,13 @@ describe('storeSubtypes', () => {
     expect(filterStorePlacesForTasks('store', places, [
       { title: 'Buy a t-shirt', poi: 'store' },
     ])).toEqual([places[1]]);
+
+    expect(filterStorePlacesForTasks('store', [
+      { name: 'store', storeSubtype: 'clothing', distanceMeters: 30 },
+      { name: 'store', storeSubtype: 'pet', distanceMeters: 70 },
+    ], [
+      { title: 'Buy a t-shirt', poi: 'store' },
+    ])).toEqual([{ name: 'store', storeSubtype: 'clothing', distanceMeters: 30 }]);
 
     expect(filterStorePlacesForTasks('store', places, [
       { title: 'Buy something', poi: 'store' },

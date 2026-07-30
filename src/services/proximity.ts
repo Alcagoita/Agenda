@@ -923,7 +923,7 @@ function processProximityTick(
     if (learnedFoodType && !hasExplicitRestaurantFoodType) {
       for (const candidate of currentPlaces) {
         if (
-          restaurantPlaceMatchesFoodType(candidate.name, learnedFoodType) &&
+          restaurantPlaceMatchesFoodType(candidate, learnedFoodType) &&
           candidate.distanceMeters < HERO_RADIUS_M
         ) {
           allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
@@ -934,7 +934,7 @@ function processProximityTick(
     } else if (learnedStoreSubtype && !hasExplicitStoreSubtype) {
       for (const candidate of currentPlaces) {
         if (
-          storePlaceMatchesSubtype(candidate.name, learnedStoreSubtype) &&
+          storePlaceMatchesSubtype(candidate, learnedStoreSubtype) &&
           candidate.distanceMeters < HERO_RADIUS_M
         ) {
           allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
@@ -960,8 +960,8 @@ function processProximityTick(
       t => t.poi === heroType &&
         t.poiAlertSeenDate !== today &&
         (!heroPlace || (
-          restaurantTaskMatchesPlaceName(t, heroPlace.name) &&
-          storeTaskMatchesPlaceName(t, heroPlace.name)
+          restaurantTaskMatchesPlaceName(t, heroPlace) &&
+          storeTaskMatchesPlaceName(t, heroPlace)
         )),
     );
     if (

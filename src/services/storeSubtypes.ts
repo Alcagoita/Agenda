@@ -6,6 +6,7 @@ type StoreSubtypeDictionary = Record<string, {
   aliases: string[];
   stores: string[];
 }>;
+type StorePlaceLike = { name: string; storeSubtype?: StoreSubtype | null };
 type StoreTaskLike = { poi?: string | null; title: string; storeSubtype?: StoreSubtype | null };
 type StoreTaskWithId = StoreTaskLike & { id: string };
 type StoreSubtypeMatch = { key: StoreSubtype; alias: string };
@@ -141,13 +142,17 @@ function visibleLabelMatchScore(label: string, normalizedQuery: string): number 
 }
 
 export function storePlaceMatchesSubtype(
-  placeName: string,
+  place: string | StorePlaceLike,
   subtype: StoreSubtype | null,
 ): boolean {
   if (!subtype) { return true; }
+  if (typeof place !== 'string' && place.storeSubtype) {
+    return place.storeSubtype === subtype;
+  }
   const entry = STORE_SUBTYPE_DICTIONARY[subtype];
   if (!entry) { return false; }
 
+  const placeName = typeof place === 'string' ? place : place.name;
   const normalizedPlace = normalize(placeName);
   const compactPlace = compact(placeName);
   if (!normalizedPlace) { return false; }
@@ -164,28 +169,35 @@ export function storePlaceMatchesSubtype(
   });
 }
 
+export function inferStoreSubtypeFromPlaceName(placeName: string): StoreSubtype | null {
+  for (const subtype of listStoreSubtypes()) {
+    if (storePlaceMatchesSubtype(placeName, subtype)) { return subtype; }
+  }
+  return null;
+}
+
 export function storeTaskSubtype(task: StoreTaskLike): StoreSubtype | null {
   return task.poi === 'store' ? task.storeSubtype ?? inferStoreSubtype(task.title) : null;
 }
 
 export function storeTaskMatchesPlaceName(
   task: StoreTaskLike,
-  placeName: string,
+  place: string | StorePlaceLike,
 ): boolean {
   if (task.poi !== 'store') { return true; }
-  return storePlaceMatchesSubtype(placeName, storeTaskSubtype(task));
+  return storePlaceMatchesSubtype(place, storeTaskSubtype(task));
 }
 
 export function storeTaskMatchesAnyPlace(
   task: StoreTaskLike,
-  places: Array<{ name: string }>,
+  places: StorePlaceLike[],
 ): boolean {
   if (task.poi !== 'store') { return true; }
   const subtype = storeTaskSubtype(task);
-  return subtype == null || places.some(place => storePlaceMatchesSubtype(place.name, subtype));
+  return subtype == null || places.some(place => storePlaceMatchesSubtype(place, subtype));
 }
 
-export function storePlacesForTask<T extends { name: string }>(
+export function storePlacesForTask<T extends StorePlaceLike>(
   task: StoreTaskLike,
   places: T[],
 ): T[] {
@@ -193,10 +205,10 @@ export function storePlacesForTask<T extends { name: string }>(
   const subtype = storeTaskSubtype(task);
   return subtype == null
     ? places
-    : places.filter(place => storePlaceMatchesSubtype(place.name, subtype));
+    : places.filter(place => storePlaceMatchesSubtype(place, subtype));
 }
 
-export function groupStorePlaceCandidates<T extends { name: string }>(
+export function groupStorePlaceCandidates<T extends StorePlaceLike>(
   poiType: string,
   places: T[],
   tasks: StoreTaskWithId[],
@@ -229,7 +241,7 @@ export function mergeStorePlaceCandidates<T extends { placeId: string; name: str
   });
 }
 
-export function filterStorePlacesForTasks<T extends { name: string }>(
+export function filterStorePlacesForTasks<T extends StorePlaceLike>(
   poiType: string,
   places: T[],
   tasks: StoreTaskLike[],
@@ -241,6 +253,6 @@ export function filterStorePlacesForTasks<T extends { name: string }>(
   if (!hasSubtypeIntent) { return places; }
 
   return places.filter(place =>
-    storeTasks.some(task => storeTaskMatchesPlaceName(task, place.name)),
+    storeTasks.some(task => storeTaskMatchesPlaceName(task, place)),
   );
 }

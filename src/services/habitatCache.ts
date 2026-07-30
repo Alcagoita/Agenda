@@ -51,6 +51,14 @@ import { searchOsmPlaces } from './osmPlaces';
 import type { NearbyPlace } from './maps';
 import { getDistanceMeters } from './maps';
 import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
+import {
+  inferRestaurantFoodTypeFromPlaceName,
+  type RestaurantFoodType,
+} from './restaurantFoodTypes';
+import {
+  inferStoreSubtypeFromPlaceName,
+  type StoreSubtype,
+} from './storeSubtypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -176,6 +184,14 @@ function getDb(): SQLite.SQLiteDatabase {
     if (!existingColumns.has('website')) {
       database.execSync('ALTER TABLE habitat_places ADD COLUMN website TEXT');
     }
+    // KAN-317 migration — subtype metadata lets offline nearby matching keep
+    // restaurant/store precision without relying only on name matching.
+    if (!existingColumns.has('restaurant_food_type')) {
+      database.execSync('ALTER TABLE habitat_places ADD COLUMN restaurant_food_type TEXT');
+    }
+    if (!existingColumns.has('store_subtype')) {
+      database.execSync('ALTER TABLE habitat_places ADD COLUMN store_subtype TEXT');
+    }
     database.execSync('CREATE INDEX IF NOT EXISTS idx_habitat_cache_area ON habitat_places(cache_area_id);');
     db = database;
   }
@@ -208,6 +224,10 @@ export interface HabitatRow {
   footprint_area_m2: number | null;
   /** The place's own site from OSM's `website` tag (KAN-293); null when OSM has none. */
   website: string | null;
+  /** Restaurant food subtype inferred at cache-write time (KAN-317). */
+  restaurant_food_type: RestaurantFoodType | null;
+  /** Store subtype inferred at cache-write time (KAN-317). */
+  store_subtype: StoreSubtype | null;
 }
 
 function generateId(): string {
@@ -228,6 +248,20 @@ export interface PlaceCandidate {
   footprintAreaM2?: number;
   /** The place's own site from OSM's `website` tag (KAN-293); omitted when OSM has none. */
   website?: string;
+  /** Optional subtype metadata for restaurant rows (KAN-317). */
+  restaurantFoodType?: RestaurantFoodType | null;
+  /** Optional subtype metadata for store rows (KAN-317). */
+  storeSubtype?: StoreSubtype | null;
+}
+
+function candidateRestaurantFoodType(candidate: PlaceCandidate): RestaurantFoodType | null {
+  if (candidate.poiType !== 'restaurant') { return null; }
+  return candidate.restaurantFoodType ?? inferRestaurantFoodTypeFromPlaceName(candidate.name);
+}
+
+function candidateStoreSubtype(candidate: PlaceCandidate): StoreSubtype | null {
+  if (candidate.poiType !== 'store') { return null; }
+  return candidate.storeSubtype ?? inferStoreSubtypeFromPlaceName(candidate.name);
 }
 
 /**
@@ -320,6 +354,8 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   const database = getDb();
   const now = Date.now();
   const isOsmSourced = candidate.source.osm != null;
+  const restaurantFoodType = candidateRestaurantFoodType(candidate);
+  const storeSubtype = candidateStoreSubtype(candidate);
 
   const match = findMatchingRow(
     database, candidate.poiType, candidate.name, candidate.isGenericName,
@@ -339,6 +375,8 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
            osm_fetched_at    = CASE WHEN ? = 1 THEN ? ELSE osm_fetched_at END,
            footprint_area_m2 = COALESCE(?, footprint_area_m2),
            website           = COALESCE(?, website),
+           restaurant_food_type = COALESCE(?, restaurant_food_type),
+           store_subtype        = COALESCE(?, store_subtype),
            cache_area_id     = COALESCE(cache_area_id, ?),
            expires_at        = CASE
                                 WHEN ? IS NULL THEN expires_at
@@ -352,6 +390,8 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
         osmFlag, candidate.lat, osmFlag, candidate.lng, osmFlag, now,
         candidate.footprintAreaM2 ?? null,
         candidate.website ?? null,
+        restaurantFoodType,
+        storeSubtype,
         tripCacheAreaId,
         tripExpiresAt, tripExpiresAt, tripExpiresAt,
         now, match.id,
@@ -367,12 +407,12 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   const id = generateId();
   database.runSync(
     `INSERT INTO habitat_places
-       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, candidate.poiType, candidate.name, candidate.isGenericName === true ? 1 : 0, candidate.lat, candidate.lng,
       candidate.source.google ?? null, candidate.source.osm ?? null, now, now,
       trip?.cacheAreaId ?? null, trip?.expiresAt ?? null, candidate.footprintAreaM2 ?? null,
-      candidate.website ?? null],
+      candidate.website ?? null, restaurantFoodType, storeSubtype],
   );
   return id;
 }
@@ -509,6 +549,8 @@ export function queryHabitatCache(
         distanceMeters,
         footprintAreaM2: row.footprint_area_m2 ?? undefined,
         website:         row.website ?? undefined,
+        restaurantFoodType: row.restaurant_food_type ?? undefined,
+        storeSubtype:       row.store_subtype ?? undefined,
       });
     }
 
@@ -546,7 +588,15 @@ export function getHabitatPlaceById(id: string): NearbyPlace | null {
       [id],
     );
     if (!row) { return null; }
-    return { placeId: row.id, name: row.name, lat: row.lat, lng: row.lng, distanceMeters: 0 };
+    return {
+      placeId: row.id,
+      name: row.name,
+      lat: row.lat,
+      lng: row.lng,
+      distanceMeters: 0,
+      restaurantFoodType: row.restaurant_food_type ?? undefined,
+      storeSubtype:       row.store_subtype ?? undefined,
+    };
   } catch (err) {
     console.warn('[habitatCache] getHabitatPlaceById failed', err);
     return null;
