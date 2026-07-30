@@ -1,4 +1,5 @@
 import {
+  BRAND_SUGGESTION_LIMIT,
   getBrandSuggestions,
   getCanonicalBrand,
 } from '../../src/services/brandDictionary';
@@ -12,6 +13,11 @@ describe('brandDictionary', () => {
   it('returns canonical spelling for exact normalized matches', () => {
     expect(getCanonicalBrand('restaurant', 'mcdonalds')).toBe("McDonald's");
     expect(getCanonicalBrand('supermarket', 'pingo doce')).toBe('Pingo Doce');
+    expect(getCanonicalBrand('supermarket', 'pingodoce')).toBe('Pingo Doce');
+  });
+
+  it('limits empty-query suggestions for a POI type', () => {
+    expect(getBrandSuggestions('cafe', '')).toHaveLength(BRAND_SUGGESTION_LIMIT);
   });
 
   it('does not match brands from another POI type', () => {

@@ -34,12 +34,14 @@ describe('TeachSheet', () => {
     const onSave = jest.fn();
     render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);
 
+    const input = screen.getByPlaceholderText(COPY.places.teachNamePlaceholder);
     fireEvent.press(screen.getByLabelText('Café'));
-    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachNamePlaceholder), 'star');
+    fireEvent.changeText(input, 'star');
     fireEvent.press(screen.getByText('Starbucks'));
     fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
 
     expect(onSave).toHaveBeenCalledWith('cafe', 'Starbucks');
+    expect(input.props.value).toBe('');
   });
 
   it('does not save free text that is not in the bundled brand dictionary', () => {
@@ -67,6 +69,20 @@ describe('TeachSheet', () => {
     fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
 
     expect(onSave).toHaveBeenCalledWith('cafe', 'Starbucks');
+  });
+
+  it('clears the selected suggestion when the brand input is edited', () => {
+    const onSave = jest.fn();
+    render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);
+
+    const input = screen.getByPlaceholderText(COPY.places.teachNamePlaceholder);
+    fireEvent.press(screen.getByLabelText('Café'));
+    fireEvent.changeText(input, 'star');
+    fireEvent.press(screen.getByText('Starbucks'));
+    fireEvent.changeText(input, 'Starbuck');
+    fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('resets the brand field when the POI type changes', () => {

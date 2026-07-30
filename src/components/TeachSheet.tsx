@@ -8,7 +8,7 @@
  * Self-contained: owns its own form state and resets on every dismissal, so
  * reopening always starts empty.
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
@@ -27,6 +27,19 @@ export interface TeachSheetProps {
 export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps) {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
+  const themedStyles = useMemo(() => StyleSheet.create({
+    suggestionRow: {
+      borderColor: palette.line,
+      backgroundColor: palette.surface,
+    },
+    suggestionRowSelected: {
+      borderColor: palette.accent,
+      backgroundColor: palette.nearTint,
+    },
+    saveBtn: {
+      backgroundColor: palette.accent,
+    },
+  }), [palette]);
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
@@ -92,10 +105,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                     onPress={() => { setName(brand); setSelectedBrand(brand); }}
                     style={[
                       styles.suggestionRow,
-                      {
-                        borderColor: selected ? palette.accent : palette.line,
-                        backgroundColor: selected ? palette.nearTint : palette.surface,
-                      },
+                      selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
                     ]}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
@@ -110,7 +120,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
           )}
 
           <Pressable
-            style={[styles.saveBtn, { backgroundColor: palette.accent }, !canSave && styles.saveBtnDisabled]}
+            style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
             disabled={!canSave}
             onPress={() => { if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); } }}
             accessibilityRole="button"
@@ -143,7 +153,7 @@ const styles = StyleSheet.create({
   },
   suggestionList: { gap: 8, marginTop: -4 },
   suggestionRow: {
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: radii.ctaBtn,
     borderWidth: 1,
     justifyContent: 'center',
