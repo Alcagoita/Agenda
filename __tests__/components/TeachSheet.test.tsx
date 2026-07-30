@@ -55,6 +55,23 @@ describe('TeachSheet', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  it('shows brand suggestions only after the user types', () => {
+    render(<TeachSheet visible onClose={jest.fn()} onSave={jest.fn()} />);
+
+    const input = screen.getByPlaceholderText(COPY.places.teachNamePlaceholder);
+    fireEvent.press(screen.getByLabelText('Café'));
+
+    expect(screen.queryByText('Starbucks')).toBeNull();
+
+    fireEvent.changeText(input, '   ');
+
+    expect(screen.queryByText('Starbucks')).toBeNull();
+
+    fireEvent.changeText(input, 'star');
+
+    expect(screen.getByText('Starbucks')).toBeTruthy();
+  });
+
   it('requires choosing a suggestion instead of only typing an exact brand name', () => {
     const onSave = jest.fn();
     render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);

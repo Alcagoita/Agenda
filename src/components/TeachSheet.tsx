@@ -45,6 +45,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const canonicalName = getCanonicalBrand(type, name);
   const suggestions = getBrandSuggestions(type, name);
+  const shouldShowSuggestions = type != null && name.trim().length > 0 && suggestions.length > 0;
   const canSave = type != null && selectedBrand != null && selectedBrand === canonicalName;
 
   const reset = () => { setType(null); setName(''); setSelectedBrand(null); };
@@ -95,7 +96,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
             onChangeText={value => { setName(value); setSelectedBrand(null); }}
             returnKeyType="done"
           />
-          {type && suggestions.length > 0 && (
+          {shouldShowSuggestions && (
             <View style={styles.suggestionList}>
               {suggestions.map(brand => {
                 const selected = brand === selectedBrand;
