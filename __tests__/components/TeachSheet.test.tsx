@@ -63,6 +63,10 @@ describe('TeachSheet', () => {
 
     expect(screen.queryByText('Starbucks')).toBeNull();
 
+    fireEvent.changeText(input, '   ');
+
+    expect(screen.queryByText('Starbucks')).toBeNull();
+
     fireEvent.changeText(input, 'star');
 
     expect(screen.getByText('Starbucks')).toBeTruthy();
