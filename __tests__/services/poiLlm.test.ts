@@ -32,6 +32,14 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchPlaceTypesProxy: jest.fn(),
 }));
 
+jest.mock('expo-sqlite', () => ({
+  openDatabaseSync: jest.fn(() => ({
+    execSync: jest.fn(),
+    getFirstSync: jest.fn(),
+    runSync: jest.fn(),
+  })),
+}));
+
 import {
   tokenize,
   validatePoi,
@@ -197,6 +205,17 @@ describe('inferPoiForQuickAdd', () => {
   it('uses the built-in cafe for generic coffee phrasing without calling the LLM classifier', async () => {
     expect(await inferPoiForQuickAdd('go out for coffee')).toBe('cafe');
     expect(mockLoad).not.toHaveBeenCalled();
+  });
+
+  it('keeps restaurant food intent on the broad restaurant type', async () => {
+    expect(await inferPoiForQuickAdd('go out to sushi')).toBe('restaurant');
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
+  it('does not force ambiguous food shopping or preparation phrases to restaurant', async () => {
+    await expect(inferPoiForQuickAdd('buy pasta')).resolves.not.toBe('restaurant');
+    await expect(inferPoiForQuickAdd('buy meat')).resolves.not.toBe('restaurant');
+    await expect(inferPoiForQuickAdd('make salad')).resolves.not.toBe('restaurant');
   });
 
   it('keeps coffee roastery when the title is explicit', async () => {

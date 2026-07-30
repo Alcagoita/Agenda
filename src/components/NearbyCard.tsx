@@ -51,12 +51,15 @@ import { Task } from '../types';
 import { ChevronRightIcon, PoiIcon, RefreshIcon } from './AppIcon';
 import { logTap } from '../services/analytics';
 import { COPY } from '../constants/copy';
+import { restaurantPlacesForTask, restaurantTaskMatchesAnyPlace } from '../services/restaurantFoodTypes';
 
 // Distance threshold that separates the orange hero zone from the grey zone.
 const HERO_RADIUS_M = 100;
 
 function nearestDistanceForTask(task: Task, poiPlaces: PlacesMap): number {
-  return task.poi ? poiPlaces[task.poi]?.[0]?.distanceMeters ?? Number.POSITIVE_INFINITY : Number.POSITIVE_INFINITY;
+  if (!task.poi) { return Number.POSITIVE_INFINITY; }
+  const places = restaurantPlacesForTask(task, poiPlaces[task.poi] ?? []);
+  return places[0]?.distanceMeters ?? Number.POSITIVE_INFINITY;
 }
 
 function capitalizeFirstLetter(text: string): string {
@@ -375,9 +378,10 @@ function NearbyCard({
   const heroEntries = poiTasks.reduce<Array<{ task: Task; places: NearbyPlace[]; poiType: string }>>(
     (acc, t) => {
       if (!t.poi) { return acc; }
-      const places = poiPlaces[t.poi];
+      const places = restaurantPlacesForTask(t, poiPlaces[t.poi] ?? []);
       if (!places?.length || places[0].distanceMeters >= HERO_RADIUS_M) { return acc; }
-      if (acc.find(e => e.poiType === t.poi)) { return acc; }
+      if (!restaurantTaskMatchesAnyPlace(t, places)) { return acc; }
+      if (t.poi !== 'restaurant' && acc.find(e => e.poiType === t.poi)) { return acc; }
       acc.push({ task: t, places, poiType: t.poi });
       return acc;
     },
@@ -390,7 +394,8 @@ function NearbyCard({
   const heroPoiTypes = new Set(heroEntries.map(e => e.poiType));
   const greyTasks = poiTasks.filter(t => {
     if (!t.poi || heroPoiTypes.has(t.poi)) { return false; }
-    return !!poiPlaces[t.poi]?.length;
+    const places = restaurantPlacesForTask(t, poiPlaces[t.poi] ?? []);
+    return !!places?.length && restaurantTaskMatchesAnyPlace(t, places);
   }).sort((a, b) => nearestDistanceForTask(a, poiPlaces) - nearestDistanceForTask(b, poiPlaces));
 
   const hasContent = poiTasks.length > 0 && (heroEntries.length > 0 || greyTasks.length > 0);
@@ -455,7 +460,7 @@ function NearbyCard({
             style={styles.carousel}
             contentContainerStyle={styles.carouselContent}>
             {heroEntries.map(({ task, places, poiType }) => (
-              <View key={poiType} style={{ width: slideWidth }}>
+              <View key={`${poiType}:${task.id}`} style={{ width: slideWidth }}>
                 <HeroCard poiType={poiType} task={task} places={places} />
               </View>
             ))}
@@ -465,11 +470,11 @@ function NearbyCard({
               dot widens into a pill; inactive dots are faint. */}
           {heroEntries.length > 1 && (
             <View style={styles.dotsRow} testID="nearby-page-dots">
-              {heroEntries.map(({ poiType }, i) => {
+              {heroEntries.map(({ task, poiType }, i) => {
                 const active = i === Math.min(activeIndex, heroEntries.length - 1);
                 return (
                   <View
-                    key={poiType}
+                    key={`${poiType}:${task.id}`}
                     testID={`nearby-page-dot${active ? '-active' : ''}`}
                     style={[
                       styles.dot,
@@ -494,7 +499,7 @@ function NearbyCard({
             <AlsoCloseRow
               key={task.id}
               task={task}
-              place={task.poi ? poiPlaces[task.poi]?.[0] : undefined}
+              place={task.poi ? restaurantPlacesForTask(task, poiPlaces[task.poi] ?? [])[0] : undefined}
               isFirst={index === 0}
             />
           ))}

@@ -605,3 +605,15 @@ export function resolvePoiIconType(type: string): string {
 
   return type;
 }
+
+export function FoodTypeIcon({ color, size = 24 }: IconProps) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none' };
+  return (
+    <Svg {...p}>
+      <Path d="M5 10h14v1.5a7 7 0 0 1-14 0V10z" stroke={color} strokeWidth={1.6} {...S} />
+      <Path d="M7 18h10" stroke={color} strokeWidth={1.6} {...S} />
+      <Path d="M8 7c1.2-1 2.4-1 3.6 0M12.4 7c1.2-1 2.4-1 3.6 0" stroke={color} strokeWidth={1.6} {...S} />
+      <Path d="M4 10h16" stroke={color} strokeWidth={1.6} {...S} />
+    </Svg>
+  );
+}

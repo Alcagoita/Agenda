@@ -209,6 +209,10 @@ export const styles = StyleSheet.create({
     fontFamily: fonts.families.regular,
     textAlign:  'center',
   },
+  subtypeSection: {
+    gap: 10,
+    paddingTop: 2,
+  },
 
   // ── Category ──
   categoryRow: {

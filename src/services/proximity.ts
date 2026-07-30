@@ -94,6 +94,15 @@ import { recordLiveResult, refreshHabitatCacheIfStale, queryHabitatCache, findEx
 import { saveProximitySnapshot, loadProximitySnapshot } from './proximitySnapshot';
 import { useToastStore } from '../store/toastStore';
 import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
+import {
+  filterRestaurantPlacesForTasks,
+  groupRestaurantPlaceCandidates,
+  mergeRestaurantPlaceCandidates,
+  parseRestaurantFoodTypeFavouriteName,
+  restaurantPlaceMatchesFoodType,
+  restaurantTaskFoodType,
+  restaurantTaskMatchesPlaceName,
+} from './restaurantFoodTypes';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -802,7 +811,11 @@ function processProximityTick(
   const allPlaces: PlacesMap = {};
 
   for (const poiType of uniquePoiTypes) {
-    const places = results[poiType] ?? [];
+    const rawPlaces = results[poiType] ?? [];
+    const restaurantGroups = groupRestaurantPlaceCandidates(poiType, rawPlaces, undonePoiTasks);
+    const places = poiType === 'restaurant'
+      ? mergeRestaurantPlaceCandidates(restaurantGroups)
+      : filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks);
 
     // Reconcile live results against the cache's cross-source identity
     // (KAN-229): a place already known to both Google and the OSM cache
@@ -842,10 +855,18 @@ function processProximityTick(
     // the TRUE nearest distance only — KAN-230's learned-place preference
     // (below) must never influence which TYPE wins the cross-type race,
     // only which specific PLACE represents the type that already won.
-    if (dist < HERO_RADIUS_M && dist < heroDistance) {
-      heroType     = poiType;
-      heroPlace    = nearest;
-      heroDistance = dist;
+    const heroCandidateLists = poiType === 'restaurant'
+      ? restaurantGroups.map(group => group.places)
+      : [places];
+    for (const candidates of heroCandidateLists) {
+      const candidateNearest = candidates[0];
+      if (!candidateNearest) { continue; }
+      const candidateDist = candidateNearest.distanceMeters;
+      if (candidateDist < HERO_RADIUS_M && candidateDist < heroDistance) {
+        heroType     = poiType;
+        heroPlace    = candidateNearest;
+        heroDistance = candidateDist;
+      }
     }
   }
 
@@ -873,9 +894,25 @@ function processProximityTick(
     const winningType = heroType;
     const learnedForType = getLearnedPlaceForPoiType(_learnedPlaces, winningType);
     const currentPlaces = allPlaces[winningType] ?? [];
+    const learnedFoodType = winningType === 'restaurant' && learnedForType
+      ? parseRestaurantFoodTypeFavouriteName(learnedForType.name)
+      : null;
+    const hasExplicitRestaurantFoodType = winningType === 'restaurant' &&
+      undonePoiTasks.some(t => t.poi === 'restaurant' && restaurantTaskFoodType(t) != null);
     // KAN-304 — prefer the learned BRAND (by name), not a specific place id, so
     // any branch of the user's preferred brand represents the type.
-    if (learnedForType && currentPlaces[0]?.name !== learnedForType.name) {
+    if (learnedFoodType && !hasExplicitRestaurantFoodType) {
+      for (const candidate of currentPlaces) {
+        if (
+          restaurantPlaceMatchesFoodType(candidate.name, learnedFoodType) &&
+          candidate.distanceMeters < HERO_RADIUS_M
+        ) {
+          allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
+          heroPlace = candidate;
+          break;
+        }
+      }
+    } else if (learnedForType && !learnedFoodType && currentPlaces[0]?.name !== learnedForType.name) {
       for (const candidate of currentPlaces.slice(1)) {
         if (candidate.name === learnedForType.name && candidate.distanceMeters < HERO_RADIUS_M) {
           allPlaces[winningType] = [candidate, ...currentPlaces.filter(p => p !== candidate)];
@@ -890,7 +927,9 @@ function processProximityTick(
   if (heroType !== null && heroType !== _currentNearbyType) {
     const today    = todayISO();
     const eligible = undonePoiTasks.filter(
-      t => t.poi === heroType && t.poiAlertSeenDate !== today,
+      t => t.poi === heroType &&
+        t.poiAlertSeenDate !== today &&
+        (!heroPlace || restaurantTaskMatchesPlaceName(t, heroPlace.name)),
     );
     if (
       eligible.length > 0 &&

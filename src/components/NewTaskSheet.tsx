@@ -55,6 +55,8 @@ import { COPY } from '../constants/copy';
 import { useToastStore } from '../store/toastStore';
 import RotatingTitlePlaceholder from './RotatingTitlePlaceholder';
 import { localPoiLabel } from '../services/poiTypeCache';
+import FoodTypeSelector from './FoodTypeSelector';
+import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -215,6 +217,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [title,    setTitle]    = useState('');
     const [category, setCategory] = useState<string | null>(null);
     const [poi,      setPoi]      = useState<string | null>(null);
+    const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
     // KAN-249 — the raw inference result, frozen the moment the user touches
     // the carousel. Compared against `poi` at submit time to tell a Confirm
     // (poi === suggestedPoi) from a Replace (poi !== suggestedPoi); null means
@@ -284,6 +287,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setTitle('');
       setCategory(null);
       setPoi(null);
+      setRestaurantFoodType(null);
       setSuggestedPoi(null);
       setSuggestedTitle(null);
       setPoiTouched(false);
@@ -399,6 +403,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     }), []);
 
     const canSubmit = title.trim().length > 0 && poi !== null;
+
+    useEffect(() => {
+      if (poi !== 'restaurant') { setRestaurantFoodType(null); }
+    }, [poi]);
 
     // KAN-249 — the leading suggestion tile's content. `suggestionType` is
     // sticky once inference lands on something: replacing it with a
@@ -602,6 +610,25 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                 ))}
               </ScrollView>
               </View>
+
+              {poi === 'restaurant' && (
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.subtypeQuestion}
+                    </Text>
+                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                      {COPY.newTaskSheet.catOptional}
+                    </Text>
+                  </View>
+                  <View style={styles.foodTypePad}>
+                  <FoodTypeSelector
+                    selected={restaurantFoodType}
+                    onSelect={setRestaurantFoodType}
+                  />
+                  </View>
+                </View>
+              )}
 
               {/* ── Category question (optional) ── */}
               <View style={styles.questionRow}>
@@ -825,6 +852,14 @@ const styles = StyleSheet.create({
     paddingLeft:        22,
     paddingBottom:       4,
     gap:                10,
+  },
+  foodTypePad: {
+    paddingLeft:   22,
+    paddingTop:     8,
+    paddingBottom:  2,
+  },
+  foodTypeSection: {
+    paddingTop: 2,
   },
   carouselMask: {
     // Soft fade on the trailing edge via paddingRight on the content and overflow

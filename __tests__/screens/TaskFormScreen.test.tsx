@@ -54,6 +54,15 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchPlaceTypesProxy: jest.fn(),
 }));
 
+jest.mock('expo-sqlite', () => ({
+  openDatabaseSync: jest.fn(() => ({
+    execSync: jest.fn(),
+    getFirstSync: jest.fn(),
+    getAllSync: jest.fn(() => []),
+    runSync: jest.fn(),
+  })),
+}));
+
 // KAN-280 — notifications.ts transitively imports @notifee/react-native
 // (native module, unavailable under Jest) — mocked at the service boundary,
 // matching this suite's existing mocking style (see achievements.ts above).
