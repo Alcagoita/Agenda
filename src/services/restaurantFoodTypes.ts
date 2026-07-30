@@ -3,6 +3,7 @@ import { normalize } from './poiInference';
 
 type RestaurantFoodDictionary = Record<string, {
   label: string;
+  labelPt?: string;
   aliases: string[];
   restaurants: string[];
 }>;
@@ -38,6 +39,16 @@ export function inferRestaurantFoodType(text: string): RestaurantFoodType | null
 
 export function restaurantFoodTypeLabel(foodType: RestaurantFoodType): string {
   return RESTAURANT_FOOD_DICTIONARY[foodType]?.label ?? foodType;
+}
+
+export function restaurantFoodTypeDisplayLabel(foodType: RestaurantFoodType, language?: string): string {
+  const entry = RESTAURANT_FOOD_DICTIONARY[foodType];
+  if (!entry) { return foodType; }
+  return language === 'pt-PT' ? entry.labelPt ?? entry.label : entry.label;
+}
+
+export function listRestaurantFoodTypes(): RestaurantFoodType[] {
+  return Object.keys(RESTAURANT_FOOD_DICTIONARY) as RestaurantFoodType[];
 }
 
 export function restaurantPlaceMatchesFoodType(

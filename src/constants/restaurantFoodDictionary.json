@@ -1,6 +1,7 @@
 {
   "sushi": {
     "label": "Sushi",
+    "labelPt": "Sushi",
     "aliases": ["sushi", "japanese", "japonês", "japones"],
     "restaurants": [
       "Yakuza by Olivier",
@@ -17,6 +18,7 @@
   },
   "vegetarian": {
     "label": "Vegetarian",
+    "labelPt": "Vegetariano",
     "aliases": ["vegetarian", "vegetarian food", "vegan", "vegetariano", "vegetariana", "vegano", "vegana"],
     "restaurants": [
       "The Green Affair",
@@ -32,6 +34,7 @@
   },
   "portuguese": {
     "label": "Portuguese",
+    "labelPt": "Português",
     "aliases": ["portuguese", "português", "portuguesa", "tasca", "comida portuguesa"],
     "restaurants": [
       "Portugália",
@@ -46,6 +49,7 @@
   },
   "italian": {
     "label": "Italian",
+    "labelPt": "Italiano",
     "aliases": ["italian", "italiano", "italiana", "pasta", "pizza"],
     "restaurants": [
       "ZeroZero",
@@ -60,6 +64,7 @@
   },
   "burger": {
     "label": "Burgers",
+    "labelPt": "Hambúrguer",
     "aliases": ["burger", "burgers", "hamburger", "hambúrguer", "hamburguer", "hambúrgueres", "hamburgueres"],
     "restaurants": [
       "H3",
@@ -73,6 +78,7 @@
   },
   "healthy": {
     "label": "Healthy",
+    "labelPt": "Saudável",
     "aliases": ["healthy", "salad", "salads", "saudável", "saudavel", "salada", "saladas"],
     "restaurants": [
       "Vitaminas",
@@ -86,6 +92,7 @@
   },
   "indian": {
     "label": "Indian",
+    "labelPt": "Indiano",
     "aliases": ["indian", "indiano", "indiana", "caril", "curry"],
     "restaurants": [
       "Natraj",
@@ -98,6 +105,7 @@
   },
   "thai": {
     "label": "Thai",
+    "labelPt": "Tailandês",
     "aliases": ["thai", "tailandês", "tailandes", "tailandesa"],
     "restaurants": [
       "Boa-Bao",
@@ -109,6 +117,7 @@
   },
   "mexican": {
     "label": "Mexican",
+    "labelPt": "Mexicano",
     "aliases": ["mexican", "mexicano", "mexicana", "taco", "tacos", "burrito", "burritos"],
     "restaurants": [
       "Taco Bell",
@@ -120,6 +129,7 @@
   },
   "steak": {
     "label": "Steak",
+    "labelPt": "Bife",
     "aliases": ["steak", "steakhouse", "meat", "carne", "bife", "bifes"],
     "restaurants": [
       "Sala de Corte",

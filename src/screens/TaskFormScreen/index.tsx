@@ -42,12 +42,14 @@ import { useToastStore } from '../../store/toastStore';
 import RotatingTitlePlaceholder from '../../components/RotatingTitlePlaceholder';
 import MiniCalendar from '../../components/MiniCalendar';
 import MiniTimePicker from '../../components/MiniTimePicker';
+import FoodTypeSelector from '../../components/FoodTypeSelector';
 import { scheduleTaskReminder, cancelTaskReminder } from '../../services/notifications';
 import { isTaskPoiFarAway, openTakeMeThereMaps, getTakeMeThereA11yLabel } from '../../services/takeMeThere';
 import { getTypeSuggestions } from './poiSuggestions';
 import { PoiTile } from './PoiTile';
 import { POI_TILE_WIDTH, styles } from './styles';
 import { localPoiLabel } from '../../services/poiTypeCache';
+import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,6 +157,7 @@ export default function TaskFormScreen() {
     if (initialPoi && !isCatalogPoiType(initialPoi)) { return initialPoi; }
     return null;
   });
+  const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
   const [focused,       setFocused]       = useState(false);
   const [suggestedPoi, setSuggestedPoi] = useState<string | null>(
     existingTask?.poi ?? (hasExplicitInitialPoi ? null : initialPoi ?? null),
@@ -283,6 +286,10 @@ export default function TaskFormScreen() {
 
   // poi is required: quick-pick key → customPoiType (from suggestion) → raw query text
   const effectivePoi: string | null = poiKey ?? customPoiType ?? (query.trim() || null);
+
+  useEffect(() => {
+    if (effectivePoi !== 'restaurant') { setRestaurantFoodType(null); }
+  }, [effectivePoi]);
 
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
   const suggestions = !customPoiType && query.trim() ? getTypeSuggestions(query) : [];
@@ -704,6 +711,13 @@ export default function TaskFormScreen() {
               ))}
             </ScrollView>
           </View>
+
+          {effectivePoi === 'restaurant' && (
+            <FoodTypeSelector
+              selected={restaurantFoodType}
+              onSelect={setRestaurantFoodType}
+            />
+          )}
         </View>
         )}
 
