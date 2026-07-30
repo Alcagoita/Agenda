@@ -6,7 +6,7 @@ type StoreSubtypeDictionary = Record<string, {
   aliases: string[];
   stores: string[];
 }>;
-type StoreTaskLike = { poi?: string | null; title: string };
+type StoreTaskLike = { poi?: string | null; title: string; storeSubtype?: StoreSubtype | null };
 type StoreTaskWithId = StoreTaskLike & { id: string };
 type StoreSubtypeMatch = { key: StoreSubtype; alias: string };
 
@@ -33,11 +33,26 @@ function compact(value: string): string {
   return normalize(value).replace(/\s/g, '');
 }
 
+function compactAliasMatchesTokenBoundary(normalizedTitle: string, normalizedAlias: string): boolean {
+  const compactAlias = compact(normalizedAlias);
+  if (!compactAlias) { return false; }
+  const tokens = normalizedTitle.split(' ').filter(Boolean);
+
+  for (let start = 0; start < tokens.length; start++) {
+    let candidate = '';
+    for (let end = start; end < tokens.length; end++) {
+      candidate += tokens[end];
+      if (candidate === compactAlias) { return true; }
+      if (candidate.length >= compactAlias.length) { break; }
+    }
+  }
+  return false;
+}
+
 function findSubtypeMatch(title: string): StoreSubtypeMatch | null {
   const normalizedTitle = normalize(title);
   if (!normalizedTitle) { return null; }
   const haystack = ` ${normalizedTitle} `;
-  const compactTitle = compact(title);
   let best: StoreSubtypeMatch | null = null;
 
   for (const [key, entry] of Object.entries(STORE_SUBTYPE_DICTIONARY) as Array<[StoreSubtype, StoreSubtypeDictionary[string]]>) {
@@ -47,7 +62,7 @@ function findSubtypeMatch(title: string): StoreSubtypeMatch | null {
       const compactAlias = compact(alias);
       const matched = normalizedAlias.includes(' ')
         ? haystack.includes(` ${normalizedAlias} `)
-        : haystack.includes(` ${normalizedAlias} `) || compactTitle.includes(compactAlias);
+        : haystack.includes(` ${normalizedAlias} `) || compactAliasMatchesTokenBoundary(normalizedTitle, compactAlias);
       if (!matched) { continue; }
       if (!best || normalizedAlias.length > normalize(best.alias).length) {
         best = { key, alias };
@@ -150,7 +165,7 @@ export function storePlaceMatchesSubtype(
 }
 
 export function storeTaskSubtype(task: StoreTaskLike): StoreSubtype | null {
-  return task.poi === 'store' ? inferStoreSubtype(task.title) : null;
+  return task.poi === 'store' ? task.storeSubtype ?? inferStoreSubtype(task.title) : null;
 }
 
 export function storeTaskMatchesPlaceName(

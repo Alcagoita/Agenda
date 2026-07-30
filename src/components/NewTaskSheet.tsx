@@ -437,6 +437,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           done:     false,
           date:     todayISO(),
           poi,
+          ...(poi === 'store' && storeSubtype ? { storeSubtype } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
         // fired for THIS title. Inference is skipped once the carousel is
@@ -462,7 +463,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         console.warn('[NewTaskSheet] addTask failed', err);
         setSubmitting(false);
       }
-    }, [title, category, poi, suggestedPoi, suggestedTitle, uid, submitting]);
+    }, [title, category, poi, storeSubtype, suggestedPoi, suggestedTitle, uid, submitting]);
 
     const handleMoreDetails = useCallback(() => {
       handleClose();
@@ -470,9 +471,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         uid,
         initialTitle: title.trim() || undefined,
         initialPoi:   poi ?? undefined,
+        initialStoreSubtype: poi === 'store' ? storeSubtype ?? undefined : undefined,
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, poi, poiTouched]);
+    }, [handleClose, uid, title, poi, storeSubtype, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.

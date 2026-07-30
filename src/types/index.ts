@@ -1,5 +1,6 @@
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { COPY } from '../constants/copy';
+import type { StoreSubtype } from '../services/storeSubtypes';
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -193,6 +194,8 @@ export interface Task {
    * categories it may be any Google Places type (e.g. "gym", "restaurant").
    */
   poi?: string;
+  /** Optional store subtype selected by the user for store tasks (KAN-315). */
+  storeSubtype?: StoreSubtype;
   /** Google Places ID if the user pinned a specific place — optional. */
   poiPlaceId?: string;
   /**

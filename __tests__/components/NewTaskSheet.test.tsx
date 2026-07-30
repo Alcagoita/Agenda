@@ -41,6 +41,15 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchPlaceTypesProxy: jest.fn(),
 }));
 
+jest.mock('expo-sqlite', () => ({
+  openDatabaseSync: jest.fn(() => ({
+    execSync: jest.fn(),
+    getFirstSync: jest.fn(),
+    getAllSync: jest.fn(() => []),
+    runSync: jest.fn(),
+  })),
+}));
+
 jest.mock('../../src/services/poiLlm', () => ({
   inferPoiForQuickAdd: (...args: unknown[]) => mockInferPoiForQuickAdd(...args),
   learnFromClassification: (...args: unknown[]) => mockLearnFromClassification(...args),
@@ -524,6 +533,25 @@ describe('addTask submission', () => {
     expect(onTaskAdded).toHaveBeenCalledTimes(1);
   });
 
+  it('persists the selected store subtype when creating a store task', async () => {
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a t-shirt');
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Add it'));
+    });
+
+    expect(mockAddTask).toHaveBeenCalledWith(
+      'test-uid',
+      expect.objectContaining({
+        poi:          'store',
+        storeSubtype: 'clothing',
+      }),
+    );
+  });
+
   it('does not call onTaskAdded when addTask fails', async () => {
     mockAddTask.mockRejectedValue(new Error('Network error'));
     const onTaskAdded = jest.fn();
@@ -557,6 +585,7 @@ describe('"More details" navigation', () => {
         uid:                          'test-uid',
         initialTitle:                 'Visit police',
         initialPoi:                   'police',
+        initialStoreSubtype:          undefined,
         initialPoiExplicitlySelected: false,
       });
     }, { timeout: 500 });
@@ -578,6 +607,26 @@ describe('"More details" navigation', () => {
         uid:                          'test-uid',
         initialTitle:                 'Buy groceries',
         initialPoi:                   'supermarket',
+        initialStoreSubtype:          undefined,
+        initialPoiExplicitlySelected: true,
+      });
+    }, { timeout: 500 });
+  });
+
+  it('passes the selected store subtype through More details', async () => {
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a t-shirt');
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    fireEvent.press(screen.getByLabelText('More details'));
+
+    await waitFor(() => {
+      expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', {
+        uid:                          'test-uid',
+        initialTitle:                 'Buy a t-shirt',
+        initialPoi:                   'store',
+        initialStoreSubtype:          'clothing',
         initialPoiExplicitlySelected: true,
       });
     }, { timeout: 500 });
@@ -592,6 +641,7 @@ describe('"More details" navigation', () => {
         uid:                          'test-uid',
         initialTitle:                 undefined,
         initialPoi:                   undefined,
+        initialStoreSubtype:          undefined,
         initialPoiExplicitlySelected: false,
       });
     }, { timeout: 500 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { S } from './AppIcon/shared';
 import { fonts, radius, spacing } from '../theme/tokens';
@@ -93,41 +93,45 @@ function StoreSubtypeIcon({ type, color, size = 16 }: { type: StoreSubtype; colo
 
 export default function StoreSubtypeSelector({ selected, onSelect }: StoreSubtypeSelectorProps) {
   const { palette, language } = useTheme();
+  const subtypes = listStoreSubtypes();
+
+  const renderSubtype = ({ item: type }: ListRenderItemInfo<StoreSubtype>) => {
+    const active = selected === type;
+    const fg = active ? palette.nearText : palette.text;
+    return (
+      <Pressable
+        onPress={() => onSelect(active ? null : type)}
+        accessibilityRole="radio"
+        accessibilityLabel={storeSubtypeDisplayLabel(type, language)}
+        accessibilityState={{ selected: active }}
+        style={[
+          styles.pill,
+          {
+            backgroundColor: active ? palette.nearTint2 : palette.surface,
+            borderColor: active ? palette.nearBorder : palette.line,
+          },
+        ]}>
+        <View style={[styles.iconPill, { backgroundColor: active ? palette.nearTint : palette.surface2 }]}>
+          <StoreSubtypeIcon type={type} color={active ? palette.nearText : palette.muted} size={15} />
+        </View>
+        <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
+          {storeSubtypeDisplayLabel(type, language)}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
-    <ScrollView
+    <FlatList
       horizontal
+      data={subtypes}
+      renderItem={renderSubtype}
+      keyExtractor={type => type}
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.row}
-      style={styles.mask}>
-      {listStoreSubtypes().map(type => {
-        const active = selected === type;
-        const fg = active ? palette.nearText : palette.text;
-        return (
-          <Pressable
-            key={type}
-            onPress={() => onSelect(active ? null : type)}
-            accessibilityRole="radio"
-            accessibilityLabel={storeSubtypeDisplayLabel(type, language)}
-            accessibilityState={{ selected: active }}
-            style={[
-              styles.pill,
-              {
-                backgroundColor: active ? palette.nearTint2 : palette.surface,
-                borderColor: active ? palette.nearBorder : palette.line,
-              },
-            ]}>
-            <View style={[styles.iconPill, { backgroundColor: active ? palette.nearTint : palette.surface2 }]}>
-              <StoreSubtypeIcon type={type} color={active ? palette.nearText : palette.muted} size={15} />
-            </View>
-            <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
-              {storeSubtypeDisplayLabel(type, language)}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+      style={styles.mask}
+    />
   );
 }
 

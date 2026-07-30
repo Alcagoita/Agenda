@@ -5,6 +5,7 @@ import {
   inferStoreSubtypeForPoiInference,
   storePlaceMatchesSubtype,
   storeSubtypeSuggestions,
+  storeTaskSubtype,
   storeTaskMatchesAnyPlace,
 } from '../../src/services/storeSubtypes';
 
@@ -18,6 +19,14 @@ describe('storeSubtypes', () => {
   it('requires shopping context before promoting subtype intent to store POI inference', () => {
     expect(inferStoreSubtypeForPoiInference('buy a t-shirt')).toBe('clothing');
     expect(inferStoreSubtypeForPoiInference('organize clothes')).toBeNull();
+  });
+
+  it('does not compact-match aliases inside larger words', () => {
+    expect(inferStoreSubtype('Comprar prato')).toBeNull();
+    expect(inferStoreSubtypeForPoiInference('Comprar prato')).toBeNull();
+    expect(filterStorePlacesForTasks('store', [{ name: 'Worten' }], [
+      { title: 'Comprar prato', poi: 'store' },
+    ])).toEqual([{ name: 'Worten' }]);
   });
 
   it('suggests store types by visible label correspondence', () => {
@@ -52,6 +61,14 @@ describe('storeSubtypes', () => {
       { title: 'Buy a t-shirt', poi: 'store' },
       [{ name: 'Aquaplante' }],
     )).toBe(false);
+  });
+
+  it('prefers an explicit task store subtype before title inference', () => {
+    expect(storeTaskSubtype({
+      title: 'Buy a t-shirt',
+      poi: 'store',
+      storeSubtype: 'electronics',
+    })).toBe('electronics');
   });
 
   it('groups simultaneous store subtype intents by matching task', () => {
