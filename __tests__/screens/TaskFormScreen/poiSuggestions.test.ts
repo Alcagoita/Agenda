@@ -8,6 +8,11 @@ jest.mock('../../../src/services/placesFunctions', () => ({
   searchPlaceTypesProxy: jest.fn(),
 }));
 
+jest.mock('../../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(),
+  putCachedCity: jest.fn(),
+}));
+
 beforeEach(() => {
   setCopyLanguage('en');
 });
@@ -35,9 +40,20 @@ describe('getTypeSuggestions', () => {
     expect(results.some(r => r.type === 'police')).toBe(true);
   });
 
-  it('supports concept search from the shared dictionary', () => {
+  it('routes store subtype intent through the generic store POI', () => {
     const results = getTypeSuggestions('buy a book');
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
+    expect(results.some(r => r.type === 'book_store')).toBe(false);
+  });
+
+  it('does not surface store subtypes in the main POI suggestions', () => {
+    const results = getTypeSuggestions('store');
+    const types = results.map(result => result.type);
+
+    expect(types).toContain('store');
+    expect(types).not.toContain('electronics_store');
+    expect(types).not.toContain('furniture_store');
+    expect(types).not.toContain('clothing_store');
   });
 
   it('returns localized labels for pt-PT', () => {
