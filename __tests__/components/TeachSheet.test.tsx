@@ -53,6 +53,22 @@ describe('TeachSheet', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  it('requires choosing a suggestion instead of only typing an exact brand name', () => {
+    const onSave = jest.fn();
+    render(<TeachSheet visible onClose={jest.fn()} onSave={onSave} />);
+
+    fireEvent.press(screen.getByLabelText('Café'));
+    fireEvent.changeText(screen.getByPlaceholderText(COPY.places.teachNamePlaceholder), 'Starbucks');
+    fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
+
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('Starbucks'));
+    fireEvent.press(screen.getByText(COPY.places.teachSaveAction));
+
+    expect(onSave).toHaveBeenCalledWith('cafe', 'Starbucks');
+  });
+
   it('resets the brand field when the POI type changes', () => {
     render(<TeachSheet visible onClose={jest.fn()} onSave={jest.fn()} />);
 

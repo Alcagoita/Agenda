@@ -29,11 +29,12 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
   const insets = useSafeAreaInsets();
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const canonicalName = getCanonicalBrand(type, name);
   const suggestions = getBrandSuggestions(type, name);
-  const canSave = type != null && canonicalName != null;
+  const canSave = type != null && selectedBrand != null && selectedBrand === canonicalName;
 
-  const reset = () => { setType(null); setName(''); };
+  const reset = () => { setType(null); setName(''); setSelectedBrand(null); };
   // Every dismissal clears the form, so reopening always starts empty.
   const handleClose = () => { reset(); onClose(); };
 
@@ -57,7 +58,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
               return (
                 <Pressable
                   key={t}
-                  onPress={() => { setType(t); setName(''); }}
+                  onPress={() => { setType(t); setName(''); setSelectedBrand(null); }}
                   style={[
                     styles.typeChip,
                     { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
@@ -78,17 +79,17 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
             placeholder={COPY.places.teachNamePlaceholder}
             placeholderTextColor={palette.muted}
             value={name}
-            onChangeText={setName}
+            onChangeText={value => { setName(value); setSelectedBrand(null); }}
             returnKeyType="done"
           />
           {type && suggestions.length > 0 && (
             <View style={styles.suggestionList}>
               {suggestions.map(brand => {
-                const selected = brand === canonicalName;
+                const selected = brand === selectedBrand;
                 return (
                   <Pressable
                     key={brand}
-                    onPress={() => setName(brand)}
+                    onPress={() => { setName(brand); setSelectedBrand(brand); }}
                     style={[
                       styles.suggestionRow,
                       {
@@ -111,7 +112,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
           <Pressable
             style={[styles.saveBtn, { backgroundColor: palette.accent }, !canSave && styles.saveBtnDisabled]}
             disabled={!canSave}
-            onPress={() => { if (canSave && type && canonicalName) { onSave(type, canonicalName); reset(); } }}
+            onPress={() => { if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); } }}
             accessibilityRole="button"
             accessibilityLabel={COPY.places.teachSaveAction}>
             <Text style={[styles.saveLabel, { color: palette.onAccent }]}>{COPY.places.teachSaveAction}</Text>
