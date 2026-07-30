@@ -134,6 +134,14 @@ const mockDb = {
     }
     throw new Error(`mockDb.getAllSync: unrecognized query: ${s}`);
   }),
+  getFirstSync: jest.fn(<T>(sql: string, params: unknown[] = []): T | null => {
+    const s = sql.replace(/\s+/g, ' ').trim();
+    if (s.startsWith('SELECT * FROM habitat_places WHERE id = ?')) {
+      const [id] = params as [string];
+      return (rows.find(r => r.id === id) ?? null) as T | null;
+    }
+    throw new Error(`mockDb.getFirstSync: unrecognized query: ${s}`);
+  }),
   runSync: jest.fn((sql: string, params: unknown[] = []) => {
     const s = sql.replace(/\s+/g, ' ').trim();
 
@@ -261,6 +269,7 @@ import {
   enforceSizeBudget,
   refreshMallsIfDue,
   findExistingPlaceId,
+  getHabitatPlaceById,
   hasCachedPlaces,
   getMostRecentHabitatUpdateAt,
   deleteTripAreaPlaces,
@@ -535,6 +544,27 @@ describe('findExistingPlaceId (KAN-229)', () => {
   });
 });
 
+describe('getHabitatPlaceById', () => {
+  it('returns persisted footprint, website, and validated subtype fields', () => {
+    const id = upsertPlace({
+      poiType: 'restaurant',
+      name: 'Yakuza by Olivier',
+      lat: 0,
+      lng: 0,
+      source: { osm: 'way/restaurant' },
+      footprintAreaM2: 1234,
+      website: 'https://example.com',
+    });
+
+    expect(getHabitatPlaceById(id)).toEqual(expect.objectContaining({
+      placeId: id,
+      footprintAreaM2: 1234,
+      website: 'https://example.com',
+      restaurantFoodType: 'sushi',
+    }));
+  });
+});
+
 describe('queryHabitatCache', () => {
   it('returns NearbyPlace-shaped results within radius, sorted by distance', () => {
     upsertPlace({ poiType: 'atm', name: 'Near ATM', lat: 0.0003, lng: 0, source: { osm: 'node/1' } }); // ~33m
@@ -561,6 +591,15 @@ describe('queryHabitatCache', () => {
     expect(rows.find(r => r.name === 'Zara')?.store_subtype).toBe('clothing');
     expect(result.restaurant[0]).toEqual(expect.objectContaining({ restaurantFoodType: 'sushi' }));
     expect(result.store[0]).toEqual(expect.objectContaining({ storeSubtype: 'clothing' }));
+  });
+
+  it('drops stale cached subtype keys at the read boundary', () => {
+    upsertPlace({ poiType: 'restaurant', name: 'Yakuza by Olivier', lat: 0.0003, lng: 0, source: { osm: 'node/restaurant' } });
+    rows[0].restaurant_food_type = 'not_real';
+
+    const result = queryHabitatCache(ORIGIN.lat, ORIGIN.lng, ['restaurant'], 500);
+
+    expect(result.restaurant[0].restaurantFoodType).toBeUndefined();
   });
 
   it('fills subtype metadata when a later sighting merges into an old row', () => {

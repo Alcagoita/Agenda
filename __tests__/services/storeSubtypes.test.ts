@@ -43,6 +43,7 @@ describe('storeSubtypes', () => {
 
   it('matches cached stores by stored subtype before falling back to name', () => {
     expect(storePlaceMatchesSubtype({ name: 'store', storeSubtype: 'clothing' }, 'clothing')).toBe(true);
+    expect(storePlaceMatchesSubtype({ name: 'Zara', storeSubtype: 'pet' }, 'clothing')).toBe(false);
     expect(storePlaceMatchesSubtype({ name: 'store', storeSubtype: 'pet' }, 'clothing')).toBe(false);
   });
 

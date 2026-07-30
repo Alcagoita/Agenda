@@ -30,6 +30,7 @@ describe('restaurantFoodTypes', () => {
 
   it('matches cached restaurants by stored food type before falling back to name', () => {
     expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodType: 'sushi' }, 'sushi')).toBe(true);
+    expect(restaurantPlaceMatchesFoodType({ name: 'Portugália', restaurantFoodType: 'sushi' }, 'sushi')).toBe(true);
     expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodType: 'portuguese' }, 'sushi')).toBe(false);
   });
 

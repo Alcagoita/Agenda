@@ -75,7 +75,7 @@ jest.mock('../../src/services/firestore', () => ({
 const mockRefreshTripArea = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../src/services/tripDownload', () => ({
   refreshTripArea: (...args: unknown[]) => mockRefreshTripArea(...args),
-  getAreaDownloadPoiTypes: (types: string[] = []) => ['atm', 'library', 'shopping_mall', ...types.filter(t => t !== 'climbing_gym')],
+  getAreaDownloadPoiTypes: () => ['atm', 'library', 'shopping_mall'],
 }));
 
 jest.mock('@react-native-firebase/auth/lib/modular', () => ({
@@ -277,7 +277,9 @@ describe('ContextChip — Refresh (shown once back online, mid-sheet)', () => {
       fireEvent.press(screen.getByLabelText(COPY.contextChip.refreshButton));
     });
 
-    const [, , poiTypes, force] = mockRefreshHabitatCacheIfStale.mock.calls[0];
+    const [lat, lng, poiTypes, force] = mockRefreshHabitatCacheIfStale.mock.calls[0];
+    expect(lat).toBe(10);
+    expect(lng).toBe(20);
     expect(force).toBe(true);
     expect(poiTypes).toContain('library');
     expect(poiTypes).not.toContain('climbing_gym');

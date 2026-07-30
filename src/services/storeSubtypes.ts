@@ -170,10 +170,27 @@ export function storePlaceMatchesSubtype(
 }
 
 export function inferStoreSubtypeFromPlaceName(placeName: string): StoreSubtype | null {
+  const normalizedPlace = normalize(placeName);
+  const compactPlace = compact(placeName);
+  if (!normalizedPlace) { return null; }
+
+  let match: StoreSubtype | null = null;
   for (const subtype of listStoreSubtypes()) {
-    if (storePlaceMatchesSubtype(placeName, subtype)) { return subtype; }
+    const entry = STORE_SUBTYPE_DICTIONARY[subtype];
+    const matchesKnownStore = entry.stores.some(store => {
+      const normalizedStore = normalize(store);
+      if (!normalizedStore) { return false; }
+      const compactStore = compact(store);
+      return (
+        normalizedPlace.includes(normalizedStore) ||
+        compactPlace.includes(compactStore)
+      );
+    });
+    if (!matchesKnownStore) { continue; }
+    if (match) { return null; }
+    match = subtype;
   }
-  return null;
+  return match;
 }
 
 export function storeTaskSubtype(task: StoreTaskLike): StoreSubtype | null {

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import { getTrips, deleteTrip as deleteTripDoc, getCategories } from '../services/firestore';
+import { getTrips, deleteTrip as deleteTripDoc } from '../services/firestore';
 import { estimateHabitatAreaSizeBytes, deleteTripAreaPlaces } from '../services/habitatCache';
 import { refreshTripArea } from '../services/tripDownload';
 import type { Trip } from '../types';
@@ -30,13 +30,12 @@ export function usePlacesIKnow(): PlacesIKnowState {
   const [habitatSizeBytes, setHabitatSizeBytes] = useState(0);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [refreshingTripId, setRefreshingTripId] = useState<string | null>(null);
-  const [customCategoryPoiTypes, setCustomCategoryPoiTypes] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     if (!uid) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [fetchedTrips, categories] = await Promise.all([getTrips(uid), getCategories(uid)]);
+      const fetchedTrips = await getTrips(uid);
       // Trip docs outlive their downloaded data (SplashScreen's
       // deleteExpiredTripPlaces purges only the on-device place cache, never
       // the doc — CalendarScreen still reads the full list for its
@@ -44,7 +43,6 @@ export function usePlacesIKnow(): PlacesIKnowState {
       // left to refresh or delete, so it's dropped from this screen's list.
       const now = Date.now();
       setTrips(fetchedTrips.filter(t => t.expiresAt > now));
-      setCustomCategoryPoiTypes(categories.map(c => c.poi).filter((p): p is string => !!p));
       setHabitatSizeBytes(estimateHabitatAreaSizeBytes());
     } catch (err) {
       console.warn('[usePlacesIKnow] refresh failed', err);
@@ -59,14 +57,14 @@ export function usePlacesIKnow(): PlacesIKnowState {
     if (!uid) { return; }
     setRefreshingTripId(trip.id);
     try {
-      await refreshTripArea(uid, trip, customCategoryPoiTypes);
+      await refreshTripArea(uid, trip);
       await refresh();
     } catch (err) {
       console.warn('[usePlacesIKnow] refreshTrip failed', err);
     } finally {
       setRefreshingTripId(null);
     }
-  }, [uid, customCategoryPoiTypes, refresh]);
+  }, [uid, refresh]);
 
   const deleteTrip = useCallback(async (trip: Trip) => {
     if (!uid) { return; }

@@ -17,6 +17,7 @@ import {
   seedPoiTypeCacheIfEmpty,
 } from '../../src/services/poiTypeCache';
 import enDictionary from '../../src/constants/poiDictionary.en.json';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
 
 jest.mock('../../src/config/keys', () => ({
   GOOGLE_PLACES_API_KEY: 'TEST_KEY',
@@ -46,7 +47,7 @@ afterEach(() => {
 
 describe('searchPlaceTypesCached', () => {
   it('keeps the bundled POI dictionary trimmed to the curated allowlist', () => {
-    expect(Object.keys(enDictionary)).toHaveLength(99);
+    expect(Object.keys(enDictionary)).toHaveLength(SUPPORTED_GOOGLE_PLACE_TYPES.length);
     expect(enDictionary).toHaveProperty('cafe');
     expect(enDictionary).toHaveProperty('coffee_shop');
     expect(enDictionary).not.toHaveProperty('coffee_roastery');
@@ -76,6 +77,7 @@ describe('searchPlaceTypesCached', () => {
   it('does not surface trimmed cuisine microtypes', async () => {
     const results = await searchPlaceTypesCached('sushi');
 
+    expect(results.some(result => result.type === 'restaurant')).toBe(true);
     expect(results.some(result => result.type === 'sushi_restaurant')).toBe(false);
   });
 
@@ -164,6 +166,7 @@ describe('searchPlaceTypesCached', () => {
   it('does not surface trimmed cafe microtypes for explicit roastery phrasing', async () => {
     const results = await searchPlaceTypesCached('go to a coffee roastery');
 
+    expect(results.some(result => result.type === 'cafe')).toBe(true);
     expect(results.some(result => result.type === 'coffee_roastery')).toBe(false);
   });
 
@@ -198,6 +201,7 @@ describe('searchPlaceTypesCached', () => {
   it('does not surface trimmed store microtypes for shoe-buying intent', async () => {
     const results = await searchPlaceTypesCached('buy shoes');
 
+    expect(results.some(result => result.type === 'clothing_store' || result.type === 'store')).toBe(true);
     expect(results.some(result => result.type === 'shoe_store')).toBe(false);
   });
 

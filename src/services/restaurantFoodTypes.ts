@@ -186,10 +186,27 @@ export function restaurantPlaceMatchesFoodType(
 }
 
 export function inferRestaurantFoodTypeFromPlaceName(placeName: string): RestaurantFoodType | null {
+  const normalizedPlace = normalize(placeName);
+  const compactPlace = compact(placeName);
+  if (!normalizedPlace) { return null; }
+
+  let match: RestaurantFoodType | null = null;
   for (const foodType of listRestaurantFoodTypes()) {
-    if (restaurantPlaceMatchesFoodType(placeName, foodType)) { return foodType; }
+    const entry = RESTAURANT_FOOD_DICTIONARY[foodType];
+    const matchesKnownRestaurant = entry.restaurants.some(restaurant => {
+      const normalizedRestaurant = normalize(restaurant);
+      if (!normalizedRestaurant) { return false; }
+      const compactRestaurant = compact(restaurant);
+      return (
+        normalizedPlace.includes(normalizedRestaurant) ||
+        compactPlace.includes(compactRestaurant)
+      );
+    });
+    if (!matchesKnownRestaurant) { continue; }
+    if (match) { return null; }
+    match = foodType;
   }
-  return null;
+  return match;
 }
 
 export function restaurantTaskFoodType(task: RestaurantTaskLike): RestaurantFoodType | null {

@@ -15,7 +15,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import { getCurrentPosition } from '../services/geolocation';
-import { getCategories } from '../services/firestore';
 import { deleteTripAreaPlaces } from '../services/habitatCache';
 import { setMallSnapshot as setProximityMallSnapshot } from '../services/proximity';
 import {
@@ -59,9 +58,7 @@ export function useMallSnapshotToggle(): MallSnapshotToggleState {
     setLoading(true);
     try {
       const coords = await getCurrentPosition();
-      const categories = await getCategories(uid);
-      const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-      const poiTypes = getAreaDownloadPoiTypes(customCategoryPoiTypes);
+      const poiTypes = getAreaDownloadPoiTypes();
 
       const snapshot = await downloadMallSnapshot(uid, { lat: coords.lat, lng: coords.lng }, poiTypes);
       setProximityMallSnapshot(snapshot);

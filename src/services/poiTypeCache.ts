@@ -10,7 +10,12 @@
 
 import { getCopyLanguage, type SupportedLanguage } from '../constants/copy';
 import { normalize } from './poiInference';
-import { isGenericPlaceType, type PlaceTypeSuggestion } from './maps';
+import { isGenericPlaceType } from './maps';
+
+export type PlaceTypeSuggestion = {
+  type: string;
+  label: string;
+};
 
 const EN_DICTIONARY = require('../constants/poiDictionary.en.json') as Record<string, string>;
 const PT_DICTIONARY = require('../constants/poiDictionary.pt-PT.json') as Record<string, string>;
@@ -130,11 +135,7 @@ const POI_CONCEPTS: PoiConcept[] = [
   },
   {
     intents: ['retail', 'food'],
-    explicitRequiredTerms: {
-      en: ['coffee roastery', 'roastery'],
-      'pt-PT': ['coffee roastery', 'café roastery', 'cafe roastery', 'roastery'],
-    },
-    types: ['coffee_roastery'],
+    types: ['cafe'],
     terms: {
       en: ['coffee roastery', 'roastery'],
       'pt-PT': ['coffee roastery', 'café roastery', 'cafe roastery', 'roastery'],
@@ -150,10 +151,18 @@ const POI_CONCEPTS: PoiConcept[] = [
   },
   {
     intents: ['retail'],
-    types: ['shoe_store'],
+    types: ['clothing_store'],
     terms: {
       en: ['shoe', 'shoes', 'sneakers', 'footwear', 'boots'],
       'pt-PT': ['sapato', 'sapatos', 'tenis', 'ténis', 'calcado', 'calçado', 'botas'],
+    },
+  },
+  {
+    intents: ['food'],
+    types: ['restaurant'],
+    terms: {
+      en: ['sushi', 'sushi restaurant'],
+      'pt-PT': ['sushi', 'restaurante de sushi'],
     },
   },
   {
@@ -394,7 +403,8 @@ function isGenericCoffeeIntent(queryVariants: QueryVariant[], lang: SupportedLan
     : ['coffee', 'espresso', 'latte'];
   const explicitSubtypeTerms = [
     ...(lang === 'pt-PT' ? ['cafetaria'] : ['coffee shop', 'coffee stand']),
-    ...normalizeKeys(EXPLICIT_REQUIRED_ALIAS_KEYS.coffee_roastery?.[lang] ?? []),
+    'coffee roastery',
+    'roastery',
   ];
 
   const hasGenericCoffee = genericTerms.some(term =>

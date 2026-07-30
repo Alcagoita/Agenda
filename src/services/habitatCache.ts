@@ -53,10 +53,12 @@ import { getDistanceMeters } from './maps';
 import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
 import {
   inferRestaurantFoodTypeFromPlaceName,
+  listRestaurantFoodTypes,
   type RestaurantFoodType,
 } from './restaurantFoodTypes';
 import {
   inferStoreSubtypeFromPlaceName,
+  listStoreSubtypes,
   type StoreSubtype,
 } from './storeSubtypes';
 
@@ -264,6 +266,16 @@ function candidateStoreSubtype(candidate: PlaceCandidate): StoreSubtype | null {
   return candidate.storeSubtype ?? inferStoreSubtypeFromPlaceName(candidate.name);
 }
 
+function normalizeCachedRestaurantFoodType(value: RestaurantFoodType | string | null): RestaurantFoodType | undefined {
+  if (value == null) { return undefined; }
+  return (listRestaurantFoodTypes() as string[]).includes(value) ? value as RestaurantFoodType : undefined;
+}
+
+function normalizeCachedStoreSubtype(value: StoreSubtype | string | null): StoreSubtype | undefined {
+  if (value == null) { return undefined; }
+  return (listStoreSubtypes() as string[]).includes(value) ? value as StoreSubtype : undefined;
+}
+
 /**
  * Resolve `candidate` to a stable internal place id: if an existing row of
  * the same POI type within IDENTITY_MATCH_RADIUS_M has a matching name,
@@ -354,9 +366,6 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   const database = getDb();
   const now = Date.now();
   const isOsmSourced = candidate.source.osm != null;
-  const restaurantFoodType = candidateRestaurantFoodType(candidate);
-  const storeSubtype = candidateStoreSubtype(candidate);
-
   const match = findMatchingRow(
     database, candidate.poiType, candidate.name, candidate.isGenericName,
     candidate.lat, candidate.lng,
@@ -366,6 +375,8 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
     const osmFlag = isOsmSourced ? 1 : 0;
     const tripCacheAreaId = trip?.cacheAreaId ?? null;
     const tripExpiresAt = trip?.expiresAt ?? null;
+    const restaurantFoodType = match.restaurant_food_type == null ? candidateRestaurantFoodType(candidate) : null;
+    const storeSubtype = match.store_subtype == null ? candidateStoreSubtype(candidate) : null;
     database.runSync(
       `UPDATE habitat_places
        SET google_place_id   = COALESCE(google_place_id, ?),
@@ -405,6 +416,8 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   if (!isOsmSourced) { return generateId(); }
 
   const id = generateId();
+  const restaurantFoodType = candidateRestaurantFoodType(candidate);
+  const storeSubtype = candidateStoreSubtype(candidate);
   database.runSync(
     `INSERT INTO habitat_places
        (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype)
@@ -549,8 +562,8 @@ export function queryHabitatCache(
         distanceMeters,
         footprintAreaM2: row.footprint_area_m2 ?? undefined,
         website:         row.website ?? undefined,
-        restaurantFoodType: row.restaurant_food_type ?? undefined,
-        storeSubtype:       row.store_subtype ?? undefined,
+        restaurantFoodType: normalizeCachedRestaurantFoodType(row.restaurant_food_type),
+        storeSubtype:       normalizeCachedStoreSubtype(row.store_subtype),
       });
     }
 
@@ -594,8 +607,10 @@ export function getHabitatPlaceById(id: string): NearbyPlace | null {
       lat: row.lat,
       lng: row.lng,
       distanceMeters: 0,
-      restaurantFoodType: row.restaurant_food_type ?? undefined,
-      storeSubtype:       row.store_subtype ?? undefined,
+      footprintAreaM2: row.footprint_area_m2 ?? undefined,
+      website:         row.website ?? undefined,
+      restaurantFoodType: normalizeCachedRestaurantFoodType(row.restaurant_food_type),
+      storeSubtype:       normalizeCachedStoreSubtype(row.store_subtype),
     };
   } catch (err) {
     console.warn('[habitatCache] getHabitatPlaceById failed', err);

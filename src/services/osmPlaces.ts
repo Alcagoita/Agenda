@@ -84,6 +84,7 @@ interface OverpassResponse {
 // 5-line wrapper, not worth a cross-file dependency for.
 
 const FETCH_TIMEOUT_MS = 8_000;
+const OVERPASS_CLAUSES_PER_REQUEST = 25;
 
 // Overpass's usage policy asks every client to identify itself — unlabeled
 // traffic risks being rate-limited or blocked. https://wiki.openstreetmap.org/wiki/Overpass_API#Rules
@@ -196,7 +197,7 @@ export async function searchOsmPlaces(
   timeoutMs: number = FETCH_TIMEOUT_MS,
 ): Promise<Record<string, OsmPlace[]>> {
   try {
-    return await fetchOsmPlaces(lat, lng, poiTypes, radiusMeters, timeoutMs);
+    return await fetchOsmPlaces(lat, lng, poiTypes, radiusMeters, timeoutMs, true);
   } catch {
     const result: Record<string, OsmPlace[]> = {};
     for (const poiType of poiTypes) { result[poiType] = []; }
@@ -218,7 +219,7 @@ export async function searchOsmPlacesStrict(
   radiusMeters: number,
   timeoutMs: number = FETCH_TIMEOUT_MS,
 ): Promise<Record<string, OsmPlace[]>> {
-  return fetchOsmPlaces(lat, lng, poiTypes, radiusMeters, timeoutMs);
+  return fetchOsmPlaces(lat, lng, poiTypes, radiusMeters, timeoutMs, false);
 }
 
 async function fetchOsmPlaces(
@@ -227,6 +228,7 @@ async function fetchOsmPlaces(
   poiTypes: string[],
   radiusMeters: number,
   timeoutMs: number,
+  keepPartialResults: boolean,
 ): Promise<Record<string, OsmPlace[]>> {
   const result: Record<string, OsmPlace[]> = {};
   for (const poiType of poiTypes) { result[poiType] = []; }
@@ -236,54 +238,65 @@ async function fetchOsmPlaces(
   // selector) — skip anything without an OSM tag mapping (e.g. arbitrary
   // custom-category Google Places strings).
   const tagByType: Record<string, { key: string; value: string }> = {};
-  const clauses: string[] = [];
+  const clauseEntries: { poiType: string; clause: string }[] = [];
   for (const poiType of poiTypes) {
     const tag = POI_OSM_TAGS[poiType as PoiType] ?? SUPPLEMENTARY_OSM_TAGS[poiType];
     if (!tag) { continue; }
     tagByType[poiType] = tag;
-    clauses.push(`nwr["${tag.key}"="${tag.value}"](around:${radiusMeters},${lat},${lng});`);
+    clauseEntries.push({ poiType, clause: `nwr["${tag.key}"="${tag.value}"](around:${radiusMeters},${lat},${lng});` });
   }
-  if (clauses.length === 0) { return result; }
+  if (clauseEntries.length === 0) { return result; }
 
-  // `out center bb;` — nodes keep their own lat/lon; way/relation elements
-  // get a bounding box (bb) instead, from which we derive both a
-  // representative center point AND a footprint-area estimate (KAN-282).
-  const query = `[out:json][timeout:25];(${clauses.join('')});out center bb;`;
+  for (let i = 0; i < clauseEntries.length; i += OVERPASS_CLAUSES_PER_REQUEST) {
+    const chunk = clauseEntries.slice(i, i + OVERPASS_CLAUSES_PER_REQUEST);
+    const chunkTypes = new Set(chunk.map(entry => entry.poiType));
+    // `out center bb;` — nodes keep their own lat/lon; way/relation elements
+    // get a bounding box (bb) instead, from which we derive both a
+    // representative center point AND a footprint-area estimate (KAN-282).
+    const query = `[out:json][timeout:25];(${chunk.map(entry => entry.clause).join('')});out center bb;`;
 
-  const data = await fetchOverpass(query, timeoutMs);
+    let data: OverpassResponse;
+    try {
+      data = await fetchOverpass(query, timeoutMs);
+    } catch (err) {
+      if (keepPartialResults) { continue; }
+      throw err;
+    }
 
-  for (const el of data.elements ?? []) {
-    // Nodes carry lat/lon directly; way/relation elements have no point of
-    // their own — derive one from the bounding box midpoint (`center` is
-    // requested too as a fallback for any element type that reports it).
-    const elLat = el.lat ?? el.center?.lat ?? (el.bounds ? (el.bounds.minlat + el.bounds.maxlat) / 2 : undefined);
-    const elLon = el.lon ?? el.center?.lon ?? (el.bounds ? (el.bounds.minlon + el.bounds.maxlon) / 2 : undefined);
-    if (elLat == null || elLon == null || !el.tags) { continue; }
-    // 0 (not undefined) for bare nodes — see OsmPlace.footprintAreaM2: it
-    // records "fetched, genuinely has no footprint", which is what lets the
-    // habitat cache tell those apart from rows never fetched with geometry.
-    const footprintAreaM2 = el.bounds ? boundingBoxAreaM2(el.bounds) : 0;
+    for (const el of data.elements ?? []) {
+      // Nodes carry lat/lon directly; way/relation elements have no point of
+      // their own — derive one from the bounding box midpoint (`center` is
+      // requested too as a fallback for any element type that reports it).
+      const elLat = el.lat ?? el.center?.lat ?? (el.bounds ? (el.bounds.minlat + el.bounds.maxlat) / 2 : undefined);
+      const elLon = el.lon ?? el.center?.lon ?? (el.bounds ? (el.bounds.minlon + el.bounds.maxlon) / 2 : undefined);
+      if (elLat == null || elLon == null || !el.tags) { continue; }
+      // 0 (not undefined) for bare nodes — see OsmPlace.footprintAreaM2: it
+      // records "fetched, genuinely has no footprint", which is what lets the
+      // habitat cache tell those apart from rows never fetched with geometry.
+      const footprintAreaM2 = el.bounds ? boundingBoxAreaM2(el.bounds) : 0;
 
-    // Assign to the first requested type whose tag matches this element.
-    for (const poiType of poiTypes) {
-      const tag = tagByType[poiType];
-      if (!tag || el.tags[tag.key] !== tag.value) { continue; }
+      // Assign to the first requested type in this chunk whose tag matches this element.
+      for (const poiType of poiTypes) {
+        if (!chunkTypes.has(poiType)) { continue; }
+        const tag = tagByType[poiType];
+        if (!tag || el.tags[tag.key] !== tag.value) { continue; }
 
-      result[poiType].push({
-        osmId:          `${el.type}/${el.id}`,
-        // Raw OSM tag values are lowercase, underscore-separated keys (e.g.
-        // "atm") — route the no-name fallback through the same label helper
-        // every other POI-type display uses, instead of leaking the tag.
-        name:           el.tags.name ?? placeTypeLabel(poiType),
-        isGenericName:  el.tags.name == null,
-        lat:            elLat,
-        lng:            elLon,
-        footprintAreaM2,
-        // `contact:website` is the other common OSM spelling for the same thing.
-        website:        el.tags.website ?? el.tags['contact:website'],
-        distanceMeters: getDistanceMeters(lat, lng, elLat, elLon),
-      });
-      break;
+        result[poiType].push({
+          osmId:          `${el.type}/${el.id}`,
+          // Raw OSM tag values are lowercase, underscore-separated keys (e.g.
+          // "atm") — route the no-name fallback through the same label helper
+          // every other POI-type display uses, instead of leaking the tag.
+          name:           el.tags.name ?? placeTypeLabel(poiType),
+          isGenericName:  el.tags.name == null,
+          lat:            elLat,
+          lng:            elLon,
+          footprintAreaM2,
+          // `contact:website` is the other common OSM spelling for the same thing.
+          website:        el.tags.website ?? el.tags['contact:website'],
+          distanceMeters: getDistanceMeters(lat, lng, elLat, elLon),
+        });
+        break;
+      }
     }
   }
 

@@ -17,7 +17,7 @@ import {
   getPlaceDetails,
 } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
-import { addTrip, getCategories } from '../services/firestore';
+import { addTrip } from '../services/firestore';
 import { downloadTripArea } from '../services/tripDownload';
 import { deleteTripAreaPlaces } from '../services/habitatCache';
 import { computeOffGridExpiresAt, OFFGRID_AREA_RADIUS_M } from '../services/offGrid';
@@ -117,10 +117,7 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
       const expiresAt = computeOffGridExpiresAt(duration, pickedTime);
       cacheAreaId = `og_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-      const categories = await getCategories(uid);
-      const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-
-      await downloadTripArea(center, OFFGRID_AREA_RADIUS_M, cacheAreaId, expiresAt, customCategoryPoiTypes);
+      await downloadTripArea(center, OFFGRID_AREA_RADIUS_M, cacheAreaId, expiresAt);
 
       await addTrip(uid, {
         destination: destinationOverride?.name ?? COPY.offGrid.currentAreaLabel,

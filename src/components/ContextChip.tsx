@@ -44,7 +44,6 @@ import { getMostRecentHabitatUpdateAt, refreshHabitatCacheIfStale } from '../ser
 import { getLastSearchCoords, getActiveOffGridWindow } from '../services/proximity';
 import type { PlaceContext } from '../services/proximity';
 import { refreshTripArea, getAreaDownloadPoiTypes } from '../services/tripDownload';
-import { getCategories } from '../services/firestore';
 import { resolveContextChipView, ContextChipView } from '../utils/contextChip';
 import { todayISO, formatLocalTime, formatDateShort } from '../utils/date';
 import { useToastStore } from '../store/toastStore';
@@ -155,10 +154,7 @@ export default function ContextChip({ placeContext = null }: ContextChipProps) {
 
     setRefreshing(true);
     try {
-      const uid = getAuth().currentUser?.uid;
-      const categories = uid ? await getCategories(uid) : [];
-      const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-      const poiTypes = getAreaDownloadPoiTypes(customCategoryPoiTypes);
+      const poiTypes = getAreaDownloadPoiTypes();
       await refreshHabitatCacheIfStale(coords.lat, coords.lng, poiTypes, true);
       setLastUpdatedAt(getMostRecentHabitatUpdateAt());
     } catch (err) {
@@ -176,9 +172,7 @@ export default function ContextChip({ placeContext = null }: ContextChipProps) {
     try {
       const uid = getAuth().currentUser?.uid;
       if (!uid) { return; }
-      const categories = await getCategories(uid);
-      const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-      await refreshTripArea(uid, trip, customCategoryPoiTypes);
+      await refreshTripArea(uid, trip);
     } catch (err) {
       console.warn('[ContextChip] trip refresh failed', err);
       useToastStore.getState().showToast(COPY.contextChip.placeRefreshErrorToast);

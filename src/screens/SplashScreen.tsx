@@ -439,8 +439,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         // day-before-departure refresh has no native scheduler to run on —
         // piggyback on this boot path instead, same "non-fatal, best effort,
         // once per boot" shape as rolloverIncompleteTasks above.
-        const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-        checkAndRunTripPreRefresh(uid, trips, customCategoryPoiTypes)
+        checkAndRunTripPreRefresh(uid, trips)
           .catch(err => console.warn('[SplashScreen] checkAndRunTripPreRefresh failed (non-critical)', err));
         try { deleteExpiredTripPlaces(); } catch (err) { console.warn('[SplashScreen] deleteExpiredTripPlaces failed (non-critical)', err); }
 
@@ -449,7 +448,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         // boot" shape as the trip pre-refresh above. No-ops when unset.
         if (userData?.home) {
           const prefetchTypes = [...new Set([
-            ...getAreaDownloadPoiTypes(customCategoryPoiTypes), ...CLUSTER_LEISURE_TYPES,
+            ...getAreaDownloadPoiTypes(), ...CLUSTER_LEISURE_TYPES,
           ])];
           refreshHabitatCacheIfStale(userData.home.lat, userData.home.lng, prefetchTypes)
             .catch(err => console.warn('[SplashScreen] home habitat prefetch failed (non-critical)', err));

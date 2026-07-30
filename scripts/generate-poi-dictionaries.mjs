@@ -12,12 +12,18 @@ function titleCase(value) {
 }
 
 function humanizeType(type) {
-  return titleCase(type.replace(/_/g, ' '));
+  return titleCase(type.replace(/_/g, ' ')).replace(/\bRv\b/g, 'RV');
 }
 
 function extractQuotedValues(source, anchor) {
   const start = source.indexOf(anchor);
+  if (start === -1) {
+    throw new Error(`Could not find anchor "${anchor}" while generating POI dictionaries.`);
+  }
   const end = source.indexOf('];', start);
+  if (end === -1) {
+    throw new Error(`Could not find closing delimiter for "${anchor}" while generating POI dictionaries.`);
+  }
   const body = source.slice(start, end);
   return [...body.matchAll(/'([^']+)'/g)].map(match => match[1]);
 }
@@ -467,6 +473,7 @@ const TOKEN_PT = {
 
 const PT_OVERRIDES = {
   atm: 'Multibanco',
+  art_gallery: 'Galeria de arte',
   cafe: 'Café',
   supermarket: 'Mercado',
   pharmacy: 'Farmácia',
@@ -477,6 +484,8 @@ const PT_OVERRIDES = {
   beach: 'Praia',
   beauty_salon: 'Salão de beleza',
   book_store: 'Livraria',
+  botanical_garden: 'Jardim botânico',
+  bowling_alley: 'Bowling',
   bus_station: 'Estação de autocarros',
   bus_stop: 'Paragem de autocarro',
   campground: 'Parque de campismo',
@@ -487,15 +496,19 @@ const PT_OVERRIDES = {
   city_hall: 'Câmara municipal',
   clothing_store: 'Loja de roupa',
   coffee_shop: 'Cafetaria',
+  community_center: 'Centro comunitário',
   convenience_store: 'Loja de conveniência',
   corporate_office: 'Escritório empresarial',
   country: 'País',
   courthouse: 'Tribunal',
+  cultural_center: 'Centro cultural',
   dentist: 'Dentista',
   department_store: 'Loja de departamento',
   doctor: 'Médico',
   drugstore: 'Farmácia',
+  electric_vehicle_charging_station: 'Posto de carregamento elétrico',
   electronics_store: 'Loja de eletrónica',
+  ferry_terminal: 'Terminal de ferry',
   fire_station: 'Quartel de bombeiros',
   fitness_center: 'Centro de fitness',
   florist: 'Florista',
@@ -504,9 +517,13 @@ const PT_OVERRIDES = {
   general_hospital: 'Hospital geral',
   general_store: 'Loja geral',
   gift_shop: 'Loja de presentes',
+  golf_course: 'Campo de golfe',
   grocery_store: 'Mercearia',
   gym: 'Ginásio',
+  hair_care: 'Cabeleireiro',
   hair_salon: 'Cabeleireiro',
+  hiking_area: 'Área de caminhadas',
+  historical_landmark: 'Marco histórico',
   historical_place: 'Local histórico',
   home_goods_store: 'Loja para o lar',
   hotel: 'Hotel',
@@ -517,9 +534,12 @@ const PT_OVERRIDES = {
   library: 'Biblioteca',
   light_rail_station: 'Estação de metro ligeiro',
   locality: 'Localidade',
+  local_government_office: 'Serviço municipal',
   lodging: 'Alojamento',
   market: 'Mercado',
   medical_center: 'Centro médico',
+  medical_lab: 'Laboratório médico',
+  movie_rental: 'Aluguer de filmes',
   movie_theater: 'Cinema',
   museum: 'Museu',
   nail_salon: 'Salão de unhas',
@@ -534,6 +554,7 @@ const PT_OVERRIDES = {
   police: 'Polícia',
   post_office: 'Correios',
   primary_school: 'Escola primária',
+  rv_park: 'Parque de autocaravanas',
   school: 'Escola',
   secondary_school: 'Escola secundária',
   shoe_store: 'Loja de sapatos',
@@ -546,12 +567,15 @@ const PT_OVERRIDES = {
   sushi_restaurant: 'Restaurante de sushi',
   taxi_stand: 'Praça de táxis',
   tea_house: 'Casa de chá',
+  tennis_court: 'Campo de ténis',
   theater: 'Teatro',
   tourist_attraction: 'Atração turística',
   train_station: 'Estação de comboios',
   transit_station: 'Estação de transportes',
   university: 'Universidade',
   veterinary_care: 'Cuidados veterinários',
+  water_park: 'Parque aquático',
+  yoga_studio: 'Estúdio de ioga',
   zoo: 'Jardim zoológico',
 };
 

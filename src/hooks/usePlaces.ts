@@ -15,7 +15,7 @@ import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import {
   getTaughtPlaces, addTaughtPlace, removeTaughtPlace,
-  getLearnedPlaceCounts, removeLearnedBrand, getTrips, getCategories, Timestamp,
+  getLearnedPlaceCounts, removeLearnedBrand, getTrips, Timestamp,
 } from '../services/firestore';
 import { taughtPlaceId, type TaughtPlace } from '../services/firestore/taughtPlaces';
 import { computeLearnedPlaces } from '../services/learnedPlaces';
@@ -60,7 +60,6 @@ export function usePlaces(): PlacesState {
   const [taught, setTaught] = useState<TaughtPlace[]>([]);
   const [learned, setLearned] = useState<ReturnType<typeof computeLearnedPlaces>>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [customCatPoiTypes, setCustomCatPoiTypes] = useState<string[]>([]);
   const [refreshingTripId, setRefreshingTripId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -75,11 +74,10 @@ export function usePlaces(): PlacesState {
     if (!hasLoadedRef.current) { setLoading(true); } // spinner only on first load, not on every focus refetch
     // Settle each read independently: one collection failing (e.g. a rules gap)
     // must not blank the other lists.
-    const [taughtRes, countsRes, tripsRes, catsRes] = await Promise.allSettled([
+    const [taughtRes, countsRes, tripsRes] = await Promise.allSettled([
       getTaughtPlaces(uid),
       getLearnedPlaceCounts(uid),
       getTrips(uid),
-      getCategories(uid),
     ]);
     if (uidRef.current !== uid) { return; }
     if (taughtRes.status === 'fulfilled') { setTaught(taughtRes.value); }
@@ -88,7 +86,6 @@ export function usePlaces(): PlacesState {
     else { console.warn('[usePlaces] learned places load failed', countsRes.reason); }
     if (tripsRes.status === 'fulfilled') { setTrips(tripsRes.value); }
     else { console.warn('[usePlaces] trips load failed', tripsRes.reason); }
-    if (catsRes.status === 'fulfilled') { setCustomCatPoiTypes(catsRes.value.map(c => c.poi).filter((p): p is string => !!p)); }
     hasLoadedRef.current = true;
     setLoading(false);
   }, [uid]);
@@ -154,10 +151,10 @@ export function usePlaces(): PlacesState {
   const refreshTrip = useCallback((trip: Trip) => {
     if (!uid) { return; }
     setRefreshingTripId(trip.id);
-    refreshTripArea(uid, trip, customCatPoiTypes)
+    refreshTripArea(uid, trip)
       .catch(err => console.warn('[usePlaces] refreshTrip failed', err))
       .finally(() => { if (uidRef.current === uid) { setRefreshingTripId(null); } });
-  }, [uid, customCatPoiTypes]);
+  }, [uid]);
 
   return {
     loading, favourites, usuals, activeTrips, pastTripGroups,

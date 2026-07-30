@@ -180,13 +180,15 @@ describe('habitat cache prefetch covers all POI types', () => {
     expect(prefetchedTypes).toContain('pharmacy');
   });
 
-  it('folds in custom category place types, deduped against the built-ins', async () => {
+  it('filters unsupported saved custom category types before habitat prefetch', async () => {
     setCustomCategoryPoiTypes(['gym', 'my_custom_type', 'coffee_shop']);
     mockAtmSearchResponse();
 
     await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
 
     const [, , prefetchedTypes] = mockRefreshHabitatCacheIfStale.mock.calls[0];
+    expect(SUPPORTED_GOOGLE_PLACE_TYPES).toContain('coffee_shop');
+    expect(SUPPORTED_GOOGLE_PLACE_TYPES).not.toContain('my_custom_type');
     expect(prefetchedTypes).toContain('coffee_shop');
     expect(prefetchedTypes).not.toContain('my_custom_type');
     // 'gym' is already a built-in — must not be duplicated.

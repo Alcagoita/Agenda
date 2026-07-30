@@ -197,7 +197,7 @@ export const GOOGLE_PLACE_TYPES_TABLE_A: readonly string[] = [
  * cafe/shop variants. Area downloads and dictionary generation should use
  * this list, not the full Google table.
  */
-export const SUPPORTED_GOOGLE_PLACE_TYPES: readonly string[] = [
+export const SUPPORTED_GOOGLE_PLACE_TYPES = [
   'accounting',
   'airport',
   'amusement_park',
@@ -297,14 +297,16 @@ export const SUPPORTED_GOOGLE_PLACE_TYPES: readonly string[] = [
   'winery',
   'yoga_studio',
   'zoo',
-];
+] as const;
 
-const SUPPORTED_GOOGLE_PLACE_TYPE_SET = new Set(SUPPORTED_GOOGLE_PLACE_TYPES);
+export type SupportedGooglePlaceType = typeof SUPPORTED_GOOGLE_PLACE_TYPES[number];
 
-export function isSupportedGooglePlaceType(type: string | null | undefined): type is string {
+const SUPPORTED_GOOGLE_PLACE_TYPE_SET: ReadonlySet<string> = new Set(SUPPORTED_GOOGLE_PLACE_TYPES);
+
+export function isSupportedGooglePlaceType(type: string | null | undefined): type is SupportedGooglePlaceType {
   return type != null && SUPPORTED_GOOGLE_PLACE_TYPE_SET.has(type);
 }
 
-export function filterSupportedGooglePlaceTypes(types: readonly string[]): string[] {
+export function filterSupportedGooglePlaceTypes(types: readonly string[]): SupportedGooglePlaceType[] {
   return types.filter(isSupportedGooglePlaceType);
 }
