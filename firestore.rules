@@ -69,6 +69,7 @@ service cloud.firestore {
 
     function validTaskData(data) {
       return data.keys().hasOnly([
+          'id',
           'title',
           'category',
           'done',
@@ -90,6 +91,7 @@ service cloud.firestore {
           'pendingSync',
           'kind',
         ])
+        && (!('id' in data.keys()) || validString(data.id, 200))
         && validNonEmptyString(data.title, 500)
         && validNonEmptyString(data.category, 120)
         && data.done is bool
