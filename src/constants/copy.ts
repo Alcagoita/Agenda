@@ -96,6 +96,7 @@ const en = {
   newTaskSheet: {
     title:        'What do you need?',
     poiQuestion:  'Where does this happen?',
+    subtypeQuestion: 'Specific type?',
     catQuestion:  'Which part of your life?',
     catOptional:  ' (optional)',
     swipeHint:    'Swipe for more',
@@ -1279,6 +1280,7 @@ const ptPT: typeof en = {
   newTaskSheet: {
     title:        'O que precisas de fazer?',
     poiQuestion:  'Onde é que isto acontece?',
+    subtypeQuestion: 'Tipo específico?',
     catQuestion:  'Que parte da tua vida?',
     catOptional:  ' (opcional)',
     swipeHint:    'Desliza para ver mais',

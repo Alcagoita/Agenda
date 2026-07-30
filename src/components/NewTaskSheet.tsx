@@ -612,11 +612,21 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
               </View>
 
               {poi === 'restaurant' && (
-                <View style={styles.foodTypePad}>
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.subtypeQuestion}
+                    </Text>
+                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                      {COPY.newTaskSheet.catOptional}
+                    </Text>
+                  </View>
+                  <View style={styles.foodTypePad}>
                   <FoodTypeSelector
                     selected={restaurantFoodType}
                     onSelect={setRestaurantFoodType}
                   />
+                  </View>
                 </View>
               )}
 
@@ -847,6 +857,9 @@ const styles = StyleSheet.create({
     paddingLeft:   22,
     paddingTop:     8,
     paddingBottom:  2,
+  },
+  foodTypeSection: {
+    paddingTop: 2,
   },
   carouselMask: {
     // Soft fade on the trailing edge via paddingRight on the content and overflow

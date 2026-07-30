@@ -713,10 +713,20 @@ export default function TaskFormScreen() {
           </View>
 
           {effectivePoi === 'restaurant' && (
-            <FoodTypeSelector
-              selected={restaurantFoodType}
-              onSelect={setRestaurantFoodType}
-            />
+            <View style={styles.subtypeSection}>
+              <View style={styles.questionRow}>
+                <Text style={[styles.questionLabel, { color: palette.text }]}>
+                  {COPY.newTaskSheet.subtypeQuestion}
+                </Text>
+                <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                  {COPY.newTaskSheet.catOptional}
+                </Text>
+              </View>
+              <FoodTypeSelector
+                selected={restaurantFoodType}
+                onSelect={setRestaurantFoodType}
+              />
+            </View>
           )}
         </View>
         )}
