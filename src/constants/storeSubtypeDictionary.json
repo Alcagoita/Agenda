@@ -1,4 +1,10 @@
 {
+  "any": {
+    "label": "Any",
+    "labelPt": "Qualquer",
+    "aliases": ["any", "anything", "any store", "generic", "general", "qualquer", "qualquer loja", "geral"],
+    "stores": []
+  },
   "clothing": {
     "label": "Clothing",
     "labelPt": "Roupa",
@@ -22,6 +28,30 @@
     "labelPt": "Livros",
     "aliases": ["book", "books", "notebook", "stationery", "livro", "livros", "caderno", "papelaria"],
     "stores": ["Bertrand", "FNAC", "Leya", "Wook", "Note!", "Staples"]
+  },
+  "furniture": {
+    "label": "Furniture",
+    "labelPt": "Mobiliário",
+    "aliases": ["furniture", "sofa", "chair", "table", "desk", "mattress", "moveis", "móveis", "sofa", "sofá", "cadeira", "mesa", "secretaria", "colchao", "colchão"],
+    "stores": ["IKEA", "Conforama", "JYSK", "Area", "Kinda Home", "Banak", "Antarte", "Moviflor"]
+  },
+  "hardware": {
+    "label": "Hardware",
+    "labelPt": "Ferragens",
+    "aliases": ["hardware", "tools", "tool", "paint", "screws", "nails", "diy", "ferragens", "ferramentas", "ferramenta", "tinta", "parafusos", "pregos", "bricolage"],
+    "stores": ["Leroy Merlin", "Maxmat", "Bricomarché", "Aki", "Brico Depôt", "Brico Depot"]
+  },
+  "bicycle": {
+    "label": "Bicycle",
+    "labelPt": "Bicicletas",
+    "aliases": ["bicycle", "bike", "cycling", "helmet", "inner tube", "bicicleta", "bicicletas", "ciclismo", "capacete", "camara de ar", "câmara de ar"],
+    "stores": ["Decathlon", "Sport Zone", "Bike Zone", "Specialized", "Trek", "Biclas & Triclas"]
+  },
+  "jewelry": {
+    "label": "Jewelry",
+    "labelPt": "Joalharia",
+    "aliases": ["jewelry", "jewellery", "ring", "necklace", "bracelet", "watch", "joia", "joias", "joalharia", "anel", "colar", "pulseira", "relogio", "relógio"],
+    "stores": ["Pandora", "Tous", "Swarovski", "Ourivesaria Portugal", "Boutique dos Relógios", "Parfois"]
   },
   "toys": {
     "label": "Toys",

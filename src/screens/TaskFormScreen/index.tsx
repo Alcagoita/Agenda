@@ -51,7 +51,11 @@ import { POI_TILE_WIDTH, styles } from './styles';
 import { localPoiLabel } from '../../services/poiTypeCache';
 import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
 import StoreSubtypeSelector from '../../components/StoreSubtypeSelector';
-import type { StoreSubtype } from '../../services/storeSubtypes';
+import {
+  inferStoreSubtype,
+  storeSubtypeDisplayLabel,
+  type StoreSubtype,
+} from '../../services/storeSubtypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +72,7 @@ export interface TaskFormParams {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function TaskFormScreen() {
-  const { palette }  = useTheme();
+  const { palette, language }  = useTheme();
   const navigation   = useNavigation();
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
@@ -167,6 +171,9 @@ export default function TaskFormScreen() {
       : initialPoi === 'store'
         ? initialStoreSubtype ?? null
         : null,
+  );
+  const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(
+    Boolean(existingTask?.storeSubtype || initialStoreSubtype),
   );
   const [focused,       setFocused]       = useState(false);
   const [suggestedPoi, setSuggestedPoi] = useState<string | null>(
@@ -299,8 +306,16 @@ export default function TaskFormScreen() {
 
   useEffect(() => {
     if (effectivePoi !== 'restaurant') { setRestaurantFoodType(null); }
-    if (effectivePoi !== 'store') { setStoreSubtype(null); }
+    if (effectivePoi !== 'store') {
+      setStoreSubtype(null);
+      setStoreSubtypeTouched(false);
+    }
   }, [effectivePoi]);
+
+  useEffect(() => {
+    if (effectivePoi !== 'store' || storeSubtypeTouched) { return; }
+    setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
+  }, [effectivePoi, storeSubtypeTouched, title]);
 
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
   const suggestions = !customPoiType && query.trim() ? getTypeSuggestions(query) : [];
@@ -318,6 +333,9 @@ export default function TaskFormScreen() {
   const confirmedSuggestion = suggestionType !== null && suggestionSelected && poiTouched;
   const showSuggestionHint = liveSuggestion || suggestionType === null;
   const suggestionHighlighted = liveSuggestion || suggestionSelected;
+  const storeSubtypeGuessLabel = effectivePoi === 'store' && storeSubtype && !storeSubtypeTouched
+    ? COPY.newTaskSheet.subtypeGuess(storeSubtypeDisplayLabel(storeSubtype, language))
+    : null;
 
   const handleSave = useCallback(async () => {
     const trimmed = title.trim();
@@ -332,7 +350,7 @@ export default function TaskFormScreen() {
         date,
         ...(time.trim() ? { time: time.trim() } : {}),
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
-        ...(!isBirthday && effectivePoi === 'store' && storeSubtype ? { storeSubtype } : {}),
+        ...(!isBirthday && effectivePoi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
       };
 
       if (notes.trim()) {
@@ -351,7 +369,7 @@ export default function TaskFormScreen() {
         } else if (existingTask.kind === 'birthday') {
           updateData.kind = deleteField();
         }
-        if (!isBirthday && (effectivePoi !== 'store' || !storeSubtype)) {
+        if (!isBirthday && effectivePoi !== 'store') {
           updateData.storeSubtype = deleteField();
         }
         await updateTask(uid, existingTask.id, updateData as Partial<Task>);
@@ -751,13 +769,18 @@ export default function TaskFormScreen() {
                 <Text style={[styles.questionLabel, { color: palette.text }]}>
                   {COPY.newTaskSheet.subtypeQuestion}
                 </Text>
-                <Text style={[styles.questionOptional, { color: palette.faint }]}>
-                  {COPY.newTaskSheet.catOptional}
-                </Text>
+                {storeSubtypeGuessLabel && (
+                  <Text style={[styles.questionOptional, { color: palette.faint }]} numberOfLines={1}>
+                    {storeSubtypeGuessLabel}
+                  </Text>
+                )}
               </View>
               <StoreSubtypeSelector
                 selected={storeSubtype}
-                onSelect={setStoreSubtype}
+                onSelect={subtype => {
+                  setStoreSubtypeTouched(true);
+                  setStoreSubtype(subtype ?? 'any');
+                }}
               />
             </View>
           )}

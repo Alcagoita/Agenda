@@ -58,7 +58,11 @@ import { localPoiLabel } from '../services/poiTypeCache';
 import FoodTypeSelector from './FoodTypeSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 import StoreSubtypeSelector from './StoreSubtypeSelector';
-import type { StoreSubtype } from '../services/storeSubtypes';
+import {
+  inferStoreSubtype,
+  storeSubtypeDisplayLabel,
+  type StoreSubtype,
+} from '../services/storeSubtypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -212,7 +216,7 @@ function SuggestionTile({ type, label, selected, touched, onPress, palette }: Su
 
 const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
   function NewTaskSheet({ visible, uid, onClose, onTaskAdded, customCategories = [] }, ref) {
-    const { palette } = useTheme();
+    const { palette, language } = useTheme();
     const insets = useSafeAreaInsets();
 
     // Form state
@@ -221,6 +225,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [poi,      setPoi]      = useState<string | null>(null);
     const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
     const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
+    const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(false);
     // KAN-249 — the raw inference result, frozen the moment the user touches
     // the carousel. Compared against `poi` at submit time to tell a Confirm
     // (poi === suggestedPoi) from a Replace (poi !== suggestedPoi); null means
@@ -292,6 +297,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setPoi(null);
       setRestaurantFoodType(null);
       setStoreSubtype(null);
+      setStoreSubtypeTouched(false);
       setSuggestedPoi(null);
       setSuggestedTitle(null);
       setPoiTouched(false);
@@ -410,8 +416,16 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
-      if (poi !== 'store') { setStoreSubtype(null); }
+      if (poi !== 'store') {
+        setStoreSubtype(null);
+        setStoreSubtypeTouched(false);
+      }
     }, [poi]);
+
+    useEffect(() => {
+      if (poi !== 'store' || storeSubtypeTouched) { return; }
+      setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
+    }, [poi, storeSubtypeTouched, title]);
 
     // KAN-249 — the leading suggestion tile's content. `suggestionType` is
     // sticky once inference lands on something: replacing it with a
@@ -424,6 +438,9 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         : localPoiLabel(suggestionType))
       : null;
     const suggestionSelected = suggestionType !== null && poi === suggestionType;
+    const storeSubtypeGuessLabel = poi === 'store' && storeSubtype && !storeSubtypeTouched
+      ? COPY.newTaskSheet.subtypeGuess(storeSubtypeDisplayLabel(storeSubtype, language))
+      : null;
 
     const handleSubmit = useCallback(async () => {
       const trimmed = title.trim();
@@ -437,7 +454,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           done:     false,
           date:     todayISO(),
           poi,
-          ...(poi === 'store' && storeSubtype ? { storeSubtype } : {}),
+          ...(poi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
         // fired for THIS title. Inference is skipped once the carousel is
@@ -643,14 +660,19 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                     <Text style={[styles.questionLabel, { color: palette.text }]}>
                       {COPY.newTaskSheet.subtypeQuestion}
                     </Text>
-                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
-                      {COPY.newTaskSheet.catOptional}
-                    </Text>
+                    {storeSubtypeGuessLabel && (
+                      <Text style={[styles.questionOptional, { color: palette.faint }]} numberOfLines={1}>
+                        {storeSubtypeGuessLabel}
+                      </Text>
+                    )}
                   </View>
                   <View style={styles.foodTypePad}>
                     <StoreSubtypeSelector
                       selected={storeSubtype}
-                      onSelect={setStoreSubtype}
+                      onSelect={subtype => {
+                        setStoreSubtypeTouched(true);
+                        setStoreSubtype(subtype ?? 'any');
+                      }}
                     />
                   </View>
                 </View>

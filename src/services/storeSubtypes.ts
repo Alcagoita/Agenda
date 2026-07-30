@@ -136,8 +136,6 @@ function visibleLabelMatchScore(label: string, normalizedQuery: string): number 
   if (normalizedLabel === normalizedQuery) { return 0; }
   if (words.some(word => word.startsWith(normalizedQuery))) { return 1; }
   if (normalizedLabel.startsWith(normalizedQuery)) { return 2; }
-  if (words.some(word => word.includes(normalizedQuery))) { return 3; }
-  if (normalizedLabel.includes(normalizedQuery)) { return 4; }
   return null;
 }
 
@@ -146,6 +144,7 @@ export function storePlaceMatchesSubtype(
   subtype: StoreSubtype | null,
 ): boolean {
   if (!subtype) { return true; }
+  if (subtype === 'any') { return true; }
   if (typeof place !== 'string' && place.storeSubtype) {
     return place.storeSubtype === subtype;
   }
@@ -176,6 +175,7 @@ export function inferStoreSubtypeFromPlaceName(placeName: string): StoreSubtype 
 
   let match: StoreSubtype | null = null;
   for (const subtype of listStoreSubtypes()) {
+    if (subtype === 'any') { continue; }
     const entry = STORE_SUBTYPE_DICTIONARY[subtype];
     const matchesKnownStore = entry.stores.some(store => {
       const normalizedStore = normalize(store);

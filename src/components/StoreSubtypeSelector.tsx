@@ -4,6 +4,7 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { S } from './AppIcon/shared';
 import { fonts, radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme';
+import { PoiIcon } from './AppIcon';
 import {
   listStoreSubtypes,
   storeSubtypeDisplayLabel,
@@ -19,6 +20,8 @@ function StoreSubtypeIcon({ type, color, size = 16 }: { type: StoreSubtype; colo
   const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none' };
 
   switch (type) {
+    case 'any':
+      return <PoiIcon type="store" color={color} size={size} />;
     case 'clothing':
       return (
         <Svg {...p}>
@@ -53,6 +56,37 @@ function StoreSubtypeIcon({ type, color, size = 16 }: { type: StoreSubtype; colo
           <Rect x="5" y="9" width="14" height="10" rx="2" stroke={color} strokeWidth={1.6} {...S} />
           <Path d="M8 9c-2-3 2-5 4-2 2-3 6-1 4 2" stroke={color} strokeWidth={1.6} {...S} />
           <Line x1="12" y1="9" x2="12" y2="19" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'furniture':
+      return (
+        <Svg {...p}>
+          <Path d="M5 11h14v7H5v-7z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M7 11V8c0-2 3-2 3 0v3M14 11V8c0-2 3-2 3 0v3" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="7" y1="18" x2="7" y2="20" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="17" y1="18" x2="17" y2="20" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'hardware':
+      return (
+        <Svg {...p}>
+          <Path d="M15 5l4 4-9 9H6v-4l9-9z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M13 7l4 4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'bicycle':
+      return (
+        <Svg {...p}>
+          <Circle cx="7" cy="16" r="3" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="17" cy="16" r="3" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M7 16l4-7h3l3 7M11 9l3 7H7M12 7h3" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'jewelry':
+      return (
+        <Svg {...p}>
+          <Path d="M8 6h8l3 4-7 9-7-9 3-4z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M5 10h14M9 6l3 4 3-4" stroke={color} strokeWidth={1.4} {...S} />
         </Svg>
       );
     case 'pet':
@@ -100,7 +134,7 @@ export default function StoreSubtypeSelector({ selected, onSelect }: StoreSubtyp
     const fg = active ? palette.nearText : palette.text;
     return (
       <Pressable
-        onPress={() => onSelect(active ? null : type)}
+        onPress={() => onSelect(type)}
         accessibilityRole="radio"
         accessibilityLabel={storeSubtypeDisplayLabel(type, language)}
         accessibilityState={{ selected: active }}

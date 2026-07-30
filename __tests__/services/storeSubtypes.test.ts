@@ -14,6 +14,10 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Buy a t-shirt')).toBe('clothing');
     expect(inferStoreSubtype('Comprar ténis')).toBe('shoes');
     expect(inferStoreSubtype('Comprar carregador')).toBe('electronics');
+    expect(inferStoreSubtype('Buy a sofa')).toBe('furniture');
+    expect(inferStoreSubtype('Buy screws')).toBe('hardware');
+    expect(inferStoreSubtype('Buy a bicycle helmet')).toBe('bicycle');
+    expect(inferStoreSubtype('Buy a necklace')).toBe('jewelry');
   });
 
   it('requires shopping context before promoting subtype intent to store POI inference', () => {
@@ -30,13 +34,19 @@ describe('storeSubtypes', () => {
   });
 
   it('suggests store types by visible label correspondence', () => {
+    expect(storeSubtypeSuggestions('')).toContain('any');
     expect(storeSubtypeSuggestions('Cl')).toEqual(['clothing']);
     expect(storeSubtypeSuggestions('El')).toEqual(['electronics']);
+    expect(storeSubtypeSuggestions('Fu')).toEqual(['furniture']);
+    expect(storeSubtypeSuggestions('Ha')).toEqual(['hardware']);
+    expect(storeSubtypeSuggestions('Bi')).toEqual(['bicycle']);
+    expect(storeSubtypeSuggestions('Je')).toEqual(['jewelry']);
     expect(storeSubtypeSuggestions('Sh')).toEqual(['shoes']);
     expect(storeSubtypeSuggestions('Sap', 'pt-PT')).toEqual(['shoes']);
   });
 
   it('matches nearby store names against the bundled subtype list', () => {
+    expect(storePlaceMatchesSubtype('Aquaplante', 'any')).toBe(true);
     expect(storePlaceMatchesSubtype('Zara Colombo', 'clothing')).toBe(true);
     expect(storePlaceMatchesSubtype('Aquaplante', 'clothing')).toBe(false);
   });
