@@ -23,6 +23,12 @@ import {
   restaurantFoodTypeSuggestions,
   type RestaurantFoodType,
 } from '../services/restaurantFoodTypes';
+import {
+  storeSubtypeDisplayLabel,
+  storeSubtypeFavouriteName,
+  storeSubtypeSuggestions,
+  type StoreSubtype,
+} from '../services/storeSubtypes';
 
 export interface TeachSheetProps {
   visible: boolean;
@@ -46,22 +52,34 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
       backgroundColor: palette.accent,
     },
   }), [palette]);
-  const [kind, setKind] = useState<'place' | 'food'>('place');
+  const [kind, setKind] = useState<'place' | 'food' | 'store'>('place');
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedFoodType, setSelectedFoodType] = useState<RestaurantFoodType | null>(null);
+  const [selectedStoreSubtype, setSelectedStoreSubtype] = useState<StoreSubtype | null>(null);
   const trimmedName = name.trim();
   const canonicalName = kind === 'place' ? getCanonicalBrand(type, name) : null;
   const brandSuggestions = kind === 'place' && trimmedName.length >= 2 ? getBrandSuggestions(type, name) : [];
-  const foodSuggestions = kind === 'food' && trimmedName.length >= 2 ? restaurantFoodTypeSuggestions(name) : [];
+  const foodSuggestions = kind === 'food' && trimmedName.length >= 2 ? restaurantFoodTypeSuggestions(name, language) : [];
+  const storeSuggestions = kind === 'store' && trimmedName.length >= 2 ? storeSubtypeSuggestions(name, language) : [];
   const shouldShowBrandSuggestions = kind === 'place' && type != null && brandSuggestions.length > 0;
   const shouldShowFoodSuggestions = kind === 'food' && foodSuggestions.length > 0;
+  const shouldShowStoreSuggestions = kind === 'store' && storeSuggestions.length > 0;
   const canSave = kind === 'food'
     ? selectedFoodType != null
-    : type != null && selectedBrand != null && selectedBrand === canonicalName;
+    : kind === 'store'
+      ? selectedStoreSubtype != null
+      : type != null && selectedBrand != null && selectedBrand === canonicalName;
 
-  const reset = () => { setKind('place'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); };
+  const reset = () => {
+    setKind('place');
+    setType(null);
+    setName('');
+    setSelectedBrand(null);
+    setSelectedFoodType(null);
+    setSelectedStoreSubtype(null);
+  };
   // Every dismissal clears the form, so reopening always starts empty.
   const handleClose = () => { reset(); onClose(); };
 
@@ -90,7 +108,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 return (
                   <Pressable
                     key={t}
-                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
+                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
                     style={[
                       styles.typeChip,
                       { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
@@ -104,7 +122,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 );
               })}
               <Pressable
-                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
+                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
                 style={[
                   styles.typeChip,
                   {
@@ -120,17 +138,42 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                   {COPY.places.teachFoodType}
                 </Text>
               </Pressable>
+              <Pressable
+                onPress={() => { setKind('store'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
+                style={[
+                  styles.typeChip,
+                  {
+                    borderColor: kind === 'store' ? palette.accent : palette.line,
+                    backgroundColor: kind === 'store' ? palette.nearTint : palette.surface,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: kind === 'store' }}
+                accessibilityLabel={COPY.places.teachStoreType}>
+                <PoiIcon type="store" color={kind === 'store' ? palette.nearText : palette.muted} size={18} />
+                <Text style={[styles.typeChipLabel, { color: kind === 'store' ? palette.nearText : palette.text }]}>
+                  {COPY.places.teachStoreType}
+                </Text>
+              </Pressable>
             </View>
 
             <Text style={[styles.fieldLabel, { color: palette.muted }]}>
-              {kind === 'food' ? COPY.places.teachFoodTypeNameLabel : COPY.places.teachNameLabel}
+              {kind === 'food'
+                ? COPY.places.teachFoodTypeNameLabel
+                : kind === 'store'
+                  ? COPY.places.teachStoreTypeNameLabel
+                  : COPY.places.teachNameLabel}
             </Text>
             <TextInput
               style={[styles.nameInput, { color: palette.text, borderColor: palette.line, backgroundColor: palette.surface }]}
-              placeholder={kind === 'food' ? COPY.places.teachFoodTypePlaceholder : COPY.places.teachNamePlaceholder}
+              placeholder={kind === 'food'
+                ? COPY.places.teachFoodTypePlaceholder
+                : kind === 'store'
+                  ? COPY.places.teachStoreTypePlaceholder
+                  : COPY.places.teachNamePlaceholder}
               placeholderTextColor={palette.muted}
               value={name}
-              onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); }}
+              onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
               returnKeyType="done"
             />
             {shouldShowBrandSuggestions && (
@@ -180,6 +223,30 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 })}
               </View>
             )}
+            {shouldShowStoreSuggestions && (
+              <View style={styles.suggestionList}>
+                {storeSuggestions.map(subtype => {
+                  const label = storeSubtypeDisplayLabel(subtype, language);
+                  const selected = subtype === selectedStoreSubtype;
+                  return (
+                    <Pressable
+                      key={subtype}
+                      onPress={() => { setName(label); setSelectedStoreSubtype(subtype); }}
+                      style={[
+                        styles.suggestionRow,
+                        selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={label}>
+                      <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
 
             <Pressable
               style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
@@ -187,6 +254,11 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
               onPress={() => {
                 if (kind === 'food' && selectedFoodType) {
                   onSave('restaurant', restaurantFoodTypeFavouriteName(selectedFoodType));
+                  reset();
+                  return;
+                }
+                if (kind === 'store' && selectedStoreSubtype) {
+                  onSave('store', storeSubtypeFavouriteName(selectedStoreSubtype));
                   reset();
                   return;
                 }

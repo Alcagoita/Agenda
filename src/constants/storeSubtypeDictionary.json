@@ -1,0 +1,56 @@
+{
+  "clothing": {
+    "label": "Clothing",
+    "labelPt": "Roupa",
+    "aliases": ["clothing", "clothes", "t-shirt", "tshirt", "shirt", "trousers", "dress", "jacket", "coat", "roupa", "camisola", "t-shirt", "camisa", "calcas", "calças", "vestido", "casaco"],
+    "stores": ["Zara", "H&M", "Mango", "Pull&Bear", "Bershka", "Stradivarius", "Massimo Dutti", "Lefties", "Primark", "C&A", "Springfield", "Sacoor Brothers", "Cortefiel", "Tezenis", "Intimissimi", "Women'secret"]
+  },
+  "shoes": {
+    "label": "Shoes",
+    "labelPt": "Sapatos",
+    "aliases": ["shoes", "trainers", "sneakers", "boots", "sandals", "sapatos", "tenis", "ténis", "sapatilhas", "botas", "sandalias", "sandálias"],
+    "stores": ["Foot Locker", "JD Sports", "Sport Zone", "Seaside", "Foreva", "Aldo", "Calçado Guimarães", "Zilian", "Skechers", "Nike", "Adidas", "New Balance"]
+  },
+  "electronics": {
+    "label": "Electronics",
+    "labelPt": "Eletrónica",
+    "aliases": ["electronics", "charger", "cable", "headphones", "phone", "laptop", "mouse", "keyboard", "battery", "eletronica", "eletrónica", "carregador", "cabo", "auscultadores", "telemovel", "telemóvel", "portatil", "portátil", "rato", "teclado", "bateria"],
+    "stores": ["Worten", "FNAC", "MediaMarkt", "Radio Popular", "iStore", "GMS Store", "PCDIGA", "Chip7", "CeX"]
+  },
+  "books": {
+    "label": "Books",
+    "labelPt": "Livros",
+    "aliases": ["book", "books", "notebook", "stationery", "livro", "livros", "caderno", "papelaria"],
+    "stores": ["Bertrand", "FNAC", "Leya", "Wook", "Note!", "Staples"]
+  },
+  "toys": {
+    "label": "Toys",
+    "labelPt": "Brinquedos",
+    "aliases": ["toy", "toys", "game", "games", "lego", "brinquedo", "brinquedos", "jogo", "jogos"],
+    "stores": ["Toys R Us", "Centroxogo", "Science4you", "Imaginarium", "LEGO Store", "Disney Store"]
+  },
+  "pet": {
+    "label": "Pet supplies",
+    "labelPt": "Animais",
+    "aliases": ["pet", "pets", "dog food", "cat food", "fish tank", "aquarium", "animal", "animals", "ração", "racao", "aquario", "aquário"],
+    "stores": ["Kiwoko", "Tiendanimal", "Ornimundo", "Pet Outlet", "Goldpet", "Aquaplante"]
+  },
+  "sports": {
+    "label": "Sports",
+    "labelPt": "Desporto",
+    "aliases": ["sports", "sport", "gym clothes", "running", "football", "bike", "bicycle", "desporto", "desportivo", "corrida", "futebol", "bicicleta"],
+    "stores": ["Decathlon", "Sport Zone", "JD Sports", "Nike", "Adidas", "New Balance", "Prozis Store"]
+  },
+  "home": {
+    "label": "Home",
+    "labelPt": "Casa",
+    "aliases": ["home", "furniture", "decor", "lamp", "bedding", "kitchenware", "casa", "moveis", "móveis", "decoracao", "decoração", "candeeiro", "cama", "cozinha"],
+    "stores": ["IKEA", "Leroy Merlin", "Gato Preto", "Zara Home", "Homa", "Area", "Conforama", "JYSK", "Casa"]
+  },
+  "beauty": {
+    "label": "Beauty",
+    "labelPt": "Beleza",
+    "aliases": ["beauty", "makeup", "perfume", "skincare", "cosmetics", "beleza", "maquilhagem", "perfume", "cosmeticos", "cosméticos"],
+    "stores": ["Sephora", "Douglas", "Perfumes & Companhia", "O Boticário", "Kiko Milano", "Primor", "Rituals"]
+  }
+}

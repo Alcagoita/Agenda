@@ -212,6 +212,12 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
+  it('keeps store subtype intent on the broad store type', async () => {
+    expect(await inferPoiForQuickAdd('buy a t-shirt')).toBe('store');
+    expect(await inferPoiForQuickAdd('comprar carregador')).toBe('store');
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
   it('does not force ambiguous food shopping or preparation phrases to restaurant', async () => {
     await expect(inferPoiForQuickAdd('buy pasta')).resolves.not.toBe('restaurant');
     await expect(inferPoiForQuickAdd('buy meat')).resolves.not.toBe('restaurant');

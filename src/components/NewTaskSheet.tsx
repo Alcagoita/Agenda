@@ -57,6 +57,8 @@ import RotatingTitlePlaceholder from './RotatingTitlePlaceholder';
 import { localPoiLabel } from '../services/poiTypeCache';
 import FoodTypeSelector from './FoodTypeSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
+import StoreSubtypeSelector from './StoreSubtypeSelector';
+import type { StoreSubtype } from '../services/storeSubtypes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -218,6 +220,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [category, setCategory] = useState<string | null>(null);
     const [poi,      setPoi]      = useState<string | null>(null);
     const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
+    const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
     // KAN-249 — the raw inference result, frozen the moment the user touches
     // the carousel. Compared against `poi` at submit time to tell a Confirm
     // (poi === suggestedPoi) from a Replace (poi !== suggestedPoi); null means
@@ -288,6 +291,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setCategory(null);
       setPoi(null);
       setRestaurantFoodType(null);
+      setStoreSubtype(null);
       setSuggestedPoi(null);
       setSuggestedTitle(null);
       setPoiTouched(false);
@@ -406,6 +410,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
+      if (poi !== 'store') { setStoreSubtype(null); }
     }, [poi]);
 
     // KAN-249 — the leading suggestion tile's content. `suggestionType` is
@@ -626,6 +631,25 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                     selected={restaurantFoodType}
                     onSelect={setRestaurantFoodType}
                   />
+                  </View>
+                </View>
+              )}
+
+              {poi === 'store' && (
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.subtypeQuestion}
+                    </Text>
+                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                      {COPY.newTaskSheet.catOptional}
+                    </Text>
+                  </View>
+                  <View style={styles.foodTypePad}>
+                    <StoreSubtypeSelector
+                      selected={storeSubtype}
+                      onSelect={setStoreSubtype}
+                    />
                   </View>
                 </View>
               )}

@@ -7,6 +7,7 @@ import { formatDateShort } from '../utils/date';
 import { isCatalogPoiType, poiCatalogLabel } from '../types';
 import type { Trip } from '../types';
 import { parseRestaurantFoodTypeFavouriteName, restaurantFoodTypeDisplayLabel } from './restaurantFoodTypes';
+import { parseStoreSubtypeFavouriteName, storeSubtypeDisplayLabel } from './storeSubtypes';
 
 /**
  * Lower-cased display label for a POI type. Safe for custom (non-catalog) POI
@@ -19,10 +20,13 @@ export function typeLabel(poiType: string): string {
 
 export function placeEntryTitle(name: string, language?: string): string {
   const foodType = parseRestaurantFoodTypeFavouriteName(name);
+  const storeSubtype = parseStoreSubtypeFavouriteName(name);
+  if (storeSubtype) { return storeSubtypeDisplayLabel(storeSubtype, language); }
   return foodType ? restaurantFoodTypeDisplayLabel(foodType, language) : name;
 }
 
 export function placeEntryTypeLabel(poiType: string, name: string): string {
+  if (parseStoreSubtypeFavouriteName(name)) { return COPY.places.teachStoreType; }
   return parseRestaurantFoodTypeFavouriteName(name) ? COPY.places.teachFoodType : typeLabel(poiType);
 }
 

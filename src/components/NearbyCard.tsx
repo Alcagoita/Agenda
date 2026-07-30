@@ -52,14 +52,27 @@ import { ChevronRightIcon, PoiIcon, RefreshIcon } from './AppIcon';
 import { logTap } from '../services/analytics';
 import { COPY } from '../constants/copy';
 import { restaurantPlacesForTask, restaurantTaskMatchesAnyPlace } from '../services/restaurantFoodTypes';
+import { storePlacesForTask, storeTaskMatchesAnyPlace } from '../services/storeSubtypes';
 
 // Distance threshold that separates the orange hero zone from the grey zone.
 const HERO_RADIUS_M = 100;
 
 function nearestDistanceForTask(task: Task, poiPlaces: PlacesMap): number {
   if (!task.poi) { return Number.POSITIVE_INFINITY; }
-  const places = restaurantPlacesForTask(task, poiPlaces[task.poi] ?? []);
+  const places = placesForTask(task, poiPlaces[task.poi] ?? []);
   return places[0]?.distanceMeters ?? Number.POSITIVE_INFINITY;
+}
+
+function placesForTask(task: Task, places: NearbyPlace[]): NearbyPlace[] {
+  if (task.poi === 'restaurant') { return restaurantPlacesForTask(task, places); }
+  if (task.poi === 'store') { return storePlacesForTask(task, places); }
+  return places;
+}
+
+function taskMatchesAnyPlace(task: Task, places: NearbyPlace[]): boolean {
+  if (task.poi === 'restaurant') { return restaurantTaskMatchesAnyPlace(task, places); }
+  if (task.poi === 'store') { return storeTaskMatchesAnyPlace(task, places); }
+  return true;
 }
 
 function capitalizeFirstLetter(text: string): string {
@@ -378,10 +391,10 @@ function NearbyCard({
   const heroEntries = poiTasks.reduce<Array<{ task: Task; places: NearbyPlace[]; poiType: string }>>(
     (acc, t) => {
       if (!t.poi) { return acc; }
-      const places = restaurantPlacesForTask(t, poiPlaces[t.poi] ?? []);
+      const places = placesForTask(t, poiPlaces[t.poi] ?? []);
       if (!places?.length || places[0].distanceMeters >= HERO_RADIUS_M) { return acc; }
-      if (!restaurantTaskMatchesAnyPlace(t, places)) { return acc; }
-      if (t.poi !== 'restaurant' && acc.find(e => e.poiType === t.poi)) { return acc; }
+      if (!taskMatchesAnyPlace(t, places)) { return acc; }
+      if (t.poi !== 'restaurant' && t.poi !== 'store' && acc.find(e => e.poiType === t.poi)) { return acc; }
       acc.push({ task: t, places, poiType: t.poi });
       return acc;
     },
@@ -394,8 +407,8 @@ function NearbyCard({
   const heroPoiTypes = new Set(heroEntries.map(e => e.poiType));
   const greyTasks = poiTasks.filter(t => {
     if (!t.poi || heroPoiTypes.has(t.poi)) { return false; }
-    const places = restaurantPlacesForTask(t, poiPlaces[t.poi] ?? []);
-    return !!places?.length && restaurantTaskMatchesAnyPlace(t, places);
+    const places = placesForTask(t, poiPlaces[t.poi] ?? []);
+    return !!places?.length && taskMatchesAnyPlace(t, places);
   }).sort((a, b) => nearestDistanceForTask(a, poiPlaces) - nearestDistanceForTask(b, poiPlaces));
 
   const hasContent = poiTasks.length > 0 && (heroEntries.length > 0 || greyTasks.length > 0);
@@ -499,7 +512,7 @@ function NearbyCard({
             <AlsoCloseRow
               key={task.id}
               task={task}
-              place={task.poi ? restaurantPlacesForTask(task, poiPlaces[task.poi] ?? [])[0] : undefined}
+              place={task.poi ? placesForTask(task, poiPlaces[task.poi] ?? [])[0] : undefined}
               isFirst={index === 0}
             />
           ))}
