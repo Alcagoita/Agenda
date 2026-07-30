@@ -212,6 +212,12 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
+  it('does not force ambiguous food shopping or preparation phrases to restaurant', async () => {
+    await expect(inferPoiForQuickAdd('buy pasta')).resolves.not.toBe('restaurant');
+    await expect(inferPoiForQuickAdd('buy meat')).resolves.not.toBe('restaurant');
+    await expect(inferPoiForQuickAdd('make salad')).resolves.not.toBe('restaurant');
+  });
+
   it('keeps coffee roastery when the title is explicit', async () => {
     expect(await inferPoiForQuickAdd('go to a coffee roastery')).toBe('coffee_roastery');
     expect(mockLoad).not.toHaveBeenCalled();

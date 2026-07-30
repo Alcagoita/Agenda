@@ -162,6 +162,24 @@ describe('runProximitySearch — multiple results per type', () => {
     expect(allPlaces.restaurant).toEqual([restaurants[1]]);
   });
 
+  it('preserves candidates for simultaneous restaurant food-intent tasks', async () => {
+    const restaurants = [
+      makePlace('r1', 'Portugália', 30),
+      makePlace('r2', 'Yakuza by Olivier', 80),
+    ];
+    mockSearchNearbyPlaces.mockResolvedValue({ restaurant: restaurants });
+
+    await runProximitySearch('uid-1', [
+      makeTask('t1', 'restaurant', 'Go out to sushi'),
+      makeTask('t2', 'restaurant', 'Comer comida portuguesa'),
+    ], mockOnUpdate);
+
+    const [heroType, heroPlace, allPlaces] = mockOnUpdate.mock.calls[0];
+    expect(heroType).toBe('restaurant');
+    expect(heroPlace?.name).toBe('Portugália');
+    expect(allPlaces.restaurant).toEqual(restaurants);
+  });
+
   it('does not show an unrelated restaurant for a food-intent restaurant task', async () => {
     mockSearchNearbyPlaces.mockResolvedValue({
       restaurant: [makePlace('r1', 'Portugália', 30)],

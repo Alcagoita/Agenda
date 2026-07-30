@@ -36,7 +36,7 @@ import {
 } from './poiInference';
 import { persistLearnedKeyword } from './firestore';
 import { searchPlaceTypesLocal } from './poiTypeCache';
-import { inferRestaurantFoodType } from './restaurantFoodTypes';
+import { inferRestaurantFoodTypeForPoiInference } from './restaurantFoodTypes';
 import vocabJson from '../../assets/poi-model/vocab.json';
 import labelsJson from '../../assets/poi-model/labels.json';
 
@@ -193,7 +193,7 @@ export async function classifyPoi(
  * to `null` on failure, so this works fully offline (airplane mode).
  */
 export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution | null> {
-  if (inferRestaurantFoodType(title)) { return 'restaurant'; }
+  if (inferRestaurantFoodTypeForPoiInference(title)) { return 'restaurant'; }
 
   const localSuggestion = searchPlaceTypesLocal(title)[0]?.type ?? null;
   if (localSuggestion) { return localSuggestion; }

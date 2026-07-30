@@ -94,7 +94,12 @@ import { recordLiveResult, refreshHabitatCacheIfStale, queryHabitatCache, findEx
 import { saveProximitySnapshot, loadProximitySnapshot } from './proximitySnapshot';
 import { useToastStore } from '../store/toastStore';
 import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
-import { filterRestaurantPlacesForTasks, restaurantTaskMatchesPlaceName } from './restaurantFoodTypes';
+import {
+  filterRestaurantPlacesForTasks,
+  groupRestaurantPlaceCandidates,
+  mergeRestaurantPlaceCandidates,
+  restaurantTaskMatchesPlaceName,
+} from './restaurantFoodTypes';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -803,7 +808,11 @@ function processProximityTick(
   const allPlaces: PlacesMap = {};
 
   for (const poiType of uniquePoiTypes) {
-    const places = filterRestaurantPlacesForTasks(poiType, results[poiType] ?? [], undonePoiTasks);
+    const rawPlaces = results[poiType] ?? [];
+    const restaurantGroups = groupRestaurantPlaceCandidates(poiType, rawPlaces, undonePoiTasks);
+    const places = poiType === 'restaurant'
+      ? mergeRestaurantPlaceCandidates(restaurantGroups)
+      : filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks);
 
     // Reconcile live results against the cache's cross-source identity
     // (KAN-229): a place already known to both Google and the OSM cache
@@ -843,10 +852,18 @@ function processProximityTick(
     // the TRUE nearest distance only — KAN-230's learned-place preference
     // (below) must never influence which TYPE wins the cross-type race,
     // only which specific PLACE represents the type that already won.
-    if (dist < HERO_RADIUS_M && dist < heroDistance) {
-      heroType     = poiType;
-      heroPlace    = nearest;
-      heroDistance = dist;
+    const heroCandidateLists = poiType === 'restaurant'
+      ? restaurantGroups.map(group => group.places)
+      : [places];
+    for (const candidates of heroCandidateLists) {
+      const candidateNearest = candidates[0];
+      if (!candidateNearest) { continue; }
+      const candidateDist = candidateNearest.distanceMeters;
+      if (candidateDist < HERO_RADIUS_M && candidateDist < heroDistance) {
+        heroType     = poiType;
+        heroPlace    = candidateNearest;
+        heroDistance = candidateDist;
+      }
     }
   }
 

@@ -289,6 +289,31 @@ describe('NearbyCard — hero carousel page indicator', () => {
     expect(renderedText.indexOf('Buy groceries')).toBeLessThan(renderedText.indexOf('Pick up prescription'));
   });
 
+  it('keeps simultaneous restaurant food-intent hero slides on their matching places', () => {
+    const sushiTask = makeTask({ id: 'sushi', poi: 'restaurant', title: 'Go out to sushi' });
+    const portugueseTask = makeTask({ id: 'portuguese', poi: 'restaurant', title: 'Comer comida portuguesa' });
+
+    render(
+      <NearbyCard
+        tasks={[sushiTask, portugueseTask]}
+        nearbyPoiType="restaurant"
+        poiPlaces={{
+          restaurant: [
+            { ...NEARBY_PLACE, placeId: 'portugal-place', name: 'Portugália', distanceMeters: 30 },
+            { ...NEARBY_PLACE, placeId: 'sushi-place', name: 'Yakuza by Olivier', distanceMeters: 80 },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Go out to sushi')).toBeTruthy();
+    expect(screen.getByText('Comer comida portuguesa')).toBeTruthy();
+    expect(screen.getByTestId('nearby-page-dots')).toBeTruthy();
+    expect(screen.getAllByTestId('nearby-page-dot-active')).toHaveLength(1);
+    expect(screen.getAllByTestId('nearby-page-dot')).toHaveLength(1);
+    expect(screen.queryByText(COPY.nearbyCard.tryAnotherPlace)).toBeNull();
+  });
+
   it('renders no page dots when there is only a single hero slide', () => {
     render(
       <NearbyCard
