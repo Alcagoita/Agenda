@@ -43,12 +43,11 @@ import { useOfflineCoverage } from '../hooks/useOfflineCoverage';
 import { getMostRecentHabitatUpdateAt, refreshHabitatCacheIfStale } from '../services/habitatCache';
 import { getLastSearchCoords, getActiveOffGridWindow } from '../services/proximity';
 import type { PlaceContext } from '../services/proximity';
-import { refreshTripArea } from '../services/tripDownload';
+import { refreshTripArea, getAreaDownloadPoiTypes } from '../services/tripDownload';
 import { getCategories } from '../services/firestore';
 import { resolveContextChipView, ContextChipView } from '../utils/contextChip';
 import { todayISO, formatLocalTime, formatDateShort } from '../utils/date';
 import { useToastStore } from '../store/toastStore';
-import { ALL_POI_TYPES } from '../types';
 import { COPY } from '../constants/copy';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -159,10 +158,7 @@ export default function ContextChip({ placeContext = null }: ContextChipProps) {
       const uid = getAuth().currentUser?.uid;
       const categories = uid ? await getCategories(uid) : [];
       const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-      // KAN-282 — shopping_mall too, matching proximity.ts's own background
-      // prefetch list; without it this manual refresh could never populate
-      // mall rows even after an explicit "Refresh now" tap.
-      const poiTypes = [...new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes, 'shopping_mall'])];
+      const poiTypes = getAreaDownloadPoiTypes(customCategoryPoiTypes);
       await refreshHabitatCacheIfStale(coords.lat, coords.lng, poiTypes, true);
       setLastUpdatedAt(getMostRecentHabitatUpdateAt());
     } catch (err) {

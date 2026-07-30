@@ -65,8 +65,8 @@ export async function deleteMallSnapshotDoc(uid: string): Promise<void> {
 /**
  * Looks up the shopping mall at `center` (throws if none found within
  * MALL_SEARCH_RADIUS_M — the toggle can only be turned on while physically
- * inside one), downloads its POIs (ALL_POI_TYPES ∪ customCategoryPoiTypes,
- * same union the Trip Planner uses), and persists the snapshot doc.
+ * inside one), downloads its POIs (the same curated allowlist the Trip
+ * Planner uses), and persists the snapshot doc.
  *
  * Throws on any failure — this is a user-initiated, visible-progress
  * action (the Profile toggle's loading state), not a silent background

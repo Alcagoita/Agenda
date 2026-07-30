@@ -817,7 +817,7 @@ function translateType(type, enLabel) {
 
 const typesSource = fs.readFileSync(typesPath, 'utf8');
 const mapsSource = fs.readFileSync(mapsPath, 'utf8');
-const types = extractQuotedValues(typesSource, 'export const GOOGLE_PLACE_TYPES_TABLE_A');
+const types = extractQuotedValues(typesSource, 'export const SUPPORTED_GOOGLE_PLACE_TYPES');
 const englishOverrides = extractEnglishOverrides(mapsSource);
 
 const enDictionary = {};

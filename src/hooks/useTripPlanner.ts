@@ -21,10 +21,10 @@ import {
   downloadTripArea,
   computeTripExpiresAt,
   estimateTripDownloadBytes,
+  getAreaDownloadPoiTypes,
   TRIP_RADIUS_PRESETS,
 } from '../services/tripDownload';
 import { deleteTripAreaPlaces } from '../services/habitatCache';
-import { ALL_POI_TYPES } from '../types';
 import type { TripRadiusPreset } from '../types';
 import { useToastStore } from '../store/toastStore';
 import { COPY } from '../constants/copy';
@@ -217,9 +217,9 @@ export function useTripPlanner(
   }, []);
 
   const preset = TRIP_RADIUS_PRESETS.find(p => p.key === radiusKey) ?? TRIP_RADIUS_PRESETS[1];
-  // Matches downloadTripArea's exact union semantics (new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes]).size),
-  // so the size estimate can't drift from what's actually downloaded if a custom category reuses a built-in POI type.
-  const poiTypeCount = new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes]).size;
+  // Matches downloadTripArea's exact allowlist semantics, so the size
+  // estimate can't drift from what's actually downloaded.
+  const poiTypeCount = getAreaDownloadPoiTypes(customCategoryPoiTypes).length;
   const estimatedBytes = estimateTripDownloadBytes(preset.radiusMeters, poiTypeCount);
   const previewUrl = destination
     ? buildStaticMapPreviewUrl(destination.lat, destination.lng, preset.radiusMeters, PREVIEW_WIDTH, PREVIEW_HEIGHT)

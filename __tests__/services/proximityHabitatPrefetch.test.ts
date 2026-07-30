@@ -1,17 +1,17 @@
 /**
- * KAN-238 — habitat cache prefetch: all POI types, not just open-task types.
+ * KAN-238/KAN-317 — habitat cache prefetch: curated POI allowlist, not just open-task types.
  *
  * Covers:
- *   - refreshHabitatCacheIfStale is fed ALL_POI_TYPES (all 16 built-ins),
- *     not just this tick's uniquePoiTypes derived from open tasks — so a
- *     task created later for a never-before-seen type still finds cached
- *     candidates offline
- *   - the user's custom category place types (setCustomCategoryPoiTypes)
- *     are folded into the same prefetch list, deduped against the built-ins
+ *   - refreshHabitatCacheIfStale is fed the 16 built-ins plus the curated
+ *     supported place types, not just this tick's uniquePoiTypes derived from
+ *     open tasks — so a task created later for a never-before-seen type still
+ *     finds cached candidates offline
+ *   - supported custom category place types (setCustomCategoryPoiTypes) are
+ *     folded into the same prefetch list; unsupported saved types are ignored
  *   - the live Places search and queryHabitatCache (the read/query side)
  *     stay filtered to this tick's actual open-task types, unchanged
  *   - setCustomCategoryPoiTypes(null) / resetProximityState() clear the
- *     custom types back to just the 16 built-ins
+ *     custom types back to just the curated baseline
  */
 
 jest.mock('@react-native-community/netinfo', () =>
@@ -104,6 +104,12 @@ jest.mock('../../src/services/placesFunctions', () => ({
   getPlaceDetailsProxy:    jest.fn(),
 }));
 
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedReverseGeocode: jest.fn(),
+  setCachedReverseGeocode: jest.fn(),
+  __resetReverseGeocodeCacheForTests: jest.fn(),
+}));
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import {
@@ -112,6 +118,7 @@ import {
   setCustomCategoryPoiTypes,
 } from '../../src/services/proximity';
 import { ALL_POI_TYPES, CLUSTER_LEISURE_TYPES } from '../../src/types';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
 import type { Task } from '../../src/types';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -164,22 +171,24 @@ describe('habitat cache prefetch covers all POI types', () => {
     // cache, so they must already be there. `park` is absent from this extra
     // set because it's a real PoiType, already inside ALL_POI_TYPES.
     expect(new Set(prefetchedTypes)).toEqual(
-      new Set([...ALL_POI_TYPES, 'shopping_mall', ...CLUSTER_LEISURE_TYPES]),
+      new Set([...ALL_POI_TYPES, ...SUPPORTED_GOOGLE_PLACE_TYPES, 'shopping_mall', ...CLUSTER_LEISURE_TYPES]),
     );
     expect(ALL_POI_TYPES).toHaveLength(16);
+    expect(SUPPORTED_GOOGLE_PLACE_TYPES).toHaveLength(99);
     // Explicitly proves the fix: pharmacy has no open task this tick, yet
     // it's still prefetched — this is exactly the "buy aspirin later" gap.
     expect(prefetchedTypes).toContain('pharmacy');
   });
 
   it('folds in custom category place types, deduped against the built-ins', async () => {
-    setCustomCategoryPoiTypes(['gym', 'my_custom_type']);
+    setCustomCategoryPoiTypes(['gym', 'my_custom_type', 'coffee_shop']);
     mockAtmSearchResponse();
 
     await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
 
     const [, , prefetchedTypes] = mockRefreshHabitatCacheIfStale.mock.calls[0];
-    expect(prefetchedTypes).toContain('my_custom_type');
+    expect(prefetchedTypes).toContain('coffee_shop');
+    expect(prefetchedTypes).not.toContain('my_custom_type');
     // 'gym' is already a built-in — must not be duplicated.
     expect(prefetchedTypes.filter((t: string) => t === 'gym')).toHaveLength(1);
     expect(new Set(prefetchedTypes).size).toBe(prefetchedTypes.length);

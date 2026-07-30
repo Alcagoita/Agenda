@@ -68,14 +68,15 @@
  *   over an arbitrary closer stranger, but only when the learned venue is
  *   itself within HERO_RADIUS_M on its own real distance.
  *
- * Habitat cache prefetch — all POI types (KAN-238):
+ * Habitat cache prefetch — curated POI allowlist (KAN-238 / KAN-317):
  *   The habitat cache's OSM-backed refresh (refreshHabitatCacheIfStale) is
- *   fed ALL_POI_TYPES plus the user's custom category place types
- *   (setCustomCategoryPoiTypes), not just this tick's open-task types — a
- *   task created after caching (e.g. "buy aspirin" offline, no prior
- *   pharmacy task) must still find candidates. Only the refresh/seed side
- *   changes; queryHabitatCache and the live Places search both stay
- *   filtered to this tick's actual open-task types, unchanged.
+ *   fed the built-ins plus the curated supported Google place types, not just
+ *   this tick's open-task types — a task created after caching (e.g. "buy
+ *   aspirin" offline, no prior pharmacy task) must still find candidates.
+ *   Unsupported saved custom category types are ignored so the prefetch cannot
+ *   drift back to the full provider taxonomy. Only the refresh/seed side
+ *   changes; queryHabitatCache and the live Places search both stay filtered
+ *   to this tick's actual open-task types, unchanged.
  */
 
 import notifee, { AndroidImportance } from '@notifee/react-native';
@@ -86,6 +87,7 @@ import { Coordinates, getPositionLowAccuracy } from './geolocation';
 import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel } from './maps';
 import { markAllPoiAlertsSeen } from './firestore';
 import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
+import { SUPPORTED_GOOGLE_PLACE_TYPES, filterSupportedGooglePlaceTypes } from '../constants/googlePlaceTypes';
 import { fireExitPrompt } from './notifications';
 import { markExitPromptSeen } from './firestore';
 import { COPY } from '../constants/copy';
@@ -357,7 +359,7 @@ export function setLearnedPlaces(places: LearnedBrand[] | null): void {
 
 /** KAN-238 — feed in the user's custom category place types for the habitat cache's all-types prefetch. */
 export function setCustomCategoryPoiTypes(types: string[] | null): void {
-  _customCategoryPoiTypes = types ?? [];
+  _customCategoryPoiTypes = filterSupportedGooglePlaceTypes(types ?? []);
 }
 
 /** KAN-237 — feed in the user's active (unexpired) trip areas, for cache-first coverage. Pass null/empty to clear (e.g. on sign-out). */
@@ -764,7 +766,7 @@ async function runProximitySearch(
           // clause per type into one query, so these ride along at the cost
           // of a few extra clauses, never an extra round-trip.
           const prefetchTypes = [...new Set([
-            ...ALL_POI_TYPES, ..._customCategoryPoiTypes, 'shopping_mall', ...CLUSTER_LEISURE_TYPES,
+            ...ALL_POI_TYPES, ...SUPPORTED_GOOGLE_PLACE_TYPES, ..._customCategoryPoiTypes, 'shopping_mall', ...CLUSTER_LEISURE_TYPES,
           ])];
           refreshHabitatCacheIfStale(coords.lat, coords.lng, prefetchTypes).catch(err =>
             reportProximityError('habitat cache refresh failed', err),

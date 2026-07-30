@@ -9,8 +9,9 @@
  *   - shouldPreRefreshTrip: true/false matrix (online/offline, before/at/
  *     after the pre-departure window, already-refreshed, dateless, trip
  *     already ended)
- *   - downloadTripArea: requests the full ALL_POI_TYPES ∪ customCategoryPoiTypes
- *     union, upserts every returned place tagged with cacheAreaId/expiresAt
+ *   - downloadTripArea: requests the curated area-download allowlist, ignores
+ *     unsupported custom types, and upserts every returned place tagged with
+ *     cacheAreaId/expiresAt
  *   - refreshTripArea: re-downloads + bumps Firestore expiresAt/preRefreshedAt
  *   - checkAndRunTripPreRefresh: only refreshes due trips; one trip's
  *     failure doesn't block the others
@@ -56,8 +57,10 @@ import {
   downloadAreaSnapshot,
   refreshTripArea,
   checkAndRunTripPreRefresh,
+  getAreaDownloadPoiTypes,
 } from '../../src/services/tripDownload';
 import { ALL_POI_TYPES } from '../../src/types';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
 import type { Trip } from '../../src/types';
 
 /** A non-empty OSM result — used everywhere a test isn't specifically about the empty-result guard, so downloadTripArea's "0 places found" check doesn't interfere. */
@@ -163,20 +166,24 @@ describe('shouldPreRefreshTrip', () => {
 });
 
 describe('downloadTripArea', () => {
-  it('requests ALL_POI_TYPES union with custom category types, in one searchOsmPlacesStrict call', async () => {
+  it('requests the curated POI allowlist and ignores unsupported custom category types', async () => {
     mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
 
-    await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, ['climbing_gym']);
+    await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, ['climbing_gym', 'coffee_shop']);
 
     expect(mockSearchOsmPlaces).toHaveBeenCalledTimes(1);
     const [lat, lng, poiTypes, radius] = mockSearchOsmPlaces.mock.calls[0];
     expect(lat).toBe(1);
     expect(lng).toBe(2);
     expect(radius).toBe(15_000);
-    // KAN-282 — shopping_mall rides along too, so a downloaded trip area can
-    // serve the "All in one place" mall card entirely offline. It isn't in
-    // ALL_POI_TYPES because it's never a user-facing task category.
-    expect(new Set(poiTypes)).toEqual(new Set([...ALL_POI_TYPES, 'climbing_gym', 'shopping_mall']));
+    expect(new Set(poiTypes)).toEqual(new Set([
+      ...ALL_POI_TYPES,
+      ...SUPPORTED_GOOGLE_PLACE_TYPES,
+      'shopping_mall',
+    ]));
+    expect(poiTypes).toContain('coffee_shop');
+    expect(poiTypes).not.toContain('climbing_gym');
+    expect(getAreaDownloadPoiTypes(['climbing_gym'])).not.toContain('climbing_gym');
   });
 
   it('dedupes a custom type that overlaps a built-in one', async () => {

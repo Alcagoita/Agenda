@@ -75,6 +75,7 @@ jest.mock('../../src/services/firestore', () => ({
 const mockRefreshTripArea = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../src/services/tripDownload', () => ({
   refreshTripArea: (...args: unknown[]) => mockRefreshTripArea(...args),
+  getAreaDownloadPoiTypes: (types: string[] = []) => ['atm', 'library', 'shopping_mall', ...types.filter(t => t !== 'climbing_gym')],
 }));
 
 jest.mock('@react-native-firebase/auth/lib/modular', () => ({
@@ -254,8 +255,11 @@ describe('ContextChip — Refresh (shown once back online, mid-sheet)', () => {
     expect(screen.getByLabelText(COPY.contextChip.refreshButton)).toBeTruthy();
   });
 
-  it('calls refreshHabitatCacheIfStale with force=true, the last search coords, and ALL_POI_TYPES ∪ custom categories', async () => {
-    mockGetCategories.mockResolvedValue([{ id: 'c1', name: 'Custom', poi: 'library' }]);
+  it('calls refreshHabitatCacheIfStale with force=true, the last search coords, and the curated POI allowlist', async () => {
+    mockGetCategories.mockResolvedValue([
+      { id: 'c1', name: 'Custom', poi: 'library' },
+      { id: 'c2', name: 'Unsupported', poi: 'climbing_gym' },
+    ]);
     mockGetLastSearchCoords.mockReturnValue({ lat: 10, lng: 20 });
 
     // Force the sheet open directly isn't possible without the glyph (chip
@@ -273,9 +277,10 @@ describe('ContextChip — Refresh (shown once back online, mid-sheet)', () => {
       fireEvent.press(screen.getByLabelText(COPY.contextChip.refreshButton));
     });
 
-    expect(mockRefreshHabitatCacheIfStale).toHaveBeenCalledWith(
-      10, 20, expect.arrayContaining(['library']), true,
-    );
+    const [, , poiTypes, force] = mockRefreshHabitatCacheIfStale.mock.calls[0];
+    expect(force).toBe(true);
+    expect(poiTypes).toContain('library');
+    expect(poiTypes).not.toContain('climbing_gym');
   });
 
   it('does nothing when there are no last-search coords yet', async () => {

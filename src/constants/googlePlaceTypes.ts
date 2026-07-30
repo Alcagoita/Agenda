@@ -186,3 +186,125 @@ export const GOOGLE_PLACE_TYPES_TABLE_A: readonly string[] = [
   'train_station', 'train_ticket_office', 'tram_stop', 'transit_depot',
   'transit_station', 'transit_stop', 'transportation_service', 'truck_stop',
 ];
+
+/**
+ * Curated user-facing POI taxonomy.
+ *
+ * GOOGLE_PLACE_TYPES_TABLE_A intentionally mirrors Google's full published
+ * taxonomy. This list is the product surface: broad, useful place types only.
+ * Keep it close to ~100 entries so task/category search does not drift back
+ * into hundreds of microtypes like cuisine-specific restaurants or niche
+ * cafe/shop variants. Area downloads and dictionary generation should use
+ * this list, not the full Google table.
+ */
+export const SUPPORTED_GOOGLE_PLACE_TYPES: readonly string[] = [
+  'accounting',
+  'airport',
+  'amusement_park',
+  'aquarium',
+  'art_gallery',
+  'atm',
+  'bakery',
+  'bank',
+  'bar',
+  'beach',
+  'beauty_salon',
+  'bicycle_store',
+  'book_store',
+  'botanical_garden',
+  'bowling_alley',
+  'brewery',
+  'bus_station',
+  'cafe',
+  'campground',
+  'car_dealer',
+  'car_rental',
+  'car_repair',
+  'car_wash',
+  'casino',
+  'cemetery',
+  'church',
+  'city_hall',
+  'clothing_store',
+  'coffee_shop',
+  'community_center',
+  'convenience_store',
+  'courthouse',
+  'cultural_center',
+  'dentist',
+  'doctor',
+  'electric_vehicle_charging_station',
+  'electronics_store',
+  'embassy',
+  'ferry_terminal',
+  'fire_station',
+  'fitness_center',
+  'florist',
+  'furniture_store',
+  'gas_station',
+  'golf_course',
+  'grocery_store',
+  'gym',
+  'hair_care',
+  'hardware_store',
+  'hiking_area',
+  'historical_landmark',
+  'home_goods_store',
+  'hospital',
+  'hotel',
+  'ice_cream_shop',
+  'jewelry_store',
+  'laundry',
+  'library',
+  'liquor_store',
+  'local_government_office',
+  'lodging',
+  'medical_lab',
+  'mosque',
+  'movie_rental',
+  'movie_theater',
+  'museum',
+  'nail_salon',
+  'night_club',
+  'park',
+  'parking',
+  'pet_store',
+  'pharmacy',
+  'physiotherapist',
+  'playground',
+  'police',
+  'post_office',
+  'primary_school',
+  'pub',
+  'restaurant',
+  'rv_park',
+  'school',
+  'shopping_mall',
+  'spa',
+  'stadium',
+  'store',
+  'subway_station',
+  'supermarket',
+  'synagogue',
+  'taxi_stand',
+  'tennis_court',
+  'tourist_attraction',
+  'train_station',
+  'transit_station',
+  'university',
+  'veterinary_care',
+  'water_park',
+  'winery',
+  'yoga_studio',
+  'zoo',
+];
+
+const SUPPORTED_GOOGLE_PLACE_TYPE_SET = new Set(SUPPORTED_GOOGLE_PLACE_TYPES);
+
+export function isSupportedGooglePlaceType(type: string | null | undefined): type is string {
+  return type != null && SUPPORTED_GOOGLE_PLACE_TYPE_SET.has(type);
+}
+
+export function filterSupportedGooglePlaceTypes(types: readonly string[]): string[] {
+  return types.filter(isSupportedGooglePlaceType);
+}

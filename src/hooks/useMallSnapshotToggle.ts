@@ -25,7 +25,7 @@ import {
   MALL_SNAPSHOT_CACHE_AREA_ID,
   NoMallFoundError,
 } from '../services/mallSnapshots';
-import { ALL_POI_TYPES } from '../types';
+import { getAreaDownloadPoiTypes } from '../services/tripDownload';
 import { useToastStore } from '../store/toastStore';
 import { COPY } from '../constants/copy';
 
@@ -61,7 +61,7 @@ export function useMallSnapshotToggle(): MallSnapshotToggleState {
       const coords = await getCurrentPosition();
       const categories = await getCategories(uid);
       const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-      const poiTypes = [...new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes])];
+      const poiTypes = getAreaDownloadPoiTypes(customCategoryPoiTypes);
 
       const snapshot = await downloadMallSnapshot(uid, { lat: coords.lat, lng: coords.lng }, poiTypes);
       setProximityMallSnapshot(snapshot);
