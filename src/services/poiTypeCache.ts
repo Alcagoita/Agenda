@@ -42,7 +42,6 @@ const COMMERCIAL_POI_TYPES = new Set([
   'drugstore',
   'electronics_store',
   'florist',
-  'furniture_store',
   'grocery_store',
   'home_goods_store',
   'liquor_store',

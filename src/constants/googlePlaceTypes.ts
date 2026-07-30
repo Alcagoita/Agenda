@@ -240,7 +240,6 @@ export const SUPPORTED_GOOGLE_PLACE_TYPES = [
   'fire_station',
   'fitness_center',
   'florist',
-  'furniture_store',
   'gas_station',
   'golf_course',
   'grocery_store',

@@ -8,7 +8,6 @@ const STORE_SUBTYPE_POI_TYPES = new Set([
   'book_store',
   'clothing_store',
   'electronics_store',
-  'furniture_store',
   'hardware_store',
   'home_goods_store',
   'jewelry_store',

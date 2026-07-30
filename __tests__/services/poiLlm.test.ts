@@ -216,6 +216,7 @@ describe('inferPoiForQuickAdd', () => {
     expect(await inferPoiForQuickAdd('buy a t-shirt')).toBe('store');
     expect(await inferPoiForQuickAdd('comprar carregador')).toBe('store');
     expect(await inferPoiForQuickAdd('buy computer parts')).toBe('store');
+    expect(await inferPoiForQuickAdd('buy furniture')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
