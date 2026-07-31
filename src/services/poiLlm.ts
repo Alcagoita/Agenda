@@ -26,16 +26,17 @@
 
 import { loadTensorflowModel, type TensorflowModel } from 'react-native-fast-tflite';
 import type { PoiType } from '../types';
-import { POI_CATALOG } from '../types';
+import { isCatalogPoiType, POI_CATALOG, POI_GOOGLE_TYPES } from '../types';
 import {
   inferPoiFromRules,
+  listSeedPoiTargets,
   normalize,
   registerLearnedKeyword,
   type PoiResolution,
   type SupportedLang,
 } from './poiInference';
 import { persistLearnedKeyword } from './firestore';
-import { searchPlaceTypesLocal } from './poiTypeCache';
+import { isSuggestedPoiType, searchPlaceTypesLocal } from './poiTypeCache';
 import { inferRestaurantFoodTypeForPoiInference } from './restaurantFoodTypes';
 import { inferStoreSubtypeForPoiInference } from './storeSubtypes';
 import vocabJson from '../../assets/poi-model/vocab.json';
@@ -208,6 +209,23 @@ export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution 
   if (pt) { return pt; }
 
   return classifyPoi(title, 'en');
+}
+
+/**
+ * Returns static POI-inference targets that the suggestion dictionary cannot
+ * represent. Built-in Brush IDs are compared through their external POI type
+ * mapping, so `gas` correctly checks against `gas_station`, for example.
+ */
+export function getUnsuggestedPoiInferenceTypes(): string[] {
+  const inferredTypes = new Set<string>([
+    ...POI_CATALOG.map(item => item.type),
+    ...listSeedPoiTargets(),
+  ]);
+
+  return Array.from(inferredTypes)
+    .map(type => isCatalogPoiType(type) ? POI_GOOGLE_TYPES[type] : type)
+    .filter(type => !isSuggestedPoiType(type))
+    .sort();
 }
 
 // ─── Learn-back ───────────────────────────────────────────────────────────────

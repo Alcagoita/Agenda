@@ -338,6 +338,11 @@ export function localPoiLabel(type: string): string {
   return lang === 'pt-PT' ? ptLabel : enLabel;
 }
 
+/** Whether a type is present in the bundled POI suggestion dictionary. */
+export function isSuggestedPoiType(type: string): boolean {
+  return Object.prototype.hasOwnProperty.call(EN_DICTIONARY, type);
+}
+
 function inferIntents(queryKey: string, lang: SupportedLanguage): Set<SearchIntent> {
   const intents = new Set<SearchIntent>();
   const haystack = ` ${queryKey} `;

@@ -158,6 +158,13 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
   },
 };
 
+/** All static POI targets emitted by the built-in title-rule dictionary. */
+export function listSeedPoiTargets(): PoiResolution[] {
+  return Array.from(new Set(
+    Object.values(SEED_DICTIONARY).flatMap(dictionary => Object.values(dictionary)),
+  ));
+}
+
 // ─── Normalization ────────────────────────────────────────────────────────────
 
 /**

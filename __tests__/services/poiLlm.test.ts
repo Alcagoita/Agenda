@@ -45,6 +45,7 @@ import {
   validatePoi,
   isLlmAvailable,
   classifyPoi,
+  getUnsuggestedPoiInferenceTypes,
   inferPoiForQuickAdd,
   learnPoiKeyword,
   learnFromClassification,
@@ -177,6 +178,10 @@ describe('classifyPoi', () => {
 // ─── inferPoiForQuickAdd (KAN-232) ─────────────────────────────────────────────
 
 describe('inferPoiForQuickAdd', () => {
+  it('keeps static POI inference targets covered by the suggestion dictionary', () => {
+    expect(getUnsuggestedPoiInferenceTypes()).toEqual([]);
+  });
+
   it('returns the rule match without calling the LLM classifier', async () => {
     expect(await inferPoiForQuickAdd('pick up prescription')).toBe('pharmacy');
     expect(mockLoad).not.toHaveBeenCalled();
