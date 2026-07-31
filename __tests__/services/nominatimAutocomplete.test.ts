@@ -164,15 +164,41 @@ describe('searchAddressAutocomplete (KAN-320, Nominatim)', () => {
 });
 
 describe('Nominatim rate limit (KAN-320, shared with reverseGeocode)', () => {
-  it('drops a call made within 1 s of the previous Nominatim request', async () => {
-    mockOk([nominatimResult()]);
-    mockOk([nominatimResult()]);
+  it('waits out the remaining window instead of dropping a call made within 1 s of the previous request', async () => {
+    jest.useFakeTimers();
+    mockOk([nominatimResult({ place_id: 1 })]);
+    mockOk([nominatimResult({ place_id: 2 })]);
 
-    const first = await searchDestinationAutocomplete('faro');
-    const second = await searchAddressAutocomplete('lisbon');
+    const firstPromise = searchDestinationAutocomplete('faro');
+    await Promise.resolve(); // let the first request's own microtasks settle
+    const secondPromise = searchAddressAutocomplete('lisbon');
 
-    expect(first).toHaveLength(1);
-    expect(second).toEqual([]);
+    // Second call is now blocked on waitForNominatimSlot — nothing fetched yet.
+    await Promise.resolve();
     expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    expect(first[0].placeId).toBe('osm:1');
+    expect(second[0].placeId).toBe('osm:2');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    jest.useRealTimers();
+  });
+
+  it('fires immediately when called more than 1 s after the previous request', async () => {
+    jest.useFakeTimers();
+    mockOk([nominatimResult({ place_id: 1 })]);
+    await searchDestinationAutocomplete('faro');
+
+    jest.advanceTimersByTime(1_000);
+    mockOk([nominatimResult({ place_id: 2 })]);
+    const results = await searchAddressAutocomplete('lisbon');
+
+    expect(results[0].placeId).toBe('osm:2');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    jest.useRealTimers();
   });
 });

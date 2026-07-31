@@ -699,6 +699,23 @@ interface NominatimSearchResult {
   name?: string;
 }
 
+/**
+ * Blocks until it's safe to fire the next Nominatim request, re-checking
+ * after each wait in case another caller (reverseGeocode, which fires on
+ * every GPS fix — far more often than a user types) claimed the slot while
+ * we were waiting. Unlike reverseGeocode's skip-and-return-null (fine for a
+ * background "Outside" label refresh), a user-initiated search must not be
+ * silently dropped — that read as "search is broken, no results ever come
+ * back" (KAN-320 review).
+ */
+async function waitForNominatimSlot(): Promise<void> {
+  for (;;) {
+    const wait = NOMINATIM_MIN_INTERVAL_MS - (Date.now() - lastNominatimRequestAt);
+    if (wait <= 0) { return; }
+    await new Promise(resolve => setTimeout(resolve, wait));
+  }
+}
+
 async function fetchNominatimAutocomplete(
   query: string,
   citiesOnly: boolean,
@@ -708,11 +725,9 @@ async function fetchNominatimAutocomplete(
   if (!query.trim()) { return []; }
 
   // Nominatim's usage policy caps traffic at 1 request/second, app-wide —
-  // shared with reverseGeocode above. A skip here just means this keystroke's
-  // search is dropped; the next debounced call tries again.
-  const now = Date.now();
-  if (now - lastNominatimRequestAt < NOMINATIM_MIN_INTERVAL_MS) { return []; }
-  lastNominatimRequestAt = now;
+  // shared with reverseGeocode above.
+  await waitForNominatimSlot();
+  lastNominatimRequestAt = Date.now();
 
   const params = new URLSearchParams({
     q: query,
