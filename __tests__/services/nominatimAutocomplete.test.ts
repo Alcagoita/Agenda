@@ -7,8 +7,9 @@
  *   - response mapping to PlaceAutocompleteSuggestion[] (with lat/lng)
  *   - searchDestinationAutocomplete restricts to class:"place" results
  *   - searchAddressAutocomplete keeps every result, no class filter
- *   - the shared Nominatim rate limit (1 req/s) drops a call instead of
- *     queuing it — same policy as reverseGeocode
+ *   - the autocomplete rate limit (1 req/s) waits out the window instead of
+ *     dropping the call, on its OWN clock — independent of reverseGeocode's,
+ *     which fires on every GPS fix and must not starve a user's search
  *   - location bias (viewbox) included only when lat/lng are given
  *   - network/non-OK failures return [] (best-effort, never throws)
  */
@@ -25,7 +26,9 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
 import {
   searchDestinationAutocomplete,
   searchAddressAutocomplete,
+  reverseGeocode,
   __resetReverseGeocodeForTests,
+  __resetNominatimAutocompleteForTests,
 } from '../../src/services/maps';
 
 const mockFetch = jest.fn();
@@ -51,6 +54,7 @@ function mockOk(results: unknown[]) {
 beforeEach(() => {
   jest.clearAllMocks();
   __resetReverseGeocodeForTests();
+  __resetNominatimAutocompleteForTests();
 });
 
 describe('searchDestinationAutocomplete (KAN-320, Nominatim)', () => {
@@ -163,7 +167,7 @@ describe('searchAddressAutocomplete (KAN-320, Nominatim)', () => {
   });
 });
 
-describe('Nominatim rate limit (KAN-320, shared with reverseGeocode)', () => {
+describe('autocomplete rate limit (KAN-320)', () => {
   it('waits out the remaining window instead of dropping a call made within 1 s of the previous request', async () => {
     jest.useFakeTimers();
     mockOk([nominatimResult({ place_id: 1 })]);
@@ -173,7 +177,7 @@ describe('Nominatim rate limit (KAN-320, shared with reverseGeocode)', () => {
     await Promise.resolve(); // let the first request's own microtasks settle
     const secondPromise = searchAddressAutocomplete('lisbon');
 
-    // Second call is now blocked on waitForNominatimSlot — nothing fetched yet.
+    // Second call is now blocked on waitForAutocompleteSlot — nothing fetched yet.
     await Promise.resolve();
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -200,5 +204,19 @@ describe('Nominatim rate limit (KAN-320, shared with reverseGeocode)', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
     jest.useRealTimers();
+  });
+
+  it('does not wait on reverseGeocode\'s clock — a background GPS-driven call cannot starve a user search (KAN-320 review)', async () => {
+    // Simulate useLanternState's background reverseGeocode firing right
+    // before the user's search — this used to burn the shared clock's 1s
+    // window and force the search to wait (or, before that, drop it).
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ address: { city: 'Lisboa' } }) });
+    await reverseGeocode(38.7223, -9.1393);
+
+    mockOk([nominatimResult({ place_id: 1 })]);
+    const results = await searchDestinationAutocomplete('faro');
+
+    expect(results[0].placeId).toBe('osm:1');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });

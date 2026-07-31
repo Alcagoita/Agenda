@@ -128,11 +128,17 @@ const NOMINATIM_TIMEOUT_MS = 8_000;
 // traffic risks being rate-limited or blocked. Shared by reverse geocoding
 // (this section) and the destination/address autocomplete below.
 const NOMINATIM_USER_AGENT = `BrushApp/${require('../../package.json').version}`;
-// Nominatim's usage policy caps traffic at 1 request/second — a hard rule, not
-// a nicety (enforced by blocking). This guards it app-wide, across every
-// Nominatim caller (reverse geocode + autocomplete), not just this section.
+// Nominatim's usage policy caps traffic at 1 request/second per caller.
 const NOMINATIM_MIN_INTERVAL_MS = 1_000;
-let lastNominatimRequestAt = 0;
+// reverseGeocode and the autocomplete search below get their OWN clock each
+// (KAN-320 review) — they used to share one, and reverseGeocode fires on
+// every GPS fix from useLanternState's background polling (TodayScreen stays
+// mounted under a pushed Trip Planner/off-grid screen, so it keeps ticking
+// even while the user is searching). Sharing a clock meant a user's search
+// almost always lost the race against that ambient background traffic and
+// came back with zero results. Two independent 1 req/s clocks are still
+// trivially inside Nominatim's policy for this app's real-world volume.
+let lastReverseGeocodeRequestAt = 0;
 
 // In-memory cache of resolved cells for this session (the fast path; the
 // SQLite layer below makes a name survive restarts). Keyed on coords rounded to
@@ -195,10 +201,13 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
     return persisted.city;
   }
 
-  // 3) Rate limit — never two Nominatim requests within 1 s, app-wide.
+  // 3) Rate limit — never two reverse-geocode requests within 1 s. Skips
+  // rather than waits: this is a background label refresh, not a user action
+  // waiting on a result — see the autocomplete search below for the
+  // user-facing counterpart, which waits instead.
   const now = Date.now();
-  if (now - lastNominatimRequestAt < NOMINATIM_MIN_INTERVAL_MS) { return null; }
-  lastNominatimRequestAt = now;
+  if (now - lastReverseGeocodeRequestAt < NOMINATIM_MIN_INTERVAL_MS) { return null; }
+  lastReverseGeocodeRequestAt = now;
 
   const url = `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
   const controller = new AbortController();
@@ -226,7 +235,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
 /** Test-only: clears the session reverse-geocode cache and rate-limit clock. */
 export function __resetReverseGeocodeForTests(): void {
   reverseGeocodeMem.clear();
-  lastNominatimRequestAt = 0;
+  lastReverseGeocodeRequestAt = 0;
 }
 
 // ─── Places API — Nearby Search ───────────────────────────────────────────────
@@ -699,18 +708,21 @@ interface NominatimSearchResult {
   name?: string;
 }
 
+// Own clock, independent of reverseGeocode's (KAN-320 review) — see the
+// NOMINATIM_MIN_INTERVAL_MS comment above for why these must not share one.
+let lastAutocompleteRequestAt = 0;
+
 /**
- * Blocks until it's safe to fire the next Nominatim request, re-checking
- * after each wait in case another caller (reverseGeocode, which fires on
- * every GPS fix — far more often than a user types) claimed the slot while
- * we were waiting. Unlike reverseGeocode's skip-and-return-null (fine for a
- * background "Outside" label refresh), a user-initiated search must not be
- * silently dropped — that read as "search is broken, no results ever come
- * back" (KAN-320 review).
+ * Blocks until it's safe to fire the next autocomplete request. Unlike
+ * reverseGeocode's skip-and-return-null (fine for a background "Outside"
+ * label refresh), a user-initiated search must not be silently dropped —
+ * that read as "search is broken, no results ever come back" (KAN-320
+ * review). Re-checks after each wait in case a concurrent search call
+ * claimed the slot first.
  */
-async function waitForNominatimSlot(): Promise<void> {
+async function waitForAutocompleteSlot(): Promise<void> {
   for (;;) {
-    const wait = NOMINATIM_MIN_INTERVAL_MS - (Date.now() - lastNominatimRequestAt);
+    const wait = NOMINATIM_MIN_INTERVAL_MS - (Date.now() - lastAutocompleteRequestAt);
     if (wait <= 0) { return; }
     await new Promise(resolve => setTimeout(resolve, wait));
   }
@@ -724,10 +736,8 @@ async function fetchNominatimAutocomplete(
 ): Promise<PlaceAutocompleteSuggestion[]> {
   if (!query.trim()) { return []; }
 
-  // Nominatim's usage policy caps traffic at 1 request/second, app-wide —
-  // shared with reverseGeocode above.
-  await waitForNominatimSlot();
-  lastNominatimRequestAt = Date.now();
+  await waitForAutocompleteSlot();
+  lastAutocompleteRequestAt = Date.now();
 
   const params = new URLSearchParams({
     q: query,
@@ -808,6 +818,11 @@ export async function searchAddressAutocomplete(
   lng?: number,
 ): Promise<PlaceAutocompleteSuggestion[]> {
   return fetchNominatimAutocomplete(query, false, lat, lng);
+}
+
+/** Test-only: clears the autocomplete rate-limit clock. */
+export function __resetNominatimAutocompleteForTests(): void {
+  lastAutocompleteRequestAt = 0;
 }
 
 // ─── Place Details (KAN-234) ──────────────────────────────────────────────────
