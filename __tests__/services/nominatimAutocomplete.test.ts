@@ -5,7 +5,7 @@
  * migrated from Google Places to OSM Nominatim. Covers:
  *   - empty/whitespace query short-circuits (no network)
  *   - response mapping to PlaceAutocompleteSuggestion[] (with lat/lng)
- *   - searchDestinationAutocomplete restricts to class:"place" results
+ *   - searchDestinationAutocomplete restricts to settlement addresstype values
  *   - searchAddressAutocomplete keeps every result, no class filter
  *   - the autocomplete rate limit (1 req/s) waits out the window instead of
  *     dropping the call, on its OWN clock — independent of reverseGeocode's,
@@ -35,14 +35,14 @@ const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
 function nominatimResult(overrides: Partial<{
-  place_id: number; display_name: string; lat: string; lon: string; class: string; name: string;
+  place_id: number; display_name: string; lat: string; lon: string; addresstype: string; name: string;
 }> = {}) {
   return {
     place_id:     1,
     display_name: 'Faro, Distrito de Faro, Portugal',
     lat:          '37.0179',
     lon:          '-7.9304',
-    class:        'place',
+    addresstype:  'city',
     ...overrides,
   };
 }
@@ -84,16 +84,30 @@ describe('searchDestinationAutocomplete (KAN-320, Nominatim)', () => {
     }]);
   });
 
-  it('excludes non-settlement results (class !== "place")', async () => {
+  it('excludes non-settlement results (addresstype not city/town/village/hamlet/municipality)', async () => {
     mockOk([
-      nominatimResult({ place_id: 1, class: 'place' }),
-      nominatimResult({ place_id: 2, class: 'shop', display_name: 'Faro Bakery, Faro, Portugal' }),
+      nominatimResult({ place_id: 1, addresstype: 'city' }),
+      nominatimResult({ place_id: 2, addresstype: 'shop', display_name: 'Faro Bakery, Faro, Portugal' }),
+      nominatimResult({ place_id: 3, addresstype: 'county', display_name: 'Faro, Portugal' }),
     ]);
 
     const results = await searchDestinationAutocomplete('faro');
 
     expect(results).toHaveLength(1);
     expect(results[0].placeId).toBe('osm:1');
+  });
+
+  it('includes town/village/hamlet/municipality, not just city (real Nominatim tags settlements differently by size)', async () => {
+    mockOk([
+      nominatimResult({ place_id: 1, addresstype: 'town' }),
+      nominatimResult({ place_id: 2, addresstype: 'village' }),
+      nominatimResult({ place_id: 3, addresstype: 'hamlet' }),
+      nominatimResult({ place_id: 4, addresstype: 'municipality' }),
+    ]);
+
+    const results = await searchDestinationAutocomplete('faro');
+
+    expect(results.map(r => r.placeId)).toEqual(['osm:1', 'osm:2', 'osm:3', 'osm:4']);
   });
 
   it('caps results at 5 even when the API returns more', async () => {
@@ -147,7 +161,7 @@ describe('searchDestinationAutocomplete (KAN-320, Nominatim)', () => {
 
 describe('searchAddressAutocomplete (KAN-320, Nominatim)', () => {
   it('keeps non-settlement results — no class restriction', async () => {
-    mockOk([nominatimResult({ place_id: 2, class: 'shop', display_name: '221B Baker Street, London, UK' })]);
+    mockOk([nominatimResult({ place_id: 2, addresstype: 'shop', display_name: '221B Baker Street, London, UK' })]);
 
     const results = await searchAddressAutocomplete('221b baker street');
 

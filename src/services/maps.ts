@@ -696,15 +696,25 @@ export async function searchPlacesAutocomplete(
 
 const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
 
-/** A place class Nominatim tags settlements with — city/town/village/etc. */
-const NOMINATIM_SETTLEMENT_CLASS = 'place';
+/**
+ * `addresstype` values that mean "this result IS a settlement" — city/town/
+ * village/etc, as opposed to a street, POI, or a bigger administrative region
+ * (county/state/country) that also comes back tagged `category: "boundary"`.
+ * Verified against live Nominatim responses (KAN-320 review) — `category`
+ * alone can't distinguish these: Lisboa, Faro, and "Beja" (a county) all come
+ * back as `category: "boundary", type: "administrative"`; `addresstype` is
+ * the field that actually says "city" vs "county" vs "state".
+ */
+const NOMINATIM_SETTLEMENT_ADDRESS_TYPES = new Set([
+  'city', 'town', 'village', 'hamlet', 'municipality',
+]);
 
 interface NominatimSearchResult {
   place_id: number;
   display_name: string;
   lat: string;
   lon: string;
-  class?: string;
+  addresstype?: string;
   name?: string;
 }
 
@@ -764,7 +774,9 @@ async function fetchNominatimAutocomplete(
     if (!res.ok) { return []; }
 
     const raw = (await res.json()) as NominatimSearchResult[];
-    const filtered = citiesOnly ? raw.filter(r => r.class === NOMINATIM_SETTLEMENT_CLASS) : raw;
+    const filtered = citiesOnly
+      ? raw.filter(r => !!r.addresstype && NOMINATIM_SETTLEMENT_ADDRESS_TYPES.has(r.addresstype))
+      : raw;
 
     return filtered.slice(0, 5).map((r) => {
       const parts = r.display_name.split(', ');

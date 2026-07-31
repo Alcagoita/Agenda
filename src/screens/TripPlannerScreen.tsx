@@ -144,7 +144,7 @@ export default function TripPlannerScreen() {
 
             {searching && suggestions.length === 0 && (
               <View style={styles.searchLoadingWrap}>
-                <LoadingDots color={palette.muted} size={6} />
+                <LoadingDots color={palette.accent} size={6} />
               </View>
             )}
 
