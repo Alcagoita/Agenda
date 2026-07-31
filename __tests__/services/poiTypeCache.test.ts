@@ -52,6 +52,9 @@ describe('searchPlaceTypesCached', () => {
     expect(enDictionary).toHaveProperty('coffee_shop');
     expect(enDictionary).not.toHaveProperty('coffee_roastery');
     expect(enDictionary).not.toHaveProperty('sushi_restaurant');
+    expect(enDictionary).not.toHaveProperty('book_store');
+    expect(enDictionary).not.toHaveProperty('electronics_store');
+    expect(enDictionary).not.toHaveProperty('pet_store');
   });
 
   it('returns English labels from the bundled dictionary', async () => {
@@ -81,28 +84,28 @@ describe('searchPlaceTypesCached', () => {
     expect(results.some(result => result.type === 'sushi_restaurant')).toBe(false);
   });
 
-  it('prefers commercial POIs for "buy a book"', async () => {
+  it('routes book shopping through the broad store POI', async () => {
     const results = await searchPlaceTypesCached('buy a book');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
   });
 
   it('handles filler words in longer retail phrasing', async () => {
     const results = await searchPlaceTypesCached('buy a new book');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
   });
 
   it('generalizes book shopping beyond the original phrase', async () => {
     const results = await searchPlaceTypesCached('purchase a novel');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
   });
 
   it('does not treat verb-style booking phrases as shopping intent', async () => {
     const results = await searchPlaceTypesCached('book a flight');
 
-    expect(results[0]?.type).not.toBe('book_store');
+    expect(results[0]?.type).not.toBe('store');
   });
 
   it('prefers bakery over broad retail buckets for bread shopping intent', async () => {
@@ -201,7 +204,7 @@ describe('searchPlaceTypesCached', () => {
   it('does not surface trimmed store microtypes for shoe-buying intent', async () => {
     const results = await searchPlaceTypesCached('buy shoes');
 
-    expect(results.some(result => result.type === 'clothing_store' || result.type === 'store')).toBe(true);
+    expect(results.some(result => result.type === 'store')).toBe(true);
     expect(results.some(result => result.type === 'shoe_store')).toBe(false);
   });
 
@@ -216,7 +219,7 @@ describe('searchPlaceTypesCached', () => {
 
     const results = await searchPlaceTypesCached('comprar um livro');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Livraria' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Loja' });
   });
 
   it('supports Portuguese bakery intent offline', async () => {

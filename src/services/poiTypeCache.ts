@@ -33,19 +33,14 @@ type CandidateKey = {
 
 const COMMERCIAL_POI_TYPES = new Set([
   'bakery',
-  'book_store',
-  'clothing_store',
   'coffee_shop',
   'convenience_store',
   'department_store',
   'discount_store',
   'drugstore',
-  'electronics_store',
   'florist',
   'grocery_store',
-  'home_goods_store',
   'liquor_store',
-  'pet_store',
   'pharmacy',
   'shoe_store',
   'sporting_goods_store',
@@ -106,7 +101,7 @@ const POI_CONCEPTS: PoiConcept[] = [
   },
   {
     intents: ['retail'],
-    types: ['book_store'],
+    types: ['store'],
     intentRequiredTerms: {
       en: ['book', 'books'],
       'pt-PT': ['livro', 'livros'],
@@ -150,7 +145,7 @@ const POI_CONCEPTS: PoiConcept[] = [
   },
   {
     intents: ['retail'],
-    types: ['clothing_store'],
+    types: ['store'],
     terms: {
       en: ['shoe', 'shoes', 'sneakers', 'footwear', 'boots'],
       'pt-PT': ['sapato', 'sapatos', 'tenis', 'ténis', 'calcado', 'calçado', 'botas'],
@@ -532,6 +527,9 @@ function localPoiSuggestions(query: string): PlaceTypeSuggestion[] {
   const queryVariants = buildQueryVariants(queryKey, lang);
   const intents = inferIntents(queryKey, lang);
   const conceptMatches = inferConceptMatches(queryVariants, intents, lang);
+  const directConceptSuggestions = Array.from(conceptMatches.entries())
+    .filter(([type, match]) => type === 'store' && match.intentAligned)
+    .map(([type]) => ({ type, label: localPoiLabel(type) }));
   const ranked = SEARCH_ENTRIES
     .map(entry => {
       const score = entryScore(queryVariants, intents, conceptMatches, entry, lang);
@@ -547,7 +545,8 @@ function localPoiSuggestions(query: string): PlaceTypeSuggestion[] {
     .filter((value): value is { suggestion: PlaceTypeSuggestion; score: number } => value !== null)
     .sort(sortSuggestions);
 
-  return ranked.slice(0, MAX_RESULTS).map(item => item.suggestion);
+  return [...directConceptSuggestions, ...ranked.map(item => item.suggestion)]
+    .slice(0, MAX_RESULTS);
 }
 
 /** Synchronous local search for UI paths that render suggestions inline. */

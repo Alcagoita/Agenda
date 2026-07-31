@@ -187,13 +187,13 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
-  it('treats book-buying phrasing as book_store without calling the LLM classifier', async () => {
-    expect(await inferPoiForQuickAdd('buy a book')).toBe('book_store');
+  it('routes book-buying phrasing through store without calling the LLM classifier', async () => {
+    expect(await inferPoiForQuickAdd('buy a book')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
-  it('treats pt-PT book-buying phrasing as book_store without calling the LLM classifier', async () => {
-    expect(await inferPoiForQuickAdd('comprar um livro')).toBe('book_store');
+  it('routes pt-PT book-buying phrasing through store without calling the LLM classifier', async () => {
+    expect(await inferPoiForQuickAdd('comprar um livro')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
