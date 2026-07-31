@@ -28,6 +28,12 @@ describe('restaurantFoodTypes', () => {
     expect(restaurantPlaceMatchesFoodType('Portugália', 'sushi')).toBe(false);
   });
 
+  it('matches cached restaurants by stored food type before falling back to name', () => {
+    expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodType: 'sushi' }, 'sushi')).toBe(true);
+    expect(restaurantPlaceMatchesFoodType({ name: 'Portugália', restaurantFoodType: 'sushi' }, 'sushi')).toBe(true);
+    expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodType: 'portuguese' }, 'sushi')).toBe(false);
+  });
+
   it('suggests food types by visible label correspondence, not hidden aliases', () => {
     expect(restaurantFoodTypeSuggestions('Po')).toEqual(['portuguese']);
     expect(restaurantFoodTypeSuggestions('It')).toEqual(['italian']);
@@ -43,6 +49,13 @@ describe('restaurantFoodTypes', () => {
     expect(filterRestaurantPlacesForTasks('restaurant', places, [
       { title: 'Go out to sushi', poi: 'restaurant' },
     ])).toEqual([places[1]]);
+
+    expect(filterRestaurantPlacesForTasks('restaurant', [
+      { name: 'restaurant', restaurantFoodType: 'sushi', distanceMeters: 30 },
+      { name: 'restaurant', restaurantFoodType: 'portuguese', distanceMeters: 70 },
+    ], [
+      { title: 'Go out to sushi', poi: 'restaurant' },
+    ])).toEqual([{ name: 'restaurant', restaurantFoodType: 'sushi', distanceMeters: 30 }]);
 
     expect(filterRestaurantPlacesForTasks('restaurant', places, [
       { title: 'Book dinner', poi: 'restaurant' },

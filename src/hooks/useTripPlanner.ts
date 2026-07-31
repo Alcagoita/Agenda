@@ -16,15 +16,15 @@ import {
   buildStaticMapPreviewUrl,
 } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
-import { addTrip, getCategories, getTrip, updateTrip } from '../services/firestore';
+import { addTrip, getTrip, updateTrip } from '../services/firestore';
 import {
   downloadTripArea,
   computeTripExpiresAt,
   estimateTripDownloadBytes,
+  getAreaDownloadPoiTypes,
   TRIP_RADIUS_PRESETS,
 } from '../services/tripDownload';
 import { deleteTripAreaPlaces } from '../services/habitatCache';
-import { ALL_POI_TYPES } from '../types';
 import type { TripRadiusPreset } from '../types';
 import { useToastStore } from '../store/toastStore';
 import { COPY } from '../constants/copy';
@@ -117,7 +117,6 @@ export function useTripPlanner(
   const [endDate, setEndDate] = useState<string | undefined>(undefined);
   const [radiusKey, setRadiusKey] = useState<TripRadiusPreset>('town_and_around');
   const [error, setError] = useState<string | null>(null);
-  const [customCategoryPoiTypes, setCustomCategoryPoiTypes] = useState<string[]>([]);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
   // Set right before selectDestination or edit-mode hydration changes `query`
@@ -129,13 +128,6 @@ export function useTripPlanner(
   useEffect(() => {
     onDoneRef.current = onDone;
   }, [onDone]);
-
-  useEffect(() => {
-    if (!uid) { return; }
-    getCategories(uid)
-      .then(categories => setCustomCategoryPoiTypes(categories.map(c => c.poi).filter((p): p is string => !!p)))
-      .catch(err => console.warn('[useTripPlanner] getCategories failed', err));
-  }, [uid]);
 
   // Debounced destination autocomplete.
   useEffect(() => {
@@ -217,9 +209,9 @@ export function useTripPlanner(
   }, []);
 
   const preset = TRIP_RADIUS_PRESETS.find(p => p.key === radiusKey) ?? TRIP_RADIUS_PRESETS[1];
-  // Matches downloadTripArea's exact union semantics (new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes]).size),
-  // so the size estimate can't drift from what's actually downloaded if a custom category reuses a built-in POI type.
-  const poiTypeCount = new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes]).size;
+  // Matches downloadTripArea's exact allowlist semantics, so the size
+  // estimate can't drift from what's actually downloaded.
+  const poiTypeCount = getAreaDownloadPoiTypes().length;
   const estimatedBytes = estimateTripDownloadBytes(preset.radiusMeters, poiTypeCount);
   const previewUrl = destination
     ? buildStaticMapPreviewUrl(destination.lat, destination.lng, preset.radiusMeters, PREVIEW_WIDTH, PREVIEW_HEIGHT)
@@ -249,7 +241,6 @@ export function useTripPlanner(
             preset.radiusMeters,
             editingTrip.cacheAreaId,
             expiresAt,
-            customCategoryPoiTypes,
           );
           const preRefreshedAt = Date.now();
           await updateTrip(uid, editingTrip.id, {
@@ -288,7 +279,6 @@ export function useTripPlanner(
         preset.radiusMeters,
         cacheAreaId,
         expiresAt,
-        customCategoryPoiTypes,
       );
       try {
         await addTrip(uid, {
@@ -319,7 +309,7 @@ export function useTripPlanner(
     }
   }, [
     isEditing, editingTrip, uid, endDate, startDate, preset.radiusMeters,
-    editInitialStep, customCategoryPoiTypes, onDone, destination,
+    editInitialStep, onDone, destination,
   ]);
 
   const goBack = useCallback(() => {

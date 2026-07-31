@@ -53,11 +53,11 @@ import {
   rolloverIncompleteTasks,
 } from '../services/firestore';
 import { getIncomingSharedTasksCount } from '../services/sharing';
-import { checkAndRunTripPreRefresh } from '../services/tripDownload';
+import { checkAndRunTripPreRefresh, getAreaDownloadPoiTypes } from '../services/tripDownload';
 import { deleteExpiredTripPlaces, refreshHabitatCacheIfStale } from '../services/habitatCache';
 import { getMallSnapshot } from '../services/mallSnapshots';
 import { setHomeLocation } from '../services/home';
-import { ALL_POI_TYPES, CLUSTER_LEISURE_TYPES } from '../types';
+import { CLUSTER_LEISURE_TYPES } from '../types';
 import { todayISO } from '../utils/date';
 import { lightPalette } from '../theme/tokens';
 
@@ -439,8 +439,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         // day-before-departure refresh has no native scheduler to run on —
         // piggyback on this boot path instead, same "non-fatal, best effort,
         // once per boot" shape as rolloverIncompleteTasks above.
-        const customCategoryPoiTypes = categories.map(c => c.poi).filter((p): p is string => !!p);
-        checkAndRunTripPreRefresh(uid, trips, customCategoryPoiTypes)
+        checkAndRunTripPreRefresh(uid, trips)
           .catch(err => console.warn('[SplashScreen] checkAndRunTripPreRefresh failed (non-critical)', err));
         try { deleteExpiredTripPlaces(); } catch (err) { console.warn('[SplashScreen] deleteExpiredTripPlaces failed (non-critical)', err); }
 
@@ -449,7 +448,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         // boot" shape as the trip pre-refresh above. No-ops when unset.
         if (userData?.home) {
           const prefetchTypes = [...new Set([
-            ...ALL_POI_TYPES, ...customCategoryPoiTypes, ...CLUSTER_LEISURE_TYPES,
+            ...getAreaDownloadPoiTypes(), ...CLUSTER_LEISURE_TYPES,
           ])];
           refreshHabitatCacheIfStale(userData.home.lat, userData.home.lng, prefetchTypes)
             .catch(err => console.warn('[SplashScreen] home habitat prefetch failed (non-critical)', err));

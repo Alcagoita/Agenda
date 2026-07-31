@@ -40,6 +40,119 @@ service cloud.firestore {
       ];
     }
 
+    function validPoiType(value) {
+      return value == null || value in [
+        'accounting',
+        'airport',
+        'amusement_park',
+        'aquarium',
+        'art_gallery',
+        'atm',
+        'bakery',
+        'bank',
+        'bar',
+        'beach',
+        'beauty_salon',
+        'bicycle_store',
+        'book_store',
+        'botanical_garden',
+        'bowling_alley',
+        'brewery',
+        'bus',
+        'bus_station',
+        'cafe',
+        'campground',
+        'car_dealer',
+        'car_rental',
+        'car_repair',
+        'car_wash',
+        'casino',
+        'cemetery',
+        'church',
+        'city_hall',
+        'clinic',
+        'clothing_store',
+        'coffee_shop',
+        'community_center',
+        'convenience_store',
+        'courthouse',
+        'cultural_center',
+        'dentist',
+        'doctor',
+        'electric_vehicle_charging_station',
+        'electronics_store',
+        'embassy',
+        'ferry_terminal',
+        'fire_station',
+        'fitness_center',
+        'florist',
+        'furniture_store',
+        'gas',
+        'gas_station',
+        'golf_course',
+        'grocery_store',
+        'gym',
+        'hair_care',
+        'hardware_store',
+        'hiking_area',
+        'historical_landmark',
+        'home_goods_store',
+        'hospital',
+        'hotel',
+        'ice_cream_shop',
+        'jewelry_store',
+        'laundry',
+        'library',
+        'liquor_store',
+        'local_government_office',
+        'lodging',
+        'medical_lab',
+        'mosque',
+        'movie_rental',
+        'movie_theater',
+        'museum',
+        'nail_salon',
+        'night_club',
+        'park',
+        'parking',
+        'pet_store',
+        'pharmacy',
+        'physiotherapist',
+        'playground',
+        'police',
+        'post',
+        'post_office',
+        'primary_school',
+        'pub',
+        'restaurant',
+        'rv_park',
+        'salon',
+        'school',
+        'shopping_mall',
+        'spa',
+        'stadium',
+        'store',
+        'subway_station',
+        'supermarket',
+        'synagogue',
+        'taxi_stand',
+        'tennis_court',
+        'tourist_attraction',
+        'train_station',
+        'transit_station',
+        'university',
+        'veterinary_care',
+        'water_park',
+        'winery',
+        'yoga_studio',
+        'zoo',
+      ];
+    }
+
+    function validRequiredPoiType(value) {
+      return value is string && validPoiType(value);
+    }
+
     function validPointsReason(reason) {
       return reason in [
         'task_completed',
@@ -77,6 +190,7 @@ service cloud.firestore {
           'time',
           'source',
           'poi',
+          'storeSubtype',
           'poiPlaceId',
           'completedPlaceId',
           'completedPlaceName',
@@ -98,11 +212,12 @@ service cloud.firestore {
         && (!('description' in data.keys()) || validString(data.description, 2000))
         && (!('time' in data.keys()) || validTimeString(data.time))
         && (!('source' in data.keys()) || validTaskSource(data.source))
-        && (!('poi' in data.keys()) || validString(data.poi, 100))
+        && (!('poi' in data.keys()) || validPoiType(data.poi))
+        && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
         && (!('poiPlaceId' in data.keys()) || validString(data.poiPlaceId, 200))
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
-        && (!('completedPoiType' in data.keys()) || validString(data.completedPoiType, 100))
+        && (!('completedPoiType' in data.keys()) || validPoiType(data.completedPoiType))
         && (!('completedTripId' in data.keys()) || validString(data.completedTripId, 200))
         && (!('poiAlertSeenDate' in data.keys()) || validDateString(data.poiAlertSeenDate))
         && (!('exitPromptSeenDate' in data.keys()) || validDateString(data.exitPromptSeenDate))
@@ -119,7 +234,7 @@ service cloud.firestore {
         && validNonEmptyString(data.name, 80)
         && data.color is string
         && data.color.matches('^#[0-9A-Fa-f]{6}$')
-        && (data.poi == null || validString(data.poi, 100))
+        && validPoiType(data.poi)
         && data.isBuiltIn == false;
     }
 
@@ -161,7 +276,7 @@ service cloud.firestore {
     // Taught places / favourites (KAN-304) — exactly (poiType, name, createdAt).
     function validPlaceData(data) {
       return data.keys().hasOnly(['poiType', 'name', 'createdAt'])
-        && validNonEmptyString(data.poiType, 100)
+        && validRequiredPoiType(data.poiType)
         && validNonEmptyString(data.name, 120)
         && data.createdAt is timestamp;
     }
@@ -196,7 +311,7 @@ service cloud.firestore {
     function validPoiPreferenceData(data, poiType) {
       return data.keys().hasOnly(['type', 'radiusMeters'])
         && data.type == poiType
-        && validNonEmptyString(data.type, 100)
+        && validRequiredPoiType(data.type)
         && data.radiusMeters is int
         && data.radiusMeters > 0
         && data.radiusMeters <= 1000;
@@ -236,7 +351,7 @@ service cloud.firestore {
         && validNonEmptyString(data.taskId, 200)
         && validNonEmptyString(data.title, 500)
         && validNonEmptyString(data.category, 120)
-        && (!('poi' in data.keys()) || validString(data.poi, 100))
+        && (!('poi' in data.keys()) || validPoiType(data.poi))
         && validNonEmptyString(data.sentBy, 128)
         && validNonEmptyString(data.sentByName, 80)
         && (!('sentByUsername' in data.keys()) || validString(data.sentByUsername, 30))
@@ -389,7 +504,7 @@ service cloud.firestore {
         allow create, update: if isOwner(userId)
           && request.resource.data.keys().hasOnly(['keyword', 'poi', 'lang', 'source', 'updatedAt'])
           && validString(request.resource.data.keyword, 200)
-          && validString(request.resource.data.poi, 50)
+          && validRequiredPoiType(request.resource.data.poi)
           && request.resource.data.lang in ['en', 'pt-PT']
           && request.resource.data.source in ['llm', 'user']
           && request.resource.data.updatedAt is timestamp;
@@ -415,7 +530,7 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['placeId', 'name', 'poiType', 'visitCount'])
           && request.resource.data.placeId == placeId
           && validString(request.resource.data.name, 200)
-          && validString(request.resource.data.poiType, 50)
+          && validRequiredPoiType(request.resource.data.poiType)
           && request.resource.data.visitCount is int
           && request.resource.data.visitCount >= 0;
       }

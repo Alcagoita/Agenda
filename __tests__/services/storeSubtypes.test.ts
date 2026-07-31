@@ -14,6 +14,14 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Buy a t-shirt')).toBe('clothing');
     expect(inferStoreSubtype('Comprar ténis')).toBe('shoes');
     expect(inferStoreSubtype('Comprar carregador')).toBe('electronics');
+    expect(inferStoreSubtype('Buy computer parts')).toBe('electronics');
+    expect(inferStoreSubtype('Comprar peças de computador')).toBe('electronics');
+    expect(inferStoreSubtype('Buy furniture')).toBe('furniture');
+    expect(inferStoreSubtype('Buy a book')).toBe('books');
+    expect(inferStoreSubtype('Buy a sofa')).toBe('furniture');
+    expect(inferStoreSubtype('Buy screws')).toBe('hardware');
+    expect(inferStoreSubtype('Buy a bicycle helmet')).toBe('bicycle');
+    expect(inferStoreSubtype('Buy a necklace')).toBe('jewelry');
   });
 
   it('requires shopping context before promoting subtype intent to store POI inference', () => {
@@ -30,15 +38,27 @@ describe('storeSubtypes', () => {
   });
 
   it('suggests store types by visible label correspondence', () => {
+    expect(storeSubtypeSuggestions('')).toContain('any');
     expect(storeSubtypeSuggestions('Cl')).toEqual(['clothing']);
     expect(storeSubtypeSuggestions('El')).toEqual(['electronics']);
+    expect(storeSubtypeSuggestions('Fu')).toEqual(['furniture']);
+    expect(storeSubtypeSuggestions('Ha')).toEqual(['hardware']);
+    expect(storeSubtypeSuggestions('Bi')).toEqual(['bicycle']);
+    expect(storeSubtypeSuggestions('Je')).toEqual(['jewelry']);
     expect(storeSubtypeSuggestions('Sh')).toEqual(['shoes']);
     expect(storeSubtypeSuggestions('Sap', 'pt-PT')).toEqual(['shoes']);
   });
 
   it('matches nearby store names against the bundled subtype list', () => {
+    expect(storePlaceMatchesSubtype('Aquaplante', 'any')).toBe(true);
     expect(storePlaceMatchesSubtype('Zara Colombo', 'clothing')).toBe(true);
     expect(storePlaceMatchesSubtype('Aquaplante', 'clothing')).toBe(false);
+  });
+
+  it('matches cached stores by stored subtype before falling back to name', () => {
+    expect(storePlaceMatchesSubtype({ name: 'store', storeSubtype: 'clothing' }, 'clothing')).toBe(true);
+    expect(storePlaceMatchesSubtype({ name: 'Zara', storeSubtype: 'pet' }, 'clothing')).toBe(false);
+    expect(storePlaceMatchesSubtype({ name: 'store', storeSubtype: 'pet' }, 'clothing')).toBe(false);
   });
 
   it('filters store places only when a store task has subtype intent', () => {
@@ -50,6 +70,13 @@ describe('storeSubtypes', () => {
     expect(filterStorePlacesForTasks('store', places, [
       { title: 'Buy a t-shirt', poi: 'store' },
     ])).toEqual([places[1]]);
+
+    expect(filterStorePlacesForTasks('store', [
+      { name: 'store', storeSubtype: 'clothing', distanceMeters: 30 },
+      { name: 'store', storeSubtype: 'pet', distanceMeters: 70 },
+    ], [
+      { title: 'Buy a t-shirt', poi: 'store' },
+    ])).toEqual([{ name: 'store', storeSubtype: 'clothing', distanceMeters: 30 }]);
 
     expect(filterStorePlacesForTasks('store', places, [
       { title: 'Buy something', poi: 'store' },

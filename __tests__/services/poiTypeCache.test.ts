@@ -16,6 +16,8 @@ import {
   searchPlaceTypesCached,
   seedPoiTypeCacheIfEmpty,
 } from '../../src/services/poiTypeCache';
+import enDictionary from '../../src/constants/poiDictionary.en.json';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
 
 jest.mock('../../src/config/keys', () => ({
   GOOGLE_PLACES_API_KEY: 'TEST_KEY',
@@ -28,6 +30,12 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchPlaceTypesProxy: jest.fn(),
 }));
 
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedReverseGeocode: jest.fn(),
+  setCachedReverseGeocode: jest.fn(),
+  __resetReverseGeocodeCacheForTests: jest.fn(),
+}));
+
 beforeEach(() => {
   setCopyLanguage('en');
   __resetPoiTypeCacheDbForTests();
@@ -38,6 +46,17 @@ afterEach(() => {
 });
 
 describe('searchPlaceTypesCached', () => {
+  it('keeps the bundled POI dictionary trimmed to the curated allowlist', () => {
+    expect(Object.keys(enDictionary)).toHaveLength(SUPPORTED_GOOGLE_PLACE_TYPES.length);
+    expect(enDictionary).toHaveProperty('cafe');
+    expect(enDictionary).toHaveProperty('coffee_shop');
+    expect(enDictionary).not.toHaveProperty('coffee_roastery');
+    expect(enDictionary).not.toHaveProperty('sushi_restaurant');
+    expect(enDictionary).not.toHaveProperty('book_store');
+    expect(enDictionary).not.toHaveProperty('electronics_store');
+    expect(enDictionary).not.toHaveProperty('pet_store');
+  });
+
   it('returns English labels from the bundled dictionary', async () => {
     await expect(searchPlaceTypesCached('gym')).resolves.toEqual([
       { type: 'gym', label: 'Gym' },
@@ -52,40 +71,41 @@ describe('searchPlaceTypesCached', () => {
     ]);
   });
 
-  it('matches a raw type slug locally', async () => {
-    const results = await searchPlaceTypesCached('sushi_restaurant');
+  it('matches a kept raw type slug locally', async () => {
+    const results = await searchPlaceTypesCached('restaurant');
 
-    expect(results[0]).toEqual({ type: 'sushi_restaurant', label: 'Sushi Restaurant' });
+    expect(results[0]).toEqual({ type: 'restaurant', label: 'Restaurant' });
   });
 
-  it('supports prefix search without any live API fallback', async () => {
+  it('does not surface trimmed cuisine microtypes', async () => {
     const results = await searchPlaceTypesCached('sushi');
 
-    expect(results.some(result => result.type === 'sushi_restaurant')).toBe(true);
+    expect(results.some(result => result.type === 'restaurant')).toBe(true);
+    expect(results.some(result => result.type === 'sushi_restaurant')).toBe(false);
   });
 
-  it('prefers commercial POIs for "buy a book"', async () => {
+  it('routes book shopping through the broad store POI', async () => {
     const results = await searchPlaceTypesCached('buy a book');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
   });
 
   it('handles filler words in longer retail phrasing', async () => {
     const results = await searchPlaceTypesCached('buy a new book');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
   });
 
   it('generalizes book shopping beyond the original phrase', async () => {
     const results = await searchPlaceTypesCached('purchase a novel');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Book Store' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Store' });
   });
 
   it('does not treat verb-style booking phrases as shopping intent', async () => {
     const results = await searchPlaceTypesCached('book a flight');
 
-    expect(results[0]?.type).not.toBe('book_store');
+    expect(results[0]?.type).not.toBe('store');
   });
 
   it('prefers bakery over broad retail buckets for bread shopping intent', async () => {
@@ -146,13 +166,14 @@ describe('searchPlaceTypesCached', () => {
     expect(results[0]).toEqual({ type: 'cafe', label: 'Café' });
   });
 
-  it('keeps coffee roastery for explicit roastery phrasing', async () => {
+  it('does not surface trimmed cafe microtypes for explicit roastery phrasing', async () => {
     const results = await searchPlaceTypesCached('go to a coffee roastery');
 
-    expect(results[0]).toEqual({ type: 'coffee_roastery', label: 'Coffee Roastery' });
+    expect(results.some(result => result.type === 'cafe')).toBe(true);
+    expect(results.some(result => result.type === 'coffee_roastery')).toBe(false);
   });
 
-  it('prefers cafe over coffee roastery for generic coffee outings', async () => {
+  it('keeps cafe for generic coffee outings', async () => {
     const results = await searchPlaceTypesCached('go out for coffee');
 
     expect(results[0]).toEqual({ type: 'cafe', label: 'Café' });
@@ -166,12 +187,12 @@ describe('searchPlaceTypesCached', () => {
     expect(results[0]).toEqual({ type: 'cafe', label: 'Café' });
   });
 
-  it('keeps coffee roastery for explicit Portuguese roastery phrasing', async () => {
+  it('does not surface trimmed cafe microtypes in Portuguese search', async () => {
     setCopyLanguage('pt-PT');
 
     const results = await searchPlaceTypesCached('ir a um café roastery');
 
-    expect(results[0]).toEqual({ type: 'coffee_roastery', label: 'Café roastery' });
+    expect(results.some(result => result.type === 'coffee_roastery')).toBe(false);
   });
 
   it('prefers pharmacy for medicine pickup intent', async () => {
@@ -180,10 +201,11 @@ describe('searchPlaceTypesCached', () => {
     expect(results[0]).toEqual({ type: 'pharmacy', label: 'Pharmacy' });
   });
 
-  it('prefers shoe stores for shoe-buying intent', async () => {
+  it('does not surface trimmed store microtypes for shoe-buying intent', async () => {
     const results = await searchPlaceTypesCached('buy shoes');
 
-    expect(results[0]).toEqual({ type: 'shoe_store', label: 'Shoe Store' });
+    expect(results.some(result => result.type === 'store')).toBe(true);
+    expect(results.some(result => result.type === 'shoe_store')).toBe(false);
   });
 
   it('matches built-in labels inside longer task phrasing', async () => {
@@ -197,7 +219,7 @@ describe('searchPlaceTypesCached', () => {
 
     const results = await searchPlaceTypesCached('comprar um livro');
 
-    expect(results[0]).toEqual({ type: 'book_store', label: 'Livraria' });
+    expect(results[0]).toEqual({ type: 'store', label: 'Loja' });
   });
 
   it('supports Portuguese bakery intent offline', async () => {

@@ -62,6 +62,10 @@ interface MockHabitatRow {
   footprint_area_m2?: number | null;
   /** KAN-293 — the place's own site from OSM's `website` tag; null when it has none. */
   website?: string | null;
+  /** KAN-317 — restaurant subtype metadata persisted in the local cache. */
+  restaurant_food_type?: string | null;
+  /** KAN-317 — store subtype metadata persisted in the local cache. */
+  store_subtype?: string | null;
 }
 
 // ─── In-memory expo-sqlite mock ────────────────────────────────────────────────
@@ -82,7 +86,7 @@ const mockDb = {
         { name: 'id' }, { name: 'poi_type' }, { name: 'name' }, { name: 'is_generic_name' },
         { name: 'lat' }, { name: 'lng' }, { name: 'google_place_id' }, { name: 'osm_id' },
         { name: 'osm_fetched_at' }, { name: 'last_matched_at' }, { name: 'cache_area_id' }, { name: 'expires_at' },
-        { name: 'footprint_area_m2' }, { name: 'website' },
+        { name: 'footprint_area_m2' }, { name: 'website' }, { name: 'restaurant_food_type' }, { name: 'store_subtype' },
       ] as unknown as T[];
     }
     if (s.startsWith('SELECT MAX(last_matched_at) as maxTs FROM habitat_places WHERE cache_area_id IS NULL')) {
@@ -130,24 +134,34 @@ const mockDb = {
     }
     throw new Error(`mockDb.getAllSync: unrecognized query: ${s}`);
   }),
+  getFirstSync: jest.fn(<T>(sql: string, params: unknown[] = []): T | null => {
+    const s = sql.replace(/\s+/g, ' ').trim();
+    if (s.startsWith('SELECT * FROM habitat_places WHERE id = ?')) {
+      const [id] = params as [string];
+      return (rows.find(r => r.id === id) ?? null) as T | null;
+    }
+    throw new Error(`mockDb.getFirstSync: unrecognized query: ${s}`);
+  }),
   runSync: jest.fn((sql: string, params: unknown[] = []) => {
     const s = sql.replace(/\s+/g, ' ').trim();
 
     if (s.startsWith('INSERT INTO habitat_places')) {
-      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website] =
-        params as [string, string, string, number, number, number, string | null, string | null, number, number, string | null, number | null, number | null, string | null];
-      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website });
+      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype] =
+        params as [string, string, string, number, number, number, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null];
+      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype });
       return {} as any;
     }
     if (s.startsWith('UPDATE habitat_places')) {
       const [
         google, osm, osmFlag1, lat, osmFlag2, lng, osmFlag3, osmFetchedAt,
         footprintAreaM2, website,
+        restaurantFoodType, storeSubtype,
         tripCacheAreaId, tripExpiresAtA, tripExpiresAtB, tripExpiresAtC,
         lastMatchedAt, id,
       ] = params as [
         string | null, string | null, number, number, number, number, number, number,
         number | null, string | null,
+        string | null, string | null,
         string | null, number | null, number | null, number | null,
         number, string,
       ];
@@ -164,6 +178,8 @@ const mockDb = {
         // COALESCE(?, website) — same shape: a discovered site fills an
         // unknown one, and a row that already has one is never cleared.
         row.website = website ?? row.website ?? null;
+        row.restaurant_food_type = restaurantFoodType ?? row.restaurant_food_type ?? null;
+        row.store_subtype = storeSubtype ?? row.store_subtype ?? null;
         row.cache_area_id = row.cache_area_id ?? tripCacheAreaId;
         if (tripExpiresAtA != null) {
           row.expires_at = row.expires_at == null ? tripExpiresAtB : Math.max(row.expires_at, tripExpiresAtC!);
@@ -253,6 +269,7 @@ import {
   enforceSizeBudget,
   refreshMallsIfDue,
   findExistingPlaceId,
+  getHabitatPlaceById,
   hasCachedPlaces,
   getMostRecentHabitatUpdateAt,
   deleteTripAreaPlaces,
@@ -527,6 +544,27 @@ describe('findExistingPlaceId (KAN-229)', () => {
   });
 });
 
+describe('getHabitatPlaceById', () => {
+  it('returns persisted footprint, website, and validated subtype fields', () => {
+    const id = upsertPlace({
+      poiType: 'restaurant',
+      name: 'Yakuza by Olivier',
+      lat: 0,
+      lng: 0,
+      source: { osm: 'way/restaurant' },
+      footprintAreaM2: 1234,
+      website: 'https://example.com',
+    });
+
+    expect(getHabitatPlaceById(id)).toEqual(expect.objectContaining({
+      placeId: id,
+      footprintAreaM2: 1234,
+      website: 'https://example.com',
+      restaurantFoodType: 'sushi',
+    }));
+  });
+});
+
 describe('queryHabitatCache', () => {
   it('returns NearbyPlace-shaped results within radius, sorted by distance', () => {
     upsertPlace({ poiType: 'atm', name: 'Near ATM', lat: 0.0003, lng: 0, source: { osm: 'node/1' } }); // ~33m
@@ -541,6 +579,38 @@ describe('queryHabitatCache', () => {
     expect(result.atm[0].distanceMeters).toBeLessThan(result.atm[1].distanceMeters);
     // placeId is the internal id, not a raw source id.
     expect(result.atm[0].placeId).toMatch(/^hp_/);
+  });
+
+  it('returns stored restaurant and store subtype metadata with cached places', () => {
+    upsertPlace({ poiType: 'restaurant', name: 'Yakuza by Olivier', lat: 0.0003, lng: 0, source: { osm: 'node/restaurant' } });
+    upsertPlace({ poiType: 'store', name: 'Zara', lat: 0.0004, lng: 0, source: { osm: 'node/store' } });
+
+    const result = queryHabitatCache(ORIGIN.lat, ORIGIN.lng, ['restaurant', 'store'], 500);
+
+    expect(rows.find(r => r.name === 'Yakuza by Olivier')?.restaurant_food_type).toBe('sushi');
+    expect(rows.find(r => r.name === 'Zara')?.store_subtype).toBe('clothing');
+    expect(result.restaurant[0]).toEqual(expect.objectContaining({ restaurantFoodType: 'sushi' }));
+    expect(result.store[0]).toEqual(expect.objectContaining({ storeSubtype: 'clothing' }));
+  });
+
+  it('drops stale cached subtype keys at the read boundary', () => {
+    upsertPlace({ poiType: 'restaurant', name: 'Yakuza by Olivier', lat: 0.0003, lng: 0, source: { osm: 'node/restaurant' } });
+    rows[0].restaurant_food_type = 'not_real';
+
+    const result = queryHabitatCache(ORIGIN.lat, ORIGIN.lng, ['restaurant'], 500);
+
+    expect(result.restaurant[0].restaurantFoodType).toBeUndefined();
+  });
+
+  it('fills subtype metadata when a later sighting merges into an old row', () => {
+    const id = upsertPlace({ poiType: 'store', name: 'Zara', lat: 0, lng: 0, source: { osm: 'node/old' } });
+    rows[0].store_subtype = null; // Simulates a row created before KAN-317.
+
+    const mergedId = upsertPlace({ poiType: 'store', name: 'Zara', lat: 0.0001, lng: 0, source: { google: 'g-zara' } });
+
+    expect(mergedId).toBe(id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].store_subtype).toBe('clothing');
   });
 
   // KAN-282 raised the per-type cap from 5 to 50. mallRoute reads ALL

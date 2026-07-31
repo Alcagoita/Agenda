@@ -9,8 +9,9 @@
  *   - shouldPreRefreshTrip: true/false matrix (online/offline, before/at/
  *     after the pre-departure window, already-refreshed, dateless, trip
  *     already ended)
- *   - downloadTripArea: requests the full ALL_POI_TYPES ∪ customCategoryPoiTypes
- *     union, upserts every returned place tagged with cacheAreaId/expiresAt
+ *   - downloadTripArea: requests the curated area-download allowlist, ignores
+ *     unsupported custom types, and upserts every returned place tagged with
+ *     cacheAreaId/expiresAt
  *   - refreshTripArea: re-downloads + bumps Firestore expiresAt/preRefreshedAt
  *   - checkAndRunTripPreRefresh: only refreshes due trips; one trip's
  *     failure doesn't block the others
@@ -56,8 +57,10 @@ import {
   downloadAreaSnapshot,
   refreshTripArea,
   checkAndRunTripPreRefresh,
+  getAreaDownloadPoiTypes,
 } from '../../src/services/tripDownload';
 import { ALL_POI_TYPES } from '../../src/types';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
 import type { Trip } from '../../src/types';
 
 /** A non-empty OSM result — used everywhere a test isn't specifically about the empty-result guard, so downloadTripArea's "0 places found" check doesn't interfere. */
@@ -163,27 +166,30 @@ describe('shouldPreRefreshTrip', () => {
 });
 
 describe('downloadTripArea', () => {
-  it('requests ALL_POI_TYPES union with custom category types, in one searchOsmPlacesStrict call', async () => {
+  it('requests exactly the curated POI allowlist', async () => {
     mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
 
-    await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, ['climbing_gym']);
+    await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000);
 
     expect(mockSearchOsmPlaces).toHaveBeenCalledTimes(1);
     const [lat, lng, poiTypes, radius] = mockSearchOsmPlaces.mock.calls[0];
     expect(lat).toBe(1);
     expect(lng).toBe(2);
     expect(radius).toBe(15_000);
-    // KAN-282 — shopping_mall rides along too, so a downloaded trip area can
-    // serve the "All in one place" mall card entirely offline. It isn't in
-    // ALL_POI_TYPES because it's never a user-facing task category.
-    expect(new Set(poiTypes)).toEqual(new Set([...ALL_POI_TYPES, 'climbing_gym', 'shopping_mall']));
+    expect(new Set(poiTypes)).toEqual(new Set([
+      ...ALL_POI_TYPES,
+      ...SUPPORTED_GOOGLE_PLACE_TYPES,
+    ]));
+    expect(poiTypes.every((type: string) => (
+      (ALL_POI_TYPES as readonly string[]).includes(type)
+      || (SUPPORTED_GOOGLE_PLACE_TYPES as readonly string[]).includes(type)
+    ))).toBe(true);
+    expect(poiTypes).not.toContain('climbing_gym');
   });
 
-  it('dedupes a custom type that overlaps a built-in one', async () => {
-    mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
-    await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, ['gym']);
+  it('dedupes overlap between built-in and curated POI types', () => {
+    const poiTypes = getAreaDownloadPoiTypes();
 
-    const [, , poiTypes] = mockSearchOsmPlaces.mock.calls[0];
     expect(poiTypes.filter((t: string) => t === 'gym')).toHaveLength(1);
   });
 
@@ -193,7 +199,7 @@ describe('downloadTripArea', () => {
       cafe: [{ osmId: 'node/2', name: 'Cafe', isGenericName: false, lat: 1, lng: 2, distanceMeters: 20 }],
     });
 
-    const count = await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, []);
+    const count = await downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000);
 
     expect(count).toBe(2);
     expect(mockWriteTripAreaPlaces).toHaveBeenCalledWith(
@@ -207,12 +213,12 @@ describe('downloadTripArea', () => {
 
   it('throws when searchOsmPlacesStrict fails — a user-initiated action must surface the error, not swallow it', async () => {
     mockSearchOsmPlaces.mockRejectedValue(new Error('network down'));
-    await expect(downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, [])).rejects.toThrow('network down');
+    await expect(downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000)).rejects.toThrow('network down');
   });
 
   it('throws instead of persisting a "successful" empty result — indistinguishable from a soft failure otherwise', async () => {
     mockSearchOsmPlaces.mockResolvedValue({});
-    await expect(downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, []))
+    await expect(downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000))
       .rejects.toThrow('Area download returned no places');
     // Must not touch any existing rows for this cacheAreaId before knowing the new fetch actually found something.
     expect(mockWriteTripAreaPlaces).not.toHaveBeenCalled();
@@ -222,7 +228,7 @@ describe('downloadTripArea', () => {
     mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
     mockWriteTripAreaPlaces.mockImplementationOnce(() => { throw new Error('disk full'); });
 
-    await expect(downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000, []))
+    await expect(downloadTripArea({ lat: 1, lng: 2 }, 15_000, 'ta_1', 1_800_000_000_000))
       .rejects.toThrow('disk full');
   });
 });
@@ -262,7 +268,7 @@ describe('refreshTripArea', () => {
     mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
     const trip = makeTrip({ endDate: '2026-07-27' });
 
-    await refreshTripArea('uid-1', trip, []);
+    await refreshTripArea('uid-1', trip);
 
     expect(mockSearchOsmPlaces).toHaveBeenCalledWith(trip.centerLat, trip.centerLng, expect.anything(), trip.areaRadius, expect.anything());
     expect(mockUpdateTrip).toHaveBeenCalledWith('uid-1', 'trip-1', {
@@ -278,7 +284,7 @@ describe('checkAndRunTripPreRefresh', () => {
     const due = makeTrip({ id: 'due', startDate: '2026-07-20' });
     const notDue = makeTrip({ id: 'not-due', startDate: '2026-08-20' });
 
-    await checkAndRunTripPreRefresh('uid-1', [due, notDue], []);
+    await checkAndRunTripPreRefresh('uid-1', [due, notDue]);
 
     expect(mockUpdateTrip).toHaveBeenCalledTimes(1);
     expect(mockUpdateTrip).toHaveBeenCalledWith('uid-1', 'due', expect.anything());
@@ -291,7 +297,7 @@ describe('checkAndRunTripPreRefresh', () => {
     const failing = makeTrip({ id: 'failing', startDate: '2026-07-20' });
     const ok      = makeTrip({ id: 'ok', startDate: '2026-07-19' });
 
-    await expect(checkAndRunTripPreRefresh('uid-1', [failing, ok], [])).resolves.toBeUndefined();
+    await expect(checkAndRunTripPreRefresh('uid-1', [failing, ok])).resolves.toBeUndefined();
 
     expect(mockUpdateTrip).toHaveBeenCalledTimes(1);
     expect(mockUpdateTrip).toHaveBeenCalledWith('uid-1', 'ok', expect.anything());
@@ -301,7 +307,7 @@ describe('checkAndRunTripPreRefresh', () => {
     mockNetInfoFetch.mockResolvedValue({ isConnected: false });
     const due = makeTrip({ id: 'due', startDate: '2026-07-20' });
 
-    await checkAndRunTripPreRefresh('uid-1', [due], []);
+    await checkAndRunTripPreRefresh('uid-1', [due]);
 
     expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
     expect(mockUpdateTrip).not.toHaveBeenCalled();

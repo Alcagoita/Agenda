@@ -25,6 +25,8 @@ import {
 } from './placesFunctions';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { Category, PoiType, POI_GOOGLE_TYPES, poiCatalogLabel } from '../types';
+import type { RestaurantFoodType } from './restaurantFoodTypes';
+import type { StoreSubtype } from './storeSubtypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,10 @@ export interface NearbyPlace {
    *  solely to decide whether the cluster box's leisure line can offer a
    *  ticket link; undefined simply means "no known site", never "look one up". */
   website?: string;
+  /** Stored offline subtype for restaurant places, when known from the local dictionary/cache. */
+  restaurantFoodType?: RestaurantFoodType;
+  /** Stored offline subtype for store places, when known from the local dictionary/cache. */
+  storeSubtype?: StoreSubtype;
 }
 
 // ─── Internal Places API types ─────────────────────────────────────────────────

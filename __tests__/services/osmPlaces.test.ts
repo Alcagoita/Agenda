@@ -22,6 +22,11 @@ jest.mock('../../src/services/placesFunctions', () => ({
   getPlaceDetailsProxy:    jest.fn(),
 }));
 
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(),
+  putCachedCity: jest.fn(),
+}));
+
 import { searchOsmPlaces, searchOsmPlacesStrict } from '../../src/services/osmPlaces';
 
 const ORIGIN = { lat: 0, lng: 0 };
@@ -157,6 +162,24 @@ describe('searchOsmPlaces', () => {
     expect(result).toEqual({ atm: [] });
 
     jest.useRealTimers();
+  });
+
+  it('keeps successful chunk results when a later chunk fails', async () => {
+    const poiTypes = Array.from({ length: 26 }, () => 'pharmacy');
+    mockOverpassResponse([{ id: 8, lat: 0.0001, lon: 0, tags: { amenity: 'pharmacy', name: 'Open Pharmacy' } }]);
+    mockFetch
+      .mockRejectedValueOnce(new Error('chunk failed'))
+      .mockRejectedValueOnce(new Error('chunk failed'));
+
+    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, poiTypes, 5000);
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    const firstBody = decodeURIComponent((mockFetch.mock.calls[0][1].body as string).replace(/^data=/, ''));
+    const secondBody = decodeURIComponent((mockFetch.mock.calls[1][1].body as string).replace(/^data=/, ''));
+    expect(firstBody.match(/nwr\[/g)).toHaveLength(25);
+    expect(secondBody.match(/nwr\[/g)).toHaveLength(1);
+    expect(result.pharmacy).toHaveLength(1);
+    expect(result.pharmacy[0].name).toBe('Open Pharmacy');
   });
 });
 

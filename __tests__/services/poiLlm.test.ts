@@ -45,6 +45,7 @@ import {
   validatePoi,
   isLlmAvailable,
   classifyPoi,
+  getUnsuggestedPoiInferenceTypes,
   inferPoiForQuickAdd,
   learnPoiKeyword,
   learnFromClassification,
@@ -177,6 +178,10 @@ describe('classifyPoi', () => {
 // ─── inferPoiForQuickAdd (KAN-232) ─────────────────────────────────────────────
 
 describe('inferPoiForQuickAdd', () => {
+  it('keeps static POI inference targets covered by the suggestion dictionary', () => {
+    expect(getUnsuggestedPoiInferenceTypes()).toEqual([]);
+  });
+
   it('returns the rule match without calling the LLM classifier', async () => {
     expect(await inferPoiForQuickAdd('pick up prescription')).toBe('pharmacy');
     expect(mockLoad).not.toHaveBeenCalled();
@@ -187,13 +192,13 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
-  it('treats book-buying phrasing as book_store without calling the LLM classifier', async () => {
-    expect(await inferPoiForQuickAdd('buy a book')).toBe('book_store');
+  it('routes book-buying phrasing through store without calling the LLM classifier', async () => {
+    expect(await inferPoiForQuickAdd('buy a book')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
-  it('treats pt-PT book-buying phrasing as book_store without calling the LLM classifier', async () => {
-    expect(await inferPoiForQuickAdd('comprar um livro')).toBe('book_store');
+  it('routes pt-PT book-buying phrasing through store without calling the LLM classifier', async () => {
+    expect(await inferPoiForQuickAdd('comprar um livro')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
@@ -215,6 +220,8 @@ describe('inferPoiForQuickAdd', () => {
   it('keeps store subtype intent on the broad store type', async () => {
     expect(await inferPoiForQuickAdd('buy a t-shirt')).toBe('store');
     expect(await inferPoiForQuickAdd('comprar carregador')).toBe('store');
+    expect(await inferPoiForQuickAdd('buy computer parts')).toBe('store');
+    expect(await inferPoiForQuickAdd('buy furniture')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 

@@ -2,11 +2,11 @@
  * tripDownload.ts — Trip Planner business logic (KAN-234).
  *
  * Orchestrates a manual, destination-based offline area download: derives
- * the full ALL_POI_TYPES ∪ customCategoryPoiTypes union (same reasoning as
- * proximity.ts's KAN-238 habitat-cache prefetch — a trip task is created
- * *during* the trip, so a download filtered to today's tasks couldn't serve
- * tomorrow's "buy sunscreen"), fetches once via osmPlaces.searchOsmPlaces,
- * and upserts every result into the habitat cache tagged with this trip's
+ * the curated POI allowlist plus supported custom categories (same reasoning
+ * as proximity.ts's habitat-cache prefetch — a trip task is created *during*
+ * the trip, so a download filtered to today's tasks couldn't serve tomorrow's
+ * "buy sunscreen"), fetches once via osmPlaces.searchOsmPlaces, and upserts
+ * every result into the habitat cache tagged with this trip's
  * cacheAreaId/expiresAt (habitatCache.upsertTripPlace).
  *
  * Unlike habitatCache's own silent opportunistic refresh, downloadTripArea/
@@ -22,6 +22,7 @@
 
 import NetInfo from '@react-native-community/netinfo';
 import { ALL_POI_TYPES } from '../types';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../constants/googlePlaceTypes';
 import type { Trip, TripRadiusPreset } from '../types';
 import { searchOsmPlacesStrict } from './osmPlaces';
 import { writeTripAreaPlaces, HABITAT_BYTES_PER_ROW } from './habitatCache';
@@ -42,6 +43,13 @@ export const TRIP_RADIUS_PRESETS: { key: TripRadiusPreset; radiusMeters: number 
   { key: 'town_and_around', radiusMeters: 15_000 },
   { key: 'region',          radiusMeters: 40_000 },
 ];
+
+export function getAreaDownloadPoiTypes(): string[] {
+  return [...new Set([
+    ...ALL_POI_TYPES,
+    ...SUPPORTED_GOOGLE_PLACE_TYPES,
+  ])];
+}
 
 /** A larger request (16+ types, up to 40km) than the opportunistic 5km refresh has ever needed — give Overpass more time before giving up (see osmPlaces.searchOsmPlaces's timeoutMs param). Shared by trip and mall snapshot downloads. */
 const AREA_DOWNLOAD_TIMEOUT_MS = 20_000;
@@ -177,8 +185,8 @@ export async function downloadAreaSnapshot(
 }
 
 /**
- * Derives the full ALL_POI_TYPES ∪ customCategoryPoiTypes union (same
- * reasoning as proximity.ts's KAN-238 habitat-cache prefetch — a trip task
+ * Derives the full curated POI allowlist (same reasoning as proximity.ts's
+ * KAN-238 habitat-cache prefetch — a trip task
  * is created *during* the trip, so a download filtered to today's tasks
  * couldn't serve tomorrow's "buy sunscreen") and delegates to
  * downloadAreaSnapshot.
@@ -188,12 +196,8 @@ export async function downloadTripArea(
   radiusMeters: number,
   cacheAreaId: string,
   expiresAt: number,
-  customCategoryPoiTypes: string[],
 ): Promise<number> {
-  // KAN-282 — shopping_mall too, so "One trip for all of these" can find a
-  // mall inside a downloaded trip area entirely offline, same as any other
-  // POI type.
-  const poiTypes = [...new Set([...ALL_POI_TYPES, ...customCategoryPoiTypes, 'shopping_mall'])];
+  const poiTypes = getAreaDownloadPoiTypes();
   return downloadAreaSnapshot(center, radiusMeters, cacheAreaId, expiresAt, poiTypes);
 }
 
@@ -205,7 +209,6 @@ export async function downloadTripArea(
 export async function refreshTripArea(
   uid: string,
   trip: Trip,
-  customCategoryPoiTypes: string[],
 ): Promise<void> {
   const expiresAt = computeTripExpiresAt(trip.endDate);
   await downloadTripArea(
@@ -213,7 +216,6 @@ export async function refreshTripArea(
     trip.areaRadius,
     trip.cacheAreaId,
     expiresAt,
-    customCategoryPoiTypes,
   );
   await updateTrip(uid, trip.id, { expiresAt, preRefreshedAt: Date.now() });
 }
@@ -227,7 +229,6 @@ export async function refreshTripArea(
 export async function checkAndRunTripPreRefresh(
   uid: string,
   trips: Trip[],
-  customCategoryPoiTypes: string[],
 ): Promise<void> {
   const today = todayISO();
   let isOnline = false;
@@ -236,7 +237,7 @@ export async function checkAndRunTripPreRefresh(
   for (const trip of trips) {
     if (!shouldPreRefreshTrip(trip, today, isOnline)) { continue; }
     try {
-      await refreshTripArea(uid, trip, customCategoryPoiTypes);
+      await refreshTripArea(uid, trip);
     } catch (err) {
       console.warn('[tripDownload] checkAndRunTripPreRefresh failed for trip', trip.id, err);
     }
