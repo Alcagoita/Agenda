@@ -752,6 +752,7 @@ const en = {
     socialA11yNoBadge: 'Social',
     notificationsA11yUnread: 'Notifications, unread',
     notificationsA11y: 'Notifications',
+    offlineA11y: 'No internet connection',
   },
 
   // ─── Achievements (KAN-114, KAN-252) ────────────────────────────────────────
@@ -1837,6 +1838,7 @@ const ptPT: typeof en = {
     socialA11yNoBadge: 'Social',
     notificationsA11yUnread: 'Notificações, por ler',
     notificationsA11y: 'Notificações',
+    offlineA11y: 'Sem ligação à internet',
   },
 
   achievements: {
