@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import { searchAddressAutocomplete, getPlaceDetails } from '../services/maps';
+import { searchAddressAutocomplete } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { getUser, setHome, clearHome } from '../services/firestore';
 import { setHomeLocation } from '../services/home';
@@ -73,13 +73,12 @@ export function useHomeAddress(): HomeAddressState {
     setSaving(true);
     setError(null);
     try {
-      const details = await getPlaceDetails(suggestion.placeId);
-      if (!details) {
+      if (suggestion.lat == null || suggestion.lng == null) {
         setError(COPY.home.saveErrorToast);
         return false;
       }
-      const address = [details.name, suggestion.address].filter(Boolean).join(', ');
-      const next: HomeLocation = { address, lat: details.lat, lng: details.lng };
+      const address = [suggestion.name, suggestion.address].filter(Boolean).join(', ');
+      const next: HomeLocation = { address, lat: suggestion.lat, lng: suggestion.lng };
       await setHome(uid, next);
       setHomeState(next);
       setHomeLocation(next);

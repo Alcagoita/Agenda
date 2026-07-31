@@ -123,20 +123,22 @@ export function getDistanceMeters(
 // Nominatim's usage policy. Any failure falls back to "Outside" at the caller.
 
 const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
-const REVERSE_GEOCODE_TIMEOUT_MS = 8_000;
+const NOMINATIM_TIMEOUT_MS = 8_000;
 // Nominatim (like Overpass) asks every client to identify itself; unlabeled
-// traffic risks being rate-limited or blocked.
-const REVERSE_GEOCODE_USER_AGENT = `BrushApp/${require('../../package.json').version}`;
+// traffic risks being rate-limited or blocked. Shared by reverse geocoding
+// (this section) and the destination/address autocomplete below.
+const NOMINATIM_USER_AGENT = `BrushApp/${require('../../package.json').version}`;
 // Nominatim's usage policy caps traffic at 1 request/second — a hard rule, not
-// a nicety (enforced by blocking). This guards it app-wide.
-const REVERSE_GEOCODE_MIN_INTERVAL_MS = 1_000;
+// a nicety (enforced by blocking). This guards it app-wide, across every
+// Nominatim caller (reverse geocode + autocomplete), not just this section.
+const NOMINATIM_MIN_INTERVAL_MS = 1_000;
+let lastNominatimRequestAt = 0;
 
 // In-memory cache of resolved cells for this session (the fast path; the
 // SQLite layer below makes a name survive restarts). Keyed on coords rounded to
 // ~3 decimals (≈100 m) so nearby fixes reuse one result. `null` = resolved, no
 // name — cached too, so we don't re-hit Nominatim for the same empty cell.
 const reverseGeocodeMem = new Map<string, string | null>();
-let lastReverseGeocodeAt = 0;
 
 /** Rounds a coordinate to a ~100 m cache cell key. */
 function reverseGeocodeCell(lat: number, lng: number): string {
@@ -195,16 +197,16 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
 
   // 3) Rate limit — never two Nominatim requests within 1 s, app-wide.
   const now = Date.now();
-  if (now - lastReverseGeocodeAt < REVERSE_GEOCODE_MIN_INTERVAL_MS) { return null; }
-  lastReverseGeocodeAt = now;
+  if (now - lastNominatimRequestAt < NOMINATIM_MIN_INTERVAL_MS) { return null; }
+  lastNominatimRequestAt = now;
 
   const url = `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REVERSE_GEOCODE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: 'GET',
-      headers: { 'User-Agent': REVERSE_GEOCODE_USER_AGENT },
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT },
       signal: controller.signal,
     });
     if (!res.ok) { return null; }
@@ -224,7 +226,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
 /** Test-only: clears the session reverse-geocode cache and rate-limit clock. */
 export function __resetReverseGeocodeForTests(): void {
   reverseGeocodeMem.clear();
-  lastReverseGeocodeAt = 0;
+  lastNominatimRequestAt = 0;
 }
 
 // ─── Places API — Nearby Search ───────────────────────────────────────────────
@@ -603,14 +605,22 @@ export function resolveCategoryPlaceType(category: Category): string | null {
 
 // ─── Places Autocomplete (KAN-76) ─────────────────────────────────────────────
 
-/** A single autocomplete suggestion returned by the Places Autocomplete API. */
+/** A single autocomplete suggestion returned by an autocomplete search. */
 export interface PlaceAutocompleteSuggestion {
-  /** Google Places ID. */
+  /** Google Places ID (establishment search) or `osm:<place_id>` (Nominatim). */
   placeId: string;
-  /** Display name of the establishment (e.g. "Nike Store"). */
+  /** Display name of the place (e.g. "Nike Store", "Faro"). */
   name: string;
   /** Formatted secondary address line (e.g. "Oxford Street, London"). */
   address: string;
+  /**
+   * Coordinates, when the search source already returns them (Nominatim —
+   * see searchDestinationAutocomplete/searchAddressAutocomplete). Absent for
+   * Google establishment results, which require a separate getPlaceDetails
+   * call.
+   */
+  lat?: number;
+  lng?: number;
 }
 
 interface AutocompleteResponse {
@@ -625,9 +635,22 @@ interface AutocompleteResponse {
   }>;
 }
 
-async function fetchPlacesAutocomplete(
+/**
+ * Search for establishments matching the user-typed `query` string.
+ * Results are optionally biased towards `lat`/`lng` when the device location
+ * is available (50 km radius — covers most metro areas).
+ *
+ * Returns up to 5 establishment suggestions, sorted by relevance.
+ * Returns an empty array on API error (search is best-effort).
+ *
+ * Uses the Places Autocomplete (New) API:
+ *   POST https://places.googleapis.com/v1/places:autocomplete
+ *
+ * Stays on Google (KAN-320 spike, KAN-278) — Nominatim has no equivalent
+ * ranked establishment search, only geocoding of named/addressed places.
+ */
+export async function searchPlacesAutocomplete(
   query: string,
-  includedPrimaryTypes: string[],
   lat?: number,
   lng?: number,
 ): Promise<PlaceAutocompleteSuggestion[]> {
@@ -635,13 +658,7 @@ async function fetchPlacesAutocomplete(
 
   let data: AutocompleteResponse;
   try {
-    const mode =
-      includedPrimaryTypes.length === 0
-        ? 'address'
-        : includedPrimaryTypes[0] === '(cities)'
-          ? 'cities'
-          : 'establishment';
-    data = await placesAutocompleteProxy(query, mode, lat, lng) as AutocompleteResponse;
+    data = await placesAutocompleteProxy(query, 'establishment', lat, lng) as AutocompleteResponse;
   } catch {
     return [];
   }
@@ -660,57 +677,122 @@ async function fetchPlacesAutocomplete(
   return results;
 }
 
-/**
- * Search for establishments matching the user-typed `query` string.
- * Results are optionally biased towards `lat`/`lng` when the device location
- * is available (50 km radius — covers most metro areas).
- *
- * Returns up to 5 establishment suggestions, sorted by relevance.
- * Returns an empty array on API error (search is best-effort).
- *
- * Uses the Places Autocomplete (New) API:
- *   POST https://places.googleapis.com/v1/places:autocomplete
- */
-export async function searchPlacesAutocomplete(
+// ─── Nominatim search — destination / address autocomplete (KAN-320) ─────────
+//
+// Google Places' free establishment autocomplete has no OSM equivalent, but
+// city and free-form address geocoding do — Nominatim's /search endpoint,
+// same service already used for reverse geocoding above. Unlike Google
+// Places, Nominatim returns lat/lon directly in the search response, so
+// these two search functions need no follow-up getPlaceDetails call.
+
+const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
+
+/** A place class Nominatim tags settlements with — city/town/village/etc. */
+const NOMINATIM_SETTLEMENT_CLASS = 'place';
+
+interface NominatimSearchResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  class?: string;
+  name?: string;
+}
+
+async function fetchNominatimAutocomplete(
   query: string,
+  citiesOnly: boolean,
   lat?: number,
   lng?: number,
 ): Promise<PlaceAutocompleteSuggestion[]> {
-  return fetchPlacesAutocomplete(query, ['establishment'], lat, lng);
+  if (!query.trim()) { return []; }
+
+  // Nominatim's usage policy caps traffic at 1 request/second, app-wide —
+  // shared with reverseGeocode above. A skip here just means this keystroke's
+  // search is dropped; the next debounced call tries again.
+  const now = Date.now();
+  if (now - lastNominatimRequestAt < NOMINATIM_MIN_INTERVAL_MS) { return []; }
+  lastNominatimRequestAt = now;
+
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    addressdetails: '1',
+    limit: '8',
+  });
+  // Soft bias (not a hard restriction) toward the caller's current region,
+  // same intent as the lat/lng bias on searchPlacesAutocomplete.
+  if (lat != null && lng != null) {
+    const delta = 0.5; // ~55 km at the equator — plenty for a soft bias box
+    params.set('viewbox', `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`);
+    params.set('bounded', '0');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${NOMINATIM_SEARCH_URL}?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT },
+      signal: controller.signal,
+    });
+    if (!res.ok) { return []; }
+
+    const raw = (await res.json()) as NominatimSearchResult[];
+    const filtered = citiesOnly ? raw.filter(r => r.class === NOMINATIM_SETTLEMENT_CLASS) : raw;
+
+    return filtered.slice(0, 5).map((r) => {
+      const parts = r.display_name.split(', ');
+      return {
+        placeId: `osm:${r.place_id}`,
+        name:    r.name || parts[0],
+        address: parts.slice(1).join(', '),
+        lat:     parseFloat(r.lat),
+        lng:     parseFloat(r.lon),
+      };
+    });
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
  * Search for cities/towns/regions matching the user-typed `query` string
  * (KAN-234 Trip Planner destination search) — excludes individual businesses/
- * landmarks/airports, unlike searchPlacesAutocomplete's establishment search.
- * `"(cities)"` is the Places API's documented shorthand for city/town-level
- * results (matches the legacy Autocomplete API's `types=(cities)`).
+ * landmarks/street addresses, unlike searchAddressAutocomplete.
  *
  * `lat`/`lng`, when available, bias ambiguous queries (e.g. "Faro" — several
- * exist worldwide) toward the caller's current region, same soft-bias
- * mechanism as searchPlacesAutocomplete — it doesn't exclude far-away
- * matches, just ranks nearby ones higher.
+ * exist worldwide) toward the caller's current region — a soft bias, it
+ * doesn't exclude far-away matches, just ranks nearby ones higher.
+ *
+ * Uses OSM Nominatim (KAN-320) — replaces the former Google Places `(cities)`
+ * search. Results carry lat/lng directly, no getPlaceDetails follow-up needed.
  */
 export async function searchDestinationAutocomplete(
   query: string,
   lat?: number,
   lng?: number,
 ): Promise<PlaceAutocompleteSuggestion[]> {
-  return fetchPlacesAutocomplete(query, ['(cities)'], lat, lng);
+  return fetchNominatimAutocomplete(query, true, lat, lng);
 }
 
 /**
  * Free-form address search for the Settings "Home" flow (KAN-247) — no
- * primary-type restriction, so a specific street address/premise resolves
+ * settlement-only restriction, so a specific street address/premise resolves
  * just as well as a named place. Same 5-result cap and best-effort (never
  * throws) contract as the rest of this file's search functions.
+ *
+ * Uses OSM Nominatim (KAN-320) — replaces the former Google Places free-form
+ * search. Results carry lat/lng directly, no getPlaceDetails follow-up needed.
  */
 export async function searchAddressAutocomplete(
   query: string,
   lat?: number,
   lng?: number,
 ): Promise<PlaceAutocompleteSuggestion[]> {
-  return fetchPlacesAutocomplete(query, [], lat, lng);
+  return fetchNominatimAutocomplete(query, false, lat, lng);
 }
 
 // ─── Place Details (KAN-234) ──────────────────────────────────────────────────

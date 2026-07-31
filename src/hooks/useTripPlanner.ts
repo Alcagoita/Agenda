@@ -12,7 +12,6 @@ import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import {
   searchDestinationAutocomplete,
-  getPlaceDetails,
   buildStaticMapPreviewUrl,
 } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
@@ -186,19 +185,13 @@ export function useTripPlanner(
     justSelectedRef.current = true;
     setQuery(suggestion.name);
     setSuggestions([]);
-    try {
-      const details = await getPlaceDetails(suggestion.placeId);
-      if (!details) {
-        setError(COPY.tripPlanner.downloadErrorToast);
-        return;
-      }
-      setDestination({ placeId: suggestion.placeId, name: details.name, lat: details.lat, lng: details.lng });
-      setError(null);
-      setStep('dates');
-    } catch (err) {
-      console.warn('[useTripPlanner] getPlaceDetails failed', err);
+    if (suggestion.lat == null || suggestion.lng == null) {
       setError(COPY.tripPlanner.downloadErrorToast);
+      return;
     }
+    setDestination({ placeId: suggestion.placeId, name: suggestion.name, lat: suggestion.lat, lng: suggestion.lng });
+    setError(null);
+    setStep('dates');
   }, []);
 
   const goToRadius = useCallback(() => setStep('radius'), []);

@@ -12,10 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import {
-  searchDestinationAutocomplete,
-  getPlaceDetails,
-} from '../services/maps';
+import { searchDestinationAutocomplete } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { addTrip } from '../services/firestore';
 import { downloadTripArea } from '../services/tripDownload';
@@ -89,9 +86,8 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
     setDestinationQuery(s.name);
     setDestinationSuggestions([]);
 
-    const details = await getPlaceDetails(s.placeId);
-    if (!details) { return; }
-    setDestinationOverride({ placeId: s.placeId, name: details.name, lat: details.lat, lng: details.lng });
+    if (s.lat == null || s.lng == null) { return; }
+    setDestinationOverride({ placeId: s.placeId, name: s.name, lat: s.lat, lng: s.lng });
   }, []);
 
   const clearDestinationOverride = useCallback(() => {

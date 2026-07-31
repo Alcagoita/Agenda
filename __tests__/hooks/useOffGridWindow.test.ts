@@ -11,7 +11,7 @@
  *   - confirm() failure surfaces an error, rolls back the cache write, and
  *     does not call onDone
  *   - destination override: debounced autocomplete, selecting a suggestion
- *     resolves via getPlaceDetails, clearing it resets the query
+ *     uses its lat/lng (Nominatim, KAN-320), clearing it resets the query
  */
 
 jest.mock('@react-native-firebase/auth/lib/modular', () => ({
@@ -20,10 +20,8 @@ jest.mock('@react-native-firebase/auth/lib/modular', () => ({
 jest.mock('@react-native-firebase/auth', () => ({}));
 
 const mockSearchDestinationAutocomplete = jest.fn();
-const mockGetPlaceDetails = jest.fn();
 jest.mock('../../src/services/maps', () => ({
   searchDestinationAutocomplete: (...args: unknown[]) => mockSearchDestinationAutocomplete(...args),
-  getPlaceDetails: (...args: unknown[]) => mockGetPlaceDetails(...args),
 }));
 
 const mockAddTrip = jest.fn();
@@ -102,11 +100,10 @@ describe('confirm()', () => {
   });
 
   it('with a destination override, downloads around its resolved center and uses its name', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
     const { result } = renderHook(() => useOffGridWindow(jest.fn()));
 
     await act(async () => {
-      await result.current.selectDestinationOverride({ placeId: 'p1', name: 'Faro', address: 'Portugal' });
+      await result.current.selectDestinationOverride({ placeId: 'p1', name: 'Faro', address: 'Portugal', lat: 37.0179, lng: -7.9304 });
     });
     act(() => { result.current.setDuration('few_hours'); });
 
@@ -121,7 +118,7 @@ describe('confirm()', () => {
       [],
     );
     expect(mockAddTrip).toHaveBeenCalledWith('test-uid', expect.objectContaining({
-      destination: 'Faro, Portugal',
+      destination: 'Faro',
       placeRef: 'p1',
       kind: 'offgrid',
     }));
@@ -169,25 +166,33 @@ describe('destination override', () => {
     jest.useRealTimers();
   });
 
-  it('selecting a suggestion resolves via getPlaceDetails', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
+  it('selecting a suggestion uses its lat/lng', async () => {
     const { result } = renderHook(() => useOffGridWindow(jest.fn()));
 
     await act(async () => {
-      await result.current.selectDestinationOverride({ placeId: 'p1', name: 'Faro', address: 'Portugal' });
+      await result.current.selectDestinationOverride({ placeId: 'p1', name: 'Faro', address: 'Portugal', lat: 37.0179, lng: -7.9304 });
     });
 
     expect(result.current.destinationOverride).toEqual({
-      placeId: 'p1', name: 'Faro, Portugal', lat: 37.0179, lng: -7.9304,
+      placeId: 'p1', name: 'Faro', lat: 37.0179, lng: -7.9304,
     });
   });
 
-  it('clearDestinationOverride resets the override and query', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
+  it('ignores a suggestion with no coordinates', async () => {
     const { result } = renderHook(() => useOffGridWindow(jest.fn()));
 
     await act(async () => {
       await result.current.selectDestinationOverride({ placeId: 'p1', name: 'Faro', address: 'Portugal' });
+    });
+
+    expect(result.current.destinationOverride).toBeNull();
+  });
+
+  it('clearDestinationOverride resets the override and query', async () => {
+    const { result } = renderHook(() => useOffGridWindow(jest.fn()));
+
+    await act(async () => {
+      await result.current.selectDestinationOverride({ placeId: 'p1', name: 'Faro', address: 'Portugal', lat: 37.0179, lng: -7.9304 });
     });
     act(() => { result.current.clearDestinationOverride(); });
 
