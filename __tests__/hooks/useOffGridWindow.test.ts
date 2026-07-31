@@ -166,6 +166,25 @@ describe('destination override', () => {
     jest.useRealTimers();
   });
 
+  it('sets destinationSearching true while the debounced request is in flight, false once it resolves', async () => {
+    jest.useFakeTimers();
+    let resolveSearch: (v: unknown[]) => void = () => {};
+    mockSearchDestinationAutocomplete.mockReturnValue(new Promise(resolve => { resolveSearch = resolve; }));
+
+    const { result } = renderHook(() => useOffGridWindow(jest.fn()));
+
+    act(() => { result.current.setDestinationQuery('Far'); });
+    expect(result.current.destinationSearching).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.destinationSearching).toBe(true);
+
+    await act(async () => { resolveSearch([]); });
+    expect(result.current.destinationSearching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
   it('selecting a suggestion uses its lat/lng', async () => {
     const { result } = renderHook(() => useOffGridWindow(jest.fn()));
 

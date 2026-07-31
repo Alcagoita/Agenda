@@ -108,6 +108,41 @@ describe('destination step', () => {
     jest.useRealTimers();
   });
 
+  it('sets searching true while the debounced request is in flight, false once it resolves', async () => {
+    jest.useFakeTimers();
+    let resolveSearch: (v: unknown[]) => void = () => {};
+    mockSearchDestinationAutocomplete.mockReturnValue(new Promise(resolve => { resolveSearch = resolve; }));
+
+    const { result } = renderHook(() => useTripPlanner(jest.fn()));
+
+    act(() => { result.current.setQuery('Far'); });
+    expect(result.current.searching).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.searching).toBe(true);
+
+    await act(async () => { resolveSearch([]); });
+    expect(result.current.searching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
+  it('clears searching when the query is emptied mid-debounce', async () => {
+    jest.useFakeTimers();
+    mockSearchDestinationAutocomplete.mockReturnValue(new Promise(() => {})); // never resolves
+
+    const { result } = renderHook(() => useTripPlanner(jest.fn()));
+
+    act(() => { result.current.setQuery('Far'); });
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.searching).toBe(true);
+
+    act(() => { result.current.setQuery(''); });
+    expect(result.current.searching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
   it('selecting a suggestion uses its lat/lng and advances to the dates step', async () => {
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
 

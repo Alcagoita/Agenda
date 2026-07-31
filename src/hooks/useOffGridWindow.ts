@@ -44,6 +44,7 @@ export interface OffGridWindowState {
   destinationQuery: string;
   setDestinationQuery: (q: string) => void;
   destinationSuggestions: PlaceAutocompleteSuggestion[];
+  destinationSearching: boolean;
   selectDestinationOverride: (s: PlaceAutocompleteSuggestion) => Promise<void>;
   clearDestinationOverride: () => void;
 
@@ -62,6 +63,7 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
   const [destinationOverride, setDestinationOverride] = useState<ResolvedOffGridDestination | null>(null);
   const [destinationQuery, setDestinationQuery] = useState('');
   const [destinationSuggestions, setDestinationSuggestions] = useState<PlaceAutocompleteSuggestion[]>([]);
+  const [destinationSearching, setDestinationSearching] = useState(false);
 
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,12 +72,14 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
 
   useEffect(() => {
     if (justSelectedRef.current) { justSelectedRef.current = false; return; }
-    if (!destinationQuery.trim()) { setDestinationSuggestions([]); return; }
+    if (!destinationQuery.trim()) { setDestinationSuggestions([]); setDestinationSearching(false); return; }
 
     const timer = setTimeout(() => {
+      setDestinationSearching(true);
       searchDestinationAutocomplete(destinationQuery.trim())
         .then(setDestinationSuggestions)
-        .catch(() => setDestinationSuggestions([]));
+        .catch(() => setDestinationSuggestions([]))
+        .finally(() => setDestinationSearching(false));
     }, AUTOCOMPLETE_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
@@ -147,7 +151,7 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
     duration, setDuration,
     pickedTime, setPickedTime,
     destinationOverride, destinationQuery, setDestinationQuery,
-    destinationSuggestions, selectDestinationOverride, clearDestinationOverride,
+    destinationSuggestions, destinationSearching, selectDestinationOverride, clearDestinationOverride,
     confirming, error, canConfirm, confirm,
   };
 }

@@ -80,6 +80,25 @@ describe('address search', () => {
     jest.useRealTimers();
   });
 
+  it('sets searching true while the debounced request is in flight, false once it resolves', async () => {
+    jest.useFakeTimers();
+    let resolveSearch: (v: unknown[]) => void = () => {};
+    mockSearchAddressAutocomplete.mockReturnValue(new Promise(resolve => { resolveSearch = resolve; }));
+
+    const { result } = renderHook(() => useHomeAddress());
+
+    act(() => { result.current.setQuery('Baker'); });
+    expect(result.current.searching).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.searching).toBe(true);
+
+    await act(async () => { resolveSearch([]); });
+    expect(result.current.searching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
   it('does not re-fire the debounced search right after a selection', async () => {
     jest.useFakeTimers();
 
