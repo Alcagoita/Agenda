@@ -97,6 +97,7 @@ export default function Header({
           {offGridWindow ? (
             <View
               style={styles.offGridWrap}
+              accessible={true}
               accessibilityLabel={COPY.offGrid.chipA11y(formatLocalTime(offGridWindow.expiresAt))}>
               <CloudOffIcon color={palette.muted} size={12} />
               <Text style={[styles.offGridTime, { color: palette.muted }]}>
@@ -104,11 +105,11 @@ export default function Header({
               </Text>
             </View>
           ) : offline ? (
-            <CloudOffIcon
-              color={palette.muted}
-              size={12}
-              accessibilityLabel={COPY.header.offlineA11y}
-            />
+            <View
+              accessible={true}
+              accessibilityLabel={COPY.header.offlineA11y}>
+              <CloudOffIcon color={palette.muted} size={12} />
+            </View>
           ) : null}
         </View>
         <View style={styles.nameRow}>
@@ -177,6 +178,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Geist-Regular',
     letterSpacing: 0.2,
+    fontVariant: ['tabular-nums'],
   },
   nameRow: {
     flexDirection: 'row',
