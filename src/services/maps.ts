@@ -17,7 +17,7 @@
  */
 
 import { Linking, Platform } from 'react-native';
-import { GOOGLE_MAPS_STATIC_ANDROID_API_KEY, GOOGLE_MAPS_STATIC_IOS_API_KEY } from '../config/keys';
+import type { Feature, Polygon } from 'geojson';
 import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
@@ -877,58 +877,83 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | n
   }
 }
 
-// ─── Static map preview (KAN-234) ─────────────────────────────────────────────
+// ─── Trip radius map preview (KAN-321) ────────────────────────────────────────
+//
+// Renders via @maplibre/maplibre-react-native against OpenFreeMap's free,
+// keyless vector tiles (https://openfreemap.org) — no Google dependency on
+// either platform, unlike react-native-maps (which has no non-Google native
+// provider on Android). See TripPlannerScreen for the <Map>/<Camera>/
+// <GeoJSONSource> usage.
 
-const STATIC_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap';
+const METERS_PER_DEGREE_LAT = 111_195;
+
+/** OpenFreeMap's "Liberty" style — free, keyless vector tiles, no usage limits. */
+export const TRIP_PREVIEW_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
 /**
  * A trip radius circle should occupy roughly this fraction of the preview
  * frame's smaller half-dimension, leaving visible padding around it rather
- * than touching the image edges.
+ * than touching the frame's edges.
  */
 export const CIRCLE_FRACTION_OF_HALF_DIM = 0.4;
 
 /**
- * Builds a Google Static Maps API URL centered on `lat`/`lng`, at a zoom
- * level chosen so a circle of `radiusMeters` (drawn separately, as an
- * overlay View on top of this image — see TripPlannerScreen) visually fits
- * within the given frame. Deliberately doesn't use the Static Maps `path=`
- * polygon param to draw the circle itself (avoids query-length limits and
- * true-circle-from-lat/lng-offsets math) — the image is just the backdrop.
+ * Computes the MapLibre zoom level that fits a `radiusMeters` circle at
+ * `lat` inside a `width`×`height` frame, leaving CIRCLE_FRACTION_OF_HALF_DIM
+ * padding on the frame's smaller dimension — same visual contract as the
+ * Google Static Maps preview this replaced (KAN-321/KAN-234).
  *
- * Uses GOOGLE_MAPS_STATIC_ANDROID_API_KEY / GOOGLE_MAPS_STATIC_IOS_API_KEY —
- * NOT the shared GOOGLE_PLACES_API_KEY. This request goes out through
- * <Image>, a real app request an Android/iOS-app-restricted key can verify
- * (unlike the plain fetch() REST calls elsewhere in this file, which need an
- * app-unrestricted key since fetch carries no app signature).
- *
- * Zoom is derived from the standard Web Mercator meters-per-pixel formula:
+ * Standard Web Mercator meters-per-pixel formula:
  *   metersPerPixel = 156543.03392 * cos(lat) / 2^zoom
- * solved for the zoom that makes the desired radius match
- * CIRCLE_FRACTION_OF_HALF_DIM of the frame's half-dimension.
- *
- * KAN-21 still applies — this is a single static image request, not an
- * embedded interactive map SDK.
+ * solved for the zoom that makes the desired radius match the padding
+ * fraction of the frame's half-dimension.
  */
-export function buildStaticMapPreviewUrl(
+export function computeTripPreviewZoom(
   lat: number,
-  lng: number,
   radiusMeters: number,
   width: number,
   height: number,
-): string {
+): number {
   const halfDim = Math.min(width, height) / 2;
   const desiredMetersPerPixel = radiusMeters / (halfDim * CIRCLE_FRACTION_OF_HALF_DIM);
   const metersPerPixelAtZoom0 = 156_543.03392 * Math.cos(lat * DEG_TO_RAD);
-  const zoom = Math.round(Math.log2(metersPerPixelAtZoom0 / desiredMetersPerPixel));
-  const clampedZoom = Math.max(1, Math.min(20, zoom));
+  const zoom = Math.log2(metersPerPixelAtZoom0 / desiredMetersPerPixel);
+  return Math.max(1, Math.min(20, zoom));
+}
 
-  const params = new URLSearchParams({
-    center:  `${lat},${lng}`,
-    zoom:    String(clampedZoom),
-    size:    `${Math.round(width)}x${Math.round(height)}`,
-    maptype: 'roadmap',
-    key:     Platform.OS === 'ios' ? GOOGLE_MAPS_STATIC_IOS_API_KEY : GOOGLE_MAPS_STATIC_ANDROID_API_KEY,
-  });
-  return `${STATIC_MAP_URL}?${params.toString()}`;
+const CIRCLE_POLYGON_STEPS = 64;
+
+/**
+ * Builds a geographic circle polygon (GeoJSON Feature) centered on
+ * `lat`/`lng` with the given `radiusMeters` — for a MapLibre <GeoJSONSource>/
+ * <Layer type="fill"|"line"> radius overlay, which (unlike react-native-maps'
+ * meters-based <Circle>) has no built-in geographic circle primitive; a
+ * circle-radius paint property is always in screen pixels, not meters.
+ *
+ * Equirectangular approximation (same quality bar as getDistanceMeters/
+ * osmPlaces.ts elsewhere in this file) — accurate enough for a small preview
+ * circle, not meant for precise geodesy at any radius/latitude.
+ */
+export function buildTripPreviewCircle(
+  lat: number,
+  lng: number,
+  radiusMeters: number,
+): Feature<Polygon> {
+  const latDegPerMeter = 1 / METERS_PER_DEGREE_LAT;
+  const lngDegPerMeter = 1 / (METERS_PER_DEGREE_LAT * Math.cos(lat * DEG_TO_RAD));
+
+  const coordinates: [number, number][] = [];
+  for (let i = 0; i <= CIRCLE_POLYGON_STEPS; i++) {
+    const angle = (i / CIRCLE_POLYGON_STEPS) * 2 * Math.PI;
+    coordinates.push([
+      lng + radiusMeters * Math.sin(angle) * lngDegPerMeter,
+      lat + radiusMeters * Math.cos(angle) * latDegPerMeter,
+    ]);
+  }
+
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Polygon', coordinates: [coordinates] },
+  };
 }

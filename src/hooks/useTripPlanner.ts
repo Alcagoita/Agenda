@@ -10,10 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import {
-  searchDestinationAutocomplete,
-  buildStaticMapPreviewUrl,
-} from '../services/maps';
+import { searchDestinationAutocomplete } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { addTrip, getTrip, updateTrip } from '../services/firestore';
 import {
@@ -41,11 +38,9 @@ function isValidIsoDate(iso: string | undefined): iso is string {
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 300;
 
-/** Static map preview frame size — exported so the screen's circle overlay can size itself to match (see maps.ts's buildStaticMapPreviewUrl, which zooms the map to keep the circle at a fixed fraction of this frame regardless of which radius preset is selected). */
+/** Map preview frame size — exported so the screen's MapView/Circle can size itself to match (see maps.ts's computeTripPreviewRegion, which zooms to keep the circle at a fixed fraction of this frame regardless of which radius preset is selected). */
 export const TRIP_PREVIEW_WIDTH = 320;
 export const TRIP_PREVIEW_HEIGHT = 200;
-const PREVIEW_WIDTH = TRIP_PREVIEW_WIDTH;
-const PREVIEW_HEIGHT = TRIP_PREVIEW_HEIGHT;
 
 export interface ResolvedDestination {
   placeId: string;
@@ -79,7 +74,8 @@ export interface TripPlannerState {
   radiusKey: TripRadiusPreset;
   setRadiusKey: (k: TripRadiusPreset) => void;
   estimatedBytes: number;
-  previewUrl: string;
+  /** Meters for the currently-selected radiusKey — for the screen's MapView Circle radius. */
+  radiusMeters: number;
 
   confirmDownload: () => Promise<void>;
   error: string | null;
@@ -210,9 +206,6 @@ export function useTripPlanner(
   // estimate can't drift from what's actually downloaded.
   const poiTypeCount = getAreaDownloadPoiTypes().length;
   const estimatedBytes = estimateTripDownloadBytes(preset.radiusMeters, poiTypeCount);
-  const previewUrl = destination
-    ? buildStaticMapPreviewUrl(destination.lat, destination.lng, preset.radiusMeters, PREVIEW_WIDTH, PREVIEW_HEIGHT)
-    : '';
 
   const confirmDownload = useCallback(async () => {
     if (isEditing) {
@@ -323,7 +316,7 @@ export function useTripPlanner(
     step,
     query, setQuery, suggestions, searching, selectDestination, destination,
     startDate, endDate, setStartDate, setEndDate, goToRadius, skipDates,
-    radiusKey, setRadiusKey, estimatedBytes, previewUrl,
+    radiusKey, setRadiusKey, estimatedBytes, radiusMeters: preset.radiusMeters,
     confirmDownload, error, goBack,
     isEditing, editInitialStep: editInitialStep ?? null,
   };

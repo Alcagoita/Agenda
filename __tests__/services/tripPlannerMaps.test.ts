@@ -1,61 +1,51 @@
 /**
- * tripPlannerMaps.test.ts — KAN-234
+ * tripPlannerMaps.test.ts — KAN-234, KAN-321
  *
  * Unit tests for maps.ts's Trip Planner additions:
  *   - getPlaceDetails: resolves a Places Autocomplete placeId (which carries
  *     no coordinates) to lat/lng + name
- *   - buildStaticMapPreviewUrl: pure URL construction for the trip radius
- *     preview image (no network) — asserts center/size/key and that zoom
+ *   - computeTripPreviewZoom: pure zoom-level math (no network) for the trip
+ *     radius MapLibre preview — asserts the circle fits with padding and
  *     scales sanely with radius
+ *   - buildTripPreviewCircle: pure GeoJSON circle-polygon construction (no
+ *     network) for the radius overlay
+ *     (KAN-321, replaced the Google Static Maps URL this used to build)
  */
 
-import { getPlaceDetails, buildStaticMapPreviewUrl } from '../../src/services/maps';
-
-// ─── Mock fetch ───────────────────────────────────────────────────────────────
-
-const mockFetch = jest.fn();
-global.fetch = mockFetch as unknown as typeof fetch;
-
-// ─── Mock config/keys ─────────────────────────────────────────────────────────
-
-jest.mock('../../src/config/keys', () => ({
-  GOOGLE_PLACES_API_KEY: 'TEST_KEY',
-  GOOGLE_MAPS_STATIC_ANDROID_API_KEY: 'TEST_ANDROID_KEY',
-  GOOGLE_MAPS_STATIC_IOS_API_KEY: 'TEST_IOS_KEY',
+// maps.ts pulls in placesFunctions -> @react-native-firebase/functions (native,
+// unavailable under Jest) and reverseGeocodeCache -> expo-sqlite. Stub both —
+// same pattern as reverseGeocode.test.ts / nominatimAutocomplete.test.ts.
+const mockGetPlaceDetailsProxy = jest.fn();
+jest.mock('../../src/services/placesFunctions', () => ({
+  getPlaceDetailsProxy: (...args: unknown[]) => mockGetPlaceDetailsProxy(...args),
+}));
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(() => ({ hit: false, city: null })),
+  putCachedCity: jest.fn(),
 }));
 
-// buildStaticMapPreviewUrl picks its key by platform (see maps.ts) — pin to
-// android so the test isn't coupled to the RN jest preset's default OS.
-jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+import { getPlaceDetails, computeTripPreviewZoom, buildTripPreviewCircle } from '../../src/services/maps';
+import type { Position } from 'geojson';
 
 beforeEach(() => {
-  mockFetch.mockReset();
+  jest.clearAllMocks();
 });
 
 describe('getPlaceDetails', () => {
   it('resolves a placeId to lat/lng + name', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({
-        location:    { latitude: 37.0179, longitude: -7.9304 },
-        displayName: { text: 'Faro, Portugal' },
-      }),
+    mockGetPlaceDetailsProxy.mockResolvedValueOnce({
+      location:    { latitude: 37.0179, longitude: -7.9304 },
+      displayName: { text: 'Faro, Portugal' },
     });
 
     const details = await getPlaceDetails('place-abc');
 
     expect(details).toEqual({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
-    const [url, options] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://places.googleapis.com/v1/places/place-abc');
-    expect(options.headers['X-Goog-Api-Key']).toBe('TEST_KEY');
-    expect(options.headers['X-Goog-FieldMask']).toBe('location,displayName');
+    expect(mockGetPlaceDetailsProxy).toHaveBeenCalledWith('place-abc');
   });
 
   it('falls back to the placeId as the name when displayName is missing', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({ location: { latitude: 1, longitude: 2 } }),
-    });
+    mockGetPlaceDetailsProxy.mockResolvedValueOnce({ location: { latitude: 1, longitude: 2 } });
 
     const details = await getPlaceDetails('place-abc');
 
@@ -63,65 +53,65 @@ describe('getPlaceDetails', () => {
   });
 
   it('returns null when location is missing from the response', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    mockGetPlaceDetailsProxy.mockResolvedValueOnce({});
     expect(await getPlaceDetails('place-abc')).toBeNull();
   });
 
-  it('returns null on a non-200 response', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+  it('returns null when the proxy call fails', async () => {
+    mockGetPlaceDetailsProxy.mockRejectedValueOnce(new Error('network down'));
     expect(await getPlaceDetails('place-abc')).toBeNull();
-  });
-
-  it('returns null on a network error', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
-    expect(await getPlaceDetails('place-abc')).toBeNull();
-  });
-
-  it('URL-encodes the placeId', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ location: { latitude: 1, longitude: 2 } }) });
-    await getPlaceDetails('place/with/slashes');
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://places.googleapis.com/v1/places/place%2Fwith%2Fslashes');
   });
 });
 
-describe('buildStaticMapPreviewUrl', () => {
-  it('includes the correct center, size, and API key', () => {
-    const url = buildStaticMapPreviewUrl(37.0179, -7.9304, 5_000, 300, 200);
-    const parsed = new URL(url);
-
-    expect(parsed.origin + parsed.pathname).toBe('https://maps.googleapis.com/maps/api/staticmap');
-    expect(parsed.searchParams.get('center')).toBe('37.0179,-7.9304');
-    expect(parsed.searchParams.get('size')).toBe('300x200');
-    expect(parsed.searchParams.get('key')).toBe('TEST_ANDROID_KEY');
-  });
-
-  it('uses the iOS-restricted key on iOS instead of the Android one', () => {
-    const RN = require('react-native');
-    RN.Platform.OS = 'ios';
-    try {
-      const url = new URL(buildStaticMapPreviewUrl(37.0179, -7.9304, 5_000, 300, 200));
-      expect(url.searchParams.get('key')).toBe('TEST_IOS_KEY');
-    } finally {
-      RN.Platform.OS = 'android';
-    }
-  });
-
+describe('computeTripPreviewZoom', () => {
   it('produces a smaller zoom for a larger radius (zooms out to fit a bigger circle)', () => {
-    const townUrl  = new URL(buildStaticMapPreviewUrl(37.0179, -7.9304, 5_000, 300, 200));
-    const regionUrl = new URL(buildStaticMapPreviewUrl(37.0179, -7.9304, 40_000, 300, 200));
-
-    const townZoom = Number(townUrl.searchParams.get('zoom'));
-    const regionZoom = Number(regionUrl.searchParams.get('zoom'));
+    const townZoom   = computeTripPreviewZoom(37.0179, 5_000, 320, 200);
+    const regionZoom = computeTripPreviewZoom(37.0179, 40_000, 320, 200);
 
     expect(regionZoom).toBeLessThan(townZoom);
   });
 
-  it('clamps zoom to a sane range for an extreme radius', () => {
-    const hugeUrl = new URL(buildStaticMapPreviewUrl(0, 0, 10_000_000, 300, 200));
-    const tinyUrl = new URL(buildStaticMapPreviewUrl(0, 0, 1, 300, 200));
+  it('clamps to a sane range for an extreme radius', () => {
+    expect(computeTripPreviewZoom(0, 10_000_000, 320, 200)).toBeGreaterThanOrEqual(1);
+    expect(computeTripPreviewZoom(0, 1, 320, 200)).toBeLessThanOrEqual(20);
+  });
 
-    expect(Number(hugeUrl.searchParams.get('zoom'))).toBeGreaterThanOrEqual(1);
-    expect(Number(tinyUrl.searchParams.get('zoom'))).toBeLessThanOrEqual(20);
+  it('produces a smaller zoom at higher latitudes for the same radius (longitude degrees compress toward the poles)', () => {
+    const equatorZoom = computeTripPreviewZoom(0, 5_000, 320, 200);
+    const highLatZoom  = computeTripPreviewZoom(60, 5_000, 320, 200);
+
+    expect(highLatZoom).toBeLessThan(equatorZoom);
+  });
+});
+
+describe('buildTripPreviewCircle', () => {
+  it('centers the polygon on the given lat/lng', () => {
+    const circle = buildTripPreviewCircle(37.0179, -7.9304, 5_000);
+    const coords = circle.geometry.coordinates[0];
+
+    const lngs = coords.map(([lng]) => lng);
+    const lats = coords.map(([, lat]) => lat);
+    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+
+    expect(centerLng).toBeCloseTo(-7.9304, 3);
+    expect(centerLat).toBeCloseTo(37.0179, 3);
+  });
+
+  it('closes the polygon ring (first point equals last)', () => {
+    const circle = buildTripPreviewCircle(37.0179, -7.9304, 5_000);
+    const coords = circle.geometry.coordinates[0];
+
+    expect(coords[0]).toEqual(coords[coords.length - 1]);
+  });
+
+  it('scales the polygon extent with radius', () => {
+    const small = buildTripPreviewCircle(37.0179, -7.9304, 5_000);
+    const large = buildTripPreviewCircle(37.0179, -7.9304, 40_000);
+
+    const extent = (coords: Position[]) =>
+      Math.max(...coords.map(([lng]) => lng)) - Math.min(...coords.map(([lng]) => lng));
+
+    expect(extent(large.geometry.coordinates[0])).toBeGreaterThan(extent(small.geometry.coordinates[0]));
   });
 });
