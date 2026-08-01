@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import { searchAddressAutocomplete, getPlaceDetails } from '../services/maps';
+import { searchAddressAutocomplete } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { getUser, setHome, clearHome } from '../services/firestore';
 import { setHomeLocation } from '../services/home';
@@ -24,6 +24,7 @@ export interface HomeAddressState {
   query: string;
   setQuery: (q: string) => void;
   suggestions: PlaceAutocompleteSuggestion[];
+  searching: boolean;
   /** Resolves true on a successful save — callers should only leave search mode then, so saving/error stay visible on failure. */
   selectSuggestion: (s: PlaceAutocompleteSuggestion) => Promise<boolean>;
   saving: boolean;
@@ -38,6 +39,7 @@ export function useHomeAddress(): HomeAddressState {
   const [home, setHomeState]          = useState<HomeLocation | null>(null);
   const [query, setQuery]             = useState('');
   const [suggestions, setSuggestions] = useState<PlaceAutocompleteSuggestion[]>([]);
+  const [searching, setSearching] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
@@ -54,12 +56,14 @@ export function useHomeAddress(): HomeAddressState {
   // Debounced address autocomplete — same shape as useTripPlanner's.
   useEffect(() => {
     if (justSelectedRef.current) { justSelectedRef.current = false; return; }
-    if (!query.trim()) { setSuggestions([]); return; }
+    if (!query.trim()) { setSuggestions([]); setSearching(false); return; }
 
     const timer = setTimeout(() => {
+      setSearching(true);
       searchAddressAutocomplete(query)
         .then(setSuggestions)
-        .catch(err => console.warn('[useHomeAddress] searchAddressAutocomplete failed', err));
+        .catch(err => console.warn('[useHomeAddress] searchAddressAutocomplete failed', err))
+        .finally(() => setSearching(false));
     }, AUTOCOMPLETE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
@@ -73,13 +77,12 @@ export function useHomeAddress(): HomeAddressState {
     setSaving(true);
     setError(null);
     try {
-      const details = await getPlaceDetails(suggestion.placeId);
-      if (!details) {
+      if (suggestion.lat == null || suggestion.lng == null) {
         setError(COPY.home.saveErrorToast);
         return false;
       }
-      const address = [details.name, suggestion.address].filter(Boolean).join(', ');
-      const next: HomeLocation = { address, lat: details.lat, lng: details.lng };
+      const address = [suggestion.name, suggestion.address].filter(Boolean).join(', ');
+      const next: HomeLocation = { address, lat: suggestion.lat, lng: suggestion.lng };
       await setHome(uid, next);
       setHomeState(next);
       setHomeLocation(next);
@@ -110,5 +113,5 @@ export function useHomeAddress(): HomeAddressState {
     }
   }, [uid]);
 
-  return { loading, home, query, setQuery, suggestions, selectSuggestion, saving, error, clear };
+  return { loading, home, query, setQuery, suggestions, searching, selectSuggestion, saving, error, clear };
 }

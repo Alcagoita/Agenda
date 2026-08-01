@@ -26,6 +26,7 @@ import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
 import { getScreenKeyboardAvoidingBehavior } from '../utils/keyboardAvoiding';
 import { ChevronLeftIcon, SuitcaseIcon } from '../components/AppIcon';
+import LoadingDots from '../components/LoadingDots';
 import { useOffGridWindow } from '../hooks/useOffGridWindow';
 import type { OffGridDurationKey } from '../services/offGrid';
 import type { RootStackParamList } from '../navigation/AppNavigator';
@@ -47,7 +48,7 @@ export default function OffGridScreen() {
   const {
     duration, setDuration,
     destinationOverride, destinationQuery, setDestinationQuery,
-    destinationSuggestions, selectDestinationOverride, clearDestinationOverride,
+    destinationSuggestions, destinationSearching, selectDestinationOverride, clearDestinationOverride,
     confirming, error, canConfirm, confirm,
   } = useOffGridWindow(() => navigation.goBack());
 
@@ -135,6 +136,12 @@ export default function OffGridScreen() {
                 returnKeyType="search"
               />
             </View>
+
+            {destinationSearching && destinationSuggestions.length === 0 && (
+              <View style={styles.searchLoadingWrap}>
+                <LoadingDots color={palette.accent} size={6} />
+              </View>
+            )}
 
             {destinationSuggestions.length > 0 && (
               <View style={[styles.dropdown, { backgroundColor: palette.surface, borderColor: palette.line }]}>
@@ -232,6 +239,7 @@ const styles = StyleSheet.create({
     borderWidth:        1,
   },
   searchInput: { flex: 1, fontSize: 16, fontFamily: 'Geist-Regular', height: '100%' },
+  searchLoadingWrap: { alignItems: 'center', paddingVertical: 14 },
   dropdown: { borderRadius: radii.card, borderWidth: 1, overflow: 'hidden' },
   dropdownRow: { paddingHorizontal: 14, paddingVertical: 12, gap: 2 },
   dropdownLabel: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },

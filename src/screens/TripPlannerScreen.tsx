@@ -67,7 +67,7 @@ export default function TripPlannerScreen() {
     : undefined;
 
   const {
-    step, query, setQuery, suggestions, selectDestination, destination,
+    step, query, setQuery, suggestions, searching, selectDestination, destination,
     startDate, endDate, setStartDate, setEndDate, goToRadius, skipDates,
     radiusKey, setRadiusKey, estimatedBytes, previewUrl,
     confirmDownload, error, goBack, isEditing, editInitialStep,
@@ -141,6 +141,12 @@ export default function TripPlannerScreen() {
                 returnKeyType="search"
               />
             </View>
+
+            {searching && suggestions.length === 0 && (
+              <View style={styles.searchLoadingWrap}>
+                <LoadingDots color={palette.accent} size={6} />
+              </View>
+            )}
 
             {suggestions.length > 0 && (
               <View style={[styles.dropdown, { backgroundColor: palette.surface, borderColor: palette.line }]}>
@@ -338,6 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.ctaBtn, borderWidth: 1, paddingHorizontal: 14, height: 48,
   },
   searchInput: { flex: 1, fontSize: 16, fontFamily: 'Geist-Regular', height: '100%' },
+  searchLoadingWrap: { alignItems: 'center', paddingVertical: 14 },
   dropdown: { borderRadius: radii.card, borderWidth: 1, overflow: 'hidden' },
   dropdownRow: { paddingHorizontal: 14, paddingVertical: 12, gap: 2 },
   dropdownLabel: { fontSize: 15, fontFamily: 'Geist-Medium', fontWeight: '500' },

@@ -12,10 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
-import {
-  searchDestinationAutocomplete,
-  getPlaceDetails,
-} from '../services/maps';
+import { searchDestinationAutocomplete } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { addTrip } from '../services/firestore';
 import { downloadTripArea } from '../services/tripDownload';
@@ -47,6 +44,7 @@ export interface OffGridWindowState {
   destinationQuery: string;
   setDestinationQuery: (q: string) => void;
   destinationSuggestions: PlaceAutocompleteSuggestion[];
+  destinationSearching: boolean;
   selectDestinationOverride: (s: PlaceAutocompleteSuggestion) => Promise<void>;
   clearDestinationOverride: () => void;
 
@@ -65,6 +63,7 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
   const [destinationOverride, setDestinationOverride] = useState<ResolvedOffGridDestination | null>(null);
   const [destinationQuery, setDestinationQuery] = useState('');
   const [destinationSuggestions, setDestinationSuggestions] = useState<PlaceAutocompleteSuggestion[]>([]);
+  const [destinationSearching, setDestinationSearching] = useState(false);
 
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,12 +72,14 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
 
   useEffect(() => {
     if (justSelectedRef.current) { justSelectedRef.current = false; return; }
-    if (!destinationQuery.trim()) { setDestinationSuggestions([]); return; }
+    if (!destinationQuery.trim()) { setDestinationSuggestions([]); setDestinationSearching(false); return; }
 
     const timer = setTimeout(() => {
+      setDestinationSearching(true);
       searchDestinationAutocomplete(destinationQuery.trim())
         .then(setDestinationSuggestions)
-        .catch(() => setDestinationSuggestions([]));
+        .catch(() => setDestinationSuggestions([]))
+        .finally(() => setDestinationSearching(false));
     }, AUTOCOMPLETE_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
@@ -89,9 +90,8 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
     setDestinationQuery(s.name);
     setDestinationSuggestions([]);
 
-    const details = await getPlaceDetails(s.placeId);
-    if (!details) { return; }
-    setDestinationOverride({ placeId: s.placeId, name: details.name, lat: details.lat, lng: details.lng });
+    if (s.lat == null || s.lng == null) { return; }
+    setDestinationOverride({ placeId: s.placeId, name: s.name, lat: s.lat, lng: s.lng });
   }, []);
 
   const clearDestinationOverride = useCallback(() => {
@@ -151,7 +151,7 @@ export function useOffGridWindow(onDone: () => void): OffGridWindowState {
     duration, setDuration,
     pickedTime, setPickedTime,
     destinationOverride, destinationQuery, setDestinationQuery,
-    destinationSuggestions, selectDestinationOverride, clearDestinationOverride,
+    destinationSuggestions, destinationSearching, selectDestinationOverride, clearDestinationOverride,
     confirming, error, canConfirm, confirm,
   };
 }

@@ -12,7 +12,6 @@ import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import '@react-native-firebase/auth';
 import {
   searchDestinationAutocomplete,
-  getPlaceDetails,
   buildStaticMapPreviewUrl,
 } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
@@ -66,6 +65,7 @@ export interface TripPlannerState {
   query: string;
   setQuery: (q: string) => void;
   suggestions: PlaceAutocompleteSuggestion[];
+  searching: boolean;
   selectDestination: (s: PlaceAutocompleteSuggestion) => Promise<void>;
   destination: ResolvedDestination | null;
 
@@ -107,6 +107,7 @@ export function useTripPlanner(
   // from the resulting autocomplete suggestions, same as typing it manually.
   const [query, setQuery] = useState(initialDestinationQuery?.trim() ?? '');
   const [suggestions, setSuggestions] = useState<PlaceAutocompleteSuggestion[]>([]);
+  const [searching, setSearching] = useState(false);
   const [destination, setDestination] = useState<ResolvedDestination | null>(null);
   // Pre-filled when opened from a future Calendar day (KAN-243) — still just
   // the dates step's normal state, so the user can change or clear it same
@@ -132,12 +133,14 @@ export function useTripPlanner(
   // Debounced destination autocomplete.
   useEffect(() => {
     if (justSelectedRef.current) { justSelectedRef.current = false; return; }
-    if (!query.trim()) { setSuggestions([]); return; }
+    if (!query.trim()) { setSuggestions([]); setSearching(false); return; }
 
     const timer = setTimeout(() => {
+      setSearching(true);
       searchDestinationAutocomplete(query)
         .then(setSuggestions)
-        .catch(err => console.warn('[useTripPlanner] searchDestinationAutocomplete failed', err));
+        .catch(err => console.warn('[useTripPlanner] searchDestinationAutocomplete failed', err))
+        .finally(() => setSearching(false));
     }, AUTOCOMPLETE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
@@ -186,19 +189,13 @@ export function useTripPlanner(
     justSelectedRef.current = true;
     setQuery(suggestion.name);
     setSuggestions([]);
-    try {
-      const details = await getPlaceDetails(suggestion.placeId);
-      if (!details) {
-        setError(COPY.tripPlanner.downloadErrorToast);
-        return;
-      }
-      setDestination({ placeId: suggestion.placeId, name: details.name, lat: details.lat, lng: details.lng });
-      setError(null);
-      setStep('dates');
-    } catch (err) {
-      console.warn('[useTripPlanner] getPlaceDetails failed', err);
+    if (suggestion.lat == null || suggestion.lng == null) {
       setError(COPY.tripPlanner.downloadErrorToast);
+      return;
     }
+    setDestination({ placeId: suggestion.placeId, name: suggestion.name, lat: suggestion.lat, lng: suggestion.lng });
+    setError(null);
+    setStep('dates');
   }, []);
 
   const goToRadius = useCallback(() => setStep('radius'), []);
@@ -324,7 +321,7 @@ export function useTripPlanner(
 
   return {
     step,
-    query, setQuery, suggestions, selectDestination, destination,
+    query, setQuery, suggestions, searching, selectDestination, destination,
     startDate, endDate, setStartDate, setEndDate, goToRadius, skipDates,
     radiusKey, setRadiusKey, estimatedBytes, previewUrl,
     confirmDownload, error, goBack,

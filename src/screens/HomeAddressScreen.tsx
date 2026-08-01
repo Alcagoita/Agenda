@@ -29,6 +29,7 @@ import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/tokens';
 import { getScreenKeyboardAvoidingBehavior } from '../utils/keyboardAvoiding';
 import { ChevronLeftIcon, HomeIcon } from '../components/AppIcon';
+import LoadingDots from '../components/LoadingDots';
 import { useHomeAddress } from '../hooks/useHomeAddress';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { COPY } from '../constants/copy';
@@ -41,14 +42,14 @@ export default function HomeAddressScreen() {
   const insets      = useSafeAreaInsets();
 
   const {
-    loading, home, query, setQuery, suggestions,
+    loading, home, query, setQuery, suggestions, searching,
     selectSuggestion, saving, error, clear,
   } = useHomeAddress();
 
   // Search mode is entered explicitly (tapping Change, or there's no home
   // yet) — showing the search box unconditionally whenever `home` is set
   // would make every screen visit look like an edit-in-progress.
-  const [searching, setSearching] = useState(false);
+  const [searchMode, setSearchMode] = useState(false);
 
   const handleClear = () => {
     Alert.alert(
@@ -61,7 +62,7 @@ export default function HomeAddressScreen() {
     );
   };
 
-  const showSearch = searching || (!loading && !home);
+  const showSearch = searchMode || (!loading && !home);
 
   return (
     <KeyboardAvoidingView
@@ -101,6 +102,12 @@ export default function HomeAddressScreen() {
               />
             </View>
 
+            {searching && suggestions.length === 0 && (
+              <View style={styles.searchLoadingWrap}>
+                <LoadingDots color={palette.accent} size={6} />
+              </View>
+            )}
+
             {suggestions.length > 0 && (
               <View style={[styles.dropdown, { backgroundColor: palette.surface, borderColor: palette.line }]}>
                 {suggestions.map((s, i) => (
@@ -113,7 +120,7 @@ export default function HomeAddressScreen() {
                     onPress={async () => {
                       const success = await selectSuggestion(s);
                       // Stay in search mode on failure so saving/error stay visible.
-                      if (success) { setSearching(false); }
+                      if (success) { setSearchMode(false); }
                     }}>
                     <Text style={[styles.dropdownLabel, { color: palette.text }]}>{s.name}</Text>
                     {!!s.address && (
@@ -128,7 +135,7 @@ export default function HomeAddressScreen() {
             {!!error && <Text style={[styles.errorText, { color: palette.nearText }]}>{error}</Text>}
 
             {home && (
-              <Pressable onPress={() => setSearching(false)} accessibilityRole="button">
+              <Pressable onPress={() => setSearchMode(false)} accessibilityRole="button">
                 <Text style={[styles.cancelLink, { color: palette.muted }]}>{COPY.home.cancel}</Text>
               </Pressable>
             )}
@@ -145,7 +152,7 @@ export default function HomeAddressScreen() {
             <View style={styles.actionsRow}>
               <Pressable
                 style={[styles.actionBtn, { borderColor: palette.line }]}
-                onPress={() => setSearching(true)}
+                onPress={() => setSearchMode(true)}
                 accessibilityRole="button"
                 accessibilityLabel={COPY.home.changeButton}>
                 <Text style={[styles.actionLabel, { color: palette.text }]}>{COPY.home.changeButton}</Text>
@@ -205,6 +212,7 @@ const styles = StyleSheet.create({
     height:            48,
   },
   searchInput: { flex: 1, fontSize: 15, fontFamily: 'Geist-Regular' },
+  searchLoadingWrap: { alignItems: 'center', paddingVertical: 14 },
   dropdown: {
     borderWidth:  1,
     borderRadius: radius.card,

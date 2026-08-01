@@ -3,7 +3,7 @@
  *
  * Covers independently-testable hook behaviour (no JSX):
  *   - destination search: debounced autocomplete, selecting a suggestion
- *     resolves via getPlaceDetails and advances to the dates step
+ *     uses its lat/lng (Nominatim, KAN-320) and advances to the dates step
  *   - dates step: skipDates / goToRadius both advance to the radius step
  *   - radius step: estimatedBytes and previewUrl update when radiusKey changes
  *   - confirmDownload: calls downloadTripArea then addTrip with a fresh
@@ -26,11 +26,9 @@ jest.mock('@react-native-community/netinfo', () =>
 jest.mock('../../src/services/habitatCache');
 
 const mockSearchDestinationAutocomplete = jest.fn();
-const mockGetPlaceDetails = jest.fn();
 const mockBuildStaticMapPreviewUrl = jest.fn((..._args: unknown[]) => 'https://example.com/map.png');
 jest.mock('../../src/services/maps', () => ({
   searchDestinationAutocomplete: (...args: unknown[]) => mockSearchDestinationAutocomplete(...args),
-  getPlaceDetails: (...args: unknown[]) => mockGetPlaceDetails(...args),
   buildStaticMapPreviewUrl: (...args: unknown[]) => mockBuildStaticMapPreviewUrl(...args),
 }));
 
@@ -110,22 +108,53 @@ describe('destination step', () => {
     jest.useRealTimers();
   });
 
-  it('selecting a suggestion resolves via getPlaceDetails and advances to the dates step', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
+  it('sets searching true while the debounced request is in flight, false once it resolves', async () => {
+    jest.useFakeTimers();
+    let resolveSearch: (v: unknown[]) => void = () => {};
+    mockSearchDestinationAutocomplete.mockReturnValue(new Promise(resolve => { resolveSearch = resolve; }));
 
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
 
+    act(() => { result.current.setQuery('Far'); });
+    expect(result.current.searching).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.searching).toBe(true);
+
+    await act(async () => { resolveSearch([]); });
+    expect(result.current.searching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
+  it('clears searching when the query is emptied mid-debounce', async () => {
+    jest.useFakeTimers();
+    mockSearchDestinationAutocomplete.mockReturnValue(new Promise(() => {})); // never resolves
+
+    const { result } = renderHook(() => useTripPlanner(jest.fn()));
+
+    act(() => { result.current.setQuery('Far'); });
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.searching).toBe(true);
+
+    act(() => { result.current.setQuery(''); });
+    expect(result.current.searching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
+  it('selecting a suggestion uses its lat/lng and advances to the dates step', async () => {
+    const { result } = renderHook(() => useTripPlanner(jest.fn()));
+
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: 'Portugal' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: 'Portugal', lat: 37.0179, lng: -7.9304 });
     });
 
     expect(result.current.step).toBe('dates');
-    expect(result.current.destination).toEqual({ placeId: 'p1', name: 'Faro, Portugal', lat: 37.0179, lng: -7.9304 });
+    expect(result.current.destination).toEqual({ placeId: 'p1', name: 'Faro', lat: 37.0179, lng: -7.9304 });
   });
 
-  it('surfaces an error and stays on the destination step when getPlaceDetails fails', async () => {
-    mockGetPlaceDetails.mockResolvedValue(null);
-
+  it('surfaces an error and stays on the destination step when the suggestion has no coordinates', async () => {
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
 
     await act(async () => {
@@ -138,12 +167,11 @@ describe('destination step', () => {
 
   it('does not re-fire the debounced search once a destination has been selected (KAN-234 review fix)', async () => {
     jest.useFakeTimers();
-    mockGetPlaceDetails.mockResolvedValue({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
 
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
 
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: 'Portugal' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: 'Portugal', lat: 37.0179, lng: -7.9304 });
     });
     mockSearchDestinationAutocomplete.mockClear();
 
@@ -159,10 +187,9 @@ describe('destination step', () => {
 
 describe('dates step', () => {
   async function goToDatesStep() {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 1, lng: 2, name: 'Faro' });
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '', lat: 1, lng: 2 });
     });
     return result;
   }
@@ -196,10 +223,9 @@ describe('initialStartDate prefill (KAN-243)', () => {
   });
 
   it('is still editable/clearable like any other trip date', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 1, lng: 2, name: 'Faro' });
     const { result } = renderHook(() => useTripPlanner(jest.fn(), '2026-07-24'));
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '', lat: 1, lng: 2 });
     });
     expect(result.current.startDate).toBe('2026-07-24');
 
@@ -243,10 +269,9 @@ describe('initialDestinationQuery prefill (KAN-245)', () => {
 
 describe('radius step', () => {
   async function goToRadiusStep() {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 1, lng: 2, name: 'Faro' });
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '', lat: 1, lng: 2 });
     });
     act(() => { result.current.skipDates(); });
     return result;
@@ -408,10 +433,9 @@ describe('edit mode (KAN-266)', () => {
 
 describe('confirmDownload', () => {
   async function goToRadiusStep() {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 1, lng: 2, name: 'Faro' });
     const { result } = renderHook(() => useTripPlanner(onDoneMock));
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '', lat: 1, lng: 2 });
     });
     act(() => { result.current.skipDates(); });
     return result;
@@ -466,11 +490,10 @@ describe('confirmDownload', () => {
 
 describe('goBack', () => {
   it('steps back radius -> dates -> destination', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 1, lng: 2, name: 'Faro' });
     const { result } = renderHook(() => useTripPlanner(jest.fn()));
 
     await act(async () => {
-      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '' });
+      await result.current.selectDestination({ placeId: 'p1', name: 'Faro', address: '', lat: 1, lng: 2 });
     });
     act(() => { result.current.goToRadius(); });
     expect(result.current.step).toBe('radius');

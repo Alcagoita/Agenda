@@ -5,8 +5,8 @@
  *   - initial load: reads home from getUser, loading flips false either way
  *   - debounced address search, suppressed right after a selection (mirrors
  *     useTripPlanner's "just selected" guard)
- *   - selectSuggestion: resolves via getPlaceDetails, saves via setHome,
- *     updates local state and the home.ts module state
+ *   - selectSuggestion: uses the suggestion's lat/lng (Nominatim, KAN-320),
+ *     saves via setHome, updates local state and the home.ts module state
  *   - selectSuggestion failure: surfaces an error, does not touch saved state
  *   - clear: clears via clearHome, resets local state and home.ts module state
  *   - clear failure: surfaces an error
@@ -18,10 +18,8 @@ jest.mock('@react-native-firebase/auth/lib/modular', () => ({
 jest.mock('@react-native-firebase/auth', () => ({}));
 
 const mockSearchAddressAutocomplete = jest.fn();
-const mockGetPlaceDetails = jest.fn();
 jest.mock('../../src/services/maps', () => ({
   searchAddressAutocomplete: (...args: unknown[]) => mockSearchAddressAutocomplete(...args),
-  getPlaceDetails: (...args: unknown[]) => mockGetPlaceDetails(...args),
 }));
 
 const mockGetUser = jest.fn();
@@ -82,14 +80,32 @@ describe('address search', () => {
     jest.useRealTimers();
   });
 
+  it('sets searching true while the debounced request is in flight, false once it resolves', async () => {
+    jest.useFakeTimers();
+    let resolveSearch: (v: unknown[]) => void = () => {};
+    mockSearchAddressAutocomplete.mockReturnValue(new Promise(resolve => { resolveSearch = resolve; }));
+
+    const { result } = renderHook(() => useHomeAddress());
+
+    act(() => { result.current.setQuery('Baker'); });
+    expect(result.current.searching).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(result.current.searching).toBe(true);
+
+    await act(async () => { resolveSearch([]); });
+    expect(result.current.searching).toBe(false);
+
+    jest.useRealTimers();
+  });
+
   it('does not re-fire the debounced search right after a selection', async () => {
     jest.useFakeTimers();
-    mockGetPlaceDetails.mockResolvedValue({ lat: 51.5, lng: -0.1, name: 'Baker Street' });
 
     const { result } = renderHook(() => useHomeAddress());
 
     await act(async () => {
-      await result.current.selectSuggestion({ placeId: 'p1', name: 'Baker Street', address: 'London' });
+      await result.current.selectSuggestion({ placeId: 'p1', name: 'Baker Street', address: 'London', lat: 51.5, lng: -0.1 });
     });
     mockSearchAddressAutocomplete.mockClear();
 
@@ -101,8 +117,7 @@ describe('address search', () => {
 });
 
 describe('selectSuggestion', () => {
-  it('resolves via getPlaceDetails, saves, and updates local + module state', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 51.5, lng: -0.1, name: 'Baker Street' });
+  it('uses the suggestion lat/lng, saves, and updates local + module state', async () => {
     mockSetHome.mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useHomeAddress());
@@ -110,7 +125,7 @@ describe('selectSuggestion', () => {
 
     let success: boolean | undefined;
     await act(async () => {
-      success = await result.current.selectSuggestion({ placeId: 'p1', name: 'Baker Street', address: 'London, UK' });
+      success = await result.current.selectSuggestion({ placeId: 'p1', name: 'Baker Street', address: 'London, UK', lat: 51.5, lng: -0.1 });
     });
 
     const expected = { address: 'Baker Street, London, UK', lat: 51.5, lng: -0.1 };
@@ -122,9 +137,7 @@ describe('selectSuggestion', () => {
     expect(result.current.saving).toBe(false);
   });
 
-  it('surfaces an error, leaves home untouched, and resolves false when getPlaceDetails returns null', async () => {
-    mockGetPlaceDetails.mockResolvedValue(null);
-
+  it('surfaces an error, leaves home untouched, and resolves false when the suggestion has no coordinates', async () => {
     const { result } = renderHook(() => useHomeAddress());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -140,7 +153,6 @@ describe('selectSuggestion', () => {
   });
 
   it('surfaces an error and resolves false when setHome (the Firestore write) fails', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 51.5, lng: -0.1, name: 'Baker Street' });
     mockSetHome.mockRejectedValue(new Error('firestore unavailable'));
 
     const { result } = renderHook(() => useHomeAddress());
@@ -148,7 +160,7 @@ describe('selectSuggestion', () => {
 
     let success: boolean | undefined;
     await act(async () => {
-      success = await result.current.selectSuggestion({ placeId: 'p1', name: 'Baker Street', address: 'London' });
+      success = await result.current.selectSuggestion({ placeId: 'p1', name: 'Baker Street', address: 'London', lat: 51.5, lng: -0.1 });
     });
 
     expect(success).toBe(false);
