@@ -85,6 +85,7 @@ import { InteractionManager, Platform } from 'react-native';
 import WearNotificationModule from '../native/WearNotificationModule';
 import { Coordinates, getPositionLowAccuracy } from './geolocation';
 import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel } from './maps';
+import { searchNearbyPlacesOsm } from './osmPlaces';
 import { markAllPoiAlertsSeen } from './firestore';
 import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES, filterSupportedGooglePlaceTypes } from '../constants/googlePlaceTypes';
@@ -123,6 +124,53 @@ import {
 
 function reportProximityError(context: string, err: unknown): void {
   console.warn(`[proximity] ${context}`, err);
+}
+
+// ─── KAN-322 spike: Overpass vs Google live nearby search comparison ──────────
+//
+// Temporary — shadow-runs Overpass alongside every live Google nearby search
+// tick, purely to log a quality/latency comparison. Never awaited from the
+// live search path, never touches `results`/onUpdate — a slow or failed
+// Overpass call can't affect the real hero-alert flow. Remove this whole
+// section once the spike concludes (see KAN-322 for the yes/no verdict).
+//
+// "Hero match" = the two sources' nearest result for a POI type are within
+// 30 m of each other — a rough "same real-world place" heuristic, not
+// identity matching (OSM and Google place IDs share nothing).
+const OVERPASS_SPIKE_HERO_MATCH_RADIUS_M = 30;
+
+async function runOverpassComparisonSpike(
+  lat: number,
+  lng: number,
+  poiTypes: string[],
+  radiusMeters: number,
+  googleResults: Record<string, NearbyPlace[]>,
+  googleLatencyMs: number,
+): Promise<void> {
+  const startedAt = Date.now();
+  const osmResults = await searchNearbyPlacesOsm(lat, lng, poiTypes, radiusMeters);
+  const osmLatencyMs = Date.now() - startedAt;
+
+  const perType = poiTypes.map((poiType) => {
+    const googleTop = (googleResults[poiType] ?? [])[0];
+    const osmTop = (osmResults[poiType] ?? [])[0];
+    const heroMatch = !!googleTop && !!osmTop &&
+      getDistanceMeters(googleTop.lat, googleTop.lng, osmTop.lat, osmTop.lng) < OVERPASS_SPIKE_HERO_MATCH_RADIUS_M;
+
+    return {
+      poiType,
+      googleCount: (googleResults[poiType] ?? []).length,
+      osmCount:    (osmResults[poiType] ?? []).length,
+      googleTop:   googleTop ? { name: googleTop.name, distanceMeters: Math.round(googleTop.distanceMeters) } : null,
+      osmTop:      osmTop ? { name: osmTop.name, distanceMeters: Math.round(osmTop.distanceMeters) } : null,
+      heroMatch,
+    };
+  });
+
+  console.log('[KAN-322 spike] nearby search comparison', {
+    latencyMs: { google: Math.round(googleLatencyMs), osm: Math.round(osmLatencyMs) },
+    perType,
+  });
 }
 
 // ─── Geofence ID helpers (exit-prompt, KAN-119) ───────────────────────────────
@@ -665,7 +713,12 @@ async function runProximitySearch(
       answeredFromCache = true;
     } else {
       try {
+        const googleStartedAt = Date.now();
         results = await searchNearbyPlaces(coords.lat, coords.lng, uniquePoiTypes, NEARBY_RADIUS);
+        // KAN-322 spike — fire-and-forget, never awaited, never touches `results`.
+        runOverpassComparisonSpike(
+          coords.lat, coords.lng, uniquePoiTypes, NEARBY_RADIUS, results, Date.now() - googleStartedAt,
+        ).catch(err => reportProximityError('KAN-322 Overpass comparison spike failed', err));
       } catch (err) {
         // If offline, queue this search for retry when connection returns, and
         // answer from the habitat cache in the meantime (KAN-229) — the cache

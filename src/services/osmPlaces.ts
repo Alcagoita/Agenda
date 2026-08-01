@@ -222,6 +222,17 @@ export async function searchOsmPlacesStrict(
   return fetchOsmPlaces(lat, lng, poiTypes, radiusMeters, timeoutMs, false);
 }
 
+/**
+ * Named alias for searchOsmPlaces (KAN-322 spike) — same Overpass query
+ * logic, no separate implementation needed. Used by proximity.ts to dual-run
+ * Overpass alongside the live Google nearby search for a walking-pace
+ * quality/latency comparison. Never-throws contract (searchOsmPlaces) is the
+ * right one here, not searchOsmPlacesStrict's — this is a background shadow
+ * call, same class as the opportunistic refresh, not a foreground action a
+ * failure needs to surface for.
+ */
+export const searchNearbyPlacesOsm = searchOsmPlaces;
+
 async function fetchOsmPlaces(
   lat: number,
   lng: number,
