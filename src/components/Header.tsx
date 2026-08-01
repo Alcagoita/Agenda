@@ -16,8 +16,11 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
-import { BellIcon, UsersIcon } from './AppIcon';
+import { BellIcon, CloudOffIcon, UsersIcon } from './AppIcon';
 import Avatar from './Avatar';
+import { useOfflineCoverage } from '../hooks/useOfflineCoverage';
+import { getActiveOffGridWindow } from '../services/proximity';
+import { formatLocalTime } from '../utils/date';
 import { COPY } from '../constants/copy';
 
 interface Props {
@@ -51,12 +54,19 @@ export default function Header({
 }: Props) {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
+  const { offline } = useOfflineCoverage();
+
+  const [offGridWindow, setOffGridWindow] = useState(() => getActiveOffGridWindow());
 
   // Re-evaluate the greeting every 60 s so it updates if the app stays open
-  // across a time boundary (e.g. morning → afternoon).
+  // across a time boundary (e.g. morning → afternoon). Same interval drives
+  // the off-grid window expiry check (time-based, not event-based).
   const [greet, setGreet] = useState(greeting);
   useEffect(() => {
-    const id = setInterval(() => setGreet(greeting()), 60_000);
+    const id = setInterval(() => {
+      setGreet(greeting());
+      setOffGridWindow(getActiveOffGridWindow());
+    }, 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -84,6 +94,23 @@ export default function Header({
           <Text style={[styles.greeting, { color: palette.muted }]} numberOfLines={1}>
             {greet}
           </Text>
+          {offGridWindow ? (
+            <View
+              style={styles.offGridWrap}
+              accessible={true}
+              accessibilityLabel={COPY.offGrid.chipA11y(formatLocalTime(offGridWindow.expiresAt))}>
+              <CloudOffIcon color={palette.muted} size={12} />
+              <Text style={[styles.offGridTime, { color: palette.muted }]}>
+                {`· ${formatLocalTime(offGridWindow.expiresAt)}`}
+              </Text>
+            </View>
+          ) : offline ? (
+            <View
+              accessible={true}
+              accessibilityLabel={COPY.header.offlineA11y}>
+              <CloudOffIcon color={palette.muted} size={12} />
+            </View>
+          ) : null}
         </View>
         <View style={styles.nameRow}>
           <Text style={[styles.name, { color: palette.text }]} numberOfLines={1}>
@@ -141,6 +168,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Geist-Regular',
     letterSpacing: 0.2,
+  },
+  offGridWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  offGridTime: {
+    fontSize: 11,
+    fontFamily: 'Geist-Regular',
+    letterSpacing: 0.2,
+    fontVariant: ['tabular-nums'],
   },
   nameRow: {
     flexDirection: 'row',
