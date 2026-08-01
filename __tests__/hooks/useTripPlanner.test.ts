@@ -5,7 +5,7 @@
  *   - destination search: debounced autocomplete, selecting a suggestion
  *     uses its lat/lng (Nominatim, KAN-320) and advances to the dates step
  *   - dates step: skipDates / goToRadius both advance to the radius step
- *   - radius step: estimatedBytes and previewUrl update when radiusKey changes
+ *   - radius step: estimatedBytes and radiusMeters update when radiusKey changes
  *   - confirmDownload: calls downloadTripArea then addTrip with a fresh
  *     cacheAreaId/expiresAt, shows a toast, and calls onDone
  *   - confirmDownload failure: surfaces an error and returns to the radius step
@@ -26,10 +26,8 @@ jest.mock('@react-native-community/netinfo', () =>
 jest.mock('../../src/services/habitatCache');
 
 const mockSearchDestinationAutocomplete = jest.fn();
-const mockBuildStaticMapPreviewUrl = jest.fn((..._args: unknown[]) => 'https://example.com/map.png');
 jest.mock('../../src/services/maps', () => ({
   searchDestinationAutocomplete: (...args: unknown[]) => mockSearchDestinationAutocomplete(...args),
-  buildStaticMapPreviewUrl: (...args: unknown[]) => mockBuildStaticMapPreviewUrl(...args),
 }));
 
 const mockAddTrip = jest.fn();
@@ -277,14 +275,14 @@ describe('radius step', () => {
     return result;
   }
 
-  it('estimatedBytes and previewUrl change when radiusKey changes', async () => {
+  it('estimatedBytes and radiusMeters change when radiusKey changes', async () => {
     const result = await goToRadiusStep();
     const initialEstimate = result.current.estimatedBytes;
 
     act(() => { result.current.setRadiusKey('region'); });
 
     expect(result.current.estimatedBytes).toBeGreaterThan(initialEstimate);
-    expect(mockBuildStaticMapPreviewUrl).toHaveBeenLastCalledWith(1, 2, 40_000, expect.any(Number), expect.any(Number));
+    expect(result.current.radiusMeters).toBe(40_000);
   });
 });
 

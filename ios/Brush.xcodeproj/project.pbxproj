@@ -8,20 +8,21 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		178B18C5ADB14B59B3FC47D7 /* ConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C7C74C02424F989FF0F22F /* ConfirmationView.swift */; };
+		4949AF9B54A44F8EAACB6571 /* BrushShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 542CF20EADDC4F40AA500845 /* BrushShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		71CD83637C80479A8B3B4DEF /* CloudFunctions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD784E3659E43BCAAB875EF /* CloudFunctions.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		8768F94715954DF19006DDC0 /* Geist-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A8200D76D424775A91F0B29 /* Geist-Regular.ttf */; };
+		90A3D240B5D44CEFBB2559CD /* ParseResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D7C6BE0CB84F1A9D5B132C /* ParseResult.swift */; };
 		B4D591A2F88645EF874F9667 /* Geist-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 29246E9E8C04400D8DC4A9C3 /* Geist-Medium.ttf */; };
 		BDFAF69EA8A2E05B2127F303 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		C10E6D279022D0FD7915D521 /* Pods_BrushShareExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2643ABC0C5232736916B0BE7 /* Pods_BrushShareExtension.framework */; };
 		DBC000516EE8C892B78BF187 /* Pods_Brush.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5E811D3B0C30ABDC3E15475 /* Pods_Brush.framework */; };
 		DBF2E2083FD0013C478A2D92 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 31AC1B518174C41A0832DC7C /* GoogleService-Info.plist */; };
 		EB706A746CDB9E43F52588B4 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE56E75490C740C56716ABC /* ExpoModulesProvider.swift */; };
 		EEE24D0CE3434552B2D3DC1B /* Geist-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F1BFDF13CDF1454798C0C50C /* Geist-SemiBold.ttf */; };
 		F9C36184A5AA4677B8E23332 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014B0CAB040845F8872415EA /* ShareViewController.swift */; };
-		90A3D240B5D44CEFBB2559CD /* ParseResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D7C6BE0CB84F1A9D5B132C /* ParseResult.swift */; };
-		71CD83637C80479A8B3B4DEF /* CloudFunctions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD784E3659E43BCAAB875EF /* CloudFunctions.swift */; };
-		178B18C5ADB14B59B3FC47D7 /* ConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C7C74C02424F989FF0F22F /* ConfirmationView.swift */; };
-		4949AF9B54A44F8EAACB6571 /* BrushShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 542CF20EADDC4F40AA500845; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,37 +50,34 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		014B0CAB040845F8872415EA /* ShareViewController.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Brush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Brush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Brush/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Brush/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = Brush/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1A8200D76D424775A91F0B29 /* Geist-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Geist-Regular.ttf"; path = "../src/assets/fonts/Geist-Regular.ttf"; sourceTree = "<group>"; };
+		2643ABC0C5232736916B0BE7 /* Pods_BrushShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_BrushShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		29246E9E8C04400D8DC4A9C3 /* Geist-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Geist-Medium.ttf"; path = "../src/assets/fonts/Geist-Medium.ttf"; sourceTree = "<group>"; };
 		31AC1B518174C41A0832DC7C /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Brush/GoogleService-Info.plist"; sourceTree = SOURCE_ROOT; };
 		3B4392A12AC88292D35C810B /* Pods-Agenda.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Agenda.debug.xcconfig"; path = "Target Support Files/Pods-Agenda/Pods-Agenda.debug.xcconfig"; sourceTree = "<group>"; };
+		542CF20EADDC4F40AA500845 /* BrushShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = undefined; name = BrushShareExtension.appex; path = BrushShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5709B34CF0A7D63546082F79 /* Pods-Agenda.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Agenda.release.xcconfig"; path = "Target Support Files/Pods-Agenda/Pods-Agenda.release.xcconfig"; sourceTree = "<group>"; };
+		57D7C6BE0CB84F1A9D5B132C /* ParseResult.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = ParseResult.swift; path = ParseResult.swift; sourceTree = "<group>"; };
+		6AFB53A1346E1B9019D93886 /* Pods-BrushShareExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BrushShareExtension.release.xcconfig"; path = "Target Support Files/Pods-BrushShareExtension/Pods-BrushShareExtension.release.xcconfig"; sourceTree = "<group>"; };
 		6BE56E75490C740C56716ABC /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Brush/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Brush/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Brush/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		959F51F696A8D0953FAE2D12 /* Pods-Brush.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Brush.debug.xcconfig"; path = "Target Support Files/Pods-Brush/Pods-Brush.debug.xcconfig"; sourceTree = "<group>"; };
+		A5DA772218F4432A81068202 /* BrushShareExtension.entitlements */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = BrushShareExtension.entitlements; path = BrushShareExtension.entitlements; sourceTree = "<group>"; };
 		A5E811D3B0C30ABDC3E15475 /* Pods_Brush.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Brush.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		BAD784E3659E43BCAAB875EF /* CloudFunctions.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = CloudFunctions.swift; path = CloudFunctions.swift; sourceTree = "<group>"; };
+		D1C7C74C02424F989FF0F22F /* ConfirmationView.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = ConfirmationView.swift; path = ConfirmationView.swift; sourceTree = "<group>"; };
+		D907F7A40D714652875FA076 /* Info.plist */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; name = Info.plist; path = Info.plist; sourceTree = "<group>"; };
 		EC1CE4951ABEED4C9E8829E1 /* Pods-Brush.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Brush.release.xcconfig"; path = "Target Support Files/Pods-Brush/Pods-Brush.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F1BFDF13CDF1454798C0C50C /* Geist-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Geist-SemiBold.ttf"; path = "../src/assets/fonts/Geist-SemiBold.ttf"; sourceTree = "<group>"; };
-		542CF20EADDC4F40AA500845 /* BrushShareExtension.appex */ = {isa = PBXFileReference; name = "BrushShareExtension.appex"; path = "BrushShareExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; fileEncoding = undefined; lastKnownFileType = undefined; explicitFileType = wrapper.app-extension; includeInIndex = 0; };
-		014B0CAB040845F8872415EA /* ShareViewController.swift */ = {isa = PBXFileReference; name = "ShareViewController.swift"; path = "ShareViewController.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
-		57D7C6BE0CB84F1A9D5B132C /* ParseResult.swift */ = {isa = PBXFileReference; name = "ParseResult.swift"; path = "ParseResult.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
-		BAD784E3659E43BCAAB875EF /* CloudFunctions.swift */ = {isa = PBXFileReference; name = "CloudFunctions.swift"; path = "CloudFunctions.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
-		D1C7C74C02424F989FF0F22F /* ConfirmationView.swift */ = {isa = PBXFileReference; name = "ConfirmationView.swift"; path = "ConfirmationView.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
-		D907F7A40D714652875FA076 /* Info.plist */ = {isa = PBXFileReference; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = text.plist.xml; explicitFileType = undefined; includeInIndex = 0; };
-		A5DA772218F4432A81068202 /* BrushShareExtension.entitlements */ = {isa = PBXFileReference; name = "BrushShareExtension.entitlements"; path = "BrushShareExtension.entitlements"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		F452A44DD42ADDBC07005EFB /* Pods-BrushShareExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BrushShareExtension.debug.xcconfig"; path = "Target Support Files/Pods-BrushShareExtension/Pods-BrushShareExtension.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		13B07F8C1A680F5B00A75B9A /* Frameworks */ = {
@@ -94,6 +92,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C10E6D279022D0FD7915D521 /* Pods_BrushShareExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +125,7 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				A5E811D3B0C30ABDC3E15475 /* Pods_Brush.framework */,
+				2643ABC0C5232736916B0BE7 /* Pods_BrushShareExtension.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -138,6 +138,20 @@
 				F1BFDF13CDF1454798C0C50C /* Geist-SemiBold.ttf */,
 			);
 			name = Resources;
+			sourceTree = "<group>";
+		};
+		55120D8C812A492E9D2EAAAF /* BrushShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				014B0CAB040845F8872415EA /* ShareViewController.swift */,
+				57D7C6BE0CB84F1A9D5B132C /* ParseResult.swift */,
+				BAD784E3659E43BCAAB875EF /* CloudFunctions.swift */,
+				D1C7C74C02424F989FF0F22F /* ConfirmationView.swift */,
+				D907F7A40D714652875FA076 /* Info.plist */,
+				A5DA772218F4432A81068202 /* BrushShareExtension.entitlements */,
+			);
+			name = BrushShareExtension;
+			path = BrushShareExtension;
 			sourceTree = "<group>";
 		};
 		683289ED8BBB2AECBCE96674 /* ExpoModulesProviders */ = {
@@ -188,27 +202,38 @@
 				5709B34CF0A7D63546082F79 /* Pods-Agenda.release.xcconfig */,
 				959F51F696A8D0953FAE2D12 /* Pods-Brush.debug.xcconfig */,
 				EC1CE4951ABEED4C9E8829E1 /* Pods-Brush.release.xcconfig */,
+				F452A44DD42ADDBC07005EFB /* Pods-BrushShareExtension.debug.xcconfig */,
+				6AFB53A1346E1B9019D93886 /* Pods-BrushShareExtension.release.xcconfig */,
 			);
 			path = Pods;
-			sourceTree = "<group>";
-		};
-		55120D8C812A492E9D2EAAAF /* BrushShareExtension */ = {
-			isa = PBXGroup;
-			children = (
-				014B0CAB040845F8872415EA /* ShareViewController.swift */,
-				57D7C6BE0CB84F1A9D5B132C /* ParseResult.swift */,
-				BAD784E3659E43BCAAB875EF /* CloudFunctions.swift */,
-				D1C7C74C02424F989FF0F22F /* ConfirmationView.swift */,
-				D907F7A40D714652875FA076 /* Info.plist */,
-				A5DA772218F4432A81068202 /* BrushShareExtension.entitlements */,
-			);
-			name = BrushShareExtension;
-			path = BrushShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0AD30ECBEE9B4FE08D9F3ECB /* BrushShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E56D685BB5F5483CBD12A30A /* Build configuration list for PBXNativeTarget "BrushShareExtension" */;
+			buildPhases = (
+				8164129363BF5D41F7890E73 /* [CP] Check Pods Manifest.lock */,
+				8563A04C1851429B95A8F21B /* Sources */,
+				C11DA5459C2B4BC19FCEAF72 /* Frameworks */,
+				5B64AA2B6977460A9DFD15DF /* Resources */,
+				300E62CBA40EE8293D7AEB77 /* [CP] Copy Pods Resources */,
+				0CACCB3F9A3A25CBF4CE0529 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BrushShareExtension;
+			packageProductDependencies = (
+				AEF9CE2B271D2BC4EA747F0A /* MapLibre */,
+			);
+			productName = BrushShareExtension;
+			productReference = 542CF20EADDC4F40AA500845 /* BrushShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		13B07F861A680F5B00A75B9A /* Brush */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Brush" */;
@@ -225,6 +250,7 @@
 				591FDBABA8D2E86508F06050 /* [CP-User] [RNFB] Core Configuration */,
 				B0F9B11BBE4FEBF5EB2592E9 /* [CP-User] [RNFB] Crashlytics Configuration */,
 				10EB3487ACC64436BE25E9B7 /* Embed Foundation Extensions */,
+				373B7A1C620DD4EB2AD09723 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */,
 			);
 			buildRules = (
 			);
@@ -232,26 +258,12 @@
 				DD1400894D6D4089BDC3B3D0 /* PBXTargetDependency */,
 			);
 			name = Brush;
+			packageProductDependencies = (
+				AD472066EE083A0179F915A6 /* MapLibre */,
+			);
 			productName = Brush;
 			productReference = 13B07F961A680F5B00A75B9A /* Brush.app */;
 			productType = "com.apple.product-type.application";
-		};
-		0AD30ECBEE9B4FE08D9F3ECB /* BrushShareExtension */ = {
-			isa = PBXNativeTarget;
-			name = BrushShareExtension;
-			productName = BrushShareExtension;
-			productReference = 542CF20EADDC4F40AA500845;
-			productType = "com.apple.product-type.app-extension";
-			buildConfigurationList = E56D685BB5F5483CBD12A30A;
-			buildPhases = (
-				8563A04C1851429B95A8F21B /* Sources */,
-				C11DA5459C2B4BC19FCEAF72 /* Frameworks */,
-				5B64AA2B6977460A9DFD15DF /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
 		};
 /* End PBXNativeTarget section */
 
@@ -262,11 +274,11 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 1210;
 				TargetAttributes = {
-					13B07F861A680F5B00A75B9A = {
-						LastSwiftMigration = 1120;
-					};
 					0AD30ECBEE9B4FE08D9F3ECB = {
 						LastSwiftMigration = 1250;
+					};
+					13B07F861A680F5B00A75B9A = {
+						LastSwiftMigration = 1120;
 					};
 				};
 			};
@@ -279,6 +291,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				94B8628F64A2537F31D8AB1A /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -347,6 +362,25 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Brush/Pods-Brush-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		0CACCB3F9A3A25CBF4CE0529 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[MapLibre React Native] Remove MapLibre.xcframework-ios.signature";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rm -rf \"$CONFIGURATION_BUILD_DIR/MapLibre.xcframework-ios.signature\"";
+		};
 		1926ECE9651AC283F81A0EC3 /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -370,6 +404,42 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Brush/expo-configure-project.sh\"\n";
+		};
+		300E62CBA40EE8293D7AEB77 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-BrushShareExtension/Pods-BrushShareExtension-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-BrushShareExtension/Pods-BrushShareExtension-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BrushShareExtension/Pods-BrushShareExtension-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		373B7A1C620DD4EB2AD09723 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[MapLibre React Native] Remove MapLibre.xcframework-ios.signature";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rm -rf \"$CONFIGURATION_BUILD_DIR/MapLibre.xcframework-ios.signature\"";
 		};
 		5278C57B1DDABA331AA8C5E7 /* [Firebase] Verify GoogleService-Info.plist */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -401,6 +471,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "#!/usr/bin/env bash\n#\n# Copyright (c) 2016-present Invertase Limited & Contributors\n#\n# Licensed under the Apache License, Version 2.0 (the \"License\");\n# you may not use this library except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#   http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n#\n\n##########################################################################\n##########################################################################\n#\n#  NOTE THAT IF YOU CHANGE THIS FILE YOU MUST RUN pod install AFTERWARDS\n#\n#  This file is installed as an Xcode build script in the project file\n#  by cocoapods, and you will not see your changes until you pod install\n#\n##########################################################################\n##########################################################################\n\nset -e\n\n_MAX_LOOKUPS=2;\n_SEARCH_RESULT=''\n_RN_ROOT_EXISTS=''\n_CURRENT_LOOKUPS=1\n_JSON_ROOT=\"'react-native'\"\n_JSON_FILE_NAME='firebase.json'\n_JSON_OUTPUT_BASE64='e30=' # { }\n_CURRENT_SEARCH_DIR=${PROJECT_DIR}\n_PLIST_BUDDY=/usr/libexec/PlistBuddy\n_TARGET_PLIST=\"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\n_DSYM_PLIST=\"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Info.plist\"\n\n# plist arrays\n_PLIST_ENTRY_KEYS=()\n_PLIST_ENTRY_TYPES=()\n_PLIST_ENTRY_VALUES=()\n\nfunction setPlistValue {\n  echo \"note:      setting plist entry '$1' of type '$2' in file '$4'\"\n  ${_PLIST_BUDDY} -c \"Add :$1 $2 '$3'\" $4 || echo \"note:      '$1' already exists\"\n}\n\nfunction getFirebaseJsonKeyValue () {\n  if [[ ${_RN_ROOT_EXISTS} ]]; then\n    ruby -Ku -e \"require 'rubygems';require 'json'; output=JSON.parse('$1'); puts output[$_JSON_ROOT]['$2']\"\n  else\n    echo \"\"\n  fi;\n}\n\nfunction jsonBoolToYesNo () {\n  if [[ $1 == \"false\" ]]; then\n    echo \"NO\"\n  elif [[ $1 == \"true\" ]]; then\n    echo \"YES\"\n  else echo \"NO\"\n  fi\n}\n\necho \"note: -> RNFB build script started\"\necho \"note: 1) Locating ${_JSON_FILE_NAME} file:\"\n\nif [[ -z ${_CURRENT_SEARCH_DIR} ]]; then\n  _CURRENT_SEARCH_DIR=$(pwd)\nfi;\n\nwhile true; do\n  _CURRENT_SEARCH_DIR=$(dirname \"$_CURRENT_SEARCH_DIR\")\n  if [[ \"$_CURRENT_SEARCH_DIR\" == \"/\" ]] || [[ ${_CURRENT_LOOKUPS} -gt ${_MAX_LOOKUPS} ]]; then break; fi;\n  echo \"note:      ($_CURRENT_LOOKUPS of $_MAX_LOOKUPS) Searching in '$_CURRENT_SEARCH_DIR' for a ${_JSON_FILE_NAME} file.\"\n  _SEARCH_RESULT=$(find \"$_CURRENT_SEARCH_DIR\" -maxdepth 2 -name ${_JSON_FILE_NAME} -print | /usr/bin/head -n 1)\n  if [[ ${_SEARCH_RESULT} ]]; then\n    echo \"note:      ${_JSON_FILE_NAME} found at $_SEARCH_RESULT\"\n    break;\n  fi;\n  _CURRENT_LOOKUPS=$((_CURRENT_LOOKUPS+1))\ndone\n\nif [[ ${_SEARCH_RESULT} ]]; then\n  _JSON_OUTPUT_RAW=$(cat \"${_SEARCH_RESULT}\")\n  if ! _RN_ROOT_EXISTS=$(ruby -Ku -e \"require 'json'; output=JSON.parse('$_JSON_OUTPUT_RAW'); puts output[$_JSON_ROOT]\"); then\n    echo \"error: Failed to parse firebase.json, check for syntax errors.\"\n    exit 1\n  fi\n\n  if [[ ${_RN_ROOT_EXISTS} ]]; then\n    if ! python3 --version >/dev/null 2>&1; then echo \"error: python3 not found, firebase.json file processing error.\" && exit 1; fi\n    _JSON_OUTPUT_BASE64=$(python3 -c 'import json,sys,base64;print(base64.b64encode(bytes(json.dumps(json.loads(open('\"'${_SEARCH_RESULT}'\"', '\"'rb'\"').read())['${_JSON_ROOT}']), '\"'utf-8'\"')).decode())' || echo \"e30=\")\n  fi\n\n  _PLIST_ENTRY_KEYS+=(\"firebase_json_raw\")\n  _PLIST_ENTRY_TYPES+=(\"string\")\n  _PLIST_ENTRY_VALUES+=(\"$_JSON_OUTPUT_BASE64\")\n\n  # config.app_data_collection_default_enabled\n  _APP_DATA_COLLECTION_ENABLED=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"app_data_collection_default_enabled\")\n  if [[ $_APP_DATA_COLLECTION_ENABLED ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FirebaseDataCollectionDefaultEnabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_APP_DATA_COLLECTION_ENABLED\")\")\n  fi\n\n  # config.analytics_auto_collection_enabled\n  _ANALYTICS_AUTO_COLLECTION=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_auto_collection_enabled\")\n  if [[ $_ANALYTICS_AUTO_COLLECTION ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FIREBASE_ANALYTICS_COLLECTION_ENABLED\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_AUTO_COLLECTION\")\")\n  fi\n\n  # config.analytics_collection_deactivated\n  _ANALYTICS_DEACTIVATED=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_collection_deactivated\")\n  if [[ $_ANALYTICS_DEACTIVATED ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_DEACTIVATED\")\")\n  fi\n\n  # config.analytics_idfv_collection_enabled\n  _ANALYTICS_IDFV_COLLECTION=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_idfv_collection_enabled\")\n  if [[ $_ANALYTICS_IDFV_COLLECTION ]]; then\n    _PLIST_ENTRY_KEYS+=(\"GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_IDFV_COLLECTION\")\")\n  fi\n\n  # config.analytics_default_allow_analytics_storage\n  _ANALYTICS_STORAGE=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_default_allow_analytics_storage\")\n  if [[ $_ANALYTICS_STORAGE ]]; then\n    _PLIST_ENTRY_KEYS+=(\"GOOGLE_ANALYTICS_DEFAULT_ALLOW_ANALYTICS_STORAGE\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_STORAGE\")\")\n  fi\n\n  # config.analytics_default_allow_ad_storage\n  _ANALYTICS_AD_STORAGE=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_default_allow_ad_storage\")\n  if [[ $_ANALYTICS_AD_STORAGE ]]; then\n    _PLIST_ENTRY_KEYS+=(\"GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_AD_STORAGE\")\")\n  fi\n\n  # config.analytics_default_allow_ad_user_data\n  _ANALYTICS_AD_USER_DATA=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_default_allow_ad_user_data\")\n  if [[ $_ANALYTICS_AD_USER_DATA ]]; then\n    _PLIST_ENTRY_KEYS+=(\"GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_USER_DATA\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_AD_USER_DATA\")\")\n  fi\n\n  # config.analytics_default_allow_ad_personalization_signals\n  _ANALYTICS_PERSONALIZATION=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"analytics_default_allow_ad_personalization_signals\")\n  if [[ $_ANALYTICS_PERSONALIZATION ]]; then\n    _PLIST_ENTRY_KEYS+=(\"GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_PERSONALIZATION\")\")\n  fi\n\n  # config.analytics_registration_with_ad_network_enabled\n  _ANALYTICS_REGISTRATION_WITH_AD_NETWORK=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"google_analytics_registration_with_ad_network_enabled\")\n  if [[ $_ANALYTICS_REGISTRATION_WITH_AD_NETWORK ]]; then\n    _PLIST_ENTRY_KEYS+=(\"GOOGLE_ANALYTICS_REGISTRATION_WITH_AD_NETWORK_ENABLED\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_REGISTRATION_WITH_AD_NETWORK\")\")\n  fi\n\n  # config.google_analytics_automatic_screen_reporting_enabled\n  _ANALYTICS_AUTO_SCREEN_REPORTING=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"google_analytics_automatic_screen_reporting_enabled\")\n  if [[ $_ANALYTICS_AUTO_SCREEN_REPORTING ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FirebaseAutomaticScreenReportingEnabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_ANALYTICS_AUTO_SCREEN_REPORTING\")\")\n  fi\n\n  # config.perf_auto_collection_enabled\n  _PERF_AUTO_COLLECTION=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"perf_auto_collection_enabled\")\n  if [[ $_PERF_AUTO_COLLECTION ]]; then\n    _PLIST_ENTRY_KEYS+=(\"firebase_performance_collection_enabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_PERF_AUTO_COLLECTION\")\")\n  fi\n\n  # config.perf_collection_deactivated\n  _PERF_DEACTIVATED=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"perf_collection_deactivated\")\n  if [[ $_PERF_DEACTIVATED ]]; then\n    _PLIST_ENTRY_KEYS+=(\"firebase_performance_collection_deactivated\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_PERF_DEACTIVATED\")\")\n  fi\n\n  # config.messaging_auto_init_enabled\n  _MESSAGING_AUTO_INIT=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"messaging_auto_init_enabled\")\n  if [[ $_MESSAGING_AUTO_INIT ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FirebaseMessagingAutoInitEnabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_MESSAGING_AUTO_INIT\")\")\n  fi\n\n  # config.in_app_messaging_auto_colllection_enabled\n  _FIAM_AUTO_INIT=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"in_app_messaging_auto_collection_enabled\")\n  if [[ $_FIAM_AUTO_INIT ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FirebaseInAppMessagingAutomaticDataCollectionEnabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_FIAM_AUTO_INIT\")\")\n  fi\n\n  # config.app_check_token_auto_refresh\n  _APP_CHECK_TOKEN_AUTO_REFRESH=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"app_check_token_auto_refresh\")\n  if [[ $_APP_CHECK_TOKEN_AUTO_REFRESH ]]; then\n    _PLIST_ENTRY_KEYS+=(\"FirebaseAppCheckTokenAutoRefreshEnabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"$(jsonBoolToYesNo \"$_APP_CHECK_TOKEN_AUTO_REFRESH\")\")\n  fi\n\n  # config.crashlytics_disable_auto_disabler - undocumented for now - mainly for debugging, document if becomes useful\n  _CRASHLYTICS_AUTO_DISABLE_ENABLED=$(getFirebaseJsonKeyValue \"$_JSON_OUTPUT_RAW\" \"crashlytics_disable_auto_disabler\")\n  if [[ $_CRASHLYTICS_AUTO_DISABLE_ENABLED == \"true\" ]]; then\n    echo \"Disabled Crashlytics auto disabler.\" # do nothing\n  else\n    _PLIST_ENTRY_KEYS+=(\"FirebaseCrashlyticsCollectionEnabled\")\n    _PLIST_ENTRY_TYPES+=(\"bool\")\n    _PLIST_ENTRY_VALUES+=(\"NO\")\n  fi\nelse\n  _PLIST_ENTRY_KEYS+=(\"firebase_json_raw\")\n  _PLIST_ENTRY_TYPES+=(\"string\")\n  _PLIST_ENTRY_VALUES+=(\"$_JSON_OUTPUT_BASE64\")\n  echo \"warning:   A firebase.json file was not found, whilst this file is optional it is recommended to include it to configure firebase services in React Native Firebase.\"\nfi;\n\necho \"note: 2) Injecting Info.plist entries: \"\n\n# Log out the keys we're adding\nfor i in \"${!_PLIST_ENTRY_KEYS[@]}\"; do\n  echo \"    ->  $i) ${_PLIST_ENTRY_KEYS[$i]}\" \"${_PLIST_ENTRY_TYPES[$i]}\" \"${_PLIST_ENTRY_VALUES[$i]}\"\ndone\n\nfor plist in \"${_TARGET_PLIST}\" \"${_DSYM_PLIST}\" ; do\n  if [[ -f \"${plist}\" ]]; then\n\n    # paths with spaces break the call to setPlistValue. temporarily modify\n    # the shell internal field separator variable (IFS), which normally\n    # includes spaces, to consist only of line breaks\n    oldifs=$IFS\n    IFS=\"\n\"\n\n    for i in \"${!_PLIST_ENTRY_KEYS[@]}\"; do\n      setPlistValue \"${_PLIST_ENTRY_KEYS[$i]}\" \"${_PLIST_ENTRY_TYPES[$i]}\" \"${_PLIST_ENTRY_VALUES[$i]}\" \"${plist}\"\n    done\n\n    # restore the original internal field separator value\n    IFS=$oldifs\n  else\n    echo \"warning:   A Info.plist build output file was not found (${plist})\"\n  fi\ndone\n\necho \"note: <- RNFB build script finished\"\n";
+		};
+		8164129363BF5D41F7890E73 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-BrushShareExtension-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
 		};
 		B0F9B11BBE4FEBF5EB2592E9 /* [CP-User] [RNFB] Crashlytics Configuration */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -471,10 +563,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F9C36184A5AA4677B8E23332 /* "ShareViewController.swift" in Sources */,
-				90A3D240B5D44CEFBB2559CD /* "ParseResult.swift" in Sources */,
-				71CD83637C80479A8B3B4DEF /* "CloudFunctions.swift" in Sources */,
-				178B18C5ADB14B59B3FC47D7 /* "ConfirmationView.swift" in Sources */,
+				F9C36184A5AA4677B8E23332 /* ShareViewController.swift in Sources */,
+				90A3D240B5D44CEFBB2559CD /* ParseResult.swift in Sources */,
+				71CD83637C80479A8B3B4DEF /* CloudFunctions.swift in Sources */,
+				178B18C5ADB14B59B3FC47D7 /* ConfirmationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -512,12 +604,12 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.brush;
-				PRODUCT_NAME = "Brush";
+				PRODUCT_NAME = Brush;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "Brush/Brush-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_OBJC_BRIDGING_HEADER = Brush/Brush-Bridging-Header.h;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -544,12 +636,83 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.brush;
-				PRODUCT_NAME = "Brush";
+				PRODUCT_NAME = Brush;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_OBJC_BRIDGING_HEADER = Brush/Brush-Bridging-Header.h;
+				SWIFT_OBJC_BRIDGING_HEADER = "Brush/Brush-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		2ECD136938E2453B996B2E0A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F452A44DD42ADDBC07005EFB /* Pods-BrushShareExtension.debug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = BrushShareExtension/BrushShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "$(PODS_ROOT)/BrushShareExtCompat-prefix.h";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BrushShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = BrushShareExtension;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.brush.BrushShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		7EE5C94F289643838CDCE0C7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6AFB53A1346E1B9019D93886 /* Pods-BrushShareExtension.release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = BrushShareExtension/BrushShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "$(PODS_ROOT)/BrushShareExtCompat-prefix.h";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BrushShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = BrushShareExtension;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.brush.BrushShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -741,65 +904,6 @@
 			};
 			name = Release;
 		};
-		2ECD136938E2453B996B2E0A /* Debug */ = {
-			name = Debug;
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = BrushShareExtension/BrushShareExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "1";
-				DEVELOPMENT_TEAM = "";
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "$(PODS_ROOT)/BrushShareExtCompat-prefix.h";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = BrushShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = BrushShareExtension;
-				IPHONEOS_DEPLOYMENT_TARGET = "16.4";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = "1.0";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.brush.BrushShareExtension";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1";
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-			};
-		};
-		7EE5C94F289643838CDCE0C7 /* Release */ = {
-			name = Release;
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = BrushShareExtension/BrushShareExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "1";
-				DEVELOPMENT_TEAM = "";
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "$(PODS_ROOT)/BrushShareExtCompat-prefix.h";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = BrushShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = BrushShareExtension;
-				IPHONEOS_DEPLOYMENT_TARGET = "16.4";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = "1.0";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.brush.BrushShareExtension";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1";
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				SWIFT_COMPILATION_MODE = wholemodule;
-			};
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -831,6 +935,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		94B8628F64A2537F31D8AB1A /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = exactVersion;
+				version = 6.26.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AD472066EE083A0179F915A6 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 94B8628F64A2537F31D8AB1A /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+		AEF9CE2B271D2BC4EA747F0A /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 94B8628F64A2537F31D8AB1A /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

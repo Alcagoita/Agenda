@@ -15,25 +15,11 @@
  * Enabled APIs (must be active in the Cloud Console for the key to work):
  *   - Places API (New)  →  https://console.cloud.google.com/apis/library/places.googleapis.com
  *
- * Static map preview (maps.ts's buildStaticMapPreviewUrl, used by the Trip
- * Planner) needs its own pair of keys — an Android-app-restricted key and an
- * iOS-app-restricted key — instead of the plain GOOGLE_PLACES_API_KEY above.
- * A plain `fetch()`-style REST call carries no app signature, so an
- * Android/iOS-app-restricted key rejects it with a silent 403; the Static
- * Maps request going out through <Image> IS a real app request the
- * restriction can verify, so each platform needs its matching key:
- *   1. Create two more keys under the same project.
- *   2. Restrict each to "Maps Static API" only.
- *   3. Restrict one to "Android apps" (package name + SHA-1), the other to
- *      "iOS apps" (bundle ID).
- *   - Maps Static API  →  https://console.cloud.google.com/apis/library/maps-backend.googleapis.com
+ * The Trip Planner's radius preview (KAN-321) uses react-native-maps instead
+ * of a Google Static Maps key — see app.json's react-native-maps plugin
+ * entry for the Android Maps SDK key (Android has no non-Google native map
+ * provider; iOS uses Apple Maps by default, no key needed).
  */
-
-/** Google Maps Static API key, restricted to the Android app (package + SHA-1) in Cloud Console. */
-export const GOOGLE_MAPS_STATIC_ANDROID_API_KEY = 'YOUR_GOOGLE_MAPS_STATIC_ANDROID_API_KEY';
-
-/** Google Maps Static API key, restricted to the iOS app (bundle ID) in Cloud Console. */
-export const GOOGLE_MAPS_STATIC_IOS_API_KEY = 'YOUR_GOOGLE_MAPS_STATIC_IOS_API_KEY';
 
 /** Google OAuth web client ID — from google-services.json / GoogleService-Info.plist. */
 export const GOOGLE_OAUTH_WEB_CLIENT_ID = 'YOUR_GOOGLE_OAUTH_WEB_CLIENT_ID';

@@ -2,7 +2,7 @@
  * TripPlannerScreen — KAN-234
  *
  * "Going somewhere?" flow: destination search → optional dates → radius +
- * static map preview + size estimate → download. All state/logic lives in
+ * native map preview + size estimate → download. All state/logic lives in
  * useTripPlanner (see that file) — this component is rendering only.
  *
  * No region drawing — the user thinks in destinations. Copy never says
@@ -12,7 +12,6 @@
 
 import React from 'react';
 import {
-  Image,
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
@@ -21,6 +20,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Map, Camera, GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -32,7 +32,7 @@ import { ChevronLeftIcon, SuitcaseIcon } from '../components/AppIcon';
 import LoadingDots from '../components/LoadingDots';
 import MiniCalendar from '../components/MiniCalendar';
 import { useTripPlanner, TRIP_PREVIEW_WIDTH, TRIP_PREVIEW_HEIGHT } from '../hooks/useTripPlanner';
-import { CIRCLE_FRACTION_OF_HALF_DIM } from '../services/maps';
+import { computeTripPreviewZoom, buildTripPreviewCircle, TRIP_PREVIEW_STYLE_URL } from '../services/maps';
 import { TRIP_RADIUS_PRESETS, formatTripSizeMb } from '../services/tripDownload';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { TripRadiusPreset } from '../types';
@@ -41,8 +41,6 @@ import { COPY } from '../constants/copy';
 
 type Nav   = NativeStackNavigationProp<RootStackParamList, 'TripPlanner'>;
 type Route = RouteProp<RootStackParamList, 'TripPlanner'>;
-
-const CIRCLE_DIAMETER = Math.min(TRIP_PREVIEW_WIDTH, TRIP_PREVIEW_HEIGHT) * CIRCLE_FRACTION_OF_HALF_DIM;
 
 /** Looks up a radius preset's label live at render time (KAN-252 review) —
  *  TRIP_RADIUS_PRESETS itself carries no label since COPY is language-dynamic
@@ -69,7 +67,7 @@ export default function TripPlannerScreen() {
   const {
     step, query, setQuery, suggestions, searching, selectDestination, destination,
     startDate, endDate, setStartDate, setEndDate, goToRadius, skipDates,
-    radiusKey, setRadiusKey, estimatedBytes, previewUrl,
+    radiusKey, setRadiusKey, estimatedBytes, radiusMeters,
     confirmDownload, error, goBack, isEditing, editInitialStep,
   } = useTripPlanner(
     () => navigation.navigate(route.params?.doneReturnTo ?? 'PlacesIKnow'),
@@ -92,6 +90,13 @@ export default function TripPlannerScreen() {
   const untilDate = destination
     ? (endDate ? formatDateShort(endDate) : undefined)
     : undefined;
+
+  const previewZoom = destination
+    ? computeTripPreviewZoom(destination.lat, radiusMeters, TRIP_PREVIEW_WIDTH, TRIP_PREVIEW_HEIGHT)
+    : null;
+  const previewCircle = destination
+    ? buildTripPreviewCircle(destination.lat, destination.lng, radiusMeters)
+    : null;
 
   return (
     <KeyboardAvoidingView
@@ -228,24 +233,36 @@ export default function TripPlannerScreen() {
         {step === 'radius' && destination && (
           <View style={styles.radiusSection}>
             <View style={[styles.previewFrame, { width: TRIP_PREVIEW_WIDTH, height: TRIP_PREVIEW_HEIGHT, backgroundColor: palette.surface2 }]}>
-              {previewUrl ? (
-                <Image
-                  source={{ uri: previewUrl }}
-                  style={{ width: TRIP_PREVIEW_WIDTH, height: TRIP_PREVIEW_HEIGHT, borderRadius: radii.card }}
-                  onError={() => { /* falls back to the plain surface backdrop below — never blocks the flow */ }}
-                />
-              ) : null}
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.previewCircle,
-                  {
-                    width: CIRCLE_DIAMETER, height: CIRCLE_DIAMETER, borderRadius: CIRCLE_DIAMETER / 2,
-                    marginLeft: -CIRCLE_DIAMETER / 2, marginTop: -CIRCLE_DIAMETER / 2,
-                    backgroundColor: `${palette.accent}33`, borderColor: palette.accent,
-                  },
-                ]}
-              />
+              {previewZoom != null && previewCircle && (
+                <Map
+                  style={{ width: TRIP_PREVIEW_WIDTH, height: TRIP_PREVIEW_HEIGHT }}
+                  mapStyle={TRIP_PREVIEW_STYLE_URL}
+                  dragPan={false}
+                  touchZoom={false}
+                  doubleTapZoom={false}
+                  doubleTapHoldZoom={false}
+                  touchRotate={false}
+                  touchPitch={false}
+                  compass={false}
+                  scaleBar={false}
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants">
+                  <Camera center={[destination.lng, destination.lat]} zoom={previewZoom} />
+                  <GeoJSONSource id="trip-radius-circle" data={previewCircle}>
+                    <Layer
+                      type="fill"
+                      id="trip-radius-fill"
+                      paint={{ 'fill-color': palette.accent, 'fill-opacity': 0.2 }}
+                    />
+                    <Layer
+                      type="line"
+                      id="trip-radius-line"
+                      paint={{ 'line-color': palette.accent, 'line-width': 1.5 }}
+                    />
+                  </GeoJSONSource>
+                </Map>
+              )}
             </View>
 
             <View style={styles.radiusChips}>
@@ -359,7 +376,6 @@ const styles = StyleSheet.create({
   // Radius + preview
   radiusSection: { gap: 16, alignItems: 'center' },
   previewFrame: { borderRadius: radii.card, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  previewCircle: { position: 'absolute', left: '50%', top: '50%', borderWidth: 2 },
   radiusChips: { flexDirection: 'row', gap: 8, alignSelf: 'stretch' },
   radiusChip: { flex: 1, height: 44, borderRadius: radii.ctaBtn, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   radiusChipLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', textAlign: 'center' },
