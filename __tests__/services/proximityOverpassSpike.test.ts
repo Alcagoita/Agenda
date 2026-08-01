@@ -155,6 +155,39 @@ describe('KAN-322 Overpass comparison spike', () => {
 
     const [, payload] = logSpy.mock.calls.find(call => call[0] === '[KAN-322 spike] nearby search comparison')!;
     expect(payload.perType[0]).toMatchObject({ poiType: 'pharmacy', heroMatch: true });
+    expect(payload.retried).toBe(false);
+    expect(mockSearchNearbyPlacesOsm).toHaveBeenCalledTimes(1); // non-empty first attempt — no retry needed
+  });
+
+  it('retries once when the first attempt returns empty across every type (KAN-322 review — likely a timeout, not a real empty area)', async () => {
+    mockSearchNearbyPlaces.mockResolvedValue({ pharmacy: [makePlace('ph1', 'Walgreens', 38.7, -9.1, 90)] });
+    mockSearchNearbyPlacesOsm
+      .mockResolvedValueOnce({ pharmacy: [] })
+      .mockResolvedValueOnce({ pharmacy: [makeOsmPlace('node/1', 'Walgreens', 38.70015, -9.1, 90)] });
+
+    await runProximitySearch('uid-1', [makeTask('t1', 'pharmacy')], mockOnUpdate);
+    await flushMicrotasks();
+
+    expect(mockSearchNearbyPlacesOsm).toHaveBeenCalledTimes(2);
+    const [, payload] = logSpy.mock.calls.find(call => call[0] === '[KAN-322 spike] nearby search comparison')!;
+    expect(payload.retried).toBe(true);
+    expect(payload.perType[0]).toMatchObject({ poiType: 'pharmacy', osmCount: 1, heroMatch: true });
+  });
+
+  it('does not retry when at least one requested type already has a result', async () => {
+    mockSearchNearbyPlaces.mockResolvedValue({
+      pharmacy: [makePlace('ph1', 'Walgreens', 38.7, -9.1, 90)],
+      atm:      [makePlace('a1', 'Chase ATM', 38.7, -9.1, 50)],
+    });
+    mockSearchNearbyPlacesOsm.mockResolvedValue({
+      pharmacy: [makeOsmPlace('node/1', 'Walgreens', 38.70015, -9.1, 90)],
+      atm:      [], // this one type is empty, but pharmacy isn't — no retry
+    });
+
+    await runProximitySearch('uid-1', [makeTask('t1', 'pharmacy'), makeTask('t2', 'atm')], mockOnUpdate);
+    await flushMicrotasks();
+
+    expect(mockSearchNearbyPlacesOsm).toHaveBeenCalledTimes(1);
   });
 
   it('logs heroMatch: false when the sources disagree by more than 30m', async () => {
@@ -170,14 +203,16 @@ describe('KAN-322 Overpass comparison spike', () => {
     expect(payload.perType[0]).toMatchObject({ poiType: 'pharmacy', heroMatch: false });
   });
 
-  it('logs heroMatch: false when Overpass has no result for a type Google found', async () => {
+  it('logs heroMatch: false when Overpass has no result even after retrying', async () => {
     mockSearchNearbyPlaces.mockResolvedValue({ pharmacy: [makePlace('ph1', 'Walgreens', 38.7, -9.1, 90)] });
-    mockSearchNearbyPlacesOsm.mockResolvedValue({ pharmacy: [] });
+    mockSearchNearbyPlacesOsm.mockResolvedValue({ pharmacy: [] }); // both attempts empty
 
     await runProximitySearch('uid-1', [makeTask('t1', 'pharmacy')], mockOnUpdate);
     await flushMicrotasks();
 
+    expect(mockSearchNearbyPlacesOsm).toHaveBeenCalledTimes(2);
     const [, payload] = logSpy.mock.calls.find(call => call[0] === '[KAN-322 spike] nearby search comparison')!;
+    expect(payload.retried).toBe(true);
     expect(payload.perType[0]).toMatchObject({ poiType: 'pharmacy', osmCount: 0, heroMatch: false });
   });
 

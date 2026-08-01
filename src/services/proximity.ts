@@ -85,7 +85,7 @@ import { InteractionManager, Platform } from 'react-native';
 import WearNotificationModule from '../native/WearNotificationModule';
 import { Coordinates, getPositionLowAccuracy } from './geolocation';
 import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel } from './maps';
-import { searchNearbyPlacesOsm } from './osmPlaces';
+import { searchNearbyPlacesOsm, OsmPlace } from './osmPlaces';
 import { markAllPoiAlertsSeen } from './firestore';
 import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES, filterSupportedGooglePlaceTypes } from '../constants/googlePlaceTypes';
@@ -139,6 +139,29 @@ function reportProximityError(context: string, err: unknown): void {
 // identity matching (OSM and Google place IDs share nothing).
 const OVERPASS_SPIKE_HERO_MATCH_RADIUS_M = 30;
 
+/**
+ * A fully-empty result (every requested type, zero results) is far more
+ * likely a timeout/failed request (searchOsmPlaces's never-throws contract
+ * collapses any failure into an empty result — see osmPlaces.ts) than a
+ * genuinely POI-free area, given this spike only ever queries common urban
+ * types (restaurant/atm/cafe). One retry with a fresh request/timeout budget
+ * distinguishes real quality from raw request flakiness — measured ~40-60%
+ * single-attempt failure rate against the public Overpass instance
+ * (KAN-322 field test, 2026-08-01).
+ */
+async function searchNearbyPlacesOsmWithRetry(
+  lat: number,
+  lng: number,
+  poiTypes: string[],
+  radiusMeters: number,
+): Promise<{ results: Record<string, OsmPlace[]>; retried: boolean }> {
+  const first = await searchNearbyPlacesOsm(lat, lng, poiTypes, radiusMeters);
+  if (poiTypes.some(t => (first[t] ?? []).length > 0)) { return { results: first, retried: false }; }
+
+  const second = await searchNearbyPlacesOsm(lat, lng, poiTypes, radiusMeters);
+  return { results: second, retried: true };
+}
+
 async function runOverpassComparisonSpike(
   lat: number,
   lng: number,
@@ -148,7 +171,7 @@ async function runOverpassComparisonSpike(
   googleLatencyMs: number,
 ): Promise<void> {
   const startedAt = Date.now();
-  const osmResults = await searchNearbyPlacesOsm(lat, lng, poiTypes, radiusMeters);
+  const { results: osmResults, retried } = await searchNearbyPlacesOsmWithRetry(lat, lng, poiTypes, radiusMeters);
   const osmLatencyMs = Date.now() - startedAt;
 
   const perType = poiTypes.map((poiType) => {
@@ -169,6 +192,7 @@ async function runOverpassComparisonSpike(
 
   console.log('[KAN-322 spike] nearby search comparison', {
     latencyMs: { google: Math.round(googleLatencyMs), osm: Math.round(osmLatencyMs) },
+    retried,
     perType,
   });
 }
