@@ -59,6 +59,31 @@ async function findCoveringTile(env: Env, lat: number, lng: number): Promise<Cov
   return best;
 }
 
+/**
+ * Directional type-merge rules, not symmetric groups. Foursquare's taxonomy
+ * splits some real-world-equivalent venues into sibling leaf categories
+ * (a "supermarket" and a "grocery_store" are the same kind of place to a
+ * shopper, just inconsistently labeled — see Minipreço/My Auchan, both
+ * classified grocery_store, KAN-329 field test) and genuinely contains one
+ * type inside another (every bank branch has an ATM; a standalone ATM is
+ * not a bank). The merge direction follows real-world intent, not the
+ * category tree:
+ *   - searching a broad/containing type also returns the narrower type it
+ *     structurally contains (atm -> atm+bank)
+ *   - searching the narrower type does NOT pull in the broader one (bank
+ *     search must not return standalone ATMs with no other bank services)
+ *   - genuine synonyms merge both ways (supermarket <-> grocery_store)
+ *   - a distinct real intent never merges with a nearby type even if
+ *     Foursquare's tree puts them close together (convenience_store is a
+ *     deliberately different "quick top-up" intent from "the weekly
+ *     grocery run" — searching either must not pull in the other)
+ */
+const TYPE_MERGE_INCLUDES: Record<string, string[]> = {
+  atm: ['atm', 'bank'],
+  supermarket: ['supermarket', 'grocery_store'],
+  grocery_store: ['supermarket', 'grocery_store'],
+};
+
 async function queryPoiDb(
   db: D1Database,
   tileId: string,
@@ -71,10 +96,13 @@ async function queryPoiDb(
   const prefixes = neighborPrefixes(lat, lng, precision);
   const placeholders = prefixes.map(() => '?').join(',');
 
-  const sql = poiType
-    ? `SELECT * FROM poi WHERE tile_id = ? AND poi_type = ? AND substr(geohash, 1, ${precision}) IN (${placeholders})`
+  const types = poiType ? (TYPE_MERGE_INCLUDES[poiType] ?? [poiType]) : null;
+  const typePlaceholders = types?.map(() => '?').join(',');
+
+  const sql = types
+    ? `SELECT * FROM poi WHERE tile_id = ? AND poi_type IN (${typePlaceholders}) AND substr(geohash, 1, ${precision}) IN (${placeholders})`
     : `SELECT * FROM poi WHERE tile_id = ? AND substr(geohash, 1, ${precision}) IN (${placeholders})`;
-  const binds = poiType ? [tileId, poiType, ...prefixes] : [tileId, ...prefixes];
+  const binds = types ? [tileId, ...types, ...prefixes] : [tileId, ...prefixes];
 
   const { results } = await db.prepare(sql).bind(...binds).all<{
     fsq_place_id: string; name: string; lat: number; lng: number;
