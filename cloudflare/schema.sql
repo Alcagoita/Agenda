@@ -28,8 +28,7 @@ CREATE TABLE IF NOT EXISTS poi (
   lng                 REAL NOT NULL,
   geohash             TEXT NOT NULL,          -- precision 7 (~150m cell), prefix-queried for radius search
   primary_poi_type    TEXT NOT NULL,          -- display/icon only — see poi_type table for the full match set
-  store_subtype       TEXT,                   -- only set when a matched type = 'store'
-  food_subtype        TEXT,                   -- only set when a matched type = 'restaurant'
+  brand               TEXT,                   -- matched at load time against src/constants/brandDictionary.json; NULL when no confident match — added to an existing table via migrations/0001_phase4_poi_attribute_brand.sql, CREATE TABLE IF NOT EXISTS alone won't add it
   category_label      TEXT,                   -- raw Foursquare category hierarchy, for debugging/display
   raw_category_ids    TEXT,                   -- '|'-joined fsq category ids, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
   raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
