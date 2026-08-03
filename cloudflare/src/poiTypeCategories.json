@@ -1,0 +1,362 @@
+{
+  "accounting": {
+    "category_id": "63be6904847c3692a84b9b3e",
+    "category_name": "Accounting and Bookkeeping Service"
+  },
+  "airport": {
+    "category_id": "4bf58dd8d48988d1ed931735",
+    "category_name": "Airport"
+  },
+  "amusement_park": {
+    "category_id": "4bf58dd8d48988d182941735",
+    "category_name": "Amusement Park"
+  },
+  "aquarium": {
+    "category_id": "4fceea171983d5d06c3e9823",
+    "category_name": "Aquarium"
+  },
+  "art_gallery": {
+    "category_id": "4bf58dd8d48988d1e2931735",
+    "category_name": "Art Gallery"
+  },
+  "atm": {
+    "category_id": "52f2ab2ebcbc57f1066b8b56",
+    "category_name": "ATM"
+  },
+  "bakery": {
+    "category_id": "4bf58dd8d48988d16a941735",
+    "category_name": "Bakery"
+  },
+  "bank": {
+    "category_id": "4bf58dd8d48988d10a951735",
+    "category_name": "Bank"
+  },
+  "bar": {
+    "category_id": "4bf58dd8d48988d116941735",
+    "category_name": "Bar"
+  },
+  "beach": {
+    "category_id": "4bf58dd8d48988d1e2941735",
+    "category_name": "Beach"
+  },
+  "beauty_salon": {
+    "category_id": "4bf58dd8d48988d10c951735",
+    "category_name": "Cosmetics Store"
+  },
+  "botanical_garden": {
+    "category_id": "52e81612bcbc57f1066b7a22",
+    "category_name": "Botanical Garden"
+  },
+  "bowling_alley": {
+    "category_id": "4bf58dd8d48988d1e4931735",
+    "category_name": "Bowling Alley"
+  },
+  "brewery": {
+    "category_id": "50327c8591d4c4b30a586d5d",
+    "category_name": "Brewery"
+  },
+  "bus_station": {
+    "category_id": "4bf58dd8d48988d1fe931735",
+    "category_name": "Bus Station"
+  },
+  "cafe": {
+    "category_id": "4bf58dd8d48988d16d941735",
+    "category_name": "Caf\u00e9"
+  },
+  "campground": {
+    "category_id": "4bf58dd8d48988d1e4941735",
+    "category_name": "Campground"
+  },
+  "car_dealer": {
+    "category_id": "4eb1c1623b7b52c0e1adc2ec",
+    "category_name": "Car Dealership"
+  },
+  "car_rental": {
+    "category_id": "4bf58dd8d48988d1ef941735",
+    "category_name": "Rental Car Location"
+  },
+  "car_repair": {
+    "category_id": "52f2ab2ebcbc57f1066b8b44",
+    "category_name": "Automotive Repair Shop"
+  },
+  "car_wash": {
+    "category_id": "4f04ae1f2fb6e1c99f3db0ba",
+    "category_name": "Car Wash and Detail"
+  },
+  "casino": {
+    "category_id": "4bf58dd8d48988d17c941735",
+    "category_name": "Casino"
+  },
+  "cemetery": {
+    "category_id": "4bf58dd8d48988d15c941735",
+    "category_name": "Cemetery"
+  },
+  "church": {
+    "category_id": "4bf58dd8d48988d132941735",
+    "category_name": "Church"
+  },
+  "city_hall": {
+    "category_id": "4bf58dd8d48988d129941735",
+    "category_name": "City Hall"
+  },
+  "coffee_shop": {
+    "category_id": "4bf58dd8d48988d1e0931735",
+    "category_name": "Coffee Shop"
+  },
+  "community_center": {
+    "category_id": "52e81612bcbc57f1066b7a34",
+    "category_name": "Community Center"
+  },
+  "convenience_store": {
+    "category_id": "4d954b0ea243a5684a65b473",
+    "category_name": "Convenience Store"
+  },
+  "courthouse": {
+    "category_id": "4bf58dd8d48988d12b941735",
+    "category_name": "Courthouse"
+  },
+  "cultural_center": {
+    "category_id": "52e81612bcbc57f1066b7a32",
+    "category_name": "Cultural Center"
+  },
+  "dentist": {
+    "category_id": "4bf58dd8d48988d178941735",
+    "category_name": "Dentist"
+  },
+  "doctor": {
+    "category_id": "4bf58dd8d48988d177941735",
+    "category_name": "Doctor's Office"
+  },
+  "electric_vehicle_charging_station": {
+    "category_id": "5032872391d4c4b30a586d64",
+    "category_name": "Electric Vehicle Charging Station"
+  },
+  "embassy": {
+    "category_id": "4bf58dd8d48988d12c951735",
+    "category_name": "Embassy or Consulate"
+  },
+  "fire_station": {
+    "category_id": "4bf58dd8d48988d12c941735",
+    "category_name": "Fire Station"
+  },
+  "fitness_center": {
+    "category_id": "4bf58dd8d48988d175941735",
+    "category_name": "Gym and Studio"
+  },
+  "golf_course": {
+    "category_id": "4bf58dd8d48988d1e6941735",
+    "category_name": "Golf Course"
+  },
+  "grocery_store": {
+    "category_id": "4bf58dd8d48988d118951735",
+    "category_name": "Grocery Store"
+  },
+  "gym": {
+    "category_id": "4bf58dd8d48988d175941735",
+    "category_name": "Gym and Studio"
+  },
+  "hair_care": {
+    "category_id": "4bf58dd8d48988d110951735",
+    "category_name": "Hair Salon"
+  },
+  "historical_landmark": {
+    "category_id": "4deefb944765f83613cdba6e",
+    "category_name": "Historic and Protected Site"
+  },
+  "hospital": {
+    "category_id": "4bf58dd8d48988d196941735",
+    "category_name": "Hospital"
+  },
+  "hotel": {
+    "category_id": "4bf58dd8d48988d1fa931735",
+    "category_name": "Hotel"
+  },
+  "ice_cream_shop": {
+    "category_id": "4bf58dd8d48988d1c9941735",
+    "category_name": "Ice Cream Parlor"
+  },
+  "laundry": {
+    "category_id": "4bf58dd8d48988d1fc941735",
+    "category_name": "Laundry Service"
+  },
+  "library": {
+    "category_id": "4bf58dd8d48988d12f941735",
+    "category_name": "Library"
+  },
+  "liquor_store": {
+    "category_id": "4bf58dd8d48988d186941735",
+    "category_name": "Liquor Store"
+  },
+  "local_government_office": {
+    "category_id": "4bf58dd8d48988d126941735",
+    "category_name": "Government Building"
+  },
+  "lodging": {
+    "category_id": "4bf58dd8d48988d1fa931735",
+    "category_name": "Hotel"
+  },
+  "medical_lab": {
+    "category_id": "4f4531b14b9074f6e4fb0103",
+    "category_name": "Medical Lab"
+  },
+  "mosque": {
+    "category_id": "4bf58dd8d48988d138941735",
+    "category_name": "Mosque"
+  },
+  "movie_theater": {
+    "category_id": "4bf58dd8d48988d17f941735",
+    "category_name": "Movie Theater"
+  },
+  "museum": {
+    "category_id": "4bf58dd8d48988d181941735",
+    "category_name": "Museum"
+  },
+  "nail_salon": {
+    "category_id": "4f04aa0c2fb6e1c99f3db0b8",
+    "category_name": "Nail Salon"
+  },
+  "park": {
+    "category_id": "4bf58dd8d48988d163941735",
+    "category_name": "Park"
+  },
+  "parking": {
+    "category_id": "4c38df4de52ce0d596b336e1",
+    "category_name": "Parking"
+  },
+  "pharmacy": {
+    "category_id": "4bf58dd8d48988d10f951735",
+    "category_name": "Pharmacy"
+  },
+  "playground": {
+    "category_id": "4bf58dd8d48988d1e7941735",
+    "category_name": "Playground"
+  },
+  "police": {
+    "category_id": "4bf58dd8d48988d12e941735",
+    "category_name": "Police Station"
+  },
+  "post_office": {
+    "category_id": "4bf58dd8d48988d172941735",
+    "category_name": "Post Office"
+  },
+  "primary_school": {
+    "category_id": "4f4533804b9074f6e4fb0105",
+    "category_name": "Elementary School"
+  },
+  "pub": {
+    "category_id": "4bf58dd8d48988d11b941735",
+    "category_name": "Pub"
+  },
+  "restaurant": {
+    "category_id": "4d4b7105d754a06374d81259",
+    "category_name": "Restaurant"
+  },
+  "rv_park": {
+    "category_id": "52f2ab2ebcbc57f1066b8b53",
+    "category_name": "RV Park"
+  },
+  "shopping_mall": {
+    "category_id": "4bf58dd8d48988d1fd941735",
+    "category_name": "Shopping Mall"
+  },
+  "spa": {
+    "category_id": "4bf58dd8d48988d1ed941735",
+    "category_name": "Spa"
+  },
+  "stadium": {
+    "category_id": "4bf58dd8d48988d184941735",
+    "category_name": "Stadium"
+  },
+  "store": {
+    "category_id": "4d4b7105d754a06378d81259",
+    "category_name": "Retail"
+  },
+  "subway_station": {
+    "category_id": "4bf58dd8d48988d1fd931735",
+    "category_name": "Metro Station"
+  },
+  "supermarket": {
+    "category_id": "52f2ab2ebcbc57f1066b8b46",
+    "category_name": "Supermarket"
+  },
+  "synagogue": {
+    "category_id": "4bf58dd8d48988d139941735",
+    "category_name": "Synagogue"
+  },
+  "taxi_stand": {
+    "category_id": "53fca564498e1a175f32528b",
+    "category_name": "Taxi Stand"
+  },
+  "tennis_court": {
+    "category_id": "4e39a956bd410d7aed40cbc3",
+    "category_name": "Tennis Court"
+  },
+  "transit_station": {
+    "category_id": "4bf58dd8d48988d1fc931735",
+    "category_name": "Light Rail Station"
+  },
+  "university": {
+    "category_id": "4bf58dd8d48988d1ae941735",
+    "category_name": "University"
+  },
+  "veterinary_care": {
+    "category_id": "4d954af4a243a5684765b473",
+    "category_name": "Veterinarian"
+  },
+  "water_park": {
+    "category_id": "4bf58dd8d48988d193941735",
+    "category_name": "Water Park"
+  },
+  "winery": {
+    "category_id": "4bf58dd8d48988d14b941735",
+    "category_name": "Winery"
+  },
+  "yoga_studio": {
+    "category_id": "4bf58dd8d48988d102941735",
+    "category_name": "Yoga Studio"
+  },
+  "zoo": {
+    "category_id": "4bf58dd8d48988d17b941735",
+    "category_name": "Zoo"
+  },
+  "ferry_terminal": {
+    "category_id": "4bf58dd8d48988d12d951735",
+    "category_name": "Boat or Ferry"
+  },
+  "florist": {
+    "category_id": "4bf58dd8d48988d11b951735",
+    "category_name": "Flower Store"
+  },
+  "gas_station": {
+    "category_id": "4bf58dd8d48988d113951735",
+    "category_name": "Fuel Station"
+  },
+  "hiking_area": {
+    "category_id": "4bf58dd8d48988d159941735",
+    "category_name": "Hiking Trail"
+  },
+  "movie_rental": {
+    "category_id": "4bf58dd8d48988d126951735",
+    "category_name": "Video Store"
+  },
+  "night_club": {
+    "category_id": "4bf58dd8d48988d11f941735",
+    "category_name": "Night Club"
+  },
+  "physiotherapist": {
+    "category_id": "5744ccdfe4b0c0459246b4af",
+    "category_name": "Physical Therapy Clinic"
+  },
+  "school": {
+    "category_id": "63be6904847c3692a84b9ba1",
+    "category_name": "Primary and Secondary School"
+  },
+  "tourist_attraction": {
+    "category_id": "5109983191d435c0d71c2bb1",
+    "category_name": "Attraction"
+  },
+  "train_station": {
+    "category_id": "4bf58dd8d48988d129951735",
+    "category_name": "Rail Station"
+  }
+}

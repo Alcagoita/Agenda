@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "brush-poi-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  // Route poi-api.brushaway.app/* -> brush-poi-backend is managed manually in
+  // the Cloudflare dashboard (Zone > Workers Routes), not here — this token's
+  // permissions don't cover Zone:Workers Routes, so wrangler can't sync a
+  // "routes" block without failing every deploy. Not lost, just not IaC yet.
+  "d1_databases": [
+    {
+      "binding": "REGISTRY_DB",
+      "database_name": "brush-poi-registry",
+      "database_id": "219307c1-3ada-4df5-bd52-724e5bcc7fb8"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "POI_EXPORTS",
+      "bucket_name": "brush-poi-exports"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "sushi": {
+    "category_id": "4bf58dd8d48988d1d2941735",
+    "category_name": "Sushi Restaurant"
+  },
+  "portuguese": {
+    "category_id": "4def73e84765ae376e57713a",
+    "category_name": "Portuguese Restaurant"
+  },
+  "italian": {
+    "category_id": "4bf58dd8d48988d110941735",
+    "category_name": "Italian Restaurant"
+  },
+  "burger": {
+    "category_id": "4bf58dd8d48988d16c941735",
+    "category_name": "Burger Joint"
+  },
+  "healthy": {
+    "category_id": "50aa9e744b90af0d42d5de0e",
+    "category_name": "Health Food Store"
+  },
+  "indian": {
+    "category_id": "4bf58dd8d48988d10f941735",
+    "category_name": "Indian Restaurant"
+  },
+  "thai": {
+    "category_id": "4bf58dd8d48988d149941735",
+    "category_name": "Thai Restaurant"
+  },
+  "mexican": {
+    "category_id": "4bf58dd8d48988d1c1941735",
+    "category_name": "Mexican Restaurant"
+  },
+  "steak": {
+    "category_id": "4bf58dd8d48988d1cc941735",
+    "category_name": "Steakhouse"
+  },
+  "vegetarian": {
+    "category_id": "4bf58dd8d48988d1d3941735",
+    "category_name": "Vegan and Vegetarian Restaurant"
+  }
+}
