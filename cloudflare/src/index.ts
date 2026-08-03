@@ -164,7 +164,7 @@ export default {
         return json({ error: 'unauthorized' }, 401);
       }
       const body = await request.json<{
-        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; status?: unknown;
+        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; status?: unknown; r2Key?: unknown;
       }>();
       if (typeof body.cityId !== 'string' || body.cityId.trim() === '') {
         return json({ error: 'cityId must be a non-empty string' }, 400);
@@ -202,11 +202,12 @@ export default {
           "UPDATE city SET status = 'ready', current_build_id = ?, last_built_at = ? WHERE city_id = ?",
         ).bind(body.buildId, now, body.cityId),
         env.REGISTRY_DB.prepare(
-          "UPDATE build_log SET status = 'ready', finished_at = ?, rows_loaded = ?, rows_skipped = ? WHERE build_id = ? AND city_id = ?",
+          "UPDATE build_log SET status = 'ready', finished_at = ?, rows_loaded = ?, rows_skipped = ?, raw_extract_r2_key = COALESCE(?, raw_extract_r2_key) WHERE build_id = ? AND city_id = ?",
         ).bind(
           now,
           typeof body.rowsLoaded === 'number' ? body.rowsLoaded : null,
           typeof body.rowsSkipped === 'number' ? body.rowsSkipped : null,
+          typeof body.r2Key === 'string' && body.r2Key.trim() !== '' ? body.r2Key : null,
           body.buildId, body.cityId,
         ),
       ]);

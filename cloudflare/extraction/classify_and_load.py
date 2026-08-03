@@ -107,19 +107,41 @@ def classify(city_id, csv_path, out_sql_path):
                 if cid in poi_reverse:
                     poi_type = poi_reverse[cid]
                     break
+
+            store_subtype = None
+            food_subtype = None
+
+            # KAN-334: the extraction filter now also pulls in rows tagged
+            # ONLY with a subtype leaf id (e.g. "Bookstore") and no generic
+            # parent tag ("Retail") at all — that's the whole point of
+            # widening it, since those rows were previously excluded from
+            # the raw extract entirely. But poi_reverse only recognizes the
+            # 90 main-type ids, so without this fallback such a row still
+            # falls through to skipped here, same as before the filter was
+            # widened — the widened filter alone doesn't recover anything
+            # unless classification also falls back to the subtype maps.
+            if poi_type is None:
+                for cid in cat_ids:
+                    if cid in store_reverse:
+                        poi_type = 'store'
+                        store_subtype = store_reverse[cid]
+                        break
+                    if cid in food_reverse:
+                        poi_type = 'restaurant'
+                        food_subtype = food_reverse[cid]
+                        break
+
             if poi_type is None:
                 skipped += 1
                 continue
 
-            store_subtype = None
-            if poi_type == 'store':
+            if poi_type == 'store' and store_subtype is None:
                 for cid in cat_ids:
                     if cid in store_reverse:
                         store_subtype = store_reverse[cid]
                         break
 
-            food_subtype = None
-            if poi_type == 'restaurant':
+            if poi_type == 'restaurant' and food_subtype is None:
                 for cid in cat_ids:
                     if cid in food_reverse:
                         food_subtype = food_reverse[cid]
@@ -218,12 +240,15 @@ def classify(city_id, csv_path, out_sql_path):
             f"DELETE FROM poi WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n"
         )
 
+    r2_key = f"raw-extracts/{city_id}/{build_id}.csv"
     print(f"[{city_id}] wrote {out_sql_path} ({batches_written} poi statements, ~{MAX_STATEMENT_BYTES // 1000}KB each max)")
     print(f"[{city_id}] build_id={build_id} rows_loaded={len(rows_out)} rows_skipped={skipped}")
-    print(f"[{city_id}] after loading this file, close out the build:")
+    print(f"[{city_id}] after loading this file, upload the raw extract and close out the build:")
+    print(f"  npx wrangler r2 object put brush-poi-exports/{r2_key} --file={csv_path} --remote")
     print(f"  curl -X POST https://poi-api.brushaway.app/internal/build-complete "
           f"-H \"X-Build-Secret: $BUILD_TRIGGER_SECRET\" -H \"Content-Type: application/json\" "
-          f"-d '{{\"cityId\":\"{city_id}\",\"buildId\":\"{build_id}\",\"rowsLoaded\":{len(rows_out)},\"rowsSkipped\":{skipped}}}'")
+          f"-d '{{\"cityId\":\"{city_id}\",\"buildId\":\"{build_id}\",\"rowsLoaded\":{len(rows_out)},"
+          f"\"rowsSkipped\":{skipped},\"r2Key\":\"{r2_key}\"}}'")
 
 if __name__ == '__main__':
     city = sys.argv[1]
