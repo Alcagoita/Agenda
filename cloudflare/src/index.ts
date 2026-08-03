@@ -168,7 +168,7 @@ async function queryPoiDb(
 
   const { results } = await db.prepare(sql).bind(...binds).all<{
     fsq_place_id: string; name: string; lat: number; lng: number;
-    primary_poi_type: string; store_subtype: string | null; food_subtype: string | null;
+    primary_poi_type: string; brand: string | null;
     category_label: string | null; address: string | null;
   }>();
 

@@ -108,12 +108,15 @@ just the 16-entry built-in catalog), `src/storeSubtypeCategories.json` (14),
 files write to a relative `build/` path and the Python script resolves
 `build/` relative to its own location either way):
 1. Query `places_os` filtered to a city's bbox + our 90 category IDs
-2. Classify each row into a `poi_type` (+ `store_subtype`/`food_subtype` if
-   applicable) by matching its Foursquare category IDs against the mapping
-   files, compute its geohash, tag every row with a fresh `build_id`
+2. Classify each row into every matching `poi_type` (a place can match more
+   than one), every matching `poi_attribute` (`store_kind`/`food_cuisine`,
+   also multi-valued) by matching its Foursquare category IDs against the
+   mapping files, and a `brand` by matching its name against
+   `src/constants/brandDictionary.json`; compute its geohash, tag every row
+   with a fresh `build_id`
 3. Write a `build_log` start row, then batch `INSERT OR REPLACE` into the
-   shared D1 `poi` table, then a sweep `DELETE` retiring the previous
-   build's rows for that city
+   shared D1 `poi`/`poi_type`/`poi_attribute` tables, then a sweep `DELETE`
+   retiring the previous build's rows for that city, across all three tables
 4. Call `/internal/build-complete` (the script prints the exact `curl`
    command with the real `build_id`/counts) to close out `city.status` and
    `build_log`
