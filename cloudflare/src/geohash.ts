@@ -24,20 +24,40 @@ export function encodeGeohash(lat: number, lng: number, precision = 7): string {
   return hash;
 }
 
-/** Cell size in metres at a given geohash precision (approx, for radius→precision selection). */
-const CELL_SIZE_M: Record<number, number> = {
-  5: 4900_00 / 100, // ~4.9km x 4.9km cells
-  6: 1200,          // ~1.2km x 0.6km
-  7: 153,           // ~153m x 153m
-  8: 38,
+/**
+ * Real geohash cell dimensions (lng x lat metres, at the equator), derived
+ * from the bit layout: encoding alternates lng/lat bits starting with lng,
+ * so odd precisions (5, 7, ...) split bits evenly between axes -> ~square
+ * cells; even precisions (6, 8, ...) give lng one more bit than lat ->
+ * lng cells are exactly 2x wider than lat cells, NOT square. Using a single
+ * shared dimension for both axes (the previous version of this file) means
+ * the narrower axis's neighbor-offset step is up to 2x too large, which can
+ * skip the true adjacent cell near a boundary. Values match the standard
+ * published geohash precision table.
+ */
+const CELL_SIZE_M: Record<number, { lng: number; lat: number }> = {
+  5: { lng: 4890, lat: 4890 },
+  6: { lng: 1220, lat: 610 },
+  7: { lng: 153,  lat: 152 },
 };
 
-/** Picks the coarsest geohash precision whose cell is still smaller than the radius. */
+/**
+ * Coarsest geohash precision whose 3x3 neighbor window can still safely
+ * cover the requested radius. Safe radius per precision = the *smaller* of
+ * its two cell dimensions (conservative — the query point could sit right
+ * at the edge of its own cell, so the window only guarantees one full cell
+ * width of margin in the tighter axis). No precision below 5 is defined, so
+ * radii beyond precision 5's safe bound must be rejected by the caller
+ * (see MAX_RADIUS_METERS) rather than silently under-covered.
+ */
 export function precisionForRadius(radiusMeters: number): number {
-  if (radiusMeters > 2000) return 5;
-  if (radiusMeters > 300) return 6;
-  return 7;
+  if (radiusMeters <= 150) return 7;
+  if (radiusMeters <= 600) return 6;
+  return 5;
 }
+
+/** Largest radius precision 5's 3x3 window can safely cover — see precisionForRadius. Callers must reject/clamp requests beyond this. */
+export const MAX_RADIUS_METERS = 4500;
 
 export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
@@ -53,12 +73,15 @@ export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: 
 /**
  * Geohash prefixes for the 3x3 grid of cells centered on (lat, lng) at the
  * given precision — covers the search point plus its 8 neighbors, since a
- * radius search can straddle a cell boundary.
+ * radius search can straddle a cell boundary. Uses separate lng/lat cell
+ * dimensions (see CELL_SIZE_M) — a shared single dimension under-steps the
+ * wider axis or over-steps the narrower one, either skipping real neighbors
+ * or (harmlessly, just wastefully) double-counting cells.
  */
 export function neighborPrefixes(lat: number, lng: number, precision: number): string[] {
-  const cell = CELL_SIZE_M[precision] ?? 153;
-  const degLat = cell / 111_195;
-  const degLng = cell / (111_195 * Math.cos((lat * Math.PI) / 180));
+  const cell = CELL_SIZE_M[precision] ?? CELL_SIZE_M[7];
+  const degLat = cell.lat / 111_195;
+  const degLng = cell.lng / (111_195 * Math.cos((lat * Math.PI) / 180));
 
   const prefixes = new Set<string>();
   for (const dLat of [-1, 0, 1]) {

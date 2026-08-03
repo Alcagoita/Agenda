@@ -1,4 +1,4 @@
-import { encodeGeohash, haversineMeters, neighborPrefixes, precisionForRadius } from './geohash';
+import { haversineMeters, neighborPrefixes, precisionForRadius, MAX_RADIUS_METERS } from './geohash';
 
 export interface Env {
   // One shared D1 database for everything — Cloudflare Free plan caps at 10
@@ -34,6 +34,28 @@ function authenticate(request: Request, env: Env): Response | null {
     return json({ error: 'unauthorized' }, 401);
   }
   return null;
+}
+
+interface ParsedCoords { lat: number; lng: number; }
+interface ParsedCoordsAndRadius extends ParsedCoords { radius: number; }
+
+/** Validates lat/lng are present, finite, and within real coordinate bounds — a value like lat=999 passed Number.isNaN before but was never a real coordinate. */
+function parseCoords(url: URL): ParsedCoords | Response {
+  const lat = Number(url.searchParams.get('lat'));
+  const lng = Number(url.searchParams.get('lng'));
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return json({ error: 'lat must be a finite number between -90 and 90' }, 400);
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) return json({ error: 'lng must be a finite number between -180 and 180' }, 400);
+  return { lat, lng };
+}
+
+/** parseCoords plus radius bounds — must be finite, positive, and within what the geohash 3x3 window can safely cover (see MAX_RADIUS_METERS). A NaN/negative/oversized radius previously fell through to an always-empty or silently-incomplete result instead of a clear error. */
+function parseCoordsAndRadius(url: URL): ParsedCoordsAndRadius | Response {
+  const coords = parseCoords(url);
+  if (coords instanceof Response) return coords;
+  const radius = Number(url.searchParams.get('radius') ?? '1000');
+  if (!Number.isFinite(radius) || radius <= 0) return json({ error: 'radius must be a finite positive number' }, 400);
+  if (radius > MAX_RADIUS_METERS) return json({ error: `radius must be <= ${MAX_RADIUS_METERS}m` }, 400);
+  return { ...coords, radius };
 }
 
 /**
@@ -82,7 +104,22 @@ const TYPE_MERGE_INCLUDES: Record<string, string[]> = {
   atm: ['atm', 'bank'],
   supermarket: ['supermarket', 'grocery_store'],
   grocery_store: ['supermarket', 'grocery_store'],
+  // fitness_center/gym and hotel/lodging are distinct PoiTypes in our own
+  // catalog, but Foursquare has exactly one leaf category for each real
+  // concept ("Gym and Studio", "Hotel") — classification can only assign a
+  // place to one or the other (see the collision warning in
+  // extraction/classify_and_load.py's build_reverse_map), so both sides
+  // need to be queried together or one of the two PoiTypes silently never
+  // returns anything.
+  fitness_center: ['fitness_center', 'gym'],
+  gym: ['fitness_center', 'gym'],
+  hotel: ['hotel', 'lodging'],
+  lodging: ['hotel', 'lodging'],
 };
+
+function typesForSearch(poiType: string): string[] {
+  return Object.hasOwn(TYPE_MERGE_INCLUDES, poiType) ? TYPE_MERGE_INCLUDES[poiType] : [poiType];
+}
 
 async function queryPoiDb(
   db: D1Database,
@@ -96,7 +133,7 @@ async function queryPoiDb(
   const prefixes = neighborPrefixes(lat, lng, precision);
   const placeholders = prefixes.map(() => '?').join(',');
 
-  const types = poiType ? (TYPE_MERGE_INCLUDES[poiType] ?? [poiType]) : null;
+  const types = poiType ? typesForSearch(poiType) : null;
   const typePlaceholders = types?.map(() => '?').join(',');
 
   const sql = types
@@ -126,10 +163,19 @@ export default {
       if (request.headers.get('X-Build-Secret') !== env.BUILD_TRIGGER_SECRET) {
         return json({ error: 'unauthorized' }, 401);
       }
-      const body = await request.json<{ tileId: string }>();
-      await env.REGISTRY_DB.prepare(
+      const body = await request.json<{ tileId?: unknown }>();
+      if (typeof body.tileId !== 'string' || body.tileId.trim() === '') {
+        return json({ error: 'tileId must be a non-empty string' }, 400);
+      }
+      const result = await env.REGISTRY_DB.prepare(
         "UPDATE coverage SET status = 'ready', last_built_at = ? WHERE tile_id = ?",
       ).bind(new Date().toISOString(), body.tileId).run();
+      if (result.meta.changes !== 1) {
+        // Silent no-op success previously masked a bad tileId (typo, unknown
+        // city) — the build pipeline would report success while coverage
+        // stayed stuck in 'building' forever with nothing to explain why.
+        return json({ error: `no coverage row matched tileId '${body.tileId}'` }, 404);
+      }
       return json({ ok: true });
     }
 
@@ -138,12 +184,11 @@ export default {
 
     // GET /poi?lat=&lng=&radius=&type=  — POIs of one type within a radius
     if (url.pathname === '/poi' && request.method === 'GET') {
-      const lat = Number(url.searchParams.get('lat'));
-      const lng = Number(url.searchParams.get('lng'));
-      const radius = Number(url.searchParams.get('radius') ?? '1000');
       const poiType = url.searchParams.get('type');
       if (!poiType) return json({ error: 'type is required' }, 400);
-      if (Number.isNaN(lat) || Number.isNaN(lng)) return json({ error: 'lat/lng required' }, 400);
+      const parsed = parseCoordsAndRadius(url);
+      if (parsed instanceof Response) return parsed;
+      const { lat, lng, radius } = parsed;
 
       const tile = await findCoveringTile(env, lat, lng);
       if (!tile || tile.status !== 'ready') {
@@ -155,10 +200,9 @@ export default {
 
     // GET /poi/all?lat=&lng=&radius=  — all cached POI types within a radius
     if (url.pathname === '/poi/all' && request.method === 'GET') {
-      const lat = Number(url.searchParams.get('lat'));
-      const lng = Number(url.searchParams.get('lng'));
-      const radius = Number(url.searchParams.get('radius') ?? '1000');
-      if (Number.isNaN(lat) || Number.isNaN(lng)) return json({ error: 'lat/lng required' }, 400);
+      const parsed = parseCoordsAndRadius(url);
+      if (parsed instanceof Response) return parsed;
+      const { lat, lng, radius } = parsed;
 
       const tile = await findCoveringTile(env, lat, lng);
       if (!tile || tile.status !== 'ready') {
@@ -170,9 +214,9 @@ export default {
 
     // GET /coverage?lat=&lng=  — is this location ready / building / none?
     if (url.pathname === '/coverage' && request.method === 'GET') {
-      const lat = Number(url.searchParams.get('lat'));
-      const lng = Number(url.searchParams.get('lng'));
-      if (Number.isNaN(lat) || Number.isNaN(lng)) return json({ error: 'lat/lng required' }, 400);
+      const parsed = parseCoords(url);
+      if (parsed instanceof Response) return parsed;
+      const { lat, lng } = parsed;
 
       const tile = await findCoveringTile(env, lat, lng);
       return json({ status: tile?.status ?? 'none', tileId: tile?.tile_id ?? null });

@@ -49,7 +49,21 @@ def load_mapping(path):
     return json.load(open(path))
 
 def build_reverse_map(mapping):
-    return {v['category_id']: k for k, v in mapping.items()}
+    """Warns on category_id collisions instead of silently letting the last
+    key win — two PoiTypes sharing an id (e.g. fitness_center/gym, hotel/
+    lodging both map to Foursquare's single "Gym and Studio"/"Hotel" leaf)
+    means the loser never gets classified at all. Known collisions are
+    resolved via TYPE_MERGE_INCLUDES in cloudflare/src/index.ts, not here —
+    this warning exists so a *new*, unhandled collision doesn't go unnoticed."""
+    reverse = {}
+    for k, v in mapping.items():
+        cid = v['category_id']
+        if cid in reverse:
+            print(f"WARNING: category_id {cid} claimed by both '{reverse[cid]}' and '{k}' — "
+                  f"'{k}' wins classification, '{reverse[cid]}' gets zero rows unless merged "
+                  f"via TYPE_MERGE_INCLUDES in cloudflare/src/index.ts")
+        reverse[cid] = k
+    return reverse
 
 def classify(city_name, csv_path, out_sql_path):
     poi_types = load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'poiTypeCategories.json'))

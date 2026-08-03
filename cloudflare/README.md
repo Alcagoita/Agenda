@@ -21,8 +21,8 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
   geospatial support is still "exploring" per Cloudflare's own docs) —
   radius search uses geohash prefix range queries instead
   (`src/geohash.ts`), same algorithm reimplemented in Python for the
-  extraction script (`build/classify_and_load.py`) — the two must stay in
-  sync or radius queries silently miss rows.
+  extraction script (`extraction/classify_and_load.py`) — the two must stay
+  in sync or radius queries silently miss rows.
 
 ## Endpoints
 
@@ -92,7 +92,10 @@ just the 16-entry built-in catalog), `src/storeSubtypeCategories.json` (14),
 `src/foodSubtypeCategories.json` (10) — all hand-verified against the real
 1,279-row Foursquare taxonomy (`build/fsq_categories.csv`), not guessed.
 
-**Steps** (see `build/extract_*.sql`, `build/classify_and_load.py`):
+**Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
+— both must be run with `cloudflare/` as the working directory; the SQL
+files write to a relative `build/` path and the Python script resolves
+`build/` relative to its own location either way):
 1. Query `places_os` filtered to a city's bbox + our 90 category IDs
 2. Classify each row into a `poi_type` (+ `store_subtype`/`food_subtype` if
    applicable) by matching its Foursquare category IDs against the mapping
