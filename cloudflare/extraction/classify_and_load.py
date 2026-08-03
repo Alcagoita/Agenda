@@ -57,7 +57,14 @@ def classify(city_name, csv_path, out_sql_path):
     food_subtypes = load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'foodSubtypeCategories.json'))
 
     poi_reverse = build_reverse_map(poi_types)
-    store_reverse = build_reverse_map(store_subtypes)
+    # 'any' maps to the same generic "Retail" category id that poi_type=='store'
+    # itself is keyed on — every store row's tag array necessarily contains it
+    # (that's *why* it's classified as store), so 'any' must never compete in
+    # the subtype scan or it always wins before a real specific subtype (e.g.
+    # Bookstore) further down the same row's tag array ever gets checked.
+    # Real bug found via KAN-329 field testing: every single loaded store row
+    # came back store_subtype='any' — this is the fix.
+    store_reverse = {v['category_id']: k for k, v in store_subtypes.items() if k != 'any'}
     food_reverse = build_reverse_map(food_subtypes)
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
