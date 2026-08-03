@@ -1,10 +1,9 @@
 import { haversineMeters, neighborPrefixes, precisionForRadius, MAX_RADIUS_METERS } from './geohash';
 
 export interface Env {
-  // One shared D1 database for everything — Cloudflare Free plan caps at 10
-  // databases/account, so per-city databases don't scale past 10 cities.
-  // Holds both `coverage` (registry) and `poi` (all cities, keyed by
-  // tile_id) tables.
+  // One shared D1 database for everything — 10GB is D1's hard per-database
+  // ceiling regardless of plan tier, so per-city databases don't scale.
+  // Holds `city`, `poi` (all cities, keyed by city_id), and `build_log`.
   REGISTRY_DB: D1Database;
   POI_EXPORTS: R2Bucket;
   API_KEY: string;
@@ -12,12 +11,13 @@ export interface Env {
   BUILD_TRIGGER_SECRET?: string;
 }
 
-interface CoverageRow {
-  tile_id: string;
+interface CityRow {
+  city_id: string;
   status: 'none' | 'building' | 'ready';
   center_lat: number;
   center_lng: number;
   radius_km: number;
+  current_build_id: string | null;
   last_built_at: string | null;
 }
 
@@ -59,17 +59,17 @@ function parseCoordsAndRadius(url: URL): ParsedCoordsAndRadius | Response {
 }
 
 /**
- * Finds the registry tile whose coverage circle contains (lat, lng). Tiles can
+ * Finds the city whose coverage circle contains (lat, lng). Cities can
  * legitimately overlap (e.g. Odivelas sits inside Lisboa's wider radius) —
  * picks the nearest center among all matches, not just the first row, so a
  * point inside a suburb's own smaller circle resolves to the suburb, not the
  * larger city it happens to also be inside. Linear scan — fine while the
- * registry is small; revisit with geohash bucketing on `coverage` itself once
+ * city table is small; revisit with geohash bucketing on `city` itself once
  * city count grows.
  */
-async function findCoveringTile(env: Env, lat: number, lng: number): Promise<CoverageRow | null> {
-  const { results } = await env.REGISTRY_DB.prepare('SELECT * FROM coverage').all<CoverageRow>();
-  let best: CoverageRow | null = null;
+async function findCoveringCity(env: Env, lat: number, lng: number): Promise<CityRow | null> {
+  const { results } = await env.REGISTRY_DB.prepare('SELECT * FROM city').all<CityRow>();
+  let best: CityRow | null = null;
   let bestDistanceM = Infinity;
   for (const row of results) {
     const distanceM = haversineMeters(lat, lng, row.center_lat, row.center_lng);
@@ -123,7 +123,7 @@ function typesForSearch(poiType: string): string[] {
 
 async function queryPoiDb(
   db: D1Database,
-  tileId: string,
+  cityId: string,
   lat: number,
   lng: number,
   radiusMeters: number,
@@ -137,9 +137,9 @@ async function queryPoiDb(
   const typePlaceholders = types?.map(() => '?').join(',');
 
   const sql = types
-    ? `SELECT * FROM poi WHERE tile_id = ? AND poi_type IN (${typePlaceholders}) AND substr(geohash, 1, ${precision}) IN (${placeholders})`
-    : `SELECT * FROM poi WHERE tile_id = ? AND substr(geohash, 1, ${precision}) IN (${placeholders})`;
-  const binds = types ? [tileId, ...types, ...prefixes] : [tileId, ...prefixes];
+    ? `SELECT * FROM poi WHERE city_id = ? AND poi_type IN (${typePlaceholders}) AND substr(geohash, 1, ${precision}) IN (${placeholders})`
+    : `SELECT * FROM poi WHERE city_id = ? AND substr(geohash, 1, ${precision}) IN (${placeholders})`;
+  const binds = types ? [cityId, ...types, ...prefixes] : [cityId, ...prefixes];
 
   const { results } = await db.prepare(sql).bind(...binds).all<{
     fsq_place_id: string; name: string; lat: number; lng: number;
@@ -163,18 +163,65 @@ export default {
       if (request.headers.get('X-Build-Secret') !== env.BUILD_TRIGGER_SECRET) {
         return json({ error: 'unauthorized' }, 401);
       }
-      const body = await request.json<{ tileId?: unknown }>();
-      if (typeof body.tileId !== 'string' || body.tileId.trim() === '') {
-        return json({ error: 'tileId must be a non-empty string' }, 400);
+      const body = await request.json<{
+        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; status?: unknown;
+      }>();
+      if (typeof body.cityId !== 'string' || body.cityId.trim() === '') {
+        return json({ error: 'cityId must be a non-empty string' }, 400);
       }
-      const result = await env.REGISTRY_DB.prepare(
-        "UPDATE coverage SET status = 'ready', last_built_at = ? WHERE tile_id = ?",
-      ).bind(new Date().toISOString(), body.tileId).run();
-      if (result.meta.changes !== 1) {
-        // Silent no-op success previously masked a bad tileId (typo, unknown
+      if (typeof body.buildId !== 'string' || body.buildId.trim() === '') {
+        return json({ error: 'buildId must be a non-empty string' }, 400);
+      }
+      const now = new Date().toISOString();
+
+      // A crashed/errored extraction run (classify_and_load.py raised, the
+      // D1 load failed, etc.) previously had no way to close out its
+      // build_log row at all — it stayed 'building' forever with nothing
+      // to explain why. This path marks it 'failed' without touching
+      // `city` — a failed re-build of an already-served city must not
+      // un-ready it; the last successful build's data is still valid and
+      // still being served.
+      if (body.status === 'failed') {
+        const buildLogResult = await env.REGISTRY_DB.prepare(
+          "UPDATE build_log SET status = 'failed', finished_at = ? WHERE build_id = ? AND city_id = ?",
+        ).bind(now, body.buildId, body.cityId).run();
+        if (buildLogResult.meta.changes !== 1) {
+          return json({ error: `no build_log row matched buildId '${body.buildId}' for cityId '${body.cityId}'` }, 404);
+        }
+        return json({ ok: true, status: 'failed' });
+      }
+
+      // Batched so both updates either both apply or both roll back on a
+      // genuine execution error — previously two separate .run() calls
+      // could leave city flipped to 'ready' while build_log's update threw
+      // and never ran at all. Batch atomicity only covers real execution
+      // failures, not "0 rows matched" (a successful UPDATE that matched
+      // nothing isn't a batch error) — those are still checked afterward.
+      const [cityResult, buildLogResult] = await env.REGISTRY_DB.batch([
+        env.REGISTRY_DB.prepare(
+          "UPDATE city SET status = 'ready', current_build_id = ?, last_built_at = ? WHERE city_id = ?",
+        ).bind(body.buildId, now, body.cityId),
+        env.REGISTRY_DB.prepare(
+          "UPDATE build_log SET status = 'ready', finished_at = ?, rows_loaded = ?, rows_skipped = ? WHERE build_id = ? AND city_id = ?",
+        ).bind(
+          now,
+          typeof body.rowsLoaded === 'number' ? body.rowsLoaded : null,
+          typeof body.rowsSkipped === 'number' ? body.rowsSkipped : null,
+          body.buildId, body.cityId,
+        ),
+      ]);
+
+      if (cityResult.meta.changes !== 1) {
+        // Silent no-op success previously masked a bad cityId (typo, unknown
         // city) — the build pipeline would report success while coverage
         // stayed stuck in 'building' forever with nothing to explain why.
-        return json({ error: `no coverage row matched tileId '${body.tileId}'` }, 404);
+        return json({ error: `no city row matched cityId '${body.cityId}'` }, 404);
+      }
+      if (buildLogResult.meta.changes !== 1) {
+        // The city row already flipped to 'ready' above — don't roll that
+        // back over a missing build_log row (e.g. an older loader run that
+        // predates this table). Surface it, don't fail the whole request.
+        return json({ ok: true, warning: `no build_log row matched buildId '${body.buildId}' for cityId '${body.cityId}'` });
       }
       return json({ ok: true });
     }
@@ -190,12 +237,12 @@ export default {
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius } = parsed;
 
-      const tile = await findCoveringTile(env, lat, lng);
-      if (!tile || tile.status !== 'ready') {
-        return json({ covered: false, status: tile?.status ?? 'none', results: [] });
+      const city = await findCoveringCity(env, lat, lng);
+      if (!city || city.status !== 'ready') {
+        return json({ covered: false, status: city?.status ?? 'none', results: [] });
       }
-      const results = await queryPoiDb(env.REGISTRY_DB, tile.tile_id, lat, lng, radius, poiType);
-      return json({ covered: true, tileId: tile.tile_id, results });
+      const results = await queryPoiDb(env.REGISTRY_DB, city.city_id, lat, lng, radius, poiType);
+      return json({ covered: true, cityId: city.city_id, results });
     }
 
     // GET /poi/all?lat=&lng=&radius=  — all cached POI types within a radius
@@ -204,12 +251,12 @@ export default {
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius } = parsed;
 
-      const tile = await findCoveringTile(env, lat, lng);
-      if (!tile || tile.status !== 'ready') {
-        return json({ covered: false, status: tile?.status ?? 'none', results: [] });
+      const city = await findCoveringCity(env, lat, lng);
+      if (!city || city.status !== 'ready') {
+        return json({ covered: false, status: city?.status ?? 'none', results: [] });
       }
-      const results = await queryPoiDb(env.REGISTRY_DB, tile.tile_id, lat, lng, radius, null);
-      return json({ covered: true, tileId: tile.tile_id, results });
+      const results = await queryPoiDb(env.REGISTRY_DB, city.city_id, lat, lng, radius, null);
+      return json({ covered: true, cityId: city.city_id, results });
     }
 
     // GET /coverage?lat=&lng=  — is this location ready / building / none?
@@ -218,8 +265,8 @@ export default {
       if (parsed instanceof Response) return parsed;
       const { lat, lng } = parsed;
 
-      const tile = await findCoveringTile(env, lat, lng);
-      return json({ status: tile?.status ?? 'none', tileId: tile?.tile_id ?? null });
+      const city = await findCoveringCity(env, lat, lng);
+      return json({ status: city?.status ?? 'none', cityId: city?.city_id ?? null });
     }
 
     // POST /coverage/request  { lat, lng }  — trigger a build for an uncovered area
@@ -230,17 +277,17 @@ export default {
         return json({ error: 'lat/lng required' }, 400);
       }
 
-      const existing = await findCoveringTile(env, lat, lng);
+      const existing = await findCoveringCity(env, lat, lng);
       if (existing) {
         // Already covered or already building — dedup, no-op.
-        return json({ status: existing.status, tileId: existing.tile_id });
+        return json({ status: existing.status, cityId: existing.city_id });
       }
 
-      // No tile for this area at all yet. Real auto-provisioning (new D1 DB +
-      // wrangler binding + Cloud Function trigger) is follow-up work — for
-      // now this just reports that nothing exists so the client falls back
-      // to OSM locally, without creating a phantom registry row.
-      return json({ status: 'none', tileId: null, note: 'auto-provisioning not yet implemented' });
+      // No city for this area at all yet. Real auto-provisioning (new city
+      // row + Cloud Function trigger) is follow-up work — for now this just
+      // reports that nothing exists so the client falls back to OSM
+      // locally, without creating a phantom city row.
+      return json({ status: 'none', cityId: null, note: 'auto-provisioning not yet implemented' });
     }
 
     return json({ error: 'not found' }, 404);

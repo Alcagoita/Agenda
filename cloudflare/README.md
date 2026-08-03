@@ -7,12 +7,21 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
 ## Architecture
 
 - **Workers** (`src/index.ts`) — the API. Deployed at `poi-api.brushaway.app`.
-- **D1** — one shared database (`brush-poi-registry`) for everything: a
-  `coverage` table (which cities exist, build status) and a `poi` table (all
-  cities' places, scoped by a `tile_id` column). **Not** one database per
-  city — Cloudflare Free plan caps at 10 databases/account, which breaks past
-  10 cities. One shared table scales to ~70+ cities before approaching the
-  500MB Free-plan per-database ceiling, at current ~7MB/city average.
+- **D1** — one shared database (`brush-poi-registry`) for everything: `city`
+  (which settlements exist, build status), `poi` (all cities' places, scoped
+  by a `city_id` column), and `build_log` (one row per extraction run —
+  KAN-333's build lifecycle). **Not** one database per city — 10GB is D1's
+  hard per-database ceiling regardless of plan tier, which breaks past a
+  relatively small number of cities if sharded that way. One shared table
+  scales much further, at current ~7MB/city average.
+- **Build lifecycle** (KAN-333): every load tags its `poi` rows with a fresh
+  `build_id`. Loading is `INSERT OR REPLACE` on the `(city_id, fsq_place_id)`
+  PK, so a place present in both the old and new build just updates in
+  place. After loading, a sweep (`DELETE ... WHERE city_id = ? AND build_id
+  != ?`) retires anything that didn't reappear (closed places) — see the
+  comment at the top of `schema.sql` for the non-atomicity tradeoff.
+  `/internal/build-complete` closes out both `city.status` and the matching
+  `build_log` row.
 - **R2** (`brush-poi-exports`) — bucket exists, provisioned, but **nothing
   writes to it yet**. Meant to hold per-city downloadable SQLite extracts for
   client-side local caching — that flow needs the client integration ticket's
@@ -34,10 +43,12 @@ separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
 - `GET /coverage?lat=&lng=` — `none` / `building` / `ready` for this location
 - `POST /coverage/request` `{lat,lng}` — trigger a build for an uncovered
   area. **Not implemented yet** — currently just reports `none`. Real
-  auto-provisioning (new tile_id row + Cloud Function trigger) is follow-up
+  auto-provisioning (new city row + Cloud Function trigger) is follow-up
   work, deliberately out of this ticket's scope.
-- `POST /internal/build-complete` `{tileId}` — called by the extraction
-  pipeline once a city's rows are loaded; flips `coverage.status` to `ready`.
+- `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?}`
+  — called by the extraction pipeline once a city's rows are loaded; flips
+  `city.status` to `ready`, sets `city.current_build_id`, and closes out the
+  matching `build_log` row.
 
 ## Local setup
 
@@ -99,8 +110,13 @@ files write to a relative `build/` path and the Python script resolves
 1. Query `places_os` filtered to a city's bbox + our 90 category IDs
 2. Classify each row into a `poi_type` (+ `store_subtype`/`food_subtype` if
    applicable) by matching its Foursquare category IDs against the mapping
-   files, compute its geohash
-3. Batch `INSERT OR REPLACE` into the shared D1 `poi` table
+   files, compute its geohash, tag every row with a fresh `build_id`
+3. Write a `build_log` start row, then batch `INSERT OR REPLACE` into the
+   shared D1 `poi` table, then a sweep `DELETE` retiring the previous
+   build's rows for that city
+4. Call `/internal/build-complete` (the script prints the exact `curl`
+   command with the real `build_id`/counts) to close out `city.status` and
+   `build_log`
 
 ### Rows-written cost — real constraint, watch this before the next city
 
