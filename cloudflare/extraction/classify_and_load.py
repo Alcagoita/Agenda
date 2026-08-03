@@ -129,26 +129,58 @@ def classify(city_name, csv_path, out_sql_path):
     print(f"[{city_name}] classified {len(rows_out)} rows, skipped {skipped} (no matching poi_type)")
     print(f"[{city_name}] top types: {sorted(type_counts.items(), key=lambda x: -x[1])[:15]}")
 
-    BATCH = 200
+    # Size-aware batching, not a fixed row count. D1's confirmed hard limits
+    # are 100KB per statement and 100 bound parameters per query (this pipeline
+    # inlines values as literals, not bound params, so the byte-size cap is
+    # the one that matters here) — a fixed 200-rows-per-batch assumption
+    # breaks the moment a row gets wider (raw category ids, attributes,
+    # brand — all planned in later schema-v2 phases). Flush at ~80KB per
+    # INSERT, well under the 100KB hard cap, so future wider rows don't
+    # silently blow the limit.
+    MAX_STATEMENT_BYTES = 80_000
+    INSERT_PREFIX = (
+        'INSERT OR REPLACE INTO poi '
+        '(fsq_place_id, tile_id, name, lat, lng, geohash, poi_type, store_subtype, food_subtype, category_label, address, date_refreshed) '
+        'VALUES '
+    )
+
+    def byte_len(s):
+        # D1's statement-size cap is bytes, not characters — Portuguese
+        # names have accented characters that are multi-byte in UTF-8
+        # (ç, ã, é, ...), so len() alone undercounts real payload size.
+        return len(s.encode('utf-8'))
+
+    def row_sql(r):
+        return '(' + ','.join([
+            sql_escape(r[0]), sql_escape(r[1]), sql_escape(r[2]), str(r[3]), str(r[4]),
+            sql_escape(r[5]), sql_escape(r[6]), sql_escape(r[7]),
+            sql_escape(r[8]), sql_escape(r[9]), sql_escape(r[10]),
+            sql_escape(r[11]),
+        ]) + ')'
+
+    batches_written = 0
     with open(out_sql_path, 'w') as f:
-        for i in range(0, len(rows_out), BATCH):
-            batch = rows_out[i:i + BATCH]
+        values: list[str] = []
+        size = byte_len(INSERT_PREFIX) + byte_len(';\n')
+
+        def flush():
+            nonlocal values, size, batches_written
+            if not values:
+                return
+            f.write(INSERT_PREFIX + ','.join(values) + ';\n')
+            batches_written += 1
             values = []
-            for r in batch:
-                values.append(
-                    '(' + ','.join([
-                        sql_escape(r[0]), sql_escape(r[1]), sql_escape(r[2]), str(r[3]), str(r[4]),
-                        sql_escape(r[5]), sql_escape(r[6]), sql_escape(r[7]),
-                        sql_escape(r[8]), sql_escape(r[9]), sql_escape(r[10]),
-                        sql_escape(r[11]),
-                    ]) + ')'
-                )
-            f.write(
-                'INSERT OR REPLACE INTO poi '
-                '(fsq_place_id, tile_id, name, lat, lng, geohash, poi_type, store_subtype, food_subtype, category_label, address, date_refreshed) '
-                'VALUES ' + ','.join(values) + ';\n'
-            )
-    print(f"[{city_name}] wrote {out_sql_path}")
+            size = byte_len(INSERT_PREFIX) + byte_len(';\n')
+
+        for r in rows_out:
+            piece = row_sql(r)
+            piece_size = byte_len(piece) + 1  # +1 for the joining comma
+            if values and size + piece_size > MAX_STATEMENT_BYTES:
+                flush()
+            values.append(piece)
+            size += piece_size
+        flush()
+    print(f"[{city_name}] wrote {out_sql_path} ({batches_written} statements, ~{MAX_STATEMENT_BYTES // 1000}KB each max)")
 
 if __name__ == '__main__':
     city = sys.argv[1]
