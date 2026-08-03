@@ -175,6 +175,16 @@ def classify(city_name, csv_path, out_sql_path):
         for r in rows_out:
             piece = row_sql(r)
             piece_size = byte_len(piece) + 1  # +1 for the joining comma
+            # A single row that can't fit even alone in a fresh statement
+            # would otherwise be silently appended anyway — not caught here,
+            # not caught until the actual D1 execute fails later with a
+            # confusing native error instead of a clear one now.
+            solo_size = byte_len(INSERT_PREFIX) + byte_len(piece) + byte_len(';\n')
+            if solo_size > MAX_STATEMENT_BYTES:
+                raise ValueError(
+                    f"[{city_name}] row {r[0]} ({r[2]!r}) is {solo_size} bytes alone, "
+                    f"exceeds MAX_STATEMENT_BYTES ({MAX_STATEMENT_BYTES}) even in its own statement"
+                )
             if values and size + piece_size > MAX_STATEMENT_BYTES:
                 flush()
             values.append(piece)
