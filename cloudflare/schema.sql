@@ -13,6 +13,11 @@
 -- (closed places). Not atomic with the load — a closed place can linger
 -- for the duration of one load cycle between the two steps, never longer,
 -- never duplicated.
+--
+-- primary_poi_type (KAN-335): display/icon only — a place can genuinely
+-- match more than one type, and search matches against the poi_type table
+-- (poi_type_schema.sql), not this column. Deliberate denormalization: every
+-- result needs exactly one icon/label, and that shouldn't cost a join.
 
 CREATE TABLE IF NOT EXISTS poi (
   fsq_place_id        TEXT NOT NULL,
@@ -22,9 +27,9 @@ CREATE TABLE IF NOT EXISTS poi (
   lat                 REAL NOT NULL,
   lng                 REAL NOT NULL,
   geohash             TEXT NOT NULL,          -- precision 7 (~150m cell), prefix-queried for radius search
-  poi_type            TEXT NOT NULL,          -- Brush PoiType / poiDictionary key this row was classified into
-  store_subtype       TEXT,                   -- only set when poi_type = 'store'
-  food_subtype        TEXT,                   -- only set when poi_type = 'restaurant'
+  primary_poi_type    TEXT NOT NULL,          -- display/icon only — see poi_type table for the full match set
+  store_subtype       TEXT,                   -- only set when a matched type = 'store'
+  food_subtype        TEXT,                   -- only set when a matched type = 'restaurant'
   category_label      TEXT,                   -- raw Foursquare category hierarchy, for debugging/display
   raw_category_ids    TEXT,                   -- '|'-joined fsq category ids, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
   raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
