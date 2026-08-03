@@ -22,4 +22,7 @@ CREATE TABLE IF NOT EXISTS poi_type (
   PRIMARY KEY (city_id, fsq_place_id, poi_type)
 );
 
-CREATE INDEX IF NOT EXISTS idx_poi_type_lookup ON poi_type (city_id, poi_type);
+-- No secondary index: the only lookup against this table (index.ts EXISTS
+-- subquery) filters on (city_id, fsq_place_id), the PK's own leading
+-- columns — already covered. A (city_id, poi_type) index would never be
+-- hit by that predicate shape, so it'd cost write overhead for nothing.
