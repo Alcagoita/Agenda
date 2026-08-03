@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS poi (
   store_subtype       TEXT,                   -- only set when poi_type = 'store'
   food_subtype        TEXT,                   -- only set when poi_type = 'restaurant'
   category_label      TEXT,                   -- raw Foursquare category hierarchy, for debugging/display
-  raw_category_ids    TEXT,                   -- '|'-joined fsq category ids, verbatim — nullable until Phase 2 (KAN-334) populates it
-  raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — nullable until Phase 2 (KAN-334) populates it
+  raw_category_ids    TEXT,                   -- '|'-joined fsq category ids, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
+  raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
   address             TEXT,
   date_refreshed      TEXT NOT NULL,
   PRIMARY KEY (city_id, fsq_place_id)         -- same place could theoretically appear in two overlapping cities

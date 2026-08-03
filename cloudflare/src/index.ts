@@ -164,7 +164,7 @@ export default {
         return json({ error: 'unauthorized' }, 401);
       }
       const body = await request.json<{
-        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown;
+        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; status?: unknown;
       }>();
       if (typeof body.cityId !== 'string' || body.cityId.trim() === '') {
         return json({ error: 'cityId must be a non-empty string' }, 400);
@@ -172,26 +172,51 @@ export default {
       if (typeof body.buildId !== 'string' || body.buildId.trim() === '') {
         return json({ error: 'buildId must be a non-empty string' }, 400);
       }
-
       const now = new Date().toISOString();
-      const cityResult = await env.REGISTRY_DB.prepare(
-        "UPDATE city SET status = 'ready', current_build_id = ?, last_built_at = ? WHERE city_id = ?",
-      ).bind(body.buildId, now, body.cityId).run();
+
+      // A crashed/errored extraction run (classify_and_load.py raised, the
+      // D1 load failed, etc.) previously had no way to close out its
+      // build_log row at all — it stayed 'building' forever with nothing
+      // to explain why. This path marks it 'failed' without touching
+      // `city` — a failed re-build of an already-served city must not
+      // un-ready it; the last successful build's data is still valid and
+      // still being served.
+      if (body.status === 'failed') {
+        const buildLogResult = await env.REGISTRY_DB.prepare(
+          "UPDATE build_log SET status = 'failed', finished_at = ? WHERE build_id = ? AND city_id = ?",
+        ).bind(now, body.buildId, body.cityId).run();
+        if (buildLogResult.meta.changes !== 1) {
+          return json({ error: `no build_log row matched buildId '${body.buildId}' for cityId '${body.cityId}'` }, 404);
+        }
+        return json({ ok: true, status: 'failed' });
+      }
+
+      // Batched so both updates either both apply or both roll back on a
+      // genuine execution error — previously two separate .run() calls
+      // could leave city flipped to 'ready' while build_log's update threw
+      // and never ran at all. Batch atomicity only covers real execution
+      // failures, not "0 rows matched" (a successful UPDATE that matched
+      // nothing isn't a batch error) — those are still checked afterward.
+      const [cityResult, buildLogResult] = await env.REGISTRY_DB.batch([
+        env.REGISTRY_DB.prepare(
+          "UPDATE city SET status = 'ready', current_build_id = ?, last_built_at = ? WHERE city_id = ?",
+        ).bind(body.buildId, now, body.cityId),
+        env.REGISTRY_DB.prepare(
+          "UPDATE build_log SET status = 'ready', finished_at = ?, rows_loaded = ?, rows_skipped = ? WHERE build_id = ? AND city_id = ?",
+        ).bind(
+          now,
+          typeof body.rowsLoaded === 'number' ? body.rowsLoaded : null,
+          typeof body.rowsSkipped === 'number' ? body.rowsSkipped : null,
+          body.buildId, body.cityId,
+        ),
+      ]);
+
       if (cityResult.meta.changes !== 1) {
         // Silent no-op success previously masked a bad cityId (typo, unknown
         // city) — the build pipeline would report success while coverage
         // stayed stuck in 'building' forever with nothing to explain why.
         return json({ error: `no city row matched cityId '${body.cityId}'` }, 404);
       }
-
-      const buildLogResult = await env.REGISTRY_DB.prepare(
-        "UPDATE build_log SET status = 'ready', finished_at = ?, rows_loaded = ?, rows_skipped = ? WHERE build_id = ? AND city_id = ?",
-      ).bind(
-        now,
-        typeof body.rowsLoaded === 'number' ? body.rowsLoaded : null,
-        typeof body.rowsSkipped === 'number' ? body.rowsSkipped : null,
-        body.buildId, body.cityId,
-      ).run();
       if (buildLogResult.meta.changes !== 1) {
         // The city row already flipped to 'ready' above — don't roll that
         // back over a missing build_log row (e.g. an older loader run that

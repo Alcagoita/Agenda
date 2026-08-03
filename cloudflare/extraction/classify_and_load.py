@@ -85,6 +85,12 @@ def classify(city_id, csv_path, out_sql_path):
     food_reverse = build_reverse_map(food_subtypes)
 
     build_id = str(uuid.uuid4())
+    # Printed immediately, not just on success — if this crashes partway
+    # through (bad row, D1 load failure, etc.), this is the only place the
+    # build_id is visible at all, and it's needed to close out build_log as
+    # 'failed' via POST /internal/build-complete {cityId, buildId,
+    # status:'failed'} instead of leaving that row stuck at 'building' forever.
+    print(f"[{city_id}] build_id={build_id} (starting)")
     started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     rows_out = []
     type_counts = {}
