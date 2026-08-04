@@ -68,7 +68,7 @@ function parseCoords(url: URL): ParsedCoords | Response {
   return { lat, lng };
 }
 
-/** parseCoords plus radius bounds — must be finite, positive, and within what the geohash 3x3 window can safely cover (see MAX_RADIUS_METERS). A NaN/negative/oversized radius previously fell through to an always-empty or silently-incomplete result instead of a clear error. */
+/** parseCoords plus radius bounds — must be finite, positive, and within MAX_RADIUS_METERS (a sanity cap on query size, not a geohash-safety bound — see neighborPrefixes, which now sizes its search grid to whatever the radius/latitude actually require rather than assuming a fixed window is always enough). A NaN/negative/oversized radius previously fell through to an always-empty or silently-incomplete result instead of a clear error. */
 function parseCoordsAndRadius(url: URL): ParsedCoordsAndRadius | Response {
   const coords = parseCoords(url);
   if (coords instanceof Response) return coords;
@@ -168,7 +168,7 @@ async function queryPoiDb(
   attributeFilter: AttributeFilter | null,
 ) {
   const precision = precisionForRadius(radiusMeters);
-  const prefixes = neighborPrefixes(lat, lng, precision);
+  const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
   const placeholders = prefixes.map(() => '?').join(',');
 
   const types = poiType ? await typesForSearch(db, poiType) : null;
