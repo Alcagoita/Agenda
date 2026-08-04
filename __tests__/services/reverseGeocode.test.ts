@@ -9,6 +9,10 @@
 // maps.ts pulls in placesFunctions -> @react-native-firebase/functions (native,
 // unavailable under Jest), and reverseGeocodeCache -> expo-sqlite. Stub both.
 jest.mock('../../src/services/placesFunctions', () => ({}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 jest.mock('../../src/services/reverseGeocodeCache', () => ({
   getCachedCity: jest.fn(() => ({ hit: false, city: null })),
   putCachedCity: jest.fn(),

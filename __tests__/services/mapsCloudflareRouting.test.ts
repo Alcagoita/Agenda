@@ -1,18 +1,19 @@
 /**
  * KAN-342 — searchNearbyPlaces tries Brush's own Cloudflare POI database
- * first (covered cities), falls through to Google on anything else.
+ * first (covered cities), falls through to OSM (not Google) for anything
+ * else. Google Places has no role in this function's path anymore.
  *
  * Covers:
  *   - covered + ready: Cloudflare results used, bucketed by primary_poi_type,
- *     distance-sorted — Google never called
- *   - not covered (status 'none'/'building'): falls through to Google
- *   - Cloudflare coverage check throws: falls through to Google, no throw
- *   - Cloudflare poi/all throws after a ready coverage check: falls through to Google
- *   - covered + ready but genuinely empty results: trusted as final, Google
+ *     distance-sorted — OSM never called
+ *   - not covered (status 'none'/'building'): falls through to OSM
+ *   - Cloudflare coverage check throws: falls through to OSM, no throw
+ *   - Cloudflare poi/all throws after a ready coverage check: falls through to OSM
+ *   - covered + ready but genuinely empty results: trusted as final, OSM
  *     never called (an authoritative "nothing here" must not be second-guessed)
  */
 import { searchNearbyPlaces } from '../../src/services/maps';
-import { searchNearbyPlacesProxy } from '../../src/services/placesFunctions';
+import { searchOsmPlacesStrict } from '../../src/services/osmPlaces';
 import { cloudflareCoverageProxy, cloudflarePoiAllProxy } from '../../src/services/cloudflarePoiFunctions';
 
 jest.mock('../../src/services/placesFunctions', () => ({
@@ -26,6 +27,10 @@ jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
   cloudflarePoiAllProxy:   jest.fn(),
 }));
 
+jest.mock('../../src/services/osmPlaces', () => ({
+  searchOsmPlacesStrict: jest.fn(),
+}));
+
 // reverseGeocodeCache -> expo-sqlite, unavailable under Jest — stub it, same
 // pattern as nominatimAutocomplete.test.ts / reverseGeocode.test.ts.
 jest.mock('../../src/services/reverseGeocodeCache', () => ({
@@ -35,13 +40,14 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
 
 const mockCoverage = cloudflareCoverageProxy as jest.Mock;
 const mockPoiAll = cloudflarePoiAllProxy as jest.Mock;
-const mockGoogleSearch = searchNearbyPlacesProxy as jest.Mock;
+const mockOsmSearch = searchOsmPlacesStrict as jest.Mock;
 
 const LAT = 38.7223, LNG = -9.1393, RADIUS = 500;
 
-describe('searchNearbyPlaces — Cloudflare-first routing', () => {
+describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOsmSearch.mockResolvedValue({});
   });
 
   it('uses Cloudflare results when the city is covered and ready, bucketed by primary_poi_type and distance-sorted', async () => {
@@ -59,44 +65,67 @@ describe('searchNearbyPlaces — Cloudflare-first routing', () => {
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
     expect(result.cafe.map(p => p.placeId)).toEqual(['near', 'far']);
-    expect(mockGoogleSearch).not.toHaveBeenCalled();
+    expect(mockOsmSearch).not.toHaveBeenCalled();
   });
 
-  it('falls through to Google when the city is not covered', async () => {
+  it('falls through to OSM when the city is not covered', async () => {
     mockCoverage.mockResolvedValue({ status: 'none', cityId: null });
-    mockGoogleSearch.mockResolvedValue({ places: [] });
+    mockOsmSearch.mockResolvedValue({
+      cafe: [{ osmId: 'node/1', name: 'OSM Cafe', isGenericName: false, lat: LAT, lng: LNG, distanceMeters: 30, footprintAreaM2: 0 }],
+    });
 
-    await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
+    const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
     expect(mockPoiAll).not.toHaveBeenCalled();
-    expect(mockGoogleSearch).toHaveBeenCalled();
+    expect(mockOsmSearch).toHaveBeenCalledWith(LAT, LNG, ['cafe'], RADIUS);
+    expect(result.cafe.map(p => p.placeId)).toEqual(['node/1']);
   });
 
-  it('falls through to Google when the coverage check itself throws', async () => {
+  it('falls through to OSM when the coverage check itself throws', async () => {
     mockCoverage.mockRejectedValue(new Error('network error'));
-    mockGoogleSearch.mockResolvedValue({ places: [] });
 
     await expect(searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS)).resolves.toBeDefined();
-    expect(mockGoogleSearch).toHaveBeenCalled();
+    expect(mockOsmSearch).toHaveBeenCalled();
   });
 
-  it('falls through to Google when poi/all throws after a ready coverage check', async () => {
+  it('falls through to OSM when poi/all throws after a ready coverage check', async () => {
     mockCoverage.mockResolvedValue({ status: 'ready', cityId: 'lisboa' });
     mockPoiAll.mockRejectedValue(new Error('radius rejected'));
-    mockGoogleSearch.mockResolvedValue({ places: [] });
 
     await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
-    expect(mockGoogleSearch).toHaveBeenCalled();
+    expect(mockOsmSearch).toHaveBeenCalled();
   });
 
-  it('trusts a genuinely empty covered result as final — does not fall through to Google', async () => {
+  it('trusts a genuinely empty covered result as final — does not fall through to OSM', async () => {
     mockCoverage.mockResolvedValue({ status: 'ready', cityId: 'lisboa' });
     mockPoiAll.mockResolvedValue({ covered: true, cityId: 'lisboa', results: [] });
 
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
     expect(result.cafe).toEqual([]);
-    expect(mockGoogleSearch).not.toHaveBeenCalled();
+    expect(mockOsmSearch).not.toHaveBeenCalled();
+  });
+
+  // KAN-342 review: searchOsmPlacesStrict (not the lenient searchOsmPlaces)
+  // is used deliberately — proximity.ts's offline retry-queue depends on
+  // catching a real thrown error to distinguish "couldn't look" (retry
+  // later) from "looked, found nothing" (a settled answer). Collapsing both
+  // into an empty result would silently break that distinction. See
+  // tripDownload.ts for the same choice made for the same reason.
+  it('AC: a genuine OSM network failure propagates as a thrown error, not an empty result', async () => {
+    mockCoverage.mockResolvedValue({ status: 'none', cityId: null });
+    mockOsmSearch.mockRejectedValue(new Error('Overpass: all endpoints failed'));
+
+    await expect(searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS)).rejects.toThrow('Overpass: all endpoints failed');
+  });
+
+  it('AC: OSM genuinely finding zero results resolves normally (the settled path), not a throw', async () => {
+    mockCoverage.mockResolvedValue({ status: 'none', cityId: null });
+    mockOsmSearch.mockResolvedValue({ cafe: [] });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
+
+    expect(result.cafe).toEqual([]);
   });
 });

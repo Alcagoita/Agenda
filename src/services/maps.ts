@@ -21,11 +21,11 @@ import type { Feature, Polygon } from 'geojson';
 import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
-  searchNearbyPlacesProxy,
 } from './placesFunctions';
 import { cloudflareCoverageProxy, cloudflarePoiAllProxy } from './cloudflarePoiFunctions';
+import { searchOsmPlacesStrict } from './osmPlaces';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
-import { Category, PoiType, POI_GOOGLE_TYPES, poiCatalogLabel } from '../types';
+import { Category, PoiType, poiCatalogLabel } from '../types';
 import type { RestaurantFoodType } from './restaurantFoodTypes';
 import type { StoreSubtype } from './storeSubtypes';
 
@@ -76,44 +76,16 @@ export interface NearbyPlace {
   storeSubtype?: StoreSubtype;
 }
 
-// ─── Internal Places API types ─────────────────────────────────────────────────
-
-interface PlacesApiPlace {
-  id: string;
-  displayName?: { text: string; languageCode?: string };
-  location?: { latitude: number; longitude: number };
-  types?: string[];
-  /** Google's own single "this IS its type" field — unlike `types` (whose
-   *  order isn't guaranteed to put the primary type first), this is the
-   *  reliable one for anything that needs to trust a SPECIFIC type. */
-  primaryType?: string;
-}
-
-interface PlacesApiResponse {
-  places?: PlacesApiPlace[];
-}
-
 // ─── Haversine distance ────────────────────────────────────────────────────────
+//
+// Moved to geoDistance.ts (KAN-342) — osmPlaces.ts needs it and maps.ts now
+// needs osmPlaces.ts (the OSM failsafe in searchNearbyPlaces below), so it
+// can't live in either file without creating a cycle. Re-exported here so
+// every existing `from './maps'` import site is unaffected.
 
 const DEG_TO_RAD = Math.PI / 180;
 
-/**
- * Returns the great-circle distance in metres between two lat/lng pairs.
- * Accurate enough for geofence radii of 50–75 m.
- */
-export function getDistanceMeters(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
-): number {
-  const R = 6_371_000; // Earth radius in metres
-  const dLat = (lat2 - lat1) * DEG_TO_RAD;
-  const dLng = (lng2 - lng1) * DEG_TO_RAD;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * DEG_TO_RAD) * Math.cos(lat2 * DEG_TO_RAD) *
-    Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+export { getDistanceMeters } from './geoDistance';
 
 // ─── Reverse geocoding — city / area name (KAN-301) ────────────────────────────
 //
@@ -300,23 +272,30 @@ async function searchNearbyPlacesCloudflare(
 }
 
 /**
- * Search for places of all given POI types within `radiusMeters` of `lat`/`lng`
- * in a SINGLE Places API call.
+ * Search for places of all given POI types within `radiusMeters` of `lat`/`lng`.
  *
- * `poiTypes` accepts our internal PoiType keys (mapped via POI_GOOGLE_TYPES) or
- * arbitrary Google Places primary type strings for custom categories. All types
- * are sent together in `includedTypes` so the API returns matches for any of
- * them in one round-trip.
+ * `poiTypes` accepts our internal PoiType keys.
  *
  * Returns a map keyed by the original poiType, each entry sorted ascending by
- * straight-line distance (up to 5 candidates per type).
+ * straight-line distance.
  *
- * Tries Brush's own Cloudflare POI database first (see
- * searchNearbyPlacesCloudflare) — falls through to Google below on any
- * failure or non-coverage, never throws from the Cloudflare attempt itself.
+ * KAN-342: tries Brush's own Cloudflare POI database first (see
+ * searchNearbyPlacesCloudflare) for cities it covers. Falls through to OSM
+ * — not Google — for everywhere else: OSM is the failsafe, Google Places is
+ * no longer part of this function's path.
  *
- * Throws on network error, timeout (8 s), or non-200 response — from the
- * Google fallback path only.
+ * Uses searchOsmPlacesStrict, not the lenient searchOsmPlaces (same choice
+ * tripDownload.ts already made, for the same reason — see there) — this
+ * function's only caller, proximity.ts, distinguishes "couldn't look"
+ * (network failure — retry later, meanwhile answer from the habitat cache)
+ * from "looked, found nothing" (a settled, real answer) by catching a
+ * thrown error here. Collapsing both into the same empty-result value would
+ * silently break that distinction, not just look different: the offline
+ * retry-queue and messaging both depend on it. The Cloudflare attempt above
+ * still never throws (a covered city's own failure isn't "we're offline",
+ * it's "fall back to OSM and let OSM's real network state decide").
+ * Background/best-effort callers (habitatCache.ts's own prefetch) still use
+ * the lenient searchOsmPlaces, unchanged — silence is correct there.
  */
 export async function searchNearbyPlaces(
   lat: number,
@@ -329,58 +308,20 @@ export async function searchNearbyPlaces(
   const cloudflareResult = await searchNearbyPlacesCloudflare(lat, lng, poiTypes, radiusMeters);
   if (cloudflareResult) { return cloudflareResult; }
 
-  // Map internal type keys → Google Places primary type strings.
-  const googleTypes = poiTypes.map(t => POI_GOOGLE_TYPES[t as PoiType] ?? t);
+  const osmResults = await searchOsmPlacesStrict(lat, lng, poiTypes, radiusMeters);
 
-  // Reverse map for grouping results back by our internal key.
-  const googleToInternal: Record<string, string> = {};
-  for (let i = 0; i < poiTypes.length; i++) {
-    googleToInternal[googleTypes[i]] = poiTypes[i];
-  }
-
-  const data = await searchNearbyPlacesProxy(lat, lng, googleTypes, radiusMeters) as PlacesApiResponse;
-
-  // Initialise result buckets for every requested type.
   const result: Record<string, NearbyPlace[]> = {};
-  for (const poiType of poiTypes) { result[poiType] = []; }
-
-  for (const p of data.places ?? []) {
-    if (!p.location) { continue; }
-    const placeLat = p.location.latitude;
-    const placeLng = p.location.longitude;
-    const nearbyPlace: NearbyPlace = {
-      placeId:        p.id,
-      name:           p.displayName?.text ?? 'Unknown',
-      lat:            placeLat,
-      lng:            placeLng,
-      distanceMeters: getDistanceMeters(lat, lng, placeLat, placeLng),
-      primaryType:    p.primaryType,
-      types:          p.types,
-    };
-
-    // Assign this place to the first requested type it matches — this is
-    // "did it match ANY of what we asked for", not "this IS its type"; see
-    // NearbyPlace.primaryType for anything that needs the latter.
-    for (const placeType of (p.types ?? [])) {
-      const internalType = googleToInternal[placeType];
-      if (internalType && result[internalType]) {
-        result[internalType].push(nearbyPlace);
-        break;
-      }
-    }
-  }
-
-  // Sort each bucket — no extra cap here. Google's own searchNearby request
-  // already caps at maxResultCount: 20 (functions/src/places.ts) and returns
-  // them ranked by distance; re-truncating to 5 on top of that (KAN-282
-  // review) meant a POI type's nearest 5 instances across the WHOLE radius
-  // could all be elsewhere, shutting out the one actually inside a specific
-  // venue (e.g. a shopping mall) that a caller like resolveTaskDestination
-  // would otherwise have found further down Google's own top-20.
   for (const poiType of poiTypes) {
-    result[poiType].sort((a, b) => a.distanceMeters - b.distanceMeters);
+    result[poiType] = (osmResults[poiType] ?? []).map(place => ({
+      placeId:         place.osmId,
+      name:            place.name,
+      lat:             place.lat,
+      lng:             place.lng,
+      distanceMeters:  place.distanceMeters,
+      footprintAreaM2: place.footprintAreaM2,
+      website:         place.website,
+    }));
   }
-
   return result;
 }
 

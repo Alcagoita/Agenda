@@ -19,6 +19,10 @@ const mockGetPlaceDetailsProxy = jest.fn();
 jest.mock('../../src/services/placesFunctions', () => ({
   getPlaceDetailsProxy: (...args: unknown[]) => mockGetPlaceDetailsProxy(...args),
 }));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 jest.mock('../../src/services/reverseGeocodeCache', () => ({
   getCachedCity: jest.fn(() => ({ hit: false, city: null })),
   putCachedCity: jest.fn(),

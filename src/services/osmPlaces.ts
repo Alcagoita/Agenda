@@ -26,8 +26,8 @@
  */
 
 import type { PoiType } from '../types';
-import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
-import { getDistanceMeters, placeTypeLabel } from './maps';
+import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS, poiCatalogLabel } from '../types';
+import { getDistanceMeters } from './geoDistance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -284,9 +284,14 @@ async function fetchOsmPlaces(
         result[poiType].push({
           osmId:          `${el.type}/${el.id}`,
           // Raw OSM tag values are lowercase, underscore-separated keys (e.g.
-          // "atm") — route the no-name fallback through the same label helper
-          // every other POI-type display uses, instead of leaking the tag.
-          name:           el.tags.name ?? placeTypeLabel(poiType),
+          // "atm") — never leak the tag itself as a display name. Uses
+          // poiCatalogLabel directly (not maps.ts's placeTypeLabel, which
+          // would create a circular import — see geoDistance.ts) — poiType
+          // here is always one of our own internal PoiType keys (this
+          // function's own poiTypes param is typed that way), so the
+          // Google-type-string-specific middle tier placeTypeLabel adds on
+          // top of poiCatalogLabel never applied to OSM callers anyway.
+          name:           el.tags.name ?? poiCatalogLabel(poiType as PoiType) ?? poiType,
           isGenericName:  el.tags.name == null,
           lat:            elLat,
           lng:            elLon,

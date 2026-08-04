@@ -258,6 +258,10 @@ jest.mock('../../src/services/placesFunctions', () => ({
   placesAutocompleteProxy: jest.fn(),
   getPlaceDetailsProxy:    jest.fn(),
 }));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
