@@ -25,14 +25,17 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
 - **R2** (`brush-poi-exports`) — holds two things per build: the raw
   Foursquare extract (`raw-extracts/{cityId}/{buildId}.csv`, for
   reproducibility) and the client-download export (KAN-339,
-  `exports/{cityId}/{buildId}.sqlite`) — a standalone SQLite file with that
-  city's `poi`/`poi_type`/`poi_attribute` rows, written by
+  `exports/{cityId}/{buildId}.sqlite`) — a standalone, build-specific SQLite
+  file with that city's `poi`/`poi_type`/`poi_attribute` rows, written by
   `write_sqlite_export()` in `extraction/classify_and_load.py` from the same
-  in-memory rows the D1 load SQL comes from, so the two can never disagree.
-  Served to clients via `GET /export/:cityId` (X-Api-Key gated, not a public
-  R2 URL). Client-side download/caching integration (which app screen
-  triggers this, when to re-download) is its own follow-up ticket, per
-  KAN-339's own scope note — not built here.
+  in-memory rows the D1 load SQL comes from within that run. The local file
+  is also named per-build (`build/export_{cityId}_{buildId}.sqlite`), not
+  just per-city — a rerun for the same city can't silently overwrite an
+  earlier build's not-yet-uploaded local file out from under its own
+  already-printed upload command. Served to clients via `GET /export/:cityId`
+  (X-Api-Key gated, not a public R2 URL). Client-side download/caching
+  integration (which app screen triggers this, when to re-download) is its
+  own follow-up ticket, per KAN-339's own scope note — not built here.
 - No R-tree/geospatial index on D1 (confirmed unsupported, and R2 SQL's
   geospatial support is still "exploring" per Cloudflare's own docs) —
   radius search uses geohash prefix range queries instead
@@ -133,7 +136,7 @@ files write to a relative `build/` path and the Python script resolves
    shared D1 `poi`/`poi_type`/`poi_attribute` tables, then a sweep `DELETE`
    retiring the previous build's rows for that city, across all three tables
 4. Write the client-download SQLite export (KAN-339,
-   `build/export_{cityId}.sqlite`) from the same in-memory rows
+   `build/export_{cityId}_{buildId}.sqlite`) from the same in-memory rows
 5. Upload the raw CSV extract and the SQLite export to R2 (the script prints
    both exact `wrangler r2 object put` commands), then call
    `/internal/build-complete` (also printed, with the real `build_id`/counts)

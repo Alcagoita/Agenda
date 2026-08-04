@@ -338,7 +338,16 @@ export default {
     // goes through the same X-Api-Key gate as every other endpoint here,
     // for the same reason: no anonymous access to the POI dataset.
     if (url.pathname.startsWith('/export/') && request.method === 'GET') {
-      const cityId = decodeURIComponent(url.pathname.slice('/export/'.length));
+      let cityId: string;
+      try {
+        cityId = decodeURIComponent(url.pathname.slice('/export/'.length));
+      } catch {
+        // Malformed percent-encoding (e.g. a lone '%' followed by non-hex,
+        // or an incomplete UTF-8 sequence) throws URIError — previously
+        // unhandled, surfaced as Cloudflare's generic 500 instead of this
+        // API's usual clean 400 JSON error.
+        return json({ error: 'cityId is not validly percent-encoded' }, 400);
+      }
       if (!cityId) return json({ error: 'cityId is required' }, 400);
 
       const city = await env.REGISTRY_DB.prepare('SELECT * FROM city WHERE city_id = ?').bind(cityId).first<CityRow>();

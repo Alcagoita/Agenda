@@ -388,7 +388,12 @@ def classify(city_id, csv_path, out_sql_path):
         f.write(f"DELETE FROM poi_type WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
         f.write(f"DELETE FROM poi_attribute WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
 
-    sqlite_path = os.path.join(BUILD_DIR, f'export_{city_id}.sqlite')
+    # build_id-specific, not just city_id-specific: a rerun for the same
+    # city before the previous run's upload command was actually executed
+    # would otherwise overwrite this file with a different build's data,
+    # while the already-printed upload command still names the OLD
+    # build_id — uploading mismatched content under a stale build_id label.
+    sqlite_path = os.path.join(BUILD_DIR, f'export_{city_id}_{build_id}.sqlite')
     write_sqlite_export(city_id, build_id, PIPELINE_VERSION, poi_rows, poi_type_rows, poi_attribute_rows, sqlite_path)
     export_r2_key = f"exports/{city_id}/{build_id}.sqlite"
 
