@@ -10,6 +10,8 @@ interface CoverageResponse {
 interface PoiAllResponse {
   covered: boolean;
   cityId?: string;
+  /** Only present when `covered` is false — the Worker's own city.status ('none' | 'building' | 'ready'), defaulted to 'none' server-side when no city row exists at all. Lets the caller distinguish "no city built here yet" from "a build is in progress" without a second round-trip to /coverage. */
+  status?: 'none' | 'building' | 'ready';
   results: Array<{
     fsq_place_id: string;
     name: string;

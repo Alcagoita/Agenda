@@ -90,7 +90,9 @@ export async function resolveTripDestinations(
   // OSM/habitat-cache-based, see the header note and mallRoute.ts.
   let liveResults: PlacesMap = {};
   if (unresolvedTypes.length > 0 && await isOnline()) {
-    liveResults = await searchNearbyPlaces(coords.lat, coords.lng, unresolvedTypes, ROUTE_MAX_RADIUS_M).catch(() => ({} as PlacesMap));
+    liveResults = await searchNearbyPlaces(coords.lat, coords.lng, unresolvedTypes, ROUTE_MAX_RADIUS_M)
+      .then(r => r.results)
+      .catch(() => ({} as PlacesMap));
   }
 
   const finalPass = await Promise.all(localPass.map(async (r) => {

@@ -17,8 +17,14 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
   getCachedCity: jest.fn(() => ({ hit: false, city: null })),
   putCachedCity: jest.fn(),
 }));
+jest.mock('../../src/services/osmPlaces', () => ({
+  searchOsmPlaces:       jest.fn(),
+  searchOsmPlacesStrict: jest.fn(),
+}));
 
 import { extractCityName, reverseGeocode, __resetReverseGeocodeForTests } from '../../src/services/maps';
+import { cloudflareCoverageProxy, cloudflarePoiAllProxy } from '../../src/services/cloudflarePoiFunctions';
+import { searchOsmPlaces, searchOsmPlacesStrict } from '../../src/services/osmPlaces';
 
 describe('extractCityName (KAN-301, Nominatim address)', () => {
   it('prefers city over broader fields', () => {
@@ -77,5 +83,26 @@ describe('reverseGeocode — caching + rate limit (KAN-301, Nominatim policy)', 
   it('returns null on a non-OK response', async () => {
     (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({ ok: false, json: async () => ({}) });
     expect(await reverseGeocode(41.15, -8.61)).toBeNull();
+  });
+
+  // KAN-342 item 5 — Lantern independence. The city label must stay resolvable
+  // through Nominatim even when the POI chain (Cloudflare, OSM) is entirely
+  // broken — a POI-source outage must never change the user's location label.
+  // Asserted behaviorally (reverseGeocode still resolves) AND structurally
+  // (none of the POI-chain functions are ever touched), so a future refactor
+  // that accidentally routes reverseGeocode through the POI chain fails loudly
+  // here instead of only showing up as a confusing outage in the field.
+  it('AC: resolves the city via Nominatim even when every POI-chain function throws — never calls them', async () => {
+    (cloudflareCoverageProxy as jest.Mock).mockRejectedValue(new Error('cloudflare down'));
+    (cloudflarePoiAllProxy as jest.Mock).mockRejectedValue(new Error('cloudflare down'));
+    (searchOsmPlaces as jest.Mock).mockRejectedValue(new Error('overpass down'));
+    (searchOsmPlacesStrict as jest.Mock).mockRejectedValue(new Error('overpass down'));
+
+    expect(await reverseGeocode(38.7223, -9.1393)).toBe('Lisboa');
+
+    expect(cloudflareCoverageProxy).not.toHaveBeenCalled();
+    expect(cloudflarePoiAllProxy).not.toHaveBeenCalled();
+    expect(searchOsmPlaces).not.toHaveBeenCalled();
+    expect(searchOsmPlacesStrict).not.toHaveBeenCalled();
   });
 });

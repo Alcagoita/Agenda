@@ -60,8 +60,10 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
 
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
-    expect(result.cafe.map(p => p.placeId)).toEqual(['near', 'far']);
+    expect(result.results.cafe.map(p => p.placeId)).toEqual(['near', 'far']);
     expect(mockOsmSearch).not.toHaveBeenCalled();
+    expect(result.source).toBe('cloudflare');
+    expect(result.coverageStatus).toBe('ready');
   });
 
   it('falls through to OSM when the city is not covered', async () => {
@@ -74,7 +76,9 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
 
     expect(mockPoiAll).toHaveBeenCalledWith(LAT, LNG, RADIUS);
     expect(mockOsmSearch).toHaveBeenCalledWith(LAT, LNG, ['cafe'], RADIUS);
-    expect(result.cafe.map(p => p.placeId)).toEqual(['node/1']);
+    expect(result.results.cafe.map(p => p.placeId)).toEqual(['node/1']);
+    expect(result.source).toBe('osm');
+    expect(result.coverageStatus).toBe('none');
   });
 
   it('falls through to OSM when the Cloudflare request throws', async () => {
@@ -89,8 +93,30 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
 
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
-    expect(result.cafe).toEqual([]);
+    expect(result.results.cafe).toEqual([]);
     expect(mockOsmSearch).not.toHaveBeenCalled();
+    expect(result.source).toBe('cloudflare');
+    expect(result.coverageStatus).toBe('ready');
+  });
+
+  it('AC: coverageStatus "building" is carried through when Cloudflare reports a city mid-build', async () => {
+    mockPoiAll.mockResolvedValue({ covered: false, status: 'building', results: [] });
+    mockOsmSearch.mockResolvedValue({ cafe: [] });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
+
+    expect(result.source).toBe('osm');
+    expect(result.coverageStatus).toBe('building');
+  });
+
+  it('AC: no Google path exists — Cloudflare failure + OSM failure never reaches a Google call (structurally, none is imported)', async () => {
+    mockPoiAll.mockRejectedValue(new Error('network error'));
+    mockOsmSearch.mockRejectedValue(new Error('Overpass: all endpoints failed'));
+
+    await expect(searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS)).rejects.toThrow('Overpass: all endpoints failed');
+    // No placesFunctions mock call assertion needed: maps.ts has no import of
+    // placesFunctions/searchNearbyPlacesProxy in this file at all — the mock
+    // above is registered only so unrelated code doesn't crash Jest.
   });
 
   // KAN-342 review: searchOsmPlacesStrict (not the lenient searchOsmPlaces)
@@ -112,6 +138,6 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
 
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
-    expect(result.cafe).toEqual([]);
+    expect(result.results.cafe).toEqual([]);
   });
 });

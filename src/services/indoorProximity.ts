@@ -77,7 +77,7 @@ let _getPosition:   GetCurrentPositionFn = async () => {
   return { lat: c.lat, lng: c.lng, accuracy: c.accuracy };
 };
 let _searchPlaces:  SearchPlacesFn       = async (lat, lng, type, radius) => {
-  const results = await searchNearbyPlaces(lat, lng, [type], radius);
+  const { results } = await searchNearbyPlaces(lat, lng, [type], radius);
   return results[type] ?? [];
 };
 let _fireNotif:     FireNotifFn          = _defaultFireNotif;
@@ -314,7 +314,7 @@ export function __setGetToday(fn: GetTodayFn): void {
 export function __resetDeps(): void {
   _getPosition  = async () => { const c = await getCurrentPosition(); return { lat: c.lat, lng: c.lng, accuracy: c.accuracy }; };
   _searchPlaces = async (lat, lng, type, radius) => {
-    const results = await searchNearbyPlaces(lat, lng, [type], radius);
+    const { results } = await searchNearbyPlaces(lat, lng, [type], radius);
     return results[type] ?? [];
   };
   _fireNotif    = _defaultFireNotif;

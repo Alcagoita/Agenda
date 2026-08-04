@@ -57,6 +57,7 @@ jest.mock('../../src/services/maps', () => ({
     Math.round(Math.hypot(lat2 - lat1, lng2 - lng1) * 111_000),
   searchNearbyPlaces: (...args: unknown[]) => mockSearchNearbyPlaces(...args),
   placeTypeLabel: jest.fn((t: string) => t),
+  isPoiSearchDegraded: jest.fn(() => true),
 }));
 
 jest.mock('@notifee/react-native', () => ({
@@ -120,7 +121,7 @@ describe('runProximitySearchOrReuseSnapshot', () => {
     jest.clearAllMocks();
     resetProximityState();
     mockGetCurrentPositionAsync.mockResolvedValue(NEARBY_POS);
-    mockSearchNearbyPlaces.mockResolvedValue({});
+    mockSearchNearbyPlaces.mockResolvedValue({ results: {}, source: 'osm' });
   });
 
   it('reuses the snapshot (no Places API call) when position and POI types are unchanged', async () => {
@@ -140,7 +141,8 @@ describe('runProximitySearchOrReuseSnapshot', () => {
     mockGetCurrentPositionAsync.mockResolvedValue(FAR_POS);
     mockLoadProximitySnapshot.mockReturnValue(makeSnapshot());
     mockSearchNearbyPlaces.mockResolvedValue({
-      pharmacy: [{ placeId: 'p2', name: 'Live Pharmacy', lat: 38.7054, lng: -9.1, distanceMeters: 30 }],
+      results: { pharmacy: [{ placeId: 'p2', name: 'Live Pharmacy', lat: 38.7054, lng: -9.1, distanceMeters: 30 }] },
+      source: 'osm',
     });
 
     await runProximitySearchOrReuseSnapshot('uid-1', [makeTask('t1', 'pharmacy')], mockOnUpdate);
@@ -159,7 +161,8 @@ describe('runProximitySearchOrReuseSnapshot', () => {
   it('falls through to a real search when no snapshot has ever been saved, and saves one after', async () => {
     mockLoadProximitySnapshot.mockReturnValue(null);
     mockSearchNearbyPlaces.mockResolvedValue({
-      pharmacy: [{ placeId: 'p3', name: 'Fresh Pharmacy', lat: ORIGIN.lat, lng: ORIGIN.lng, distanceMeters: 50 }],
+      results: { pharmacy: [{ placeId: 'p3', name: 'Fresh Pharmacy', lat: ORIGIN.lat, lng: ORIGIN.lng, distanceMeters: 50 }] },
+      source: 'osm',
     });
 
     await runProximitySearchOrReuseSnapshot('uid-1', [makeTask('t1', 'pharmacy')], mockOnUpdate);

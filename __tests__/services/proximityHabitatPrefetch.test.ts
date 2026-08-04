@@ -127,6 +127,7 @@ import {
   runProximitySearch,
   resetProximityState,
   setCustomCategoryPoiTypes,
+  getLastPoiSearchState,
 } from '../../src/services/proximity';
 import { ALL_POI_TYPES, CLUSTER_LEISURE_TYPES } from '../../src/types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
@@ -249,5 +250,33 @@ describe('habitat cache prefetch covers all POI types', () => {
 
     const [, , prefetchedTypes] = mockRefreshHabitatCacheIfStale.mock.calls[0];
     expect(prefetchedTypes).not.toContain('my_custom_type');
+  });
+});
+
+describe('KAN-342: source-aware identity + source/coverageStatus threading', () => {
+  it('AC: an OSM live hit is recorded with source.osm, never googlePlaceId', async () => {
+    mockAtmSearchResponse();
+
+    await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
+
+    expect(mockRecordLiveResult).toHaveBeenCalledWith(
+      expect.objectContaining({ poiType: 'atm', source: { osm: 'atm-1' } }),
+    );
+    const call = mockRecordLiveResult.mock.calls[0][0];
+    expect(call.source.google).toBeUndefined();
+    expect(call).not.toHaveProperty('googlePlaceId');
+  });
+
+  it('AC: source and coverageStatus are exposed via getLastPoiSearchState, degraded computed not stored', async () => {
+    mockAtmSearchResponse();
+
+    await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
+
+    const state = getLastPoiSearchState();
+    expect(state.source).toBe('osm');
+    // cloudflarePoiAllProxy is unconfigured here (undefined -> caught -> falls
+    // through), so coverageStatus is genuinely unknown for this tick.
+    expect(state.degraded).toBe(true);
+    expect(state).not.toHaveProperty('_degraded');
   });
 });

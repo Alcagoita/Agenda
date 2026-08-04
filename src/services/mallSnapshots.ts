@@ -77,7 +77,7 @@ export async function downloadMallSnapshot(
   center: { lat: number; lng: number },
   poiTypes: string[],
 ): Promise<MallSnapshot> {
-  const mallResults = await searchNearbyPlaces(center.lat, center.lng, ['shopping_mall'], MALL_SEARCH_RADIUS_M);
+  const { results: mallResults } = await searchNearbyPlaces(center.lat, center.lng, ['shopping_mall'], MALL_SEARCH_RADIUS_M);
   // A place lands in the shopping_mall bucket if ANY of its Google types
   // matched our request (searchNearbyPlaces buckets by "matched something
   // we asked for", not "this IS its type") — a parking/loading-dock feature

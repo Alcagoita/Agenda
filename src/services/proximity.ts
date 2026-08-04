@@ -84,7 +84,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { InteractionManager, Platform } from 'react-native';
 import WearNotificationModule from '../native/WearNotificationModule';
 import { Coordinates, getPositionLowAccuracy } from './geolocation';
-import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel } from './maps';
+import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel, PoiSearchSource, PoiCoverageStatus, isPoiSearchDegraded } from './maps';
 import { markAllPoiAlertsSeen } from './firestore';
 import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES, filterSupportedGooglePlaceTypes } from '../constants/googlePlaceTypes';
@@ -209,6 +209,27 @@ const QUEUE_STALE_MS = 5 * 60 * 1_000;
 
 /** Where the last Places API search was run from. Movement gate. */
 let _lastSearchCoords: { lat: number; lng: number } | null = null;
+
+/**
+ * KAN-342: which source actually answered the last search tick, and the
+ * Cloudflare coverage state behind it — set on every branch that produces a
+ * result (live Cloudflare/OSM, both cache-answered paths), read via
+ * getLastPoiSearchState() below. Exists so the UI layer (KAN-349's "minimal
+ * data" banner, not built here) has something to read without re-deriving
+ * it from scratch — deliberately NOT a stored `degraded` boolean; that's
+ * always computed fresh from these two on read (see isPoiSearchDegraded).
+ */
+let _lastPoiSearchSource: PoiSearchSource | null = null;
+let _lastPoiSearchCoverageStatus: PoiCoverageStatus | undefined;
+
+/** Source/coverage state behind the most recent search tick, plus a freshly-derived (never stored) degraded flag. Null fields mean no search has completed yet this session. */
+export function getLastPoiSearchState(): { source: PoiSearchSource | null; coverageStatus: PoiCoverageStatus | undefined; degraded: boolean } {
+  return {
+    source: _lastPoiSearchSource,
+    coverageStatus: _lastPoiSearchCoverageStatus,
+    degraded: _lastPoiSearchSource == null ? true : isPoiSearchDegraded(_lastPoiSearchSource, _lastPoiSearchCoverageStatus),
+  };
+}
 
 /** Sorted, comma-joined POI types the last search covered (KAN-285) — the
  *  "did the POI list change" half of the snapshot-reuse gate. */
@@ -654,6 +675,12 @@ async function runProximitySearch(
     // a confident "nothing here" (the snapshot was downloaded specifically
     // to answer this), not an ambiguous cache-miss to bail out on.
     let isConnectivityFallback = false;
+    // KAN-342: which source actually answered this tick, threaded through to
+    // _lastPoiSearchSource/_lastPoiSearchCoverageStatus below and to
+    // recordLiveResult (source-aware place identity — see there for why
+    // mislabeling every live hit as a Google id was a real bug).
+    let tickSource: PoiSearchSource = 'cache';
+    let tickCoverageStatus: PoiCoverageStatus | undefined;
 
     // KAN-237 — inside an active trip area or the current mall snapshot,
     // skip the live API entirely: this is a deliberately-downloaded, bounded
@@ -665,7 +692,10 @@ async function runProximitySearch(
       answeredFromCache = true;
     } else {
       try {
-        results = await searchNearbyPlaces(coords.lat, coords.lng, uniquePoiTypes, NEARBY_RADIUS);
+        const search = await searchNearbyPlaces(coords.lat, coords.lng, uniquePoiTypes, NEARBY_RADIUS);
+        results = search.results;
+        tickSource = search.source;
+        tickCoverageStatus = search.coverageStatus;
       } catch (err) {
         // If offline, queue this search for retry when connection returns, and
         // answer from the habitat cache in the meantime (KAN-229) — the cache
@@ -692,6 +722,8 @@ async function runProximitySearch(
       }
     }
 
+    _lastPoiSearchSource = tickSource;
+    _lastPoiSearchCoverageStatus = tickCoverageStatus;
     _lastSearchCoords = { lat: coords.lat, lng: coords.lng };
 
     // A cache miss (nothing cached for this area yet) is not the same as
@@ -734,12 +766,20 @@ async function runProximitySearch(
     }
 
     // Habitat cache (KAN-228): seed the cross-source identity table with
-    // these live Google hits, and opportunistically refresh the OSM-backed
+    // this tick's live hits, and opportunistically refresh the OSM-backed
     // cache around this origin. Deferred until after interactions settle —
     // the seeding loop's synchronous SQLite writes must not delay the
     // hero-card/notification logic below, which needs this tick's result now.
     // Skipped when this tick was itself answered by the cache — there's no
     // new live data to feed back into it.
+    //
+    // KAN-342 review — source-aware identity, not a hardcoded googlePlaceId:
+    // Cloudflare returns Foursquare ids, OSM returns OSM ids; tagging both as
+    // "google" corrupted cross-source dedupe AND licence provenance (OSM is
+    // ODbL, Foursquare is Apache 2.0, Google is restricted — an identity
+    // column that lies about origin can't be audited against those terms).
+    // `answeredFromCache` guards this block, so tickSource is always
+    // 'cloudflare' or 'osm' here, never 'cache'.
     if (!answeredFromCache) {
       InteractionManager.runAfterInteractions(() => {
         try {
@@ -747,10 +787,10 @@ async function runProximitySearch(
             for (const place of results[poiType] ?? []) {
               recordLiveResult({
                 poiType,
-                name:          place.name,
-                lat:           place.lat,
-                lng:           place.lng,
-                googlePlaceId: place.placeId,
+                name:   place.name,
+                lat:    place.lat,
+                lng:    place.lng,
+                source: tickSource === 'osm' ? { osm: place.placeId } : { fsq: place.placeId },
               });
             }
           }
@@ -1163,6 +1203,8 @@ export function resetProximityState(): void {
   _activeTrips = [];
   _mallSnapshot = null;
   _lastPlaceContext = null;
+  _lastPoiSearchSource = null;
+  _lastPoiSearchCoverageStatus = undefined;
 
   geofenceEntryTimes.clear();
 }

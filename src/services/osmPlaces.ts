@@ -120,39 +120,83 @@ const OVERPASS_ENDPOINTS = [
 const METRES_PER_DEGREE_LAT = 111_195;
 const DEG_TO_RAD = Math.PI / 180;
 
+/** Bounded — 1 initial attempt + this many retries, per endpoint. Not unlimited: a hung/consistently-erroring endpoint must give up and move on, not retry forever inside the shared timeout budget. */
+const MAX_RETRIES_PER_ENDPOINT = 2;
+/** Exponential backoff base — 500ms, 1000ms, 2000ms, ... between retries of the SAME endpoint. */
+const RETRY_BACKOFF_BASE_MS = 500;
+
+/** 5xx and 408 (timeout) are transient — worth a retry. Anything else (400, 404, ...) means the request itself is wrong and retrying won't help. 429 is handled separately, never here — it's a stop signal, not a retry-with-backoff case (see fetchOverpass). */
+function isRetryableStatus(status: number): boolean {
+  return status >= 500 || status === 408;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Thrown when Overpass returns 429 — a distinct type (not a plain Error) so fetchOverpass's retry loop can recognize it and stop immediately, never caught-and-retried like a transient failure. */
+export class OverpassRateLimitedError extends Error {}
+
 /**
- * POSTs `query` to each OVERPASS_ENDPOINTS entry in turn, returning the first
- * successful response. Throws the last error only if every endpoint fails —
- * preserving the contract searchOsmPlacesStrict depends on (a real failure
- * must stay distinguishable from a legitimately empty result, so a trip
- * download can surface an error instead of silently persisting an empty area).
+ * POSTs `query` to each OVERPASS_ENDPOINTS entry in turn, with bounded
+ * exponential-backoff retries per endpoint for transient failures (timeout,
+ * network error, 5xx) — returns the first successful response. Throws the
+ * last error only if every endpoint's every attempt fails — preserving the
+ * contract searchOsmPlacesStrict depends on (a real failure must stay
+ * distinguishable from a legitimately empty result, so a trip download can
+ * surface an error instead of silently persisting an empty area).
  *
- * `timeoutMs` is a SHARED deadline across all endpoints, not a per-endpoint
- * budget (KAN-282 review): trip/mall downloads pass 20s, so a per-endpoint
- * timeout would let a foreground spinner run for endpoints × 20s before
- * failing. Each attempt gets whatever is left, and once the deadline passes
- * the remaining endpoints are skipped.
+ * A 429 (rate limited) is NOT retried, on this or any other endpoint —
+ * Overpass enforces its usage policy by blocking on User-Agent (the same
+ * wall already hit with Nominatim), so a 429 means WE are blocked, not
+ * "this one endpoint is down." Retrying — even a different endpoint, even
+ * after a delay — can't fix a User-Agent block and risks compounding it.
+ * Stops the whole call immediately and throws OverpassRateLimitedError.
+ *
+ * `timeoutMs` is a SHARED deadline across every endpoint AND every retry,
+ * not a per-attempt budget (KAN-282 review): trip/mall downloads pass 20s,
+ * so a per-attempt timeout would let a foreground spinner run far longer
+ * than that before failing. Each attempt gets whatever is left; once the
+ * deadline passes, no further attempts are made.
  */
 async function fetchOverpass(query: string, timeoutMs: number): Promise<OverpassResponse> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown = new Error('Overpass: no endpoint attempted');
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) { break; }
-    try {
-      const response = await fetchWithTimeout(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent':   USER_AGENT,
-        },
-        body: `data=${encodeURIComponent(query)}`,
-      }, remainingMs);
-      if (!response.ok) { throw new Error(`Overpass request failed: ${response.status}`); }
-      return (await response.json()) as OverpassResponse;
-    } catch (err) {
-      lastError = err;
+    for (let attempt = 0; attempt <= MAX_RETRIES_PER_ENDPOINT; attempt++) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) { throw lastError; }
+
+      try {
+        const response = await fetchWithTimeout(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent':   USER_AGENT,
+          },
+          body: `data=${encodeURIComponent(query)}`,
+        }, remainingMs);
+
+        if (response.status === 429) {
+          throw new OverpassRateLimitedError(`Overpass: rate limited (429) at ${endpoint}`);
+        }
+        if (response.ok) {
+          return (await response.json()) as OverpassResponse;
+        }
+        lastError = new Error(`Overpass request failed: ${response.status}`);
+        if (!isRetryableStatus(response.status)) { break; } // non-retryable — try the next endpoint, not another attempt here
+      } catch (err) {
+        if (err instanceof OverpassRateLimitedError) { throw err; }
+        lastError = err;
+        // network error / timeout — treated as retryable, falls through to backoff below
+      }
+
+      const hasMoreRetries = attempt < MAX_RETRIES_PER_ENDPOINT;
+      if (hasMoreRetries) {
+        const backoffMs = Math.min(RETRY_BACKOFF_BASE_MS * 2 ** attempt, deadline - Date.now());
+        if (backoffMs > 0) { await sleep(backoffMs); }
+      }
     }
   }
   throw lastError;
