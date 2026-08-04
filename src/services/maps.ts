@@ -23,6 +23,7 @@ import {
   placesAutocompleteProxy,
   searchNearbyPlacesProxy,
 } from './placesFunctions';
+import { cloudflareCoverageProxy, cloudflarePoiAllProxy } from './cloudflarePoiFunctions';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { Category, PoiType, POI_GOOGLE_TYPES, poiCatalogLabel } from '../types';
 import type { RestaurantFoodType } from './restaurantFoodTypes';
@@ -241,6 +242,64 @@ export function __resetReverseGeocodeForTests(): void {
 // ─── Places API — Nearby Search ───────────────────────────────────────────────
 
 /**
+ * KAN-342: Brush's own Cloudflare-backed POI database (poi-api.brushaway.app)
+ * for cities it covers — Google Places stays the permanent fallback for
+ * everywhere else (small/rural areas we haven't built a city database for).
+ * Tried first on every call; any failure (not covered, API error, rejected
+ * radius — our Worker's own MAX_RADIUS_METERS is 4500m, tighter than some
+ * callers' radii like destinationResolver's 5000m ROUTE_MAX_RADIUS_M) falls
+ * straight through to the existing Google path below, silently — this must
+ * never be the reason a search comes back empty when Google would have
+ * answered.
+ *
+ * Buckets by `primary_poi_type` only, not the full multi-type match a place
+ * can have server-side (poi_type table) — /poi/all doesn't join that table,
+ * it's a single flat query across all types in range. A place matching two
+ * of our requested types under a secondary type would only bucket under its
+ * primary one here. Acceptable simplification for live search (same
+ * "matched into the first type it hit" imprecision Google's own bucketing
+ * below already has); a caller that needs true multi-type filtering should
+ * use the Cloudflare API's own `/poi?type=&attribute=&value=` directly, not
+ * this general-purpose function.
+ */
+async function searchNearbyPlacesCloudflare(
+  lat: number,
+  lng: number,
+  poiTypes: string[],
+  radiusMeters: number,
+): Promise<Record<string, NearbyPlace[]> | null> {
+  try {
+    const coverage = await cloudflareCoverageProxy(lat, lng);
+    if (coverage.status !== 'ready') { return null; }
+
+    const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters);
+    if (!data.covered) { return null; }
+
+    const result: Record<string, NearbyPlace[]> = {};
+    for (const poiType of poiTypes) { result[poiType] = []; }
+
+    for (const p of data.results) {
+      if (!result[p.primary_poi_type]) { continue; }
+      result[p.primary_poi_type].push({
+        placeId:        p.fsq_place_id,
+        name:           p.name,
+        lat:            p.lat,
+        lng:            p.lng,
+        distanceMeters: p.distanceMeters,
+        primaryType:    p.primary_poi_type,
+      });
+    }
+
+    for (const poiType of poiTypes) {
+      result[poiType].sort((a, b) => a.distanceMeters - b.distanceMeters);
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search for places of all given POI types within `radiusMeters` of `lat`/`lng`
  * in a SINGLE Places API call.
  *
@@ -252,7 +311,12 @@ export function __resetReverseGeocodeForTests(): void {
  * Returns a map keyed by the original poiType, each entry sorted ascending by
  * straight-line distance (up to 5 candidates per type).
  *
- * Throws on network error, timeout (8 s), or non-200 response.
+ * Tries Brush's own Cloudflare POI database first (see
+ * searchNearbyPlacesCloudflare) — falls through to Google below on any
+ * failure or non-coverage, never throws from the Cloudflare attempt itself.
+ *
+ * Throws on network error, timeout (8 s), or non-200 response — from the
+ * Google fallback path only.
  */
 export async function searchNearbyPlaces(
   lat: number,
@@ -261,6 +325,9 @@ export async function searchNearbyPlaces(
   radiusMeters: number,
 ): Promise<Record<string, NearbyPlace[]>> {
   if (poiTypes.length === 0) { return {}; }
+
+  const cloudflareResult = await searchNearbyPlacesCloudflare(lat, lng, poiTypes, radiusMeters);
+  if (cloudflareResult) { return cloudflareResult; }
 
   // Map internal type keys → Google Places primary type strings.
   const googleTypes = poiTypes.map(t => POI_GOOGLE_TYPES[t as PoiType] ?? t);
