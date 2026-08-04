@@ -18,7 +18,7 @@ BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz'
 CLOUDFLARE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(CLOUDFLARE_DIR)
 BUILD_DIR = os.path.join(CLOUDFLARE_DIR, 'build')
-PIPELINE_VERSION = 'v2-phase4'
+PIPELINE_VERSION = 'v2-phase5'
 
 def normalize_text(s):
     """Same rules as src/services/poiInference.ts's normalize(): lowercase,
@@ -53,6 +53,43 @@ def find_brand(name, ranked_types, brand_dictionary):
             if normalized_brand and f' {normalized_brand} ' in padded_name:
                 return brand
     return None
+
+def load_keyword_dictionary(filename):
+    # KAN-340: reuses the app's existing keyword-inference dictionaries
+    # (used elsewhere for task-title inference) rather than building a
+    # third, parallel keyword list.
+    return load_mapping(os.path.join(REPO_ROOT, 'src', 'constants', filename))
+
+def build_alias_index(dictionary, exclude_keys=()):
+    """{key: [normalized aliases]} — 'any' is excluded for store_kind, same
+    reasoning as store_reverse in build_reverse_map: it's a generic catch-all,
+    not a real subtype, and would win every match if left in."""
+    index = {}
+    for key, entry in dictionary.items():
+        if key in exclude_keys:
+            continue
+        normalized = [normalize_text(a) for a in entry.get('aliases', [])]
+        index[key] = [a for a in normalized if a]
+    return index
+
+def match_keyword_subtypes(name, alias_index):
+    """Every dimension value whose alias appears in the name as a whole
+    word/phrase — not just the first match (KAN-340 follows the same
+    multi-value reasoning as KAN-334/336's category-tag matching: a place
+    literally named e.g. "Sushi Vegetariano" should get both, not just one).
+    Only called when category-tag matching already found nothing for this
+    dimension, so there's no existing match to compete with or override."""
+    normalized_name = normalize_text(name)
+    if not normalized_name:
+        return set()
+    padded_name = f' {normalized_name} '
+    matched = set()
+    for key, aliases in alias_index.items():
+        for alias in aliases:
+            if f' {alias} ' in padded_name:
+                matched.add(key)
+                break
+    return matched
 
 def encode_geohash(lat, lng, precision=7):
     lat_min, lat_max = -90.0, 90.0
@@ -234,6 +271,17 @@ def classify(city_id, csv_path, out_sql_path):
     food_reverse = build_reverse_map(food_subtypes)
     brand_dictionary = load_brand_dictionary()
 
+    # KAN-340: Foursquare frequently tags a place as the generic 'restaurant'
+    # or 'store' with no specific cuisine/kind category id at all — no
+    # amount of extraction-filter widening recovers that, since the data
+    # simply isn't in Foursquare's row (confirmed: "Miya Sushi & Ramen"
+    # carries only the generic "Restaurant" tag). Fallback: match the
+    # place's own name against the app's existing keyword dictionaries —
+    # only when category-tag matching (above) already found nothing for
+    # that dimension, never overriding a real category-tag match.
+    store_kind_aliases = build_alias_index(load_keyword_dictionary('storeSubtypeDictionary.json'), exclude_keys={'any'})
+    food_cuisine_aliases = build_alias_index(load_keyword_dictionary('restaurantFoodDictionary.json'))
+
     # KAN-335: explicit, deterministic priority for choosing primary_poi_type
     # among a place's multiple matched types — declaration order in
     # poiTypeCategories.json, NOT Foursquare's own per-row category array
@@ -244,6 +292,8 @@ def classify(city_id, csv_path, out_sql_path):
 
     build_id = str(uuid.uuid4())
     brand_matches = 0
+    keyword_store_kind_matches = 0
+    keyword_food_cuisine_matches = 0
     # Printed immediately, not just on success — if this crashes partway
     # through (bad row, D1 load failure, etc.), this is the only place the
     # build_id is visible at all, and it's needed to close out build_log as
@@ -291,6 +341,20 @@ def classify(city_id, csv_path, out_sql_path):
                     matched_types.add('restaurant')
                     food_cuisines.add(food_reverse[cid])
 
+            # KAN-340 keyword fallback — only for dimensions category-tag
+            # matching left empty, and only for rows already classified as
+            # store/restaurant by real Foursquare category tags (never
+            # invents a store_kind/food_cuisine attribute on a place that
+            # isn't even tagged as a store/restaurant to begin with).
+            if 'store' in matched_types and not store_kinds:
+                store_kinds = match_keyword_subtypes(row['name'], store_kind_aliases)
+                if store_kinds:
+                    keyword_store_kind_matches += 1
+            if 'restaurant' in matched_types and not food_cuisines:
+                food_cuisines = match_keyword_subtypes(row['name'], food_cuisine_aliases)
+                if food_cuisines:
+                    keyword_food_cuisine_matches += 1
+
             if not matched_types:
                 skipped += 1
                 continue
@@ -326,6 +390,7 @@ def classify(city_id, csv_path, out_sql_path):
     print(f"[{city_id}] classified {len(poi_rows)} rows, skipped {skipped} (no matching poi_type)")
     print(f"[{city_id}] {multi_type_count} rows matched more than one type ({len(poi_type_rows)} total poi_type rows)")
     print(f"[{city_id}] {brand_matches} rows matched a brand, {len(poi_attribute_rows)} total poi_attribute rows")
+    print(f"[{city_id}] KAN-340 keyword fallback: {keyword_store_kind_matches} store_kind + {keyword_food_cuisine_matches} food_cuisine rows recovered (category tags alone found nothing for these)")
     print(f"[{city_id}] top primary types: {sorted(type_counts.items(), key=lambda x: -x[1])[:15]}")
 
     def poi_row_sql(r):
