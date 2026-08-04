@@ -30,7 +30,7 @@ rest of this pipeline) — shells out to `wrangler d1 execute` for reads.
 import json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from classify_and_load import normalize_text, write_batches, sql_escape, CLOUDFLARE_DIR, BUILD_DIR
+from classify_and_load import normalize_text, sql_escape, CLOUDFLARE_DIR, BUILD_DIR
 
 # Mirrors src/services/osmPlaces.ts's endpoint-fallback list — the canonical
 # Overpass instance is volunteer-run and genuinely flaky under load.
@@ -49,7 +49,7 @@ MATCH_RADIUS_METERS = 75  # confident-match proximity threshold — tight enough
 OSM_CUISINE_TO_FOOD_CUISINE = {
     'portuguese': 'portuguese', 'regional_portuguese': 'portuguese',
     'italian': 'italian', 'pizza': 'italian',
-    'sushi': 'sushi', 'japanese': 'sushi',
+    'sushi': 'sushi',
     'burger': 'burger',
     'indian': 'indian',
     'thai': 'thai',
@@ -71,7 +71,7 @@ OSM_SHOP_TO_STORE_KIND = {
     'toys': 'toys',
     'sports': 'sports',
     'houseware': 'home', 'interior_decoration': 'home',
-    'books': 'books', 'stationery': 'books',
+    'books': 'books',
     'bicycle': 'bicycle',
     'pet': 'pet',
     'beauty': 'beauty', 'cosmetics': 'beauty', 'hairdresser_supply': 'beauty',
@@ -110,6 +110,18 @@ def fetch_overpass(query):
                 last_error = e
                 time.sleep(2)
     raise RuntimeError(f"all Overpass endpoints failed: {last_error}")
+
+
+def first_mapped_cuisine(cuisine_tag):
+    """OSM's cuisine= value can be semicolon-separated (e.g. "italian;pizza")
+    — checking only the first token missed a mappable value whenever it
+    happened to come second. Returns the first token (in the tag's own
+    order) that has an entry in OSM_CUISINE_TO_FOOD_CUISINE, or None."""
+    for token in cuisine_tag.split(';'):
+        value = OSM_CUISINE_TO_FOOD_CUISINE.get(token.strip().lower())
+        if value:
+            return value
+    return None
 
 
 def haversine_m(lat1, lng1, lat2, lng2):
@@ -174,6 +186,28 @@ def enrich(city_id):
     matched_place_ids = set()  # a place already matched by an earlier OSM element shouldn't match a second one under a different dimension by accident
     cuisine_matches = 0
     store_kind_matches = 0
+    ambiguous_skipped = 0
+
+    def closest_unambiguous_candidate(index, normalized_name, lat, lng):
+        """All unassigned same-normalized-name candidates within
+        MATCH_RADIUS_METERS, picking the strictly closest one — but only
+        when it's unambiguously closest (no other eligible candidate at the
+        same distance). Two candidates at an identical distance means we
+        can't tell which business the OSM element actually refers to, so
+        neither gets guessed at; returns None for that case too."""
+        eligible = []
+        for candidate in index.get(normalized_name, []):
+            if candidate['fsq_place_id'] in matched_place_ids:
+                continue
+            dist = haversine_m(lat, lng, candidate['lat'], candidate['lng'])
+            if dist <= MATCH_RADIUS_METERS:
+                eligible.append((dist, candidate))
+        if not eligible:
+            return None
+        eligible.sort(key=lambda pair: pair[0])
+        if len(eligible) > 1 and eligible[0][0] == eligible[1][0]:
+            return 'ambiguous'
+        return eligible[0][1]
 
     for el in elements:
         tags = el.get('tags') or {}
@@ -190,48 +224,71 @@ def enrich(city_id):
 
         cuisine_tag = tags.get('cuisine')
         if cuisine_tag:
-            value = OSM_CUISINE_TO_FOOD_CUISINE.get(cuisine_tag.split(';')[0].strip().lower())
+            value = first_mapped_cuisine(cuisine_tag)
             if value:
-                for candidate in restaurant_index.get(normalized_name, []):
-                    if candidate['fsq_place_id'] in matched_place_ids:
-                        continue
-                    if haversine_m(lat, lng, candidate['lat'], candidate['lng']) <= MATCH_RADIUS_METERS:
-                        matched_rows.append((candidate['fsq_place_id'], 'food_cuisine', value))
-                        matched_place_ids.add(candidate['fsq_place_id'])
-                        cuisine_matches += 1
-                        break
+                candidate = closest_unambiguous_candidate(restaurant_index, normalized_name, lat, lng)
+                if candidate == 'ambiguous':
+                    ambiguous_skipped += 1
+                elif candidate:
+                    matched_rows.append((candidate['fsq_place_id'], 'food_cuisine', value))
+                    matched_place_ids.add(candidate['fsq_place_id'])
+                    cuisine_matches += 1
 
         shop_tag = tags.get('shop')
         if shop_tag:
             value = OSM_SHOP_TO_STORE_KIND.get(shop_tag.strip().lower())
             if value:
-                for candidate in store_index.get(normalized_name, []):
-                    if candidate['fsq_place_id'] in matched_place_ids:
-                        continue
-                    if haversine_m(lat, lng, candidate['lat'], candidate['lng']) <= MATCH_RADIUS_METERS:
-                        matched_rows.append((candidate['fsq_place_id'], 'store_kind', value))
-                        matched_place_ids.add(candidate['fsq_place_id'])
-                        store_kind_matches += 1
-                        break
+                candidate = closest_unambiguous_candidate(store_index, normalized_name, lat, lng)
+                if candidate == 'ambiguous':
+                    ambiguous_skipped += 1
+                elif candidate:
+                    matched_rows.append((candidate['fsq_place_id'], 'store_kind', value))
+                    matched_place_ids.add(candidate['fsq_place_id'])
+                    store_kind_matches += 1
 
-    print(f"[{city_id}] matched {cuisine_matches} food_cuisine + {store_kind_matches} store_kind rows from OSM")
+    print(f"[{city_id}] matched {cuisine_matches} food_cuisine + {store_kind_matches} store_kind rows from OSM ({ambiguous_skipped} skipped as ambiguous — multiple same-named candidates equidistant)")
 
     if not matched_rows:
         print(f"[{city_id}] nothing to write, done")
         return
 
     out_path = os.path.join(BUILD_DIR, f'osm_enrich_{city_id}_{build_id}.sql')
-    insert_prefix = 'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, city_id, build_id, dimension, value) VALUES '
+    # This script writes a file for the operator to apply later, by hand —
+    # an arbitrary time gap in which a regular classify_and_load.py run for
+    # the same city could produce a NEW build_id, making these rows stale
+    # the moment they'd be written (attached to a build_id that's no longer
+    # current, and due to be swept by the next re-run after that). Each
+    # INSERT is guarded with a build-drift check: it only writes if
+    # city.current_build_id still equals the build_id captured at the start
+    # of this run, otherwise it's a silent no-op for that statement rather
+    # than corrupting data under a stale build_id.
+    guard = f"WHERE EXISTS (SELECT 1 FROM city WHERE city_id = {sql_escape(city_id)} AND current_build_id = {sql_escape(build_id)})"
+    insert_prefix = 'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, city_id, build_id, dimension, value) SELECT * FROM (VALUES '
     with open(out_path, 'w') as f:
-        pieces = [
-            (fsq_place_id, '(' + ','.join([sql_escape(fsq_place_id), sql_escape(city_id), sql_escape(build_id), sql_escape(dimension), sql_escape(value)]) + ')')
-            for fsq_place_id, dimension, value in matched_rows
-        ]
-        batches = write_batches(f, insert_prefix, pieces, 'osm_enrich_poi_attribute', city_id)
-    print(f"[{city_id}] wrote {out_path} ({batches} statements)")
+        batches = 0
+        chunk = []
+        chunk_size = 0
+        MAX_CHUNK_BYTES = 80_000
+        for fsq_place_id, dimension, value in matched_rows:
+            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(city_id), sql_escape(build_id), sql_escape(dimension), sql_escape(value)]) + ')'
+            piece_bytes = len(piece.encode('utf-8')) + 1
+            if chunk and chunk_size + piece_bytes > MAX_CHUNK_BYTES:
+                f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
+                batches += 1
+                chunk = []
+                chunk_size = 0
+            chunk.append(piece)
+            chunk_size += piece_bytes
+        if chunk:
+            f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
+            batches += 1
+    print(f"[{city_id}] wrote {out_path} ({batches} statements, each guarded against build drift)")
     print(f"[{city_id}] apply with:")
     print(f"  npx wrangler d1 execute brush-poi-registry --remote --file={out_path}")
 
 
 if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("usage: python3 enrich_osm_cuisine.py <city_id>")
+        sys.exit(1)
     enrich(sys.argv[1])

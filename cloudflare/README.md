@@ -159,9 +159,13 @@ Real yield, measured against actual OSM/Foursquare name overlap in these
 two cities (most OSM elements simply don't share a listing with
 Foursquare at all — of 200 sampled cuisine-tagged OSM elements near
 Odivelas, only 22% had any same-named Foursquare row, 18% also within
-75m): +42 `food_cuisine` / +1 `store_kind` on Lisboa, +7 / +0 on Odivelas.
-Smaller than the keyword pass's yield, as expected for a third,
-supplementary source layered on top of two already-run passes — but real,
+75m): +5 `food_cuisine` on Lisboa, +2 on Odivelas (a later review round
+tightened the OSM tag mapping — removed `japanese`→`sushi` and
+`stationery`→`books`, both broad-to-narrow guesses that could mislabel a
+real place, and matching now requires an unambiguous closest candidate
+rather than the first one found — smaller yield, but every match is one
+we're actually confident in). Smaller than the keyword pass's yield, as
+expected for a third, supplementary source layered on top of two already-run passes — but real,
 verified live, and recovers cases neither of the other two passes can
 (a place whose name gives no cuisine hint at all, and whose Foursquare row
 was never tagged with one either).
