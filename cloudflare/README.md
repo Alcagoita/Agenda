@@ -121,6 +121,26 @@ just the 16-entry built-in catalog), `src/storeSubtypeCategories.json` (14),
 `src/foodSubtypeCategories.json` (10) — all hand-verified against the real
 1,279-row Foursquare taxonomy (`build/fsq_categories.csv`), not guessed.
 
+**Keyword fallback (KAN-340)**: Foursquare frequently tags a place as the
+generic `restaurant`/`store` with no specific cuisine/kind category id at
+all — no amount of extraction-filter widening recovers that (confirmed:
+"Miya Sushi & Ramen" carries only the generic "Restaurant" tag, nothing
+else). When category-tag matching finds nothing for `food_cuisine`/
+`store_kind` on an already-classified restaurant/store row, `classify()`
+falls back to matching the place's own name against the app's existing
+`src/constants/restaurantFoodDictionary.json` /
+`storeSubtypeDictionary.json` alias lists — same dictionaries used for
+task-title inference elsewhere in the app, not a third parallel list.
+Real but modest recovery given the dictionaries' size (10 cuisines, 14
+store kinds): +120 `food_cuisine` / +36 `store_kind` rows on Lisboa,
++22 / +8 on Odivelas. OSM `cuisine=`/`shop=` tag enrichment (the ticket's
+higher-priority source) was evaluated but not built this round — the
+keyword pass alone already recovers real cases including the ticket's own
+example, and OSM's added complexity (external API, ~40-60% single-attempt
+failure rate per KAN-322, name+proximity matching, retries) wasn't judged
+worth it against that marginal return; revisit as a follow-up if the
+residual gap turns out to matter more in practice.
+
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL
 files write to a relative `build/` path and the Python script resolves
