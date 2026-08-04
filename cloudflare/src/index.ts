@@ -321,13 +321,46 @@ export default {
     }
 
     // GET /coverage?lat=&lng=  — is this location ready / building / none?
+    // buildId (KAN-339): lets the client compare against its locally cached
+    // download's build_id and skip re-downloading /export/:cityId when
+    // nothing changed, without fetching the export file just to check.
     if (url.pathname === '/coverage' && request.method === 'GET') {
       const parsed = parseCoords(url);
       if (parsed instanceof Response) return parsed;
       const { lat, lng } = parsed;
 
       const city = await findCoveringCity(env, lat, lng);
-      return json({ status: city?.status ?? 'none', cityId: city?.city_id ?? null });
+      return json({ status: city?.status ?? 'none', cityId: city?.city_id ?? null, buildId: city?.current_build_id ?? null });
+    }
+
+    // GET /export/:cityId  — the current build's client-download SQLite
+    // export (KAN-339), streamed straight from R2. Not a public R2 URL —
+    // goes through the same X-Api-Key gate as every other endpoint here,
+    // for the same reason: no anonymous access to the POI dataset.
+    if (url.pathname.startsWith('/export/') && request.method === 'GET') {
+      const cityId = decodeURIComponent(url.pathname.slice('/export/'.length));
+      if (!cityId) return json({ error: 'cityId is required' }, 400);
+
+      const city = await env.REGISTRY_DB.prepare('SELECT * FROM city WHERE city_id = ?').bind(cityId).first<CityRow>();
+      if (!city || city.status !== 'ready' || !city.current_build_id) {
+        return json({ error: `city '${cityId}' is not ready` }, 404);
+      }
+
+      const object = await env.POI_EXPORTS.get(`exports/${cityId}/${city.current_build_id}.sqlite`);
+      if (!object) {
+        // The city row is 'ready' but the export object is missing — an
+        // older build (predating KAN-339) or an upload step that was
+        // skipped. Distinct from "city not ready" so it's clear this needs
+        // a re-run of the export step, not a rebuild of the whole city.
+        return json({ error: `export not found for city '${cityId}' build '${city.current_build_id}'` }, 404);
+      }
+      return new Response(object.body, {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${cityId}-${city.current_build_id}.sqlite"`,
+          'X-Build-Id': city.current_build_id,
+        },
+      });
     }
 
     // POST /coverage/request  { lat, lng }  — trigger a build for an uncovered area

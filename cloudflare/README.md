@@ -22,10 +22,17 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
   comment at the top of `schema.sql` for the non-atomicity tradeoff.
   `/internal/build-complete` closes out both `city.status` and the matching
   `build_log` row.
-- **R2** (`brush-poi-exports`) — bucket exists, provisioned, but **nothing
-  writes to it yet**. Meant to hold per-city downloadable SQLite extracts for
-  client-side local caching — that flow needs the client integration ticket's
-  format decisions first, so it's deliberately not built blind here.
+- **R2** (`brush-poi-exports`) — holds two things per build: the raw
+  Foursquare extract (`raw-extracts/{cityId}/{buildId}.csv`, for
+  reproducibility) and the client-download export (KAN-339,
+  `exports/{cityId}/{buildId}.sqlite`) — a standalone SQLite file with that
+  city's `poi`/`poi_type`/`poi_attribute` rows, written by
+  `write_sqlite_export()` in `extraction/classify_and_load.py` from the same
+  in-memory rows the D1 load SQL comes from, so the two can never disagree.
+  Served to clients via `GET /export/:cityId` (X-Api-Key gated, not a public
+  R2 URL). Client-side download/caching integration (which app screen
+  triggers this, when to re-download) is its own follow-up ticket, per
+  KAN-339's own scope note — not built here.
 - No R-tree/geospatial index on D1 (confirmed unsupported, and R2 SQL's
   geospatial support is still "exploring" per Cloudflare's own docs) —
   radius search uses geohash prefix range queries instead
@@ -38,9 +45,17 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
 All require `X-Api-Key: <API_KEY>` header except `/internal/*`, which uses a
 separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
 
-- `GET /poi?lat=&lng=&radius=&type=` — POIs of one type within a radius
+- `GET /poi?lat=&lng=&radius=&type=&attribute=&value=` — POIs of one type
+  within a radius, optionally narrowed to 1-2 `poi_attribute` values (e.g.
+  `type=restaurant&attribute=food_cuisine&value=sushi`)
 - `GET /poi/all?lat=&lng=&radius=` — all cached types within a radius
-- `GET /coverage?lat=&lng=` — `none` / `building` / `ready` for this location
+- `GET /coverage?lat=&lng=` — `{status, cityId, buildId}` for this location.
+  `buildId` (KAN-339) lets a client compare its locally cached download's
+  build against the current one without fetching `/export/:cityId` just to
+  check.
+- `GET /export/:cityId` — the current build's client-download SQLite export
+  (KAN-339), streamed from R2. 404 if the city isn't `ready`, or if it's
+  `ready` but predates this ticket and has no export object yet.
 - `POST /coverage/request` `{lat,lng}` — trigger a build for an uncovered
   area. **Not implemented yet** — currently just reports `none`. Real
   auto-provisioning (new city row + Cloud Function trigger) is follow-up
@@ -117,9 +132,12 @@ files write to a relative `build/` path and the Python script resolves
 3. Write a `build_log` start row, then batch `INSERT OR REPLACE` into the
    shared D1 `poi`/`poi_type`/`poi_attribute` tables, then a sweep `DELETE`
    retiring the previous build's rows for that city, across all three tables
-4. Call `/internal/build-complete` (the script prints the exact `curl`
-   command with the real `build_id`/counts) to close out `city.status` and
-   `build_log`
+4. Write the client-download SQLite export (KAN-339,
+   `build/export_{cityId}.sqlite`) from the same in-memory rows
+5. Upload the raw CSV extract and the SQLite export to R2 (the script prints
+   both exact `wrangler r2 object put` commands), then call
+   `/internal/build-complete` (also printed, with the real `build_id`/counts)
+   to close out `city.status` and `build_log`
 
 ### Rows-written cost
 

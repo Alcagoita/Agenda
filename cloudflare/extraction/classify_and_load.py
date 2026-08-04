@@ -12,7 +12,7 @@ Reimplements the same geohash algorithm as cloudflare/src/geohash.ts in
 Python — the Worker and this script must agree on precision/encoding or
 radius queries silently miss rows.
 """
-import csv, json, sys, datetime, os, re, unicodedata, uuid
+import csv, json, sqlite3, sys, datetime, os, re, unicodedata, uuid
 
 BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz'
 CLOUDFLARE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -152,6 +152,72 @@ def write_batches(f, insert_prefix, pieces, label, city_id):
         size += piece_size
     flush()
     return batches_written
+
+def write_sqlite_export(city_id, build_id, pipeline_version, poi_rows, poi_type_rows, poi_attribute_rows, out_sqlite_path):
+    """KAN-339: client-download export — a single city+build's poi/poi_type/
+    poi_attribute rows flattened into a standalone SQLite file (no city_id/
+    build_id columns needed per-row, both are implied by the whole file, and
+    are instead recorded once in _export_meta so the client can compare its
+    cached build_id against /coverage's current one before deciding whether
+    to re-download). Reads straight from the same in-memory rows already
+    classified above, not a second D1 round-trip — guarantees the D1 load
+    and this export can never disagree with each other."""
+    if os.path.exists(out_sqlite_path):
+        os.remove(out_sqlite_path)
+    conn = sqlite3.connect(out_sqlite_path)
+    conn.executescript("""
+        CREATE TABLE poi (
+          fsq_place_id     TEXT PRIMARY KEY,
+          name             TEXT NOT NULL,
+          lat              REAL NOT NULL,
+          lng              REAL NOT NULL,
+          primary_poi_type TEXT NOT NULL,
+          brand            TEXT,
+          category_label   TEXT,
+          address          TEXT
+        );
+        CREATE TABLE poi_type (
+          fsq_place_id TEXT NOT NULL,
+          poi_type     TEXT NOT NULL,
+          rank         INTEGER NOT NULL,
+          PRIMARY KEY (fsq_place_id, poi_type)
+        );
+        CREATE TABLE poi_attribute (
+          fsq_place_id TEXT NOT NULL,
+          dimension    TEXT NOT NULL,
+          value        TEXT NOT NULL,
+          PRIMARY KEY (fsq_place_id, dimension, value)
+        );
+        CREATE INDEX idx_poi_type_lookup ON poi_type (poi_type);
+        CREATE TABLE _export_meta (
+          city_id          TEXT NOT NULL,
+          build_id         TEXT NOT NULL,
+          generated_at     TEXT NOT NULL,
+          pipeline_version TEXT NOT NULL,
+          row_count        INTEGER NOT NULL
+        );
+    """)
+    # r[0]=fsq_place_id, r[3]=name, r[4]=lat, r[5]=lng, r[7]=primary_poi_type,
+    # r[8]=brand, r[9]=category_label, r[12]=address — see the poi_rows.append
+    # call above for the full tuple shape.
+    conn.executemany(
+        'INSERT INTO poi (fsq_place_id, name, lat, lng, primary_poi_type, brand, category_label, address) VALUES (?,?,?,?,?,?,?,?)',
+        [(r[0], r[3], r[4], r[5], r[7], r[8], r[9], r[12]) for r in poi_rows],
+    )
+    conn.executemany(
+        'INSERT INTO poi_type (fsq_place_id, poi_type, rank) VALUES (?,?,?)',
+        [(r[0], r[3], r[4]) for r in poi_type_rows],
+    )
+    conn.executemany(
+        'INSERT INTO poi_attribute (fsq_place_id, dimension, value) VALUES (?,?,?)',
+        [(r[0], r[3], r[4]) for r in poi_attribute_rows],
+    )
+    conn.execute(
+        'INSERT INTO _export_meta (city_id, build_id, generated_at, pipeline_version, row_count) VALUES (?,?,?,?,?)',
+        (city_id, build_id, datetime.datetime.now(datetime.timezone.utc).isoformat(), pipeline_version, len(poi_rows)),
+    )
+    conn.commit()
+    conn.close()
 
 def classify(city_id, csv_path, out_sql_path):
     poi_types = load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'poiTypeCategories.json'))
@@ -322,11 +388,17 @@ def classify(city_id, csv_path, out_sql_path):
         f.write(f"DELETE FROM poi_type WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
         f.write(f"DELETE FROM poi_attribute WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
 
+    sqlite_path = os.path.join(BUILD_DIR, f'export_{city_id}.sqlite')
+    write_sqlite_export(city_id, build_id, PIPELINE_VERSION, poi_rows, poi_type_rows, poi_attribute_rows, sqlite_path)
+    export_r2_key = f"exports/{city_id}/{build_id}.sqlite"
+
     r2_key = f"raw-extracts/{city_id}/{build_id}.csv"
     print(f"[{city_id}] wrote {out_sql_path} ({poi_batches} poi statements + {poi_type_batches} poi_type statements + {poi_attribute_batches} poi_attribute statements, ~{MAX_STATEMENT_BYTES // 1000}KB each max)")
+    print(f"[{city_id}] wrote {sqlite_path} (client-download export, KAN-339)")
     print(f"[{city_id}] build_id={build_id} rows_loaded={len(poi_rows)} rows_skipped={skipped}")
-    print(f"[{city_id}] after loading this file, upload the raw extract and close out the build:")
+    print(f"[{city_id}] after loading this file, upload the raw extract + export and close out the build:")
     print(f"  npx wrangler r2 object put brush-poi-exports/{r2_key} --file={csv_path} --remote")
+    print(f"  npx wrangler r2 object put brush-poi-exports/{export_r2_key} --file={sqlite_path} --remote")
     print(f"  curl -X POST https://poi-api.brushaway.app/internal/build-complete "
           f"-H \"X-Build-Secret: $BUILD_TRIGGER_SECRET\" -H \"Content-Type: application/json\" "
           f"-d '{{\"cityId\":\"{city_id}\",\"buildId\":\"{build_id}\",\"rowsLoaded\":{len(poi_rows)},"
