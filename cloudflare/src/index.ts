@@ -38,6 +38,25 @@ function authenticate(request: Request, env: Env): Response | null {
 
 interface ParsedCoords { lat: number; lng: number; }
 interface ParsedCoordsAndRadius extends ParsedCoords { radius: number; }
+interface AttributeFilter { dimension: string; values: string[]; }
+
+/** attribute+value are optional but must appear together — e.g. attribute=food_cuisine&value=sushi, or value=sushi,italian for an OR match. Capped at 2 values (matches the current real use case: a place tagged with two cuisines, not an open-ended list). */
+function parseAttributeFilter(url: URL): AttributeFilter | null | Response {
+  const dimension = url.searchParams.get('attribute');
+  const rawValue = url.searchParams.get('value');
+  if (!dimension && !rawValue) return null;
+  if (!dimension || !rawValue) {
+    return json({ error: 'attribute and value must be provided together' }, 400);
+  }
+  const values = [...new Set(rawValue.split(',').map(v => v.trim()).filter(v => v !== ''))];
+  if (values.length === 0) {
+    return json({ error: 'value must contain at least one non-empty value' }, 400);
+  }
+  if (values.length > 2) {
+    return json({ error: 'value accepts at most 2 comma-separated values' }, 400);
+  }
+  return { dimension, values };
+}
 
 /** Validates lat/lng are present, finite, and within real coordinate bounds — a value like lat=999 passed Number.isNaN before but was never a real coordinate. */
 function parseCoords(url: URL): ParsedCoords | Response {
@@ -82,43 +101,36 @@ async function findCoveringCity(env: Env, lat: number, lng: number): Promise<Cit
 }
 
 /**
- * Directional type-merge rules, not symmetric groups. Foursquare's taxonomy
- * splits some real-world-equivalent venues into sibling leaf categories
- * (a "supermarket" and a "grocery_store" are the same kind of place to a
- * shopper, just inconsistently labeled — see Minipreço/My Auchan, both
- * classified grocery_store, KAN-329 field test) and genuinely contains one
- * type inside another (every bank branch has an ATM; a standalone ATM is
- * not a bank). The merge direction follows real-world intent, not the
- * category tree:
- *   - searching a broad/containing type also returns the narrower type it
- *     structurally contains (atm -> atm+bank)
- *   - searching the narrower type does NOT pull in the broader one (bank
- *     search must not return standalone ATMs with no other bank services)
- *   - genuine synonyms merge both ways (supermarket <-> grocery_store)
- *   - a distinct real intent never merges with a nearby type even if
- *     Foursquare's tree puts them close together (convenience_store is a
- *     deliberately different "quick top-up" intent from "the weekly
- *     grocery run" — searching either must not pull in the other)
+ * Merge rules as data (KAN-337) — see type_relation_schema.sql for the full
+ * rationale (directional, not symmetric; genuine synonyms vs. structural
+ * containment vs. deliberately-isolated types) and the seed rows.
+ *
+ * Loaded once per Worker isolate, cached in module scope — an isolate can
+ * serve many requests, and merge rules change rarely enough that
+ * re-querying D1 on every request would be pure waste. A newly-deployed
+ * isolate always sees the current table; an existing isolate picks up a
+ * table edit only after it's recycled (not on a fixed schedule — whenever
+ * the Workers runtime naturally cycles it), same tradeoff as any
+ * module-scope cache in a serverless runtime.
  */
-const TYPE_MERGE_INCLUDES: Record<string, string[]> = {
-  atm: ['atm', 'bank'],
-  supermarket: ['supermarket', 'grocery_store'],
-  grocery_store: ['supermarket', 'grocery_store'],
-  // fitness_center/gym and hotel/lodging are distinct PoiTypes in our own
-  // catalog, but Foursquare has exactly one leaf category for each real
-  // concept ("Gym and Studio", "Hotel") — classification can only assign a
-  // place to one or the other (see the collision warning in
-  // extraction/classify_and_load.py's build_reverse_map), so both sides
-  // need to be queried together or one of the two PoiTypes silently never
-  // returns anything.
-  fitness_center: ['fitness_center', 'gym'],
-  gym: ['fitness_center', 'gym'],
-  hotel: ['hotel', 'lodging'],
-  lodging: ['hotel', 'lodging'],
-};
+let typeRelationCache: Record<string, string[]> | null = null;
 
-function typesForSearch(poiType: string): string[] {
-  return Object.hasOwn(TYPE_MERGE_INCLUDES, poiType) ? TYPE_MERGE_INCLUDES[poiType] : [poiType];
+async function loadTypeRelations(db: D1Database): Promise<Record<string, string[]>> {
+  if (typeRelationCache) return typeRelationCache;
+  const { results } = await db.prepare('SELECT search_type, include_type FROM type_relation').all<{
+    search_type: string; include_type: string;
+  }>();
+  const map: Record<string, string[]> = {};
+  for (const row of results) {
+    (map[row.search_type] ??= []).push(row.include_type);
+  }
+  typeRelationCache = map;
+  return map;
+}
+
+async function typesForSearch(db: D1Database, poiType: string): Promise<string[]> {
+  const relations = await loadTypeRelations(db);
+  return Object.hasOwn(relations, poiType) ? relations[poiType] : [poiType];
 }
 
 /**
@@ -152,19 +164,37 @@ async function queryPoiDb(
   lng: number,
   radiusMeters: number,
   poiType: string | null,
+  attributeFilter: AttributeFilter | null,
 ) {
   const precision = precisionForRadius(radiusMeters);
   const prefixes = neighborPrefixes(lat, lng, precision);
   const placeholders = prefixes.map(() => '?').join(',');
 
-  const types = poiType ? typesForSearch(poiType) : null;
+  const types = poiType ? await typesForSearch(db, poiType) : null;
   const typePlaceholders = types?.map(() => '?').join(',');
 
-  const sql = types
-    ? `SELECT * FROM poi WHERE city_id = ? AND substr(geohash, 1, ${precision}) IN (${placeholders}) ` +
-      `AND EXISTS (SELECT 1 FROM poi_type WHERE poi_type.city_id = poi.city_id AND poi_type.fsq_place_id = poi.fsq_place_id AND poi_type.poi_type IN (${typePlaceholders}))`
-    : `SELECT * FROM poi WHERE city_id = ? AND substr(geohash, 1, ${precision}) IN (${placeholders})`;
-  const binds = types ? [cityId, ...prefixes, ...types] : [cityId, ...prefixes];
+  const clauses = ['city_id = ?', `substr(geohash, 1, ${precision}) IN (${placeholders})`];
+  const binds: unknown[] = [cityId, ...prefixes];
+
+  if (types) {
+    clauses.push(
+      `EXISTS (SELECT 1 FROM poi_type WHERE poi_type.city_id = poi.city_id AND poi_type.fsq_place_id = poi.fsq_place_id AND poi_type.poi_type IN (${typePlaceholders}))`,
+    );
+    binds.push(...types);
+  }
+
+  // Same EXISTS shape as the poi_type filter above — a place can carry more
+  // than one value per dimension (KAN-336), so this is presence, not a
+  // plain join that would multiply rows.
+  if (attributeFilter) {
+    const valuePlaceholders = attributeFilter.values.map(() => '?').join(',');
+    clauses.push(
+      `EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.city_id = poi.city_id AND poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value IN (${valuePlaceholders}))`,
+    );
+    binds.push(attributeFilter.dimension, ...attributeFilter.values);
+  }
+
+  const sql = `SELECT * FROM poi WHERE ${clauses.join(' AND ')}`;
 
   const { results } = await db.prepare(sql).bind(...binds).all<{
     fsq_place_id: string; name: string; lat: number; lng: number;
@@ -255,19 +285,23 @@ export default {
     const authError = authenticate(request, env);
     if (authError) return authError;
 
-    // GET /poi?lat=&lng=&radius=&type=  — POIs of one type within a radius
+    // GET /poi?lat=&lng=&radius=&type=&attribute=&value=  — POIs of one type
+    // within a radius, optionally narrowed to 1-2 attribute values (e.g.
+    // type=restaurant&attribute=food_cuisine&value=sushi)
     if (url.pathname === '/poi' && request.method === 'GET') {
       const poiType = url.searchParams.get('type');
       if (!poiType) return json({ error: 'type is required' }, 400);
       const parsed = parseCoordsAndRadius(url);
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius } = parsed;
+      const attributeFilter = parseAttributeFilter(url);
+      if (attributeFilter instanceof Response) return attributeFilter;
 
       const city = await findCoveringCity(env, lat, lng);
       if (!city || city.status !== 'ready') {
         return json({ covered: false, status: city?.status ?? 'none', results: [] });
       }
-      const results = await queryPoiDb(env.REGISTRY_DB, city.city_id, lat, lng, radius, poiType);
+      const results = await queryPoiDb(env.REGISTRY_DB, city.city_id, lat, lng, radius, poiType, attributeFilter);
       return json({ covered: true, cityId: city.city_id, results });
     }
 
@@ -281,7 +315,7 @@ export default {
       if (!city || city.status !== 'ready') {
         return json({ covered: false, status: city?.status ?? 'none', results: [] });
       }
-      const results = await queryPoiDb(env.REGISTRY_DB, city.city_id, lat, lng, radius, null);
+      const results = await queryPoiDb(env.REGISTRY_DB, city.city_id, lat, lng, radius, null, null);
       return json({ covered: true, cityId: city.city_id, results });
     }
 
