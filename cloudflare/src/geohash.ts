@@ -42,19 +42,17 @@ export function precisionForRadius(radiusMeters: number): number {
 /** Sanity ceiling on requested radius — not a geohash-safety bound (see neighborPrefixes, which now handles any radius/latitude combination correctly), just a cap on how large a single query is allowed to ask for. */
 export const MAX_RADIUS_METERS = 4500;
 
+const METERS_PER_DEGREE_LAT = 111_195;
+
 /**
- * A geohash cell's width in degrees is fixed by its precision alone (pure
- * bit-count math, independent of any specific lat/lng) — but converting
- * that to metres divides the longitude axis by cos(lat): meridians
- * converge toward the poles, so the same number of degrees of longitude
- * covers fewer real metres the further from the equator a query is. A fixed
- * 3x3 neighbor grid sized off an "at the equator" cell estimate is
- * therefore only safe there — confirmed live at Lisbon's ~38.7°N, a fixed
- * 3x3 grid missed real in-range results near the edge of the search radius,
- * because the real lng cell width at that latitude is narrower than the
- * equatorial estimate the fixed grid assumed. neighborPrefixes below sizes
- * its grid from these exact per-latitude dimensions instead of assuming 3x3
- * is always enough.
+ * A geohash cell's dimensions in degrees are fixed by its precision alone
+ * (pure bit-count math — every cell at a given precision has the same
+ * degree height/width, regardless of where it sits), but converting to
+ * metres divides the longitude axis by cos(lat): meridians converge toward
+ * the poles, so the same number of degrees of longitude covers fewer real
+ * metres the further from the equator a query is. This is why a fixed 3x3
+ * neighbor grid sized off an "at the equator" cell estimate isn't always
+ * enough — confirmed live at Lisbon's ~38.7°N (see neighborPrefixes).
  */
 function cellDimensionsDeg(precision: number): { latDeg: number; lngDeg: number } {
   const totalBits = precision * 5;
@@ -63,7 +61,35 @@ function cellDimensionsDeg(precision: number): { latDeg: number; lngDeg: number 
   return { lngDeg: 360 / 2 ** lngBits, latDeg: 180 / 2 ** latBits };
 }
 
-const METERS_PER_DEGREE_LAT = 111_195;
+/**
+ * Cap on how many cells out neighborPrefixes will search per axis. D1 binds
+ * one parameter per prefix (confirmed 100-bound-param hard limit), and lng
+ * cell width shrinks toward zero near the poles (cos(lat) -> 0), which
+ * would otherwise blow the required grid up unboundedly for a query at an
+ * extreme latitude. This product only serves Portugal today — normal usage
+ * never approaches this (Lisbon's latitude needs at most 2 cells out even
+ * at MAX_RADIUS_METERS) — but a request that genuinely needs more than this
+ * must be rejected explicitly (see requiredGridCells / the caller in
+ * index.ts), never silently served with incomplete coverage.
+ */
+export const MAX_GRID_CELLS_PER_AXIS = 4;
+
+/**
+ * How many cells out, per axis, neighborPrefixes needs to fully cover
+ * radiusMeters at this latitude/precision — the real, uncapped number, so
+ * callers can reject a request that would exceed MAX_GRID_CELLS_PER_AXIS
+ * instead of neighborPrefixes silently truncating it. See neighborPrefixes
+ * for why the worst-case margin is exactly one whole cell per axis.
+ */
+export function requiredGridCells(lat: number, precision: number, radiusMeters: number): { cellsLat: number; cellsLng: number } {
+  const { latDeg, lngDeg } = cellDimensionsDeg(precision);
+  const cellHeightMeters = latDeg * METERS_PER_DEGREE_LAT;
+  const cellWidthMeters = lngDeg * METERS_PER_DEGREE_LAT * Math.cos((lat * Math.PI) / 180);
+  return {
+    cellsLat: Math.max(1, Math.ceil(radiusMeters / cellHeightMeters)),
+    cellsLng: Math.max(1, Math.ceil(radiusMeters / cellWidthMeters)),
+  };
+}
 
 export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
@@ -128,12 +154,14 @@ function geohashCellBounds(lat: number, lng: number, precision: number) {
  *    why lng cells narrow with latitude). A request near the top of a
  *    precision tier's radius range, at a real latitude, could still exceed
  *    a fixed 3x3 window's true coverage. Fixed by computing exactly how
- *    many cells out are needed per axis for THIS radius/latitude/precision,
- *    rather than assuming 3 is always enough — this also means there is no
- *    longer any "unsafe" radius/latitude combination to reject; the grid
- *    just grows if it needs to (typically stays small: the precision tiers
- *    in precisionForRadius keep a well-chosen precision's grid near 3x3
- *    even at high latitudes, growing only for extreme cases).
+ *    many cells out are needed per axis for THIS radius/latitude/precision
+ *    (requiredGridCells), rather than assuming 3 is always enough.
+ *
+ * Callers MUST check requiredGridCells against MAX_GRID_CELLS_PER_AXIS
+ * before calling this (see index.ts) — this function does not clamp or
+ * silently truncate the grid itself. A precision/radius/latitude
+ * combination that needs a bigger grid than the cap allows must be
+ * rejected explicitly at the caller, never served with incomplete coverage.
  */
 export function neighborPrefixes(lat: number, lng: number, precision: number, radiusMeters: number): string[] {
   const bounds = geohashCellBounds(lat, lng, precision);
@@ -142,22 +170,7 @@ export function neighborPrefixes(lat: number, lng: number, precision: number, ra
   const cellHeightDeg = bounds.latMax - bounds.latMin;
   const cellWidthDeg = bounds.lngMax - bounds.lngMin;
 
-  const cellHeightMeters = cellHeightDeg * METERS_PER_DEGREE_LAT;
-  const cellWidthMeters = cellWidthDeg * METERS_PER_DEGREE_LAT * Math.cos((lat * Math.PI) / 180);
-
-  // Worst case, the query point sits right at the edge of its own cell (~0
-  // margin within it) — so full coverage needs N whole cells out from the
-  // own cell's center in that axis, where N*cellSize >= radiusMeters.
-  // Capped: D1 binds one parameter per prefix (confirmed 100-bound-param
-  // hard limit), and lng cell width shrinks toward zero near the poles
-  // (cos(lat) -> 0), which would otherwise blow this up unboundedly for a
-  // query at an extreme latitude. This product only serves Portugal today
-  // — the cap is a safety net against a pathological future query, not
-  // something normal usage should ever hit (verified: Lisbon's latitude
-  // needs at most 2 cells out even at MAX_RADIUS_METERS).
-  const MAX_GRID_CELLS_PER_AXIS = 4;
-  const cellsLat = Math.min(MAX_GRID_CELLS_PER_AXIS, Math.max(1, Math.ceil(radiusMeters / cellHeightMeters)));
-  const cellsLng = Math.min(MAX_GRID_CELLS_PER_AXIS, Math.max(1, Math.ceil(radiusMeters / cellWidthMeters)));
+  const { cellsLat, cellsLng } = requiredGridCells(lat, precision, radiusMeters);
 
   const prefixes = new Set<string>();
   for (let dLat = -cellsLat; dLat <= cellsLat; dLat++) {
