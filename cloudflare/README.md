@@ -121,16 +121,16 @@ files write to a relative `build/` path and the Python script resolves
    command with the real `build_id`/counts) to close out `city.status` and
    `build_log`
 
-### Rows-written cost — real constraint, watch this before the next city
+### Rows-written cost
 
-D1 Free plan caps at **100,000 rows written/day**. Every index an insert
-touches counts as an extra "row written" — a straight INSERT is not 1:1 with
-real rows. Observed: 6,162 real rows → 24,648 "rows written" (4x, from the
-composite PK + 2 secondary indexes) before the index was trimmed down to one
-(now ~3x). **A city with more than ~30-35k real POIs will not fit in a single
-day's free quota** even post-fix — either spread a large city's initial load
-across multiple days, or move to Workers Paid (removes the cap) once regular
-re-seeding/new-city cadence needs it.
+On Workers Paid (in use since the KAN-329/331 upgrade): 50M rows-written/month
+included, then metered — no daily cap, no need to trim indexes or spread a
+city's initial load across multiple days to stay under a quota. Every index an
+insert touches still counts as an extra "row written" (a straight INSERT is
+not 1:1 with real rows — e.g. a `poi` row with 2 indexes costs 3), so it's
+still worth knowing, just no longer a hard constraint that shapes schema
+decisions. D1's actual hard ceiling is 10GB/database, plan-independent — see
+`schema.sql`.
 
 ## Test cities
 

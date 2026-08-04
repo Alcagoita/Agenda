@@ -3,7 +3,8 @@ import { haversineMeters, neighborPrefixes, precisionForRadius, MAX_RADIUS_METER
 export interface Env {
   // One shared D1 database for everything — 10GB is D1's hard per-database
   // ceiling regardless of plan tier, so per-city databases don't scale.
-  // Holds `city`, `poi` (all cities, keyed by city_id), and `build_log`.
+  // Holds `city`, `poi`, `poi_type`, `poi_attribute`, `type_relation`, and
+  // `build_log` (all cities, keyed by city_id).
   REGISTRY_DB: D1Database;
   POI_EXPORTS: R2Bucket;
   API_KEY: string;
