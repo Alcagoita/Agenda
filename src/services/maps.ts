@@ -22,7 +22,7 @@ import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
 } from './placesFunctions';
-import { cloudflareCoverageProxy, cloudflarePoiAllProxy } from './cloudflarePoiFunctions';
+import { cloudflarePoiAllProxy } from './cloudflarePoiFunctions';
 import { searchOsmPlacesStrict } from './osmPlaces';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { Category, PoiType, poiCatalogLabel } from '../types';
@@ -241,9 +241,6 @@ async function searchNearbyPlacesCloudflare(
   radiusMeters: number,
 ): Promise<Record<string, NearbyPlace[]> | null> {
   try {
-    const coverage = await cloudflareCoverageProxy(lat, lng);
-    if (coverage.status !== 'ready') { return null; }
-
     const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters);
     if (!data.covered) { return null; }
 

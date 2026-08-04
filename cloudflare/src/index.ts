@@ -158,21 +158,17 @@ async function typesForSearch(db: D1Database, poiType: string): Promise<string[]
  * place matching both searched types 'bakery' and 'cafe' would come back
  * twice); EXISTS just checks presence, never multiplies rows.
  *
- * Filters by geohash prefix first, type second (WHERE geohash IN (...) AND
+ * Filters by geohash prefix first, type second (WHERE geohash range OR ...
  * EXISTS(...type check...)). Benchmarked against live Lisboa data (121
  * matching rows either way, same result set both forms): this ordering
  * averaged ~23ms vs ~38ms for a type-first JOIN (poi_type driving, geohash
  * filtered after) — consistently faster across repeated runs.
  *
- * Real caveat found while benchmarking, not yet fixed here: EXPLAIN QUERY
- * PLAN shows neither form actually uses idx_poi_city_geo for the geohash
- * filter — substr(geohash, 1, n) IN (...) is a function over the column,
- * which SQLite/D1 can't serve from a b-tree index, so both forms fall back
- * to a city_id-filtered scan. Correctness is unaffected, but a real
- * geohash >= ? AND geohash < ? range condition (index-sargable, unlike
- * substr()) would likely be meaningfully faster still — worth its own
- * follow-up, out of scope for this ticket (multi-type support, not a
- * geohash-indexing rewrite).
+ * Each prefix is expressed as an inclusive/exclusive lexical range rather
+ * than `substr(geohash, 1, n)`: applying a function to the indexed column
+ * prevents SQLite/D1 using idx_poi_city_geo beyond city_id. `~` sorts after
+ * every base32 geohash character, so [prefix, prefix + '~') contains exactly
+ * the full geohash subtree for that prefix and is index-sargable.
  */
 async function queryPoiDb(
   db: D1Database,
@@ -185,13 +181,13 @@ async function queryPoiDb(
 ) {
   const precision = precisionForRadius(radiusMeters);
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
-  const placeholders = prefixes.map(() => '?').join(',');
+  const geohashClauses = prefixes.map(() => '(geohash >= ? AND geohash < ?)');
 
   const types = poiType ? await typesForSearch(db, poiType) : null;
   const typePlaceholders = types?.map(() => '?').join(',');
 
-  const clauses = ['city_id = ?', `substr(geohash, 1, ${precision}) IN (${placeholders})`];
-  const binds: unknown[] = [cityId, ...prefixes];
+  const clauses = ['city_id = ?', `(${geohashClauses.join(' OR ')})`];
+  const binds: unknown[] = [cityId, ...prefixes.flatMap(prefix => [prefix, `${prefix}~`])];
 
   if (types) {
     clauses.push(
