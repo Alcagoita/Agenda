@@ -1,4 +1,4 @@
-import { haversineMeters, neighborPrefixes, precisionForRadius, MAX_RADIUS_METERS } from './geohash';
+import { haversineMeters, neighborPrefixes, precisionForRadius, requiredGridCells, MAX_GRID_CELLS_PER_AXIS, MAX_RADIUS_METERS } from './geohash';
 
 export interface Env {
   // One shared D1 database for everything — 10GB is D1's hard per-database
@@ -68,13 +68,29 @@ function parseCoords(url: URL): ParsedCoords | Response {
   return { lat, lng };
 }
 
-/** parseCoords plus radius bounds — must be finite, positive, and within what the geohash 3x3 window can safely cover (see MAX_RADIUS_METERS). A NaN/negative/oversized radius previously fell through to an always-empty or silently-incomplete result instead of a clear error. */
+/**
+ * parseCoords plus radius bounds — must be finite, positive, within
+ * MAX_RADIUS_METERS (a sanity cap on query size), and within the geohash
+ * grid's per-axis cell budget at this specific latitude (see geohash.ts's
+ * requiredGridCells/MAX_GRID_CELLS_PER_AXIS — lng cell width shrinks toward
+ * the poles, so a radius/precision that's a small grid at the equator can
+ * need a much bigger one at extreme latitudes; rejected here explicitly
+ * rather than neighborPrefixes silently truncating the search grid and
+ * returning incomplete results). Not reachable by this product's actual
+ * Portugal-only usage today — Lisbon's latitude needs at most 2 cells out
+ * even at MAX_RADIUS_METERS — but a real, if currently theoretical, request
+ * that would exceed the budget must fail loudly, not silently.
+ */
 function parseCoordsAndRadius(url: URL): ParsedCoordsAndRadius | Response {
   const coords = parseCoords(url);
   if (coords instanceof Response) return coords;
   const radius = Number(url.searchParams.get('radius') ?? '1000');
   if (!Number.isFinite(radius) || radius <= 0) return json({ error: 'radius must be a finite positive number' }, 400);
   if (radius > MAX_RADIUS_METERS) return json({ error: `radius must be <= ${MAX_RADIUS_METERS}m` }, 400);
+  const { cellsLat, cellsLng } = requiredGridCells(coords.lat, precisionForRadius(radius), radius);
+  if (cellsLat > MAX_GRID_CELLS_PER_AXIS || cellsLng > MAX_GRID_CELLS_PER_AXIS) {
+    return json({ error: `radius ${radius}m at this latitude needs a search grid larger than supported (max ${MAX_GRID_CELLS_PER_AXIS} cells/axis)` }, 400);
+  }
   return { ...coords, radius };
 }
 
@@ -168,7 +184,7 @@ async function queryPoiDb(
   attributeFilter: AttributeFilter | null,
 ) {
   const precision = precisionForRadius(radiusMeters);
-  const prefixes = neighborPrefixes(lat, lng, precision);
+  const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
   const placeholders = prefixes.map(() => '?').join(',');
 
   const types = poiType ? await typesForSearch(db, poiType) : null;
