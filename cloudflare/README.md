@@ -133,13 +133,38 @@ falls back to matching the place's own name against the app's existing
 task-title inference elsewhere in the app, not a third parallel list.
 Real but modest recovery given the dictionaries' size (10 cuisines, 14
 store kinds): +120 `food_cuisine` / +36 `store_kind` rows on Lisboa,
-+22 / +8 on Odivelas. OSM `cuisine=`/`shop=` tag enrichment (the ticket's
-higher-priority source) was evaluated but not built this round — the
-keyword pass alone already recovers real cases including the ticket's own
-example, and OSM's added complexity (external API, ~40-60% single-attempt
-failure rate per KAN-322, name+proximity matching, retries) wasn't judged
-worth it against that marginal return; revisit as a follow-up if the
-residual gap turns out to matter more in practice.
++22 / +8 on Odivelas.
+
+**OSM enrichment (`extraction/enrich_osm_cuisine.py`, KAN-340's originally
+higher-priority source)**: run separately from `classify_and_load.py`, not
+inline — Overpass is a slow, flaky, retryable external call (~40-60%
+single-attempt failure rate per KAN-322) that doesn't belong in the fast
+synchronous Foursquare pipeline. Queries Overpass for the city's
+`cuisine=`/`shop=`-tagged elements, matches them to `poi` rows still
+missing a subtype after *both* the category-tag and keyword-fallback
+passes (by normalized name + ≤75m proximity — deliberately conservative to
+avoid mismatching two different nearby businesses with similar names), and
+writes new `poi_attribute` rows tagged with the city's current
+`build_id` (read live from D1) so they survive that build's sweep.
+**Must be re-run after every future Foursquare re-extraction for the same
+city**, or this enrichment is lost when the next build's sweep retires the
+previous build's `poi_attribute` rows — same requirement as the keyword
+pass, just a separate manual step here instead of automatic.
+
+Usage: `python3 extraction/enrich_osm_cuisine.py <city_id>` (after the
+regular pipeline has already loaded that city), then run the printed
+`wrangler d1 execute --file=...` command.
+
+Real yield, measured against actual OSM/Foursquare name overlap in these
+two cities (most OSM elements simply don't share a listing with
+Foursquare at all — of 200 sampled cuisine-tagged OSM elements near
+Odivelas, only 22% had any same-named Foursquare row, 18% also within
+75m): +42 `food_cuisine` / +1 `store_kind` on Lisboa, +7 / +0 on Odivelas.
+Smaller than the keyword pass's yield, as expected for a third,
+supplementary source layered on top of two already-run passes — but real,
+verified live, and recovers cases neither of the other two passes can
+(a place whose name gives no cuisine hint at all, and whose Foursquare row
+was never tagged with one either).
 
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL
