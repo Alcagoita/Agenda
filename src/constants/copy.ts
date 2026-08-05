@@ -512,7 +512,7 @@ const en = {
     signOutErrorTitle: 'Error',
     signOutErrorBody: 'Failed to sign out. Please try again.',
     footerVersion: (version: string) => `Brush Away · v${version}`,
-    footerAttribution: 'Place & location data © OpenStreetMap contributors (ODbL)',
+    footerAttribution: 'Place & location data © OpenStreetMap contributors (ODbL), Foursquare Open Source Places (Apache 2.0), and Google',
   },
 
   // ─── Login (KAN-252) ────────────────────────────────────────────────────────
@@ -1615,7 +1615,7 @@ const ptPT: typeof en = {
     signOutErrorTitle: 'Erro',
     signOutErrorBody: 'Falha ao terminar sessão. Tenta outra vez.',
     footerVersion: (version: string) => `Brush Away · v${version}`,
-    footerAttribution: 'Dados de locais e localização © colaboradores do OpenStreetMap (ODbL)',
+    footerAttribution: 'Dados de locais e localização © colaboradores do OpenStreetMap (ODbL), Foursquare Open Source Places (Apache 2.0) e Google',
   },
 
   login: {
