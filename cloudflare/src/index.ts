@@ -158,8 +158,13 @@ async function findPlace(env: Env, lat: number, lng: number): Promise<PlaceRow |
 // Server-side only — the client never resolves its own Place identity, so
 // it can't be spoofed/mismatched against what the Worker dedupes on. Same
 // Nominatim service the app already uses client-side (maps.ts), same
-// User-Agent policy requirement, own independent isolate-scoped state (no
-// shared clock with the app — different process entirely).
+// User-Agent policy requirement.
+//
+// No shared 1req/s throttle across isolates (would need a Durable Object or
+// KV-backed token bucket — real infra, out of scope here). Acceptable for
+// now: this only runs on a genuinely new Place resolution, which findPlace's
+// bbox fast-path and the app's own zero-check already make rare. Revisit
+// with a real global limiter before this traffic grows.
 
 const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
 const NOMINATIM_USER_AGENT = 'BrushPoiBackend/1 (poi-api.brushaway.app)';
@@ -184,11 +189,17 @@ interface PlaceGeo {
   placeId: string;
   name: string;
   countryCode: string | null;
+  countryName: string | null;
   placeKind: string | null;
 }
 
 /** Same preference order as the app's own extractCityName (maps.ts) — most specific populated-place field wins. Do not write this twice; keep in sync if either changes. */
 const SETTLEMENT_FIELD_PRIORITY = ['city', 'town', 'village', 'municipality', 'suburb', 'county'] as const;
+
+/** Case/diacritic-insensitive: address.city and a feature's own `name` come from the same OSM source but aren't always byte-identical (accents, casing). Same normalization shape as extraction/classify_and_load.py's normalize_text — kept independent since this compares whole names, not tokenizing for substring matching. */
+function normalizeSettlementName(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
 
 interface NominatimReverseResult {
   osmType: string;
@@ -196,6 +207,7 @@ interface NominatimReverseResult {
   name: string;
   addresstype: string | null;
   countryCode: string | null;
+  countryName: string | null;
   settlementName: string | null;
 }
 
@@ -240,6 +252,7 @@ async function nominatimReverse(lat: number, lng: number, zoom: number): Promise
     name,
     addresstype: typeof record.addresstype === 'string' ? record.addresstype : null,
     countryCode: typeof address.country_code === 'string' ? address.country_code.toUpperCase() : null,
+    countryName: typeof address.country === 'string' ? address.country : null,
     settlementName,
   };
 }
@@ -273,11 +286,12 @@ async function resolvePlaceIdentity(lat: number, lng: number): Promise<PlaceGeo 
     // case — Sertã/Odivelas resolve here on the first, finest zoom).
     // Otherwise the resolved feature is a sub-unit of a NAMED settlement
     // (a freguesia inside Lisboa) — try a coarser zoom.
-    if (!result.settlementName || result.settlementName === result.name) {
+    if (!result.settlementName || normalizeSettlementName(result.settlementName) === normalizeSettlementName(result.name)) {
       return {
         placeId: `osm-${result.osmType}-${result.osmId}`,
         name: result.settlementName ?? result.name,
         countryCode: result.countryCode,
+        countryName: result.countryName,
         placeKind: result.addresstype,
       };
     }
@@ -408,8 +422,11 @@ async function bumpCoverageDemand(env: Env, place: PlaceRow): Promise<void> {
   // Only 'none' rows are demand signal — a 'mapped'/'mapping' row being
   // requested again isn't telling us anything new to prioritize.
   if (place.status !== 'none') return;
+  // WHERE status = 'none' too — defense in depth against a concurrent
+  // request flipping this row's status between our read and this write;
+  // the JS check above alone only guards against the row we already read.
   await env.REGISTRY_DB.prepare(
-    'UPDATE place SET request_count = request_count + 1, last_requested_at = ? WHERE place_id = ?',
+    "UPDATE place SET request_count = request_count + 1, last_requested_at = ? WHERE place_id = ? AND status = 'none'",
   ).bind(new Date().toISOString(), place.place_id).run();
 }
 
@@ -648,6 +665,17 @@ export default {
       }
 
       const now = new Date().toISOString();
+      // Ensure the country row exists before place.country_code can
+      // reference it — place_id resolution can hit a country before KAN-354
+      // ever queues it (country.status stays 'none' until it does). INSERT
+      // OR IGNORE: a race with another request for the same country, or the
+      // country pre-build already having created it, must not clobber it.
+      if (geo.countryCode) {
+        await env.REGISTRY_DB.prepare(
+          "INSERT OR IGNORE INTO country (country_code, name, status) VALUES (?, ?, 'none')",
+        ).bind(geo.countryCode, geo.countryName ?? geo.countryCode).run();
+      }
+
       // ON CONFLICT DO UPDATE (not INSERT OR IGNORE) so a request that loses
       // the race to a concurrent identical request still counts as demand —
       // both requests bump request_count instead of the loser's demand

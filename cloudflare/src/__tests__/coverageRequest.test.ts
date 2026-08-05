@@ -26,8 +26,15 @@ interface FakePlaceRow {
   last_requested_at: string | null;
 }
 
+interface FakeCountryRow {
+  country_code: string;
+  name: string;
+  status: 'none' | 'mapping' | 'mapped';
+}
+
 function createFakePlaceDb(seed: FakePlaceRow[] = []) {
   const rows = new Map(seed.map(r => [r.place_id, { ...r }]));
+  const countryRows = new Map<string, FakeCountryRow>();
 
   function prepare(sql: string) {
     const trimmed = sql.trim();
@@ -67,6 +74,13 @@ function createFakePlaceDb(seed: FakePlaceRow[] = []) {
             row.last_requested_at = lastRequestedAt;
             return { meta: { changes: 1 } };
           }
+          if (trimmed.startsWith('INSERT OR IGNORE INTO country')) {
+            const [countryCode, name] = args as [string, string];
+            if (!countryRows.has(countryCode)) {
+              countryRows.set(countryCode, { country_code: countryCode, name, status: 'none' });
+            }
+            return { meta: { changes: 1 } };
+          }
           if (trimmed.startsWith('INSERT INTO place')) {
             const [placeId, countryCode, name, placeKind, firstRequestedAt, lastRequestedAt] = args as [
               string, string | null, string, string | null, string, string,
@@ -96,7 +110,7 @@ function createFakePlaceDb(seed: FakePlaceRow[] = []) {
     return statement([]);
   }
 
-  return { prepare, rows } as unknown as D1Database & { rows: Map<string, FakePlaceRow> };
+  return { prepare, rows, countryRows } as unknown as D1Database & { rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow> };
 }
 
 const API_KEY = 'test-key';
@@ -157,10 +171,13 @@ describe('POST /coverage/request', () => {
     const body = await res.json() as { coverageStatus: string; cityId: string };
 
     expect(body).toEqual({ coverageStatus: 'none', cityId: 'osm-relation-1294136' });
-    const stored = (env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> }).rows.get('osm-relation-1294136');
+    const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow> };
+    const stored = fakeDb.rows.get('osm-relation-1294136');
     expect(stored?.status).toBe('none');
     expect(stored?.country_code).toBe('PT');
     expect(stored?.request_count).toBe(1);
+    // The FK'd country row must exist before place.country_code can reference it.
+    expect(fakeDb.countryRows.get('PT')).toEqual({ country_code: 'PT', name: 'PT', status: 'none' });
   });
 
   it('dedupes: a second request for the same Place does not create a second row', async () => {
@@ -236,6 +253,24 @@ describe('POST /coverage/request', () => {
     expect(body.cityId).toBe('osm-relation-2897141');
     const stored = (env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> }).rows.get('osm-relation-2897141');
     expect(stored?.name).toBe('Lisboa');
+  });
+
+  // The settlement-name match must tolerate case/diacritic differences
+  // between address.city and the resolved feature's own name — both come
+  // from the same OSM source, but aren't always byte-identical.
+  it('resolves on the first zoom when the settlement name matches only after diacritic/case normalization', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      osm_type: 'relation', osm_id: 7654321, name: 'sao paulo', addresstype: 'city',
+      address: { city: 'São Paulo', country_code: 'br' },
+    }), { status: 200 }));
+    const env = makeEnv();
+
+    const res = await worker.fetch(coverageRequest(-23.55, -46.63), env);
+    const body = await res.json() as { coverageStatus: string; cityId: string };
+
+    expect(body).toEqual({ coverageStatus: 'none', cityId: 'osm-relation-7654321' });
+    const stored = (env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> }).rows.get('osm-relation-7654321');
+    expect(stored?.name).toBe('São Paulo');
   });
 
   it('gives up after exhausting all zoom candidates without a clean resolution', async () => {

@@ -182,6 +182,26 @@ describe('searchNearbyPlaces — KAN-355 zero check / coverage demand recording'
     expect(mockRequestCoverage).toHaveBeenCalledWith(10.0, 10.0);
   });
 
+  it('does not fire when Nominatim rejects the classification request', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('network error'));
+    mockPoiAll.mockResolvedValue({ covered: false, results: [] });
+
+    await searchNearbyPlaces(10.2, 10.2, ['cafe'], RADIUS);
+    await flushZeroCheck();
+
+    expect(mockRequestCoverage).not.toHaveBeenCalled();
+  });
+
+  it('does not fire when Nominatim responds not-ok during classification', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false } as Response);
+    mockPoiAll.mockResolvedValue({ covered: false, results: [] });
+
+    await searchNearbyPlaces(10.3, 10.3, ['cafe'], RADIUS);
+    await flushZeroCheck();
+
+    expect(mockRequestCoverage).not.toHaveBeenCalled();
+  });
+
   it('does not fire when OSM actually found something — not a genuine zero', async () => {
     mockPoiAll.mockResolvedValue({ covered: false, results: [] });
     mockOsmSearch.mockResolvedValue({

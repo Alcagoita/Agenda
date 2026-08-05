@@ -30,7 +30,7 @@ A zero result triggers a reverse geocode of the user's coordinates. Nominatim al
 
 | Reverse geocode returns | Meaning | Action |
 |---|---|---|
-| Nothing / no country | Ocean, Antarctica, nowhere | Nothing to show. **No worker, no OSM.** Zero is the truth |
+| Nothing / no country | Ocean, Antarctica, nowhere | Nothing to show. **No worker.** Zero is the truth. (OSM was already tried before this classification runs — see KAN-355's implementation note — so this doesn't skip that call, just confirms it was never going to matter) |
 | Country, no settlement | Desert, farmland, between towns | **No worker.** Still try OSM — there may be a petrol station |
 | Country + settlement | Normal | Place mapped → **true zero, done.** Not mapped → **start the worker** |
 

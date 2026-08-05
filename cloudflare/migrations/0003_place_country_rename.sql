@@ -30,7 +30,11 @@
 --
 -- Run: npx wrangler d1 execute brush-poi-registry --remote --file=migrations/0003_place_country_rename.sql
 
-PRAGMA foreign_keys=OFF;
+-- Defers FK checking to the end of D1's implicit transaction for this whole
+-- file, rather than disabling it outright — place_new's country_code FK
+-- would otherwise fail mid-migration (place_new is populated before
+-- `country` has committed in the same sense a real transaction would need).
+PRAGMA defer_foreign_keys = ON;
 
 CREATE TABLE country (
   country_code TEXT PRIMARY KEY,
@@ -41,7 +45,7 @@ CREATE TABLE country (
   place_count  INTEGER NOT NULL DEFAULT 0
 );
 
-INSERT INTO country (country_code, name, status, place_count) VALUES ('PT', 'Portugal', 'none', 2);
+INSERT INTO country (country_code, name, status) VALUES ('PT', 'Portugal', 'none');
 
 CREATE TABLE place_new (
   place_id         TEXT PRIMARY KEY,
@@ -87,26 +91,47 @@ FROM city;
 DROP TABLE city;
 ALTER TABLE place_new RENAME TO place;
 
+-- Derived, not hardcoded — counts whatever place_new actually produced
+-- rather than assuming exactly the two rows this migration was written
+-- against. Every migrated row is assigned 'PT' above (this migration only
+-- ever runs against the current Portugal-only dataset — see the file's own
+-- top comment), so a straight count is correct without a WHERE.
+UPDATE country SET place_count = (SELECT COUNT(*) FROM place WHERE country_code = 'PT') WHERE country_code = 'PT';
+
 -- poi / poi_type / poi_attribute / build_log: city_id -> place_id, and
 -- remap the two known slug values to their new identities.
 ALTER TABLE poi RENAME COLUMN city_id TO place_id;
-UPDATE poi SET place_id = 'osm-relation-2897141' WHERE place_id = 'lisboa';
-UPDATE poi SET place_id = 'osm-relation-6522461' WHERE place_id = 'odivelas';
+UPDATE poi
+   SET place_id = 'osm-relation-2897141'
+ WHERE place_id = 'lisboa';
+UPDATE poi
+   SET place_id = 'osm-relation-6522461'
+ WHERE place_id = 'odivelas';
 DROP INDEX IF EXISTS idx_poi_city_geo;
 DROP INDEX IF EXISTS idx_poi_city_build;
 CREATE INDEX idx_poi_place_geo   ON poi (place_id, geohash);
 CREATE INDEX idx_poi_place_build ON poi (place_id, build_id);
 
 ALTER TABLE poi_type RENAME COLUMN city_id TO place_id;
-UPDATE poi_type SET place_id = 'osm-relation-2897141' WHERE place_id = 'lisboa';
-UPDATE poi_type SET place_id = 'osm-relation-6522461' WHERE place_id = 'odivelas';
+UPDATE poi_type
+   SET place_id = 'osm-relation-2897141'
+ WHERE place_id = 'lisboa';
+UPDATE poi_type
+   SET place_id = 'osm-relation-6522461'
+ WHERE place_id = 'odivelas';
 
 ALTER TABLE poi_attribute RENAME COLUMN city_id TO place_id;
-UPDATE poi_attribute SET place_id = 'osm-relation-2897141' WHERE place_id = 'lisboa';
-UPDATE poi_attribute SET place_id = 'osm-relation-6522461' WHERE place_id = 'odivelas';
+UPDATE poi_attribute
+   SET place_id = 'osm-relation-2897141'
+ WHERE place_id = 'lisboa';
+UPDATE poi_attribute
+   SET place_id = 'osm-relation-6522461'
+ WHERE place_id = 'odivelas';
 
 ALTER TABLE build_log RENAME COLUMN city_id TO place_id;
-UPDATE build_log SET place_id = 'osm-relation-2897141' WHERE place_id = 'lisboa';
-UPDATE build_log SET place_id = 'osm-relation-6522461' WHERE place_id = 'odivelas';
-
-PRAGMA foreign_keys=ON;
+UPDATE build_log
+   SET place_id = 'osm-relation-2897141'
+ WHERE place_id = 'lisboa';
+UPDATE build_log
+   SET place_id = 'osm-relation-6522461'
+ WHERE place_id = 'odivelas';
