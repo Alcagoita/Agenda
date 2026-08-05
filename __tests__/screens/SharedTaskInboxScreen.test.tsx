@@ -31,10 +31,12 @@ const mockGetUser      = jest.fn();
 const mockIsFollowing  = jest.fn();
 const mockFollowUser   = jest.fn();
 
+const mockGetInboxEntries = jest.fn().mockResolvedValue([]);
 jest.mock('../../src/services/firestore', () => ({
-  getUser:     (...args: unknown[]) => mockGetUser(...args),
-  isFollowing: (...args: unknown[]) => mockIsFollowing(...args),
-  followUser:  (...args: unknown[]) => mockFollowUser(...args),
+  getUser:         (...args: unknown[]) => mockGetUser(...args),
+  isFollowing:     (...args: unknown[]) => mockIsFollowing(...args),
+  followUser:      (...args: unknown[]) => mockFollowUser(...args),
+  getInboxEntries: (...args: unknown[]) => mockGetInboxEntries(...args),
 }));
 
 jest.mock('@react-native-firebase/auth/lib/modular', () => ({
@@ -130,7 +132,7 @@ describe('SharedTaskInboxScreen', () => {
     const fireItems = captureInboxCallback();
     render(<SharedTaskInboxScreen />);
     fireItems([makeSharedTask()]);
-    expect(screen.getByText('Alice')).toBeTruthy();
+    // Row shows the sender's @handle only, not their display name.
     expect(screen.getByText('@alice')).toBeTruthy();
     expect(screen.getByText('Buy milk')).toBeTruthy();
   });
@@ -164,7 +166,7 @@ describe('SharedTaskInboxScreen', () => {
     render(<SharedTaskInboxScreen />);
     fireItems([makeSharedTask()]);
     await waitFor(() =>
-      expect(screen.getByLabelText('Follow @alice')).toBeTruthy(),
+      expect(screen.getByText('+ Follow @alice')).toBeTruthy(),
     );
   });
 
@@ -174,7 +176,7 @@ describe('SharedTaskInboxScreen', () => {
     render(<SharedTaskInboxScreen />);
     fireItems([makeSharedTask()]);
     await waitFor(() =>
-      expect(screen.queryByLabelText('Follow @alice')).toBeNull(),
+      expect(screen.queryByText('+ Follow @alice')).toBeNull(),
     );
   });
 
@@ -183,8 +185,8 @@ describe('SharedTaskInboxScreen', () => {
     const fireItems = captureInboxCallback();
     render(<SharedTaskInboxScreen />);
     fireItems([makeSharedTask()]);
-    await waitFor(() => screen.getByLabelText('Follow @alice'));
-    fireEvent.press(screen.getByLabelText('Follow @alice'));
+    await waitFor(() => screen.getByText('+ Follow @alice'));
+    fireEvent.press(screen.getByText('+ Follow @alice'));
     await waitFor(() =>
       expect(mockFollowUser).toHaveBeenCalledWith(
         'current-uid', 'me', 'Me',

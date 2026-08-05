@@ -368,7 +368,6 @@ describe('edit mode (KAN-266)', () => {
       40_000,
       'ta_existing',
       expect.any(Number),
-      [],
     );
     expect(mockAddTrip).not.toHaveBeenCalled();
   });
@@ -423,7 +422,6 @@ describe('edit mode (KAN-266)', () => {
       40_000,
       'ta_existing',
       expect.any(Number),
-      [],
     );
     expect(mockUpdateTrip).toHaveBeenCalledWith('test-uid', 'trip-1', expect.objectContaining({ areaRadius: 40_000 }));
   });
@@ -450,7 +448,7 @@ describe('confirmDownload', () => {
     await act(async () => { await result.current.confirmDownload(); });
 
     expect(mockDownloadTripArea).toHaveBeenCalledWith(
-      { lat: 1, lng: 2 }, expect.any(Number), expect.any(String), expect.any(Number), [],
+      { lat: 1, lng: 2 }, expect.any(Number), expect.any(String), expect.any(Number),
     );
     expect(mockAddTrip).toHaveBeenCalledWith('test-uid', expect.objectContaining({
       destination: 'Faro', placeRef: 'p1', centerLat: 1, centerLng: 2,

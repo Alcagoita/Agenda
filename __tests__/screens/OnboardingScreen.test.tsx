@@ -48,15 +48,20 @@ jest.mock('../../src/theme', () => ({
   }),
 }));
 
-const mockAddTask                   = jest.fn().mockResolvedValue('task-123');
-const mockAwardPointsOnboardingBonus = jest.fn().mockResolvedValue(undefined);
-const mockUpsertUser                = jest.fn().mockResolvedValue(undefined);
+const mockAddTask               = jest.fn().mockResolvedValue('task-123');
+const mockAwardOnboardingBonus  = jest.fn().mockResolvedValue(undefined);
+const mockUpsertUser            = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../src/services/firestore', () => ({
   addTask:                    (...args: unknown[]) => mockAddTask(...args),
-  awardPointsOnboardingBonus: (...args: unknown[]) => mockAwardPointsOnboardingBonus(...args),
   upsertUser:                 (...args: unknown[]) => mockUpsertUser(...args),
   ONBOARDING_BONUS_POINTS:    10,
+}));
+
+// KAN-271 — onboarding bonus moved server-side, behind this Cloud Function
+// proxy (previously a direct client-side awardPointsOnboardingBonus write).
+jest.mock('../../src/services/rewardFunctions', () => ({
+  awardOnboardingBonus: (...args: unknown[]) => mockAwardOnboardingBonus(...args),
 }));
 
 jest.mock('../../src/utils/date', () => ({ todayISO: () => '2026-06-13' }));
@@ -195,7 +200,7 @@ describe('OnboardingScreen — Stage 3 → 4 (Create → Payoff)', () => {
 describe('OnboardingScreen — completion', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    mockAwardPointsOnboardingBonus.mockClear();
+    mockAwardOnboardingBonus.mockClear();
     mockUpsertUser.mockClear();
   });
   afterEach(() => jest.useRealTimers());
@@ -230,7 +235,7 @@ describe('OnboardingScreen — completion', () => {
     await waitFor(() => utils.getByText(COPY.onboarding.seeFullDay));
     await act(async () => { fireEvent.press(utils.getByText(COPY.onboarding.seeFullDay)); });
 
-    expect(mockAwardPointsOnboardingBonus).toHaveBeenCalledWith('uid-1', 'task-123', COPY.onboarding.chipBuyBread);
+    expect(mockAwardOnboardingBonus).toHaveBeenCalledWith('task-123');
     expect(mockUpsertUser).toHaveBeenCalledWith('uid-1', { onboardingDone: true });
     expect(onComplete).toHaveBeenCalled();
   });
@@ -250,7 +255,7 @@ describe('OnboardingScreen — completion', () => {
 
     await waitFor(() => utils.getByText(COPY.onboarding.seeFullDay));
 
-    expect(mockAwardPointsOnboardingBonus).toHaveBeenCalledWith('uid-1', 'task-123', COPY.onboarding.chipBuyBread);
+    expect(mockAwardOnboardingBonus).toHaveBeenCalledWith('task-123');
 
     jest.restoreAllMocks();
   });

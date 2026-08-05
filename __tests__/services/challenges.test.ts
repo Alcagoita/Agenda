@@ -17,9 +17,12 @@
  *     - increments completedCount without marking won when goal not met
  *     - marks participant won and challenge completed when goal is met
  *     - does not write pendingNotifications directly (KAN-221)
+ *     - does not award the achievement client-side (KAN-271 — moved
+ *       server-side to functions/src/rewards.ts, triggered off `won`)
  *   resolveTimeBasedChallenge
  *     - marks the highest-completedCount participant as winner
  *     - does not write pendingNotifications directly (KAN-221)
+ *     - does not award the achievement client-side (KAN-271)
  *     - no-ops when there are no participants
  */
 
@@ -36,6 +39,12 @@ jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 jest.mock('../../src/services/achievements', () => ({
   awardChallengeWinnerAchievement: jest.fn().mockResolvedValue(undefined),
 }));
+// KAN-271 — challenges.ts deliberately never calls
+// awardChallengeWinnerAchievement anymore: the client-side call was removed
+// when reward writes moved server-side (functions/src/rewards.ts, triggered
+// off the `won` flag flip on the challenge doc). The mock above is still
+// imported below purely to assert it's NOT called — a regression back to a
+// client-side call would double-award the achievement.
 
 // ─── Firestore mock ───────────────────────────────────────────────────────────
 
@@ -222,13 +231,18 @@ describe('incrementCompletedCount', () => {
       'participants.uid-me.won':            true,
       status:                               'completed',
     });
-    expect(awardChallengeWinnerAchievement).toHaveBeenCalledWith('uid-me', 'challenge-1');
   });
 
   it('does not write directly to pendingNotifications (KAN-221)', async () => {
     const challenge = makeGoalChallenge({ goalCount: 5 });
     await incrementCompletedCount('challenge-1', 'uid-me', challenge);
     expect(mockAddDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not award the achievement client-side (KAN-271 — server-side now)', async () => {
+    const challenge = makeGoalChallenge({ goalCount: 5 });
+    await incrementCompletedCount('challenge-1', 'uid-me', challenge);
+    expect(awardChallengeWinnerAchievement).not.toHaveBeenCalled();
   });
 });
 
@@ -244,13 +258,18 @@ describe('resolveTimeBasedChallenge', () => {
     const [, data] = mockUpdateDoc.mock.calls[0];
     expect(data.status).toBe('completed');
     expect(data['participants.uid-me.won']).toBe(true);
-    expect(awardChallengeWinnerAchievement).toHaveBeenCalledWith('uid-me', 'challenge-1');
   });
 
   it('does not write directly to pendingNotifications (KAN-221)', async () => {
     const challenge = makeGoalChallenge({ type: 'time', goalCount: undefined });
     await resolveTimeBasedChallenge('challenge-1', challenge);
     expect(mockAddDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not award the achievement client-side (KAN-271 — server-side now)', async () => {
+    const challenge = makeGoalChallenge({ type: 'time', goalCount: undefined });
+    await resolveTimeBasedChallenge('challenge-1', challenge);
+    expect(awardChallengeWinnerAchievement).not.toHaveBeenCalled();
   });
 
   it('no-ops when there are no participants', async () => {

@@ -84,7 +84,25 @@ jest.mock('@react-native-firebase/firestore', () => {
   (firestoreFn as unknown as { FieldValue: { serverTimestamp: () => string } }).FieldValue = {
     serverTimestamp: () => 'SERVER_TIMESTAMP',
   };
-  return firestoreFn;
+  return {
+    __esModule: true,
+    default: firestoreFn,
+    FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP' },
+    // firebase.ts's own module-level init (getFirestore/initializeFirestore/
+    // connectFirestoreEmulator/getDocs/query/limit/collection/
+    // CACHE_SIZE_UNLIMITED) — reached transitively via
+    // import.ts -> poiLlm.ts -> maps.ts -> placesFunctions.ts -> firebase.ts.
+    // Not under test here; this file's own fixtures use the namespaced
+    // `firestoreFn` above for the actual import-connector logic.
+    getFirestore: jest.fn(() => ({})),
+    initializeFirestore: jest.fn(),
+    connectFirestoreEmulator: jest.fn(),
+    getDocs: jest.fn().mockResolvedValue({ docs: [] }),
+    query: jest.fn(),
+    collection: jest.fn(),
+    limit: jest.fn(),
+    CACHE_SIZE_UNLIMITED: -1,
+  };
 });
 
 // ─── runImportWithTimeout (KAN-92) ────────────────────────────────────────────

@@ -34,6 +34,10 @@ jest.mock('../../src/services/sharing', () => ({
 const mockCheckAndRunTripPreRefresh = jest.fn();
 jest.mock('../../src/services/tripDownload', () => ({
   checkAndRunTripPreRefresh: (...args: unknown[]) => mockCheckAndRunTripPreRefresh(...args),
+  // getAreaDownloadPoiTypes is a pure function (ALL_POI_TYPES ∪
+  // SUPPORTED_GOOGLE_PLACE_TYPES) — use the real one rather than reinventing
+  // its output here, so this test doesn't drift from it independently.
+  getAreaDownloadPoiTypes: jest.requireActual('../../src/services/tripDownload').getAreaDownloadPoiTypes,
 }));
 
 const mockDeleteExpiredTripPlaces = jest.fn();
@@ -226,7 +230,7 @@ describe('SplashScreen', () => {
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
       expect(useAppStore.getState().bootData?.trips).toEqual([trip]);
-      expect(mockCheckAndRunTripPreRefresh).toHaveBeenCalledWith('u1', [trip], ['library']);
+      expect(mockCheckAndRunTripPreRefresh).toHaveBeenCalledWith('u1', [trip]);
       expect(mockDeleteExpiredTripPlaces).toHaveBeenCalled();
     });
 
