@@ -77,8 +77,27 @@ jest.mock('../../src/constants/copy', () => ({
   },
 }));
 
-const mockFetch = jest.fn();
-global.fetch = mockFetch as unknown as typeof fetch;
+// KAN-342 — live search is Cloudflare-first, OSM-failsafe; Google is no
+// longer reachable from this path. cloudflarePoiFunctions is left
+// unconfigured (rejects to undefined -> caught -> falls through), so every
+// fixture here is injected via the OSM mock instead.
+jest.mock('../../src/services/placesFunctions', () => ({
+  searchNearbyPlacesProxy: jest.fn(),
+  placesAutocompleteProxy: jest.fn(),
+  getPlaceDetailsProxy:    jest.fn(),
+}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
+const mockSearchOsmPlacesStrict = jest.fn();
+jest.mock('../../src/services/osmPlaces', () => ({
+  searchOsmPlacesStrict: (...args: unknown[]) => mockSearchOsmPlacesStrict(...args),
+}));
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(() => ({ hit: false, city: null })),
+  putCachedCity: jest.fn(),
+}));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
@@ -112,10 +131,20 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
-function mockPlacesResponse(places: Array<{
+function mockPlacesResponse(poiType: string, places: Array<{
   id: string; displayName: { text: string }; location: { latitude: number; longitude: number };
 }>) {
-  mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ places }) });
+  mockSearchOsmPlacesStrict.mockResolvedValueOnce({
+    [poiType]: places.map(p => ({
+      osmId: p.id, name: p.displayName.text, isGenericName: false,
+      lat: p.location.latitude, lng: p.location.longitude,
+      // searchNearbyPlaces copies this through verbatim rather than
+      // recomputing it — north-only offset from ORIGIN, same approximation
+      // (LAT_PER_METRE) used to construct the fixture's latitude.
+      distanceMeters: p.location.latitude / LAT_PER_METRE,
+      footprintAreaM2: 0,
+    })),
+  });
 }
 
 // ─── 1. NEARBY_RADIUS constant ────────────────────────────────────────────────
@@ -131,7 +160,7 @@ describe('NEARBY_RADIUS', () => {
 describe('distance accuracy — 400 m threshold', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFetch.mockReset();
+    mockSearchOsmPlacesStrict.mockReset();
     mockGetPosition.mockResolvedValue(ORIGIN);
     resetProximityState();
   });
@@ -139,7 +168,7 @@ describe('distance accuracy — 400 m threshold', () => {
   it('counts a place at 390 m as nearby (just inside threshold)', async () => {
     // ~390 m north — inside NEARBY_RADIUS (400 m), outside HERO_RADIUS_M (100 m) → grey zone.
     const lat390m = LAT_PER_METRE * 390;
-    mockPlacesResponse([{
+    mockPlacesResponse('atm', [{
       id:          'atm-390',
       displayName: { text: 'Close ATM' },
       location:    { latitude: lat390m, longitude: 0 },
@@ -159,7 +188,7 @@ describe('distance accuracy — 400 m threshold', () => {
   it('does NOT count a place at 410 m as nearby (just outside threshold)', async () => {
     // ~410 m north — outside NEARBY_RADIUS (400 m).
     const lat410m = LAT_PER_METRE * 410;
-    mockPlacesResponse([{
+    mockPlacesResponse('atm', [{
       id:          'atm-410',
       displayName: { text: 'Far ATM' },
       location:    { latitude: lat410m, longitude: 0 },
@@ -177,7 +206,7 @@ describe('distance accuracy — 400 m threshold', () => {
     // may land just inside or outside depending on floating-point. The definitive
     // boundary assertions are the 390 m (inside) and 410 m (outside) tests above.
     const lat400m = LAT_PER_METRE * 400;
-    mockPlacesResponse([{
+    mockPlacesResponse('atm', [{
       id:          'atm-400',
       displayName: { text: 'Boundary ATM' },
       location:    { latitude: lat400m, longitude: 0 },
@@ -194,7 +223,7 @@ describe('distance accuracy — 400 m threshold', () => {
   it('display path uses NEARBY_RADIUS (400 m) as the outer threshold', async () => {
     // ~300 m north: within NEARBY_RADIUS, outside HERO_RADIUS_M → grey zone.
     const lat300m = LAT_PER_METRE * 300;
-    mockPlacesResponse([{
+    mockPlacesResponse('atm', [{
       id:          'atm-300',
       displayName: { text: 'Nearby ATM' },
       location:    { latitude: lat300m, longitude: 0 },
@@ -217,7 +246,7 @@ describe('distance accuracy — 400 m threshold', () => {
 describe('no store field leakage after KAN-143', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFetch.mockReset();
+    mockSearchOsmPlacesStrict.mockReset();
     mockGetPosition.mockResolvedValue(ORIGIN);
     resetProximityState();
   });
@@ -235,17 +264,11 @@ describe('no store field leakage after KAN-143', () => {
 
   it('proximity engine works correctly with tasks that have no store field', async () => {
     const onUpdate = jest.fn();
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({
-        places: [{
-          id:          'cafe-1',
-          displayName: { text: 'Nice Café' },
-          location:    { latitude: LAT_PER_METRE * 200, longitude: 0 },
-          types:       ['cafe'],
-        }],
-      }),
-    });
+    mockPlacesResponse('cafe', [{
+      id:          'cafe-1',
+      displayName: { text: 'Nice Café' },
+      location:    { latitude: LAT_PER_METRE * 200, longitude: 0 },
+    }]);
 
     // Task has poi but no store field — must not cause any error or wrong behavior.
     const task: Task = {

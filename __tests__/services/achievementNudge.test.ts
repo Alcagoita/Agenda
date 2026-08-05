@@ -78,9 +78,9 @@ jest.mock('../../src/services/firestore', () => ({
   updateUserPreferences:        (...args: any[]) => mockUpdateUserPreferences(...args),
 }));
 
-jest.mock('../../src/constants/copy', () => ({
-  COPY: {},
-}));
+// copy.ts is a pure data module (no native deps) — achievements.ts reads its
+// real COPY.achievements.catalogue for labels/conditions, so mocking it away
+// (as `{}`) crashes at import time. Use the real thing.
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -266,11 +266,16 @@ describe('evaluateAchievements — nudgeCandidate', () => {
 
   it('returns nudgeCandidate centurion when projectedPoints === 99', async () => {
     setupTxDoc({
-      totalPoints: 94,   // + 5 (first_brush award) = 99
+      totalPoints: 89,   // + 10 (first_brush award) = 99
       currentStreak: 0,
       achievements: {
         // first_brush: not yet earned
-        centurion: { progress: 94, target: 100, earnCount: 0, earnedAt: null },
+        // worth_wait already earned — this fixture's createdAt has no
+        // toMillis/seconds, so the real age check falls back to epoch 0 and
+        // would otherwise spuriously re-fire worth_wait too, throwing off
+        // the exact totalPoints arithmetic this test depends on.
+        worth_wait: { progress: 1, target: 1, earnCount: 1, earnedAt: null },
+        centurion: { progress: 89, target: 100, earnCount: 0, earnedAt: null },
       },
     });
     const { nudgeCandidate } = await evaluateAchievements(

@@ -125,9 +125,9 @@ it('shows unset when no home is stored, without needing a fix', async () => {
 
 it('keeps Home through a mall/trip override within the leave threshold (KAN-301 review)', async () => {
   mockGetHomeLocation.mockReturnValue(HOME);
-  // Start at home (40 m), then 190 m — inside the 200 m leave threshold — for
-  // the mall and the following no-context render.
-  mockDistanceFromHome.mockReturnValueOnce(40).mockReturnValue(190);
+  // Start at home (40 m), then 1150 m — inside the 1200 m leave threshold —
+  // for the mall and the following no-context render.
+  mockDistanceFromHome.mockReturnValueOnce(40).mockReturnValue(1150);
 
   const { result, rerender } = renderHook(
     ({ ctx }: { ctx: PlaceContext | null }) => useLanternState(ctx, COORDS, true),
@@ -136,11 +136,11 @@ it('keeps Home through a mall/trip override within the leave threshold (KAN-301 
   await act(async () => {});
   expect(result.current.kind).toBe('home'); // 40 m → Home, buffer now true
 
-  await act(async () => { rerender({ ctx: mallCtx }); }); // enter mall at 190 m
+  await act(async () => { rerender({ ctx: mallCtx }); }); // enter mall at 1150 m
   expect(result.current.kind).toBe('mall');
 
-  await act(async () => { rerender({ ctx: null }); });     // leave mall, still 190 m
-  // Still inside the 200 m leave threshold → the home buffer must have survived
+  await act(async () => { rerender({ ctx: null }); });     // leave mall, still 1150 m
+  // Still inside the 1200 m leave threshold → the home buffer must have survived
   // the mall override, so we read Home, not Outside.
   expect(result.current.kind).toBe('home');
 });

@@ -86,12 +86,62 @@ jest.mock('../src/screens/UsernameSetupScreen', () => {
   return () => <View testID="username-setup-screen" />;
 });
 
+// OnboardingScreen and SplashScreen each have their own dedicated test file
+// (OnboardingScreen.test.tsx, SplashScreen.test.tsx) — not under test here.
+// Both transitively reach expo-location (via proximity.ts/geolocation.ts),
+// an ESM native module Jest can't parse, so stub at the screen boundary
+// rather than trying to mock every native module in between.
+jest.mock('../src/screens/OnboardingScreen', () => {
+  const { View } = require('react-native');
+  return () => <View testID="onboarding-screen" />;
+});
+jest.mock('../src/screens/SplashScreen', () => {
+  const { View } = require('react-native');
+  return () => <View testID="splash-screen" />;
+});
+
 jest.mock('../src/services/firestore', () => ({
-  getUser: jest.fn().mockResolvedValue(null),
+  getUser:               jest.fn().mockResolvedValue(null),
+  markLastOpenedAt:      jest.fn().mockResolvedValue(undefined),
+  setTaskDone:           jest.fn().mockResolvedValue(undefined),
+  getUserPreferences:    jest.fn().mockResolvedValue({}),
+  backfillUserDocument:  jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/services/sharing', () => ({
   subscribeToSharedTaskNotifications: jest.fn(() => jest.fn()),
+}));
+
+jest.mock('../src/services/appCheck', () => ({
+  ensureAppCheckInitialized: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/services/achievements', () => ({
+  migratePointsToAchievementDerived: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/services/notifications', () => ({
+  EXIT_ACTION_MARK_DONE:      'MARK_DONE',
+  registerExitPromptCategory: jest.fn().mockResolvedValue(undefined),
+}));
+
+// App.tsx imports these two directly (updateExitPromptPref /
+// updateIndoorExitPromptPref) — both transitively reach expo-location, an
+// ESM native module Jest can't parse.
+jest.mock('../src/services/proximity', () => ({
+  updateExitPromptPref: jest.fn(),
+}));
+
+jest.mock('../src/services/indoorProximity', () => ({
+  updateIndoorExitPromptPref: jest.fn(),
+}));
+
+jest.mock('react-native-share-menu', () => ({
+  __esModule: true,
+  default: {
+    getInitialShare: jest.fn(),
+    addNewShareListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
 }));
 
 // ─── Test ─────────────────────────────────────────────────────────────────────

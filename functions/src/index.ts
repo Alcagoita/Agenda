@@ -31,3 +31,7 @@ export {
   placesAutocompleteProxy,
   getPlaceDetailsProxy,
 } from './places';
+export {
+  cloudflareCoverageProxy,
+  cloudflarePoiAllProxy,
+} from './cloudflarePoi';

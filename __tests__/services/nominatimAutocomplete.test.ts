@@ -18,6 +18,10 @@
 // unavailable under Jest) and reverseGeocodeCache -> expo-sqlite. Stub both —
 // same pattern as reverseGeocode.test.ts.
 jest.mock('../../src/services/placesFunctions', () => ({}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 jest.mock('../../src/services/reverseGeocodeCache', () => ({
   getCachedCity: jest.fn(() => ({ hit: false, city: null })),
   putCachedCity: jest.fn(),

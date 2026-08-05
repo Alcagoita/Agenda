@@ -109,7 +109,7 @@ let _mallLookupInFlight = false;
 
 /** Production implementation — replaced in tests via __setMallLookup. */
 let _mallLookup: MallLookupFn = async (lat, lng, type, radius) => {
-  const results = await searchNearbyPlaces(lat, lng, [type], radius);
+  const { results } = await searchNearbyPlaces(lat, lng, [type], radius);
   return results[type] ?? [];
 };
 
@@ -239,7 +239,7 @@ function _reset(): void {
   // Restore production mall lookup so __setMallLookup from a prior test
   // doesn't leak into a fresh startIndoorDetection call.
   _mallLookup = async (lat, lng, type, radius) => {
-    const results = await searchNearbyPlaces(lat, lng, [type], radius);
+    const { results } = await searchNearbyPlaces(lat, lng, [type], radius);
     return results[type] ?? [];
   };
 }

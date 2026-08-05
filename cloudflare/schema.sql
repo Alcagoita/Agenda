@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS poi (
   name                TEXT NOT NULL,
   lat                 REAL NOT NULL,
   lng                 REAL NOT NULL,
-  geohash             TEXT NOT NULL,          -- precision 7 (~150m cell), prefix-queried for radius search
+  geohash             TEXT NOT NULL,          -- precision 7 (~150m cell), lowercase base32 only (see geohash.ts's BASE32); prefix-range-queried for radius search (index.ts's queryPoiDb: `geohash >= ? AND geohash < ?~`). No COLLATE clause -> SQLite's default BINARY collation, which is what makes that range correct: BASE32 is already in ascending codepoint order, so byte comparison alone matches the intended geohash subtree. Never load an uppercase geohash into this column — it would sort before its lowercase siblings and silently miss every prefix range that should contain it.
   primary_poi_type    TEXT NOT NULL,          -- display/icon only — see poi_type table for the full match set
   brand               TEXT,                   -- matched at load time against src/constants/brandDictionary.json; NULL when no confident match — added to an existing table via migrations/0001_phase4_poi_attribute_brand.sql, CREATE TABLE IF NOT EXISTS alone won't add it
   category_label      TEXT,                   -- raw Foursquare category hierarchy, for debugging/display

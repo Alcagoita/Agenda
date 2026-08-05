@@ -20,6 +20,10 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchNearbyPlacesProxy: jest.fn(),
   searchPlaceTypesProxy:   jest.fn(),
 }));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 
 import { openMultiStopDirections } from '../../src/services/maps';
 

@@ -73,8 +73,11 @@ describe('resolveTripDestinations', () => {
   it('makes AT MOST ONE batched searchNearbyPlaces call for all unresolved types together', async () => {
     mockQueryHabitatCache.mockReturnValue({}); // nothing cached, nothing learned
     mockSearchNearbyPlaces.mockResolvedValue({
-      pharmacy: [{ placeId: 'live-1', name: 'Live Pharmacy', lat: 38.73, lng: -9.13, distanceMeters: 1000 }],
-      atm:      [{ placeId: 'live-2', name: 'Live ATM', lat: 38.74, lng: -9.14, distanceMeters: 1200 }],
+      results: {
+        pharmacy: [{ placeId: 'live-1', name: 'Live Pharmacy', lat: 38.73, lng: -9.13, distanceMeters: 1000 }],
+        atm:      [{ placeId: 'live-2', name: 'Live ATM', lat: 38.74, lng: -9.14, distanceMeters: 1200 }],
+      },
+      source: 'osm',
     });
 
     const tasks = [
@@ -99,7 +102,8 @@ describe('resolveTripDestinations', () => {
   it('never asks Google for shopping_mall — mall discovery is not this call\'s job', async () => {
     mockQueryHabitatCache.mockReturnValue({});
     mockSearchNearbyPlaces.mockResolvedValue({
-      pharmacy: [{ placeId: 'live-1', name: 'Live Pharmacy', lat: 38.73, lng: -9.13, distanceMeters: 1000 }],
+      results: { pharmacy: [{ placeId: 'live-1', name: 'Live Pharmacy', lat: 38.73, lng: -9.13, distanceMeters: 1000 }] },
+      source: 'osm',
     });
 
     const tasks = [makeTask({ id: 't1', poi: 'pharmacy' })];

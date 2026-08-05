@@ -127,6 +127,7 @@ describe('setTaskDone', () => {
       completedPlaceId: DELETE_FIELD_SENTINEL,
       completedPlaceName: DELETE_FIELD_SENTINEL,
       completedPoiType: DELETE_FIELD_SENTINEL,
+      completedTripId: DELETE_FIELD_SENTINEL,
     });
     expect(mockTxSet).not.toHaveBeenCalled();
     expect(mockTxDelete).not.toHaveBeenCalled();
@@ -147,6 +148,7 @@ describe('setTaskDone', () => {
       completedPlaceId: 'place-abc',
       completedPlaceName: 'Whole Foods',
       completedPoiType: 'supermarket',
+      completedTripId: DELETE_FIELD_SENTINEL,
     });
     expect(mockTxSet).toHaveBeenCalledWith(COUNTER_PATH('place-abc'), {
       placeId: 'place-abc',
@@ -189,6 +191,7 @@ describe('setTaskDone', () => {
       completedPlaceId: DELETE_FIELD_SENTINEL,
       completedPlaceName: DELETE_FIELD_SENTINEL,
       completedPoiType: DELETE_FIELD_SENTINEL,
+      completedTripId: DELETE_FIELD_SENTINEL,
     });
     // No prior completedPlaceId on the task doc — nothing to decrement.
     expect(mockTxSet).not.toHaveBeenCalled();
@@ -227,6 +230,7 @@ describe('setTaskDone', () => {
       completedPlaceId: DELETE_FIELD_SENTINEL,
       completedPlaceName: DELETE_FIELD_SENTINEL,
       completedPoiType: DELETE_FIELD_SENTINEL,
+      completedTripId: DELETE_FIELD_SENTINEL,
     });
     expect(mockTxUpdate).toHaveBeenCalledTimes(1); // task doc only — no counter update
     expect(mockTxSet).not.toHaveBeenCalled();
@@ -308,6 +312,7 @@ describe('setTaskDone', () => {
       completedPlaceId: 'place-abc',
       completedPlaceName: 'Whole Foods',
       completedPoiType: 'supermarket',
+      completedTripId: DELETE_FIELD_SENTINEL,
     });
     expect(mockBatchSet).toHaveBeenCalledWith(COUNTER_PATH('place-abc'), {
       placeId: 'place-abc',

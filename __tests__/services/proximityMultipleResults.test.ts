@@ -45,7 +45,14 @@ jest.mock('../../src/services/maps', () => ({
   getDistanceMeters: jest.fn(() => 0),
   searchNearbyPlaces: (...args: unknown[]) => mockSearchNearbyPlaces(...args),
   placeTypeLabel: jest.fn((t: string) => t),
+  isPoiSearchDegraded: jest.fn(() => true),
 }));
+
+// KAN-342: searchNearbyPlaces now resolves { results, source, coverageStatus? }
+// instead of a bare Record<string, NearbyPlace[]>.
+function mockSearchResults(results: Record<string, unknown>) {
+  mockSearchNearbyPlaces.mockResolvedValue({ results, source: 'osm' });
+}
 
 jest.mock('@notifee/react-native', () => ({
   __esModule: true,
@@ -107,7 +114,7 @@ describe('runProximitySearch — multiple results per type', () => {
       makePlace('ph2', 'CVS', 150),
       makePlace('ph3', 'Rite Aid', 300),
     ];
-    mockSearchNearbyPlaces.mockResolvedValue({ pharmacy: pharmacies });
+    mockSearchResults({ pharmacy: pharmacies })
 
     const tasks = [makeTask('t1', 'pharmacy')];
     await runProximitySearch('uid-1', tasks, mockOnUpdate);
@@ -124,7 +131,7 @@ describe('runProximitySearch — multiple results per type', () => {
       makePlace('atm1', 'Chase ATM', 40),
       makePlace('atm2', 'Wells ATM', 80),
     ];
-    mockSearchNearbyPlaces.mockResolvedValue({ atm: atms });
+    mockSearchResults({ atm: atms })
 
     const tasks = [makeTask('t1', 'atm')];
     await runProximitySearch('uid-1', tasks, mockOnUpdate);
@@ -136,7 +143,7 @@ describe('runProximitySearch — multiple results per type', () => {
 
   it('does not store types where nearest place is outside NEARBY_RADIUS (400m)', async () => {
     const farCafe = [makePlace('c1', 'Remote Cafe', 450)];
-    mockSearchNearbyPlaces.mockResolvedValue({ cafe: farCafe });
+    mockSearchResults({ cafe: farCafe })
 
     const tasks = [makeTask('t1', 'cafe')];
     await runProximitySearch('uid-1', tasks, mockOnUpdate);
@@ -150,7 +157,7 @@ describe('runProximitySearch — multiple results per type', () => {
       makePlace('r1', 'Portugália', 30),
       makePlace('r2', 'Yakuza by Olivier', 80),
     ];
-    mockSearchNearbyPlaces.mockResolvedValue({ restaurant: restaurants });
+    mockSearchResults({ restaurant: restaurants })
 
     await runProximitySearch('uid-1', [
       makeTask('t1', 'restaurant', 'Go out to sushi'),
@@ -167,7 +174,7 @@ describe('runProximitySearch — multiple results per type', () => {
       makePlace('r1', 'Portugália', 30),
       makePlace('r2', 'Yakuza by Olivier', 80),
     ];
-    mockSearchNearbyPlaces.mockResolvedValue({ restaurant: restaurants });
+    mockSearchResults({ restaurant: restaurants })
 
     await runProximitySearch('uid-1', [
       makeTask('t1', 'restaurant', 'Go out to sushi'),
@@ -181,9 +188,9 @@ describe('runProximitySearch — multiple results per type', () => {
   });
 
   it('does not show an unrelated restaurant for a food-intent restaurant task', async () => {
-    mockSearchNearbyPlaces.mockResolvedValue({
+    mockSearchResults({
       restaurant: [makePlace('r1', 'Portugália', 30)],
-    });
+    })
 
     await runProximitySearch('uid-1', [
       makeTask('t1', 'restaurant', 'Go out to sushi'),

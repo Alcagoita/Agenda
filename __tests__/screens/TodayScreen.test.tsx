@@ -1,48 +1,113 @@
 /**
- * KAN-31 — TodayScreen point-awarding tests.
+ * TodayScreen — screen-level wiring tests.
  *
- * Covers:
- *   - awardPoint is called with the correct uid, taskId, and title when a task is marked done
- *   - awardPoint is NOT called when a task is marked undone
- *   - awardPoint failure does NOT affect the task toggle (fire-and-forget)
- *   - awardPoint is NOT called when uid is absent (signed-out guard)
+ * KAN-153/KAN-214: data loading is one-shot (getTasksForDate + friends via
+ * Promise.allSettled), not a live Firestore subscription — see
+ * useTodayScreenData.ts. Business-rule coverage for the reward flow
+ * (processTaskCompletionRewards, achievements) lives at the hook level in
+ * __tests__/hooks/useTodayScreen.test.ts; this file covers screen wiring:
+ *   - far-away indicator / "one trip for all of these" row visibility
+ *   - proximity engine start gate at mount
+ *   - loading / error / retry / empty states
  */
 
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-// ─── Firestore mocks ──────────────────────────────────────────────────────────
+// ─── Firestore mocks (one-shot — KAN-153/KAN-214) ────────────────────────────
 
-const mockSetTaskDone                = jest.fn();
-const mockAwardPoint                 = jest.fn();
-const mockSubscribeToTasksForDate    = jest.fn();
-const mockSubscribeToPoiPreferences  = jest.fn();
-const mockSubscribeToCategories      = jest.fn();
-const mockSubscribeLowBatteryPausePref = jest.fn();
-const mockSubscribeToTotalPoints     = jest.fn();
+const mockGetTasksForDate      = jest.fn();
+const mockGetCategories        = jest.fn();
+const mockGetUser              = jest.fn();
+const mockGetUserPreferences   = jest.fn();
+const mockGetPoiPreferencesMap = jest.fn();
+const mockGetTotalPoints       = jest.fn();
+const mockGetInboxUnreadCount  = jest.fn();
+const mockGetTrips             = jest.fn();
+const mockGetMallSnapshot      = jest.fn();
+const mockSetTaskDone          = jest.fn();
+const mockProcessTaskCompletionRewards = jest.fn();
 
 jest.mock('../../src/services/sharing', () => ({
-  subscribeToIncomingSharedTasks: jest.fn(() => jest.fn()),
+  getIncomingSharedTasksCount: jest.fn().mockResolvedValue(0),
 }));
 
 jest.mock('../../src/services/firestore', () => ({
-  setTaskDone:                 (...args: unknown[]) => mockSetTaskDone(...args),
-  awardPoint:                  (...args: unknown[]) => mockAwardPoint(...args),
-  subscribeToTasksForDate:     (...args: unknown[]) => mockSubscribeToTasksForDate(...args),
-  subscribeToPoiPreferences:   (...args: unknown[]) => mockSubscribeToPoiPreferences(...args),
-  subscribeToCategories:       (...args: unknown[]) => mockSubscribeToCategories(...args),
-  subscribeLowBatteryPausePref: (...args: unknown[]) => mockSubscribeLowBatteryPausePref(...args),
-  subscribeStoreTuningPref:    jest.fn().mockReturnValue(jest.fn()),
-  setStoreTuningPref:          jest.fn().mockResolvedValue(undefined),
-  subscribeToTotalPoints:      (...args: unknown[]) => mockSubscribeToTotalPoints(...args),
+  getTasksForDate:      (...args: unknown[]) => mockGetTasksForDate(...args),
+  getCategories:        (...args: unknown[]) => mockGetCategories(...args),
+  getUser:              (...args: unknown[]) => mockGetUser(...args),
+  upsertUser:           jest.fn().mockResolvedValue(undefined),
+  serverTimestamp:      jest.fn().mockReturnValue('SERVER_TIMESTAMP'),
+  getUserPreferences:   (...args: unknown[]) => mockGetUserPreferences(...args),
+  getPoiPreferencesMap: (...args: unknown[]) => mockGetPoiPreferencesMap(...args),
+  getTotalPoints:       (...args: unknown[]) => mockGetTotalPoints(...args),
+  getInboxUnreadCount:  (...args: unknown[]) => mockGetInboxUnreadCount(...args),
+  getTrips:             (...args: unknown[]) => mockGetTrips(...args),
+  setStoreTuningPref:   jest.fn().mockResolvedValue(undefined),
+  setTaskDone:          (...args: unknown[]) => mockSetTaskDone(...args),
+  // KAN-230/240/317 — useLearnedPlaces (rendered inside the real
+  // useTodayScreen hook) fetches both on mount.
+  getLearnedPlaceCounts: jest.fn().mockResolvedValue([]),
+  getTaughtPlaces:       jest.fn().mockResolvedValue([]),
 }));
 
-// ─── Achievements mock ────────────────────────────────────────────────────────
+jest.mock('../../src/services/mallSnapshots', () => ({
+  getMallSnapshot: (...args: unknown[]) => mockGetMallSnapshot(...args),
+}));
 
-const mockCheckAndAwardDailyComplete = jest.fn();
+jest.mock('../../src/store/appStore', () => ({
+  useAppStore: {
+    // No SplashScreen boot data in this isolated screen render — every test
+    // goes through the real one-shot fetch path.
+    getState: () => ({ bootData: null, clearBootData: jest.fn() }),
+  },
+}));
+
+jest.mock('../../src/services/tripSuggestions', () => ({
+  detectCalendarSignal:  jest.fn().mockReturnValue(null),
+  getDismissedSignalIds: jest.fn().mockReturnValue(new Set()),
+  dismissSignal:         jest.fn(),
+  CALENDAR_SIGNAL_LOOKAHEAD_DAYS: 7,
+}));
+
+// errandBundles.ts opens its own expo-sqlite db — not under test here (see
+// errandBundles.test.ts / useErrandBundle.test.ts), so stub it out wholesale.
+jest.mock('../../src/services/errandBundles', () => ({
+  computeErrandBundles:       jest.fn().mockReturnValue([]),
+  errandBundleKey:            (bundle: { anchor: { placeId: string } }) => bundle.anchor.placeId,
+  isBundleDismissedToday:     jest.fn().mockReturnValue(false),
+  getDismissedBundleKeysToday: jest.fn().mockReturnValue(new Set()),
+  dismissBundleForToday:      jest.fn(),
+}));
+
+jest.mock('../../src/services/clusterLeisure', () => ({
+  findClusterLeisure: jest.fn(() => null),
+}));
+
+jest.mock('../../src/services/wearSync', () => ({
+  syncTasksToWatch: jest.fn(),
+}));
+
+jest.mock('../../src/hooks/useOffGridWelcomeBack', () => ({
+  useOffGridWelcomeBack: jest.fn(),
+}));
+
+jest.mock('../../src/services/home', () => ({
+  setHomeLocation: jest.fn(),
+}));
+
+// KAN-271 — achievement/points evaluation moved server-side, behind this
+// Cloud Function proxy. Reaches @react-native-firebase/functions, mocked
+// globally in jest.setup.js, but stubbed at the service boundary here since
+// the reward round-trip itself isn't under test in this file (see
+// __tests__/hooks/useTodayScreen.test.ts for that).
+jest.mock('../../src/services/rewardFunctions', () => ({
+  processTaskCompletionRewards: (...args: unknown[]) => mockProcessTaskCompletionRewards(...args),
+  awardOnboardingBonus:         jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('../../src/services/achievements', () => ({
-  checkAndAwardDailyComplete: (...args: unknown[]) => mockCheckAndAwardDailyComplete(...args),
+  checkAndFireAchievementNudge: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../src/services/challenges', () => ({
@@ -71,8 +136,22 @@ jest.mock('@react-native-firebase/auth', () => ({}));
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: (...args: unknown[]) => mockNavigate(...args), goBack: jest.fn() }),
+  // useProximityEngine imports navigationRef.ts, which builds this once at
+  // module load time regardless of whether this test ever navigates through it.
+  createNavigationContainerRef: () => ({ current: null, isReady: () => false }),
+  // TodayScreen's own focus-triggered refresh (skips the first focus, since
+  // SplashScreen already preloaded data) — a plain mount-effect is enough
+  // here since these tests never leave/re-enter the screen.
+  useFocusEffect: (callback: () => void) => require('react').useEffect(callback, []),
 }));
 jest.mock('@react-navigation/native-stack', () => ({}));
+
+// useTripSuggestion (rendered inside the real useTodayScreen hook) imports
+// calendar.ts, which imports expo-calendar — an ESM native module Jest can't
+// parse. Not under test here.
+jest.mock('../../src/services/calendar', () => ({
+  fetchCalendarEvents: jest.fn().mockResolvedValue([]),
+}));
 
 // ─── Theme mock ───────────────────────────────────────────────────────────────
 
@@ -128,6 +207,13 @@ jest.mock('react-native-reanimated', () => {
     interpolate:              (_v: unknown, _i: unknown[], o: unknown[]) => o[0],
     Extrapolation:            { CLAMP: 'clamp' },
     runOnJS:                  (fn: (...args: unknown[]) => unknown) => fn,
+    cancelAnimation:          noop,
+    // useCollapseAnimation calls Easing.inOut(Easing.cubic) directly (not
+    // just passed as an opaque config) — real no-op passthrough shape.
+    Easing: {
+      inOut: (fn: (t: number) => number) => fn,
+      cubic: (t: number) => t,
+    },
   };
 });
 
@@ -164,31 +250,64 @@ jest.mock('../../src/components/NewTaskSheet', () => {
   const { forwardRef } = require('react');
   return { __esModule: true, default: forwardRef(() => null) };
 });
-jest.mock('../../src/components/AppIcon', () => ({ PlusIcon: () => null }));
+jest.mock('../../src/components/AppIcon', () => ({
+  PlusIcon: () => null,
+  // KAN-281 "one trip for all of these" row.
+  NavigateIcon: () => null,
+  ChevronRightIcon: () => null,
+}));
 
 // ─── Service mocks ────────────────────────────────────────────────────────────
 
 jest.mock('../../src/services/geolocation', () => ({
   requestLocationPermission: jest.fn().mockResolvedValue('granted'),
+  getPositionLowAccuracy:    jest.fn().mockResolvedValue({ lat: 0, lng: 0 }),
   LocationContext:           {},
 }));
-const mockStartProximityMonitoring = jest.fn();
-const mockStopProximityMonitoring  = jest.fn();
+// KAN-59/KAN-214 review — there is no separate startProximityMonitoring/
+// stopProximityMonitoring pair anymore; useProximityEngine.ts drives the
+// engine directly via runProximitySearchOrReuseSnapshot (automatic entry
+// point) / runProximitySearch (manual refresh) plus its own setInterval, so
+// "does the engine run" is asserted against that call instead.
+const mockRunProximitySearchOrReuseSnapshot = jest.fn(
+  (_uid: string, _tasks: unknown[], onUpdate: (poiType: null, place: null, places: Record<string, unknown>) => void) => {
+    // Resolves as a completed-but-empty scan (calls onUpdate with no
+    // results) rather than never calling back at all — otherwise
+    // useProximityEngine's hasCompletedScan/nearbyReady never flips true and
+    // every downstream "is this task far/nearby" check hangs indefinitely.
+    onUpdate(null, null, {});
+    return Promise.resolve();
+  },
+);
 
 jest.mock('../../src/services/proximity', () => ({
-  startProximityMonitoring:      (...args: unknown[]) => mockStartProximityMonitoring(...args),
-  stopProximityMonitoring:       () => mockStopProximityMonitoring(),
+  runProximitySearch: jest.fn((_uid: string, _tasks: unknown[], onUpdate: (poiType: null, place: null, places: Record<string, unknown>) => void) => {
+    onUpdate(null, null, {});
+    return Promise.resolve();
+  }),
+  runProximitySearchOrReuseSnapshot: (...args: unknown[]) => mockRunProximitySearchOrReuseSnapshot(...args),
+  getLastSearchCoords:           jest.fn().mockReturnValue(null),
+  getActivePlaceContext:         jest.fn().mockReturnValue(null),
   updateProximityTasks:          jest.fn(),
   updateProximityPoiPreferences: jest.fn(),
   pauseGeofenceMonitoring:       jest.fn(),
   resumeGeofenceMonitoring:      jest.fn(),
   setLocationTap:                jest.fn(),
+  setPlaceContextTap:            jest.fn(),
+  setNavigateToTripPlanner:      jest.fn(),
+  updateNotifNearbyEnabled:      jest.fn(),
+  updateExitPromptPref:          jest.fn(),
+  setLearnedPlaces:              jest.fn(),
+  setCustomCategoryPoiTypes:     jest.fn(),
+  setActiveTrips:                jest.fn(),
+  setMallSnapshot:                jest.fn(),
 }));
 
 jest.mock('../../src/services/indoorProximity', () => ({
   startIndoorProximityMonitoring: jest.fn().mockReturnValue(jest.fn()),
   stopIndoorProximityMonitoring:  jest.fn(),
   updateIndoorTasks:              jest.fn(),
+  updateIndoorExitPromptPref:     jest.fn(),
 }));
 
 jest.mock('../../src/services/indoorDetection', () => ({
@@ -233,20 +352,17 @@ const TASK = {
 const DONE_TASK = { ...TASK, id: 'task-done', done: true };
 
 function setupFirestoreMocks(tasks: typeof TASK[]) {
-  // subscribeToTasksForDate fires the callback synchronously.
-  mockSubscribeToTasksForDate.mockImplementation(
-    (_uid: string, _date: string, cb: (tasks: typeof TASK[]) => void) => {
-      cb(tasks);
-      return jest.fn(); // unsubscribe
-    },
-  );
-  mockSubscribeToPoiPreferences.mockReturnValue(jest.fn());
-  mockSubscribeToCategories.mockReturnValue(jest.fn());
-  mockSubscribeLowBatteryPausePref.mockReturnValue(jest.fn());
-  mockSubscribeToTotalPoints.mockReturnValue(jest.fn());
+  mockGetTasksForDate.mockResolvedValue(tasks);
+  mockGetCategories.mockResolvedValue([]);
+  mockGetUser.mockResolvedValue(null);
+  mockGetUserPreferences.mockResolvedValue({});
+  mockGetPoiPreferencesMap.mockResolvedValue({});
+  mockGetTotalPoints.mockResolvedValue(tasks.length);
+  mockGetInboxUnreadCount.mockResolvedValue(0);
+  mockGetTrips.mockResolvedValue([]);
+  mockGetMallSnapshot.mockResolvedValue(null);
   mockSetTaskDone.mockResolvedValue(undefined);
-  mockAwardPoint.mockResolvedValue(undefined);
-  mockCheckAndAwardDailyComplete.mockResolvedValue(undefined);
+  mockProcessTaskCompletionRewards.mockResolvedValue({ totalPoints: 0, nudgeCandidate: null });
 }
 
 // ─── Import (after all mocks) ─────────────────────────────────────────────────
@@ -258,7 +374,6 @@ import TodayScreen from '../../src/screens/TodayScreen';
 beforeEach(() => {
   jest.clearAllMocks();
   mockUid = 'user-test';
-  mockSubscribeToTotalPoints.mockReturnValue(jest.fn());
 });
 
 describe('KAN-279 — far-away indicator wiring', () => {
@@ -283,10 +398,6 @@ describe('KAN-279 — far-away indicator wiring', () => {
 
 describe('KAN-281 — "one trip for all of these" entry row', () => {
   const TASK_ATM = { ...TASK, id: 'task-2', poi: 'atm' };
-
-  // The mocked proximity module never invokes its onUpdate callback in this
-  // suite (see KAN-279 block above), so poiPlaces stays {} throughout — every
-  // task with a poi reads as "not in the nearby list" by default.
 
   it('does NOT render with fewer than 2 eligible tasks', async () => {
     setupFirestoreMocks([{ ...TASK, poi: 'pharmacy' } as any]);
@@ -318,39 +429,48 @@ describe('KAN-281 — "one trip for all of these" entry row', () => {
   });
 });
 
-describe('KAN-31 — point awarding on task toggle', () => {
-  it('calls awardPoint with correct uid, taskId, and title when marking done', async () => {
+// KAN-31/KAN-32 — point awarding + daily-complete achievement moved
+// server-side (KAN-271): useTaskCompletion now just calls
+// processTaskCompletionRewards(taskId, hour) and applies whatever comes
+// back; it no longer computes allTasksDone/remainingTaskCount or calls
+// awardPoint/checkAndAwardDailyComplete directly (both are dead client-side
+// code — grep confirms no call site left in src/). Full behavioral coverage
+// of the toggle -> reward call lives in __tests__/hooks/useTodayScreen.test.ts;
+// this suite only checks the screen wires the toggle through at all.
+describe('KAN-31 — reward call wiring on task toggle', () => {
+  it('calls processTaskCompletionRewards when marking a task done', async () => {
     setupFirestoreMocks([TASK]);
     render(<TodayScreen />);
+    await act(async () => {}); // let the one-shot fetch land before pressing
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('task-row-task-1'));
     });
-    // Allow the fire-and-forget promise to settle.
     await act(async () => {});
 
-    expect(mockAwardPoint).toHaveBeenCalledTimes(1);
-    expect(mockAwardPoint).toHaveBeenCalledWith('user-test', 'task-1', 'Buy milk');
+    expect(mockSetTaskDone).toHaveBeenCalledWith('user-test', 'task-1', true, undefined, undefined);
+    expect(mockProcessTaskCompletionRewards).toHaveBeenCalledWith('task-1', expect.any(Number));
   });
 
-  it('does NOT call awardPoint when marking a task undone', async () => {
+  it('does NOT call processTaskCompletionRewards when marking a task undone', async () => {
     setupFirestoreMocks([DONE_TASK]);
     render(<TodayScreen />);
+    await act(async () => {});
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('task-row-task-done'));
     });
     await act(async () => {});
 
-    expect(mockSetTaskDone).toHaveBeenCalledWith('user-test', 'task-done', false);
-    expect(mockAwardPoint).not.toHaveBeenCalled();
+    expect(mockSetTaskDone).toHaveBeenCalledWith('user-test', 'task-done', false, undefined, undefined);
+    expect(mockProcessTaskCompletionRewards).not.toHaveBeenCalled();
   });
 
-  it('does NOT revert the task toggle when awardPoint fails', async () => {
+  it('does NOT revert the task toggle when processTaskCompletionRewards fails (fire-and-forget)', async () => {
     setupFirestoreMocks([TASK]);
-    mockAwardPoint.mockRejectedValue(new Error('Network error'));
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockProcessTaskCompletionRewards.mockRejectedValue(new Error('Network error'));
     render(<TodayScreen />);
+    await act(async () => {});
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('task-row-task-1'));
@@ -358,123 +478,33 @@ describe('KAN-31 — point awarding on task toggle', () => {
     await act(async () => {});
 
     // setTaskDone still called and succeeded — toggle was not reverted.
-    expect(mockSetTaskDone).toHaveBeenCalledWith('user-test', 'task-1', true);
-    // The task row is still present (not reverted).
+    expect(mockSetTaskDone).toHaveBeenCalledWith('user-test', 'task-1', true, undefined, undefined);
     expect(screen.getByTestId('task-row-task-1')).toBeTruthy();
   });
 
-  it('does NOT call awardPoint when uid is absent', async () => {
+  it('does NOT call processTaskCompletionRewards when uid is absent', async () => {
     mockUid = null;
     setupFirestoreMocks([TASK]);
     render(<TodayScreen />);
+    await act(async () => {});
 
     await act(async () => {
       fireEvent.press(screen.queryByTestId('task-row-task-1') ?? { type: 'View' } as any);
     });
     await act(async () => {});
 
-    expect(mockAwardPoint).not.toHaveBeenCalled();
+    expect(mockProcessTaskCompletionRewards).not.toHaveBeenCalled();
   });
 });
 
-// ─── KAN-32 — daily-complete achievement ─────────────────────────────────────
-
-/** A second pending task — used in multi-task scenarios. */
-const TASK_2 = {
-  id:        'task-2',
-  title:     'Walk the dog',
-  category:  'health' as const,
-  done:      false,
-  date:      '2026-05-29',
-  createdAt: { toDate: () => new Date() } as any,
-};
-
-describe('KAN-32 — daily-complete achievement', () => {
-  it('calls checkAndAwardDailyComplete when the last pending task is marked done', async () => {
-    // Only TASK is pending — marking it done makes the list fully complete.
-    setupFirestoreMocks([TASK]);
-    render(<TodayScreen />);
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('task-row-task-1'));
-    });
-    await act(async () => {});
-
-    expect(mockCheckAndAwardDailyComplete).toHaveBeenCalledTimes(1);
-    expect(mockCheckAndAwardDailyComplete).toHaveBeenCalledWith(
-      'user-test',
-      expect.any(String), // todayISO() result
-      1,                  // totalTasks  = tasks.length (TASK only)
-      1,                  // totalPoints = tasks.length (1 pt per task)
-    );
-  });
-
-  it('does NOT call checkAndAwardDailyComplete when other tasks are still pending', async () => {
-    // Two pending tasks — marking only one done leaves the list incomplete.
-    setupFirestoreMocks([TASK, TASK_2]);
-    render(<TodayScreen />);
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('task-row-task-1'));
-    });
-    await act(async () => {});
-
-    expect(mockCheckAndAwardDailyComplete).not.toHaveBeenCalled();
-  });
-
-  it('does NOT call checkAndAwardDailyComplete when marking a task undone', async () => {
-    setupFirestoreMocks([DONE_TASK]);
-    render(<TodayScreen />);
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('task-row-task-done'));
-    });
-    await act(async () => {});
-
-    expect(mockCheckAndAwardDailyComplete).not.toHaveBeenCalled();
-  });
-
-  it('does NOT call checkAndAwardDailyComplete when uid is absent', async () => {
-    mockUid = null;
-    setupFirestoreMocks([TASK]);
-    render(<TodayScreen />);
-
-    await act(async () => {
-      fireEvent.press(screen.queryByTestId('task-row-task-1') ?? { type: 'View' } as any);
-    });
-    await act(async () => {});
-
-    expect(mockCheckAndAwardDailyComplete).not.toHaveBeenCalled();
-  });
-
-  it('does NOT revert the task toggle when checkAndAwardDailyComplete fails', async () => {
-    setupFirestoreMocks([TASK]);
-    mockCheckAndAwardDailyComplete.mockRejectedValue(new Error('Achievement service error'));
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
-    render(<TodayScreen />);
-
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('task-row-task-1'));
-    });
-    await act(async () => {});
-
-    // setTaskDone still called — toggle was not reverted.
-    expect(mockSetTaskDone).toHaveBeenCalledWith('user-test', 'task-1', true);
-    expect(screen.getByTestId('task-row-task-1')).toBeTruthy();
-  });
-});
-
-// ─── KAN-53 — proximity engine gate / stop / restart ─────────────────────────
+// ─── KAN-53 — proximity engine gate ──────────────────────────────────────────
 //
-// These tests verify that the proximity engine is only running when it is
-// actually useful:
-//   Gate:    engine never starts when there are zero undone POI tasks at mount.
-//   Stop:    engine stops when the last POI task is marked done mid-day.
-//   Restart: engine restarts (without re-prompting) when a new POI task appears.
-//
-// The mock for requestLocationPermission resolves 'granted' (set in the
-// geolocation mock above). startProximityMonitoring returns a stop function
-// so the cleanup path in TodayScreen can call it.
+// Engine never starts when there are zero undone POI tasks at mount. The
+// old STOP/RESTART tests here simulated a live Firestore push arriving
+// mid-session (task completed/added without any user action) — that trigger
+// no longer exists client-side (KAN-153/KAN-214: one-shot fetch, no
+// subscription), so there's nothing left to simulate; removed rather than
+// rewritten around a scenario that can't happen anymore.
 
 /** A task with a POI field — triggers the proximity engine. */
 const POI_TASK = {
@@ -487,139 +517,69 @@ const POI_TASK = {
   createdAt: { toDate: () => new Date() } as any,
 };
 
-/** Same task but marked done — used to simulate completing the last POI task. */
+/** Same task but marked done. */
 const POI_TASK_DONE = { ...POI_TASK, done: true };
 
-describe('KAN-53 — proximity engine gate / stop / restart', () => {
-  beforeEach(() => {
-    // startProximityMonitoring returns a stop fn so the cleanup path works.
-    mockStartProximityMonitoring.mockReturnValue(jest.fn());
-  });
-
-  // ── Gate ──────────────────────────────────────────────────────────────────
-  // When there are no undone POI tasks at mount, GPS must never start.
-
-  it('GATE — does NOT start proximity monitoring when there are no POI tasks', async () => {
+describe('KAN-53 — proximity engine gate', () => {
+  it('GATE — does NOT run a proximity search when there are no POI tasks', async () => {
     // TASK has no `poi` field — engine should stay off.
     setupFirestoreMocks([TASK]);
     render(<TodayScreen />);
     await act(async () => {});
 
-    expect(mockStartProximityMonitoring).not.toHaveBeenCalled();
+    expect(mockRunProximitySearchOrReuseSnapshot).not.toHaveBeenCalled();
   });
 
-  it('GATE — does NOT start proximity monitoring when tasks list is empty', async () => {
+  it('GATE — does NOT run a proximity search when tasks list is empty', async () => {
     setupFirestoreMocks([]);
     render(<TodayScreen />);
     await act(async () => {});
 
-    expect(mockStartProximityMonitoring).not.toHaveBeenCalled();
+    expect(mockRunProximitySearchOrReuseSnapshot).not.toHaveBeenCalled();
   });
 
-  it('GATE — starts proximity monitoring when at least one undone POI task exists', async () => {
+  it('GATE — runs a proximity search when at least one undone POI task exists', async () => {
     setupFirestoreMocks([POI_TASK]);
     render(<TodayScreen />);
     await act(async () => {});
+    await act(async () => {});
 
-    expect(mockStartProximityMonitoring).toHaveBeenCalledTimes(1);
-    expect(mockStartProximityMonitoring).toHaveBeenCalledWith(
+    // Not pinned to an exact call count — permission resolving async can
+    // legitimately cause the effect to re-run once more than a same-tick
+    // mount would. What matters is that it ran, for the right uid/tasks.
+    expect(mockRunProximitySearchOrReuseSnapshot).toHaveBeenCalledWith(
       'user-test',
       expect.arrayContaining([expect.objectContaining({ id: 'poi-task-1' })]),
       expect.any(Function),
     );
   });
 
-  it('GATE — does NOT start monitoring when only done POI tasks exist', async () => {
+  it('GATE — does NOT run a proximity search when only done POI tasks exist', async () => {
     setupFirestoreMocks([POI_TASK_DONE]);
     render(<TodayScreen />);
     await act(async () => {});
 
-    expect(mockStartProximityMonitoring).not.toHaveBeenCalled();
-  });
-
-  // ── Stop ──────────────────────────────────────────────────────────────────
-  // When the last POI task is completed mid-day, the engine must stop.
-
-  it('STOP — calls stopProximityMonitoring when the last POI task is marked done', async () => {
-    // First snapshot: one undone POI task → engine starts.
-    // Second snapshot: same task now done → engine should stop.
-    let firestoreCallback: ((tasks: any[]) => void) | null = null;
-    mockSubscribeToTasksForDate.mockImplementation(
-      (_uid: string, _date: string, cb: (tasks: any[]) => void) => {
-        firestoreCallback = cb;
-        cb([POI_TASK]); // initial snapshot — starts the engine
-        return jest.fn();
-      },
-    );
-    mockSubscribeToPoiPreferences.mockReturnValue(jest.fn());
-    mockSubscribeToCategories.mockReturnValue(jest.fn());
-    mockSubscribeLowBatteryPausePref.mockReturnValue(jest.fn());
-
-    render(<TodayScreen />);
-    await act(async () => {}); // let mount effects settle
-
-    expect(mockStartProximityMonitoring).toHaveBeenCalledTimes(1);
-
-    // Simulate Firestore updating the task to done → engine should stop.
-    await act(async () => {
-      firestoreCallback!([POI_TASK_DONE]);
-    });
-
-    expect(mockStopProximityMonitoring).toHaveBeenCalledTimes(1);
-  });
-
-  // ── Restart ───────────────────────────────────────────────────────────────
-  // When a new POI task is added after the engine was stopped, it must restart
-  // without re-requesting location permission.
-
-  it('RESTART — restarts monitoring when a POI task is added after engine was stopped', async () => {
-    // Phase 1: start with no POI tasks → engine off.
-    // Phase 2: Firestore pushes a new POI task → engine should start.
-    let firestoreCallback: ((tasks: any[]) => void) | null = null;
-    mockSubscribeToTasksForDate.mockImplementation(
-      (_uid: string, _date: string, cb: (tasks: any[]) => void) => {
-        firestoreCallback = cb;
-        cb([TASK]); // initial: no POI tasks
-        return jest.fn();
-      },
-    );
-    mockSubscribeToPoiPreferences.mockReturnValue(jest.fn());
-    mockSubscribeToCategories.mockReturnValue(jest.fn());
-    mockSubscribeLowBatteryPausePref.mockReturnValue(jest.fn());
-
-    render(<TodayScreen />);
-    await act(async () => {});
-
-    // Engine should NOT have started yet (no POI tasks).
-    expect(mockStartProximityMonitoring).not.toHaveBeenCalled();
-
-    // Simulate a new POI task arriving via Firestore.
-    await act(async () => {
-      firestoreCallback!([TASK, POI_TASK]);
-    });
-
-    // Engine should now be running.
-    expect(mockStartProximityMonitoring).toHaveBeenCalledTimes(1);
+    expect(mockRunProximitySearchOrReuseSnapshot).not.toHaveBeenCalled();
   });
 });
 
 // ─── KAN-57 / KAN-58 — TasksUiState error branch & retry ────────────────────
 
-function setupErrorSubscription() {
-  mockSubscribeToTasksForDate.mockImplementation(
-    (_uid: string, _date: string, _onSuccess: unknown, onError: (err: Error) => void) => {
-      onError(new Error('Firestore permission denied'));
-      return jest.fn();
-    },
-  );
-  mockSubscribeToPoiPreferences.mockReturnValue(jest.fn());
-  mockSubscribeToCategories.mockReturnValue(jest.fn());
-  mockSubscribeLowBatteryPausePref.mockReturnValue(jest.fn());
-}
-
 describe('KAN-57 / KAN-58 — TasksUiState error branch & retry', () => {
-  it('shows a user-friendly error message when the subscription fires an error', async () => {
-    setupErrorSubscription();
+  function setupErrorFetch() {
+    mockGetTasksForDate.mockRejectedValue(new Error('Firestore permission denied'));
+    mockGetCategories.mockResolvedValue([]);
+    mockGetUser.mockResolvedValue(null);
+    mockGetUserPreferences.mockResolvedValue({});
+    mockGetPoiPreferencesMap.mockResolvedValue({});
+    mockGetTotalPoints.mockResolvedValue(0);
+    mockGetInboxUnreadCount.mockResolvedValue(0);
+    mockGetTrips.mockResolvedValue([]);
+    mockGetMallSnapshot.mockResolvedValue(null);
+  }
+
+  it('shows a user-friendly error message when the fetch fails', async () => {
+    setupErrorFetch();
     render(<TodayScreen />);
     await act(async () => {});
 
@@ -627,7 +587,7 @@ describe('KAN-57 / KAN-58 — TasksUiState error branch & retry', () => {
   });
 
   it('shows a "Try again" button in the error state', async () => {
-    setupErrorSubscription();
+    setupErrorFetch();
     render(<TodayScreen />);
     await act(async () => {});
 
@@ -635,43 +595,26 @@ describe('KAN-57 / KAN-58 — TasksUiState error branch & retry', () => {
   });
 
   it('does NOT show task rows in the error state', async () => {
-    setupErrorSubscription();
+    setupErrorFetch();
     render(<TodayScreen />);
     await act(async () => {});
 
     expect(screen.queryByTestId('task-row-task-1')).toBeNull();
   });
 
-  it('re-subscribes and shows tasks when "Try again" is pressed after a recovery', async () => {
-    // Phase 1: subscription errors.
-    let callCount = 0;
-    mockSubscribeToTasksForDate.mockImplementation(
-      (_uid: string, _date: string, onSuccess: (tasks: any[]) => void, onError: (err: Error) => void) => {
-        callCount += 1;
-        if (callCount === 1) {
-          onError(new Error('Network error'));
-        } else {
-          onSuccess([TASK]); // second attempt succeeds
-        }
-        return jest.fn();
-      },
-    );
-    mockSubscribeToPoiPreferences.mockReturnValue(jest.fn());
-    mockSubscribeToCategories.mockReturnValue(jest.fn());
-    mockSubscribeLowBatteryPausePref.mockReturnValue(jest.fn());
-
+  it('re-fetches and shows tasks when "Try again" is pressed after a recovery', async () => {
+    // First fetch fails; refresh() (triggered by "Try again") succeeds.
+    setupErrorFetch();
     render(<TodayScreen />);
     await act(async () => {});
 
-    // Error shown after first attempt.
     expect(screen.getByLabelText('Try again')).toBeTruthy();
 
-    // Press retry — second subscription call succeeds.
+    setupFirestoreMocks([TASK]);
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Try again'));
     });
 
-    // Task now visible after recovery.
     expect(screen.getByText('Buy milk')).toBeTruthy();
     expect(screen.queryByLabelText('Try again')).toBeNull();
   });
@@ -713,11 +656,16 @@ describe('KAN-139 — empty state body', () => {
   });
 
   it('does NOT show the empty state during loading', () => {
-    // Don't call setupFirestoreMocks — subscribeToTasksForDate never fires → status stays loading
-    mockSubscribeToTasksForDate.mockReturnValue(jest.fn());
-    mockSubscribeToPoiPreferences.mockReturnValue(jest.fn());
-    mockSubscribeToCategories.mockReturnValue(jest.fn());
-    mockSubscribeLowBatteryPausePref.mockReturnValue(jest.fn());
+    // Never-resolving fetch — status stays loading throughout this test.
+    mockGetTasksForDate.mockReturnValue(new Promise(() => {}));
+    mockGetCategories.mockResolvedValue([]);
+    mockGetUser.mockResolvedValue(null);
+    mockGetUserPreferences.mockResolvedValue({});
+    mockGetPoiPreferencesMap.mockResolvedValue({});
+    mockGetTotalPoints.mockResolvedValue(0);
+    mockGetInboxUnreadCount.mockResolvedValue(0);
+    mockGetTrips.mockResolvedValue([]);
+    mockGetMallSnapshot.mockResolvedValue(null);
 
     render(<TodayScreen />);
 

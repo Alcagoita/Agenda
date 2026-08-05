@@ -97,7 +97,22 @@ jest.mock('@react-native-firebase/firestore', () => {
     }),
   });
   firestoreFn.FieldValue = FieldValue;
-  return firestoreFn;
+  return {
+    __esModule: true,
+    default: firestoreFn,
+    FieldValue,
+    // firebase.ts's own module-level init, reached transitively via this
+    // file's import chain — not under test here; the namespaced
+    // `firestoreFn` above covers the actual import-connector logic.
+    getFirestore: jest.fn(() => ({})),
+    initializeFirestore: jest.fn(),
+    connectFirestoreEmulator: jest.fn(),
+    getDocs: jest.fn().mockResolvedValue({ docs: [] }),
+    query: jest.fn(),
+    collection: jest.fn(),
+    limit: jest.fn(),
+    CACHE_SIZE_UNLIMITED: -1,
+  };
 });
 
 // global fetch mock

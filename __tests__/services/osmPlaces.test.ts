@@ -164,16 +164,25 @@ describe('searchOsmPlaces', () => {
     jest.useRealTimers();
   });
 
-  it('keeps successful chunk results when a later chunk fails', async () => {
+  // KAN-342 — a chunk-level failure now retries each of the 2 endpoints up
+  // to MAX_RETRIES_PER_ENDPOINT+1 times (3 attempts each = 6 total) before
+  // giving up on that chunk, instead of one attempt per endpoint (2 total).
+  it('keeps successful chunk results when a later chunk exhausts every endpoint/retry', async () => {
+    jest.useFakeTimers();
     const poiTypes = Array.from({ length: 26 }, () => 'pharmacy');
     mockOverpassResponse([{ id: 8, lat: 0.0001, lon: 0, tags: { amenity: 'pharmacy', name: 'Open Pharmacy' } }]);
-    mockFetch
-      .mockRejectedValueOnce(new Error('chunk failed'))
-      .mockRejectedValueOnce(new Error('chunk failed'));
+    mockFetch.mockRejectedValue(new Error('chunk failed')); // every subsequent call fails
 
-    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, poiTypes, 5000);
+    const resultPromise = searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, poiTypes, 5000);
+    await jest.advanceTimersByTimeAsync(0);      // chunk 1 succeeds immediately
+    await jest.advanceTimersByTimeAsync(500);     // chunk 2, endpoint 1, backoff before retry 1
+    await jest.advanceTimersByTimeAsync(1000);    // endpoint 1, backoff before retry 2
+    await jest.advanceTimersByTimeAsync(500);     // endpoint 2, backoff before retry 1
+    await jest.advanceTimersByTimeAsync(1000);    // endpoint 2, backoff before retry 2
+    const result = await resultPromise;
+    jest.useRealTimers();
 
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(1 + 6); // 1 (chunk 1) + 2 endpoints x 3 attempts (chunk 2)
     const firstBody = decodeURIComponent((mockFetch.mock.calls[0][1].body as string).replace(/^data=/, ''));
     const secondBody = decodeURIComponent((mockFetch.mock.calls[1][1].body as string).replace(/^data=/, ''));
     expect(firstBody.match(/nwr\[/g)).toHaveLength(25);
@@ -260,14 +269,31 @@ describe('searchOsmPlaces — building footprint area (KAN-282)', () => {
 });
 
 describe('searchOsmPlaces — Overpass endpoint fallback (KAN-282)', () => {
-  it('falls back to the next endpoint when the first one fails', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('504 Gateway Timeout'));
+  // KAN-342 — a transient failure now retries the SAME endpoint with
+  // exponential backoff (bounded — MAX_RETRIES_PER_ENDPOINT) before moving on
+  // to the next endpoint at all; only after every attempt on endpoint 1 is
+  // exhausted does endpoint 2 get tried.
+  it('exhausts retries on the first endpoint (with backoff) before falling back to the next', async () => {
+    jest.useFakeTimers();
+    mockFetch
+      .mockRejectedValueOnce(new Error('504 Gateway Timeout'))
+      .mockRejectedValueOnce(new Error('504 Gateway Timeout'))
+      .mockRejectedValueOnce(new Error('504 Gateway Timeout'));
     mockOverpassResponse([{ id: 1, lat: 0.001, lon: 0, tags: { amenity: 'pharmacy', name: 'Farmácia' } }]);
 
-    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['pharmacy'], 5000);
+    const promise = searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['pharmacy'], 5000);
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(500);  // backoff before retry 1
+    await jest.advanceTimersByTimeAsync(1000); // backoff before retry 2
+    const result = await promise;
+    jest.useRealTimers();
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockFetch.mock.calls[0][0]).not.toBe(mockFetch.mock.calls[1][0]);
+    // 3 attempts on endpoint 1 (exhausted), then 1 on endpoint 2 (succeeds).
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(mockFetch.mock.calls[0][0]).toBe(mockFetch.mock.calls[1][0]);
+    expect(mockFetch.mock.calls[0][0]).toBe(mockFetch.mock.calls[2][0]);
+    expect(mockFetch.mock.calls[3][0]).not.toBe(mockFetch.mock.calls[0][0]);
     expect(result.pharmacy).toHaveLength(1);
   });
 
@@ -288,13 +314,25 @@ describe('searchOsmPlaces — Overpass endpoint fallback (KAN-282)', () => {
     expect(Date.now() - startedAt).toBeLessThan(220);
   });
 
-  it('falls back on a non-200 response too, not just a thrown error', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
+  it('falls back on a non-retryable non-200 response too, not just a thrown error', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({}) });
     mockOverpassResponse([{ id: 1, lat: 0.001, lon: 0, tags: { amenity: 'pharmacy', name: 'Farmácia' } }]);
 
     const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['pharmacy'], 5000);
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result.pharmacy).toHaveLength(1);
+  });
+
+  // KAN-342 — 429 is a stop signal, never a retry-or-fallback case: Overpass
+  // blocks by User-Agent identity, so trying a second endpoint (or retrying
+  // this one) can't fix it and risks compounding the block.
+  it('a 429 stops immediately — no retry, no next-endpoint fallback', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
+
+    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['pharmacy'], 5000);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.pharmacy).toEqual([]);
   });
 });

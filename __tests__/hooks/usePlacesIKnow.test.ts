@@ -121,7 +121,7 @@ describe('refreshTrip', () => {
 
     await act(async () => { await refreshPromise; });
 
-    expect(mockRefreshTripArea).toHaveBeenCalledWith('test-uid', trip, []);
+    expect(mockRefreshTripArea).toHaveBeenCalledWith('test-uid', trip);
     expect(result.current.refreshingTripId).toBeNull();
     expect(mockGetTrips).toHaveBeenCalledTimes(2); // initial load + post-refresh re-fetch
   });

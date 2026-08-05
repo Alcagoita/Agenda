@@ -194,6 +194,12 @@ function getDb(): SQLite.SQLiteDatabase {
     if (!existingColumns.has('store_subtype')) {
       database.execSync('ALTER TABLE habitat_places ADD COLUMN store_subtype TEXT');
     }
+    // KAN-342 migration — Foursquare (via Cloudflare) is now a third live
+    // source, freely storable like OSM (Apache 2.0) — needs its own identity
+    // column, not shoehorned into google_place_id or osm_id.
+    if (!existingColumns.has('fsq_place_id')) {
+      database.execSync('ALTER TABLE habitat_places ADD COLUMN fsq_place_id TEXT');
+    }
     database.execSync('CREATE INDEX IF NOT EXISTS idx_habitat_cache_area ON habitat_places(cache_area_id);');
     db = database;
   }
@@ -216,6 +222,8 @@ export interface HabitatRow {
   lng: number;
   google_place_id: string | null;
   osm_id: string | null;
+  /** Foursquare id via Cloudflare (KAN-342) — null for rows never matched to a live Cloudflare result. */
+  fsq_place_id: string | null;
   osm_fetched_at: number;
   last_matched_at: number;
   /** Non-null when this row belongs to a KAN-234 trip download — joins to Trip.cacheAreaId. Null for ordinary opportunistic habitat rows. */
@@ -245,7 +253,18 @@ export interface PlaceCandidate {
   isGenericName?: boolean;
   lat: number;
   lng: number;
-  source: { google?: string; osm?: string };
+  /**
+   * `google` is never written by any live code path anymore (KAN-342 —
+   * Google Places has no role in live search) — kept in the type only
+   * because existing on-device rows from before that change may still carry
+   * a real value there, and this type still needs to describe them. `osm`
+   * and `fsq` (Foursquare, via Cloudflare) are the two sources that can
+   * actually create/move a row today — both are freely storable (ODbL,
+   * Apache 2.0 respectively), unlike Google's restricted coordinate-caching
+   * terms, which is why Google could only ever merge into an existing row,
+   * never create one (see upsertPlaceCore).
+   */
+  source: { google?: string; osm?: string; fsq?: string };
   /** OSM building-footprint area in m² (KAN-282) — only OSM way/relation malls carry this; omitted otherwise. */
   footprintAreaM2?: number;
   /** The place's own site from OSM's `website` tag (KAN-293); omitted when OSM has none. */
@@ -365,14 +384,22 @@ interface TripStamp { cacheAreaId: string; expiresAt: number; }
 function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   const database = getDb();
   const now = Date.now();
-  const isOsmSourced = candidate.source.osm != null;
+  // Both OSM (ODbL) and Foursquare-via-Cloudflare (Apache 2.0) are freely
+  // storable — either can create a new row or move an existing one's
+  // coordinates. Google cannot (restricted coordinate-caching terms), which
+  // is the entire reason this flag exists: it's the gate on "may this
+  // candidate actually persist its own lat/lng", not just "is this a live
+  // hit". A Google-sourced candidate (source.google set, only possible on
+  // pre-KAN-342 rows re-merging) can still update OTHER fields below, just
+  // never lat/lng/fetched_at.
+  const isFreelyStorable = candidate.source.osm != null || candidate.source.fsq != null;
   const match = findMatchingRow(
     database, candidate.poiType, candidate.name, candidate.isGenericName,
     candidate.lat, candidate.lng,
   );
 
   if (match) {
-    const osmFlag = isOsmSourced ? 1 : 0;
+    const storableFlag = isFreelyStorable ? 1 : 0;
     const tripCacheAreaId = trip?.cacheAreaId ?? null;
     const tripExpiresAt = trip?.expiresAt ?? null;
     const restaurantFoodType = match.restaurant_food_type == null ? candidateRestaurantFoodType(candidate) : null;
@@ -381,6 +408,7 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
       `UPDATE habitat_places
        SET google_place_id   = COALESCE(google_place_id, ?),
            osm_id            = COALESCE(osm_id, ?),
+           fsq_place_id      = COALESCE(fsq_place_id, ?),
            lat               = CASE WHEN ? = 1 THEN ? ELSE lat END,
            lng               = CASE WHEN ? = 1 THEN ? ELSE lng END,
            osm_fetched_at    = CASE WHEN ? = 1 THEN ? ELSE osm_fetched_at END,
@@ -397,8 +425,8 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
            last_matched_at   = ?
        WHERE id = ?`,
       [
-        candidate.source.google ?? null, candidate.source.osm ?? null,
-        osmFlag, candidate.lat, osmFlag, candidate.lng, osmFlag, now,
+        candidate.source.google ?? null, candidate.source.osm ?? null, candidate.source.fsq ?? null,
+        storableFlag, candidate.lat, storableFlag, candidate.lng, storableFlag, now,
         candidate.footprintAreaM2 ?? null,
         candidate.website ?? null,
         restaurantFoodType,
@@ -412,18 +440,19 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   }
 
   // No existing row. Google coordinates are never persisted long-term
-  // (Places ToS) — only an OSM-anchored candidate may create a new row.
-  if (!isOsmSourced) { return generateId(); }
+  // (Places ToS) — only an OSM- or Foursquare-anchored candidate may create
+  // a new row.
+  if (!isFreelyStorable) { return generateId(); }
 
   const id = generateId();
   const restaurantFoodType = candidateRestaurantFoodType(candidate);
   const storeSubtype = candidateStoreSubtype(candidate);
   database.runSync(
     `INSERT INTO habitat_places
-       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, candidate.poiType, candidate.name, candidate.isGenericName === true ? 1 : 0, candidate.lat, candidate.lng,
-      candidate.source.google ?? null, candidate.source.osm ?? null, now, now,
+      candidate.source.google ?? null, candidate.source.osm ?? null, candidate.source.fsq ?? null, now, now,
       trip?.cacheAreaId ?? null, trip?.expiresAt ?? null, candidate.footprintAreaM2 ?? null,
       candidate.website ?? null, restaurantFoodType, storeSubtype],
   );
@@ -492,22 +521,31 @@ export function writeTripAreaPlaces(
 }
 
 /**
- * Feeds a live (Google-sourced) search hit into the cache's identity table.
- * Never creates a new row or persists Google coordinates — see upsertPlace.
+ * Feeds a live search hit into the cache's identity table — source-aware
+ * (KAN-342): the caller (proximity.ts) passes exactly one of `osm`/`fsq`
+ * depending on which chain actually answered that tick. There is no
+ * `google` option here anymore — Google Places has no role in live search
+ * — but upsertPlace/PlaceCandidate still accept it as a type, since
+ * pre-KAN-342 rows may carry a real google_place_id and this same merge
+ * path is still what reconciles them going forward.
+ *
+ * Both osm and fsq candidates may create a new row or move an existing
+ * one's coordinates (see upsertPlaceCore) — both sources are freely
+ * storable, unlike Google's restricted terms.
  */
 export function recordLiveResult(candidate: {
   poiType: string;
   name: string;
   lat: number;
   lng: number;
-  googlePlaceId: string;
+  source: { osm?: string; fsq?: string };
 }): void {
   upsertPlace({
     poiType: candidate.poiType,
     name:    candidate.name,
     lat:     candidate.lat,
     lng:     candidate.lng,
-    source:  { google: candidate.googlePlaceId },
+    source:  candidate.source,
   });
 }
 

@@ -93,17 +93,49 @@ jest.mock('../../src/constants/copy', () => ({
       proximityTitle: (label: string) => `You're near ${label}`,
       proximityBody:  (count: number) => `${count} task(s) nearby`,
     },
+    poiCatalog: new Proxy({}, { get: (_t, key) => String(key) }),
   },
 }));
 
-const mockFetch = jest.fn();
-global.fetch    = mockFetch as unknown as typeof fetch;
+// KAN-342 — live search is Cloudflare-first, OSM-failsafe; Google is no
+// longer reachable from this path. cloudflarePoiFunctions is left
+// unconfigured (rejects to undefined -> caught -> falls through), so every
+// fixture here is injected via the OSM mock instead.
+jest.mock('../../src/services/placesFunctions', () => ({
+  searchNearbyPlacesProxy: jest.fn(),
+  placesAutocompleteProxy: jest.fn(),
+  getPlaceDetailsProxy:    jest.fn(),
+}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
+const mockSearchOsmPlacesStrict = jest.fn();
+jest.mock('../../src/services/osmPlaces', () => ({
+  searchOsmPlacesStrict: (...args: unknown[]) => mockSearchOsmPlacesStrict(...args),
+}));
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(() => ({ hit: false, city: null })),
+  putCachedCity: jest.fn(),
+}));
 
-function mockPlacesResponse(places: Array<{ id: string; displayName: { text: string }; location: { latitude: number; longitude: number } }>) {
-  mockFetch.mockResolvedValueOnce({
-    ok:   true,
-    json: async () => ({ places }),
-  });
+/** Approximate latitude offset to produce a given distance in metres north of the equator. */
+const LAT_PER_METRE = 1 / 111_195;
+
+function mockPlacesResponse(places: Array<{
+  id: string; displayName: { text: string }; location: { latitude: number; longitude: number }; types?: string[];
+}>) {
+  const byType: Record<string, unknown[]> = {};
+  for (const p of places) {
+    const poiType = p.types?.[0] ?? 'atm';
+    (byType[poiType] ??= []).push({
+      osmId: p.id, name: p.displayName.text, isGenericName: false,
+      lat: p.location.latitude, lng: p.location.longitude,
+      distanceMeters: p.location.latitude / LAT_PER_METRE,
+      footprintAreaM2: 0,
+    });
+  }
+  mockSearchOsmPlacesStrict.mockResolvedValueOnce(byType);
 }
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
@@ -214,7 +246,7 @@ const atmTask = {
 };
 
 beforeEach(() => {
-  mockFetch.mockClear();
+  mockSearchOsmPlacesStrict.mockClear();
   mockGetPosition.mockClear();
   mockGetPosition.mockResolvedValue(ORIGIN);
   resetProximityState();

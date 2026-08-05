@@ -168,6 +168,21 @@ describe('SettingsScreen — KAN-113: rendering', () => {
     expect(screen.getByText(/Brush Away · v/)).toBeTruthy();
   });
 
+  // KAN-351 — every place-data source currently reachable from the app must
+  // stay credited (OpenStreetMap ODbL, Foursquare OS Places Apache 2.0, and
+  // Google while the autocomplete path still calls it) — a licence
+  // obligation, not a feature, so it must never be silently dropped by a
+  // future copy edit.
+  it('renders attribution for every reachable place-data source', async () => {
+    await renderScreen();
+    // Import rows ("Google Tasks", "Google Calendar") also contain "Google",
+    // so match the whole attribution line rather than each source in
+    // isolation — this is the one node the licence obligation actually lives on.
+    const attribution = screen.getByText(/OpenStreetMap contributors \(ODbL\)/);
+    expect(attribution.props.children).toContain('Foursquare Open Source Places (Apache 2.0)');
+    expect(attribution.props.children).toContain('Google');
+  });
+
   it('keeps the scroll view keyboard-safe and full-height', async () => {
     const rendered = await renderScreen();
     const scrollView = rendered.UNSAFE_getByType(ScrollView);

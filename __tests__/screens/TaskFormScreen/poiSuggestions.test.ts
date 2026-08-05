@@ -7,6 +7,10 @@ jest.mock('../../../src/services/placesFunctions', () => ({
   searchNearbyPlacesProxy: jest.fn(),
   searchPlaceTypesProxy: jest.fn(),
 }));
+jest.mock('../../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 
 jest.mock('../../../src/services/reverseGeocodeCache', () => ({
   getCachedCity: jest.fn(),

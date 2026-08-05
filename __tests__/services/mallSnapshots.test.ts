@@ -95,9 +95,9 @@ describe('setMallSnapshotDoc / deleteMallSnapshotDoc', () => {
 
 describe('downloadMallSnapshot', () => {
   it('looks up the mall, downloads its POIs with the fixed cacheAreaId, and persists the doc', async () => {
-    mockSearchNearbyPlaces.mockResolvedValue({
+    mockSearchNearbyPlaces.mockResolvedValue({ results: {
       shopping_mall: [{ placeId: 'mall-1', name: 'Test Mall', lat: 1, lng: 2, distanceMeters: 50, primaryType: 'shopping_mall', types: ['shopping_mall', 'point_of_interest', 'establishment'] }],
-    });
+    }, source: 'osm' });
 
     const snapshot = await downloadMallSnapshot('uid-1', { lat: 1, lng: 2 }, ['atm', 'cafe']);
 
@@ -115,7 +115,7 @@ describe('downloadMallSnapshot', () => {
   });
 
   it('throws a typed NoMallFoundError when no shopping mall is found nearby, without ever calling downloadAreaSnapshot', async () => {
-    mockSearchNearbyPlaces.mockResolvedValue({ shopping_mall: [] });
+    mockSearchNearbyPlaces.mockResolvedValue({ results: { shopping_mall: [] }, source: 'osm' });
 
     await expect(downloadMallSnapshot('uid-1', { lat: 1, lng: 2 }, ['atm']))
       .rejects.toBeInstanceOf(NoMallFoundError);
@@ -125,10 +125,13 @@ describe('downloadMallSnapshot', () => {
 
   it('skips a bucket hit whose PRIMARY Google type is something else — e.g. a parking/loading feature tagged shopping_mall only as a secondary category — and picks the next genuine mall (or throws if none)', async () => {
     mockSearchNearbyPlaces.mockResolvedValue({
-      shopping_mall: [
-        { placeId: 'not-a-mall', name: 'Cais para o carro', lat: 1, lng: 2, distanceMeters: 20, primaryType: 'parking', types: ['parking', 'point_of_interest', 'establishment'] },
-        { placeId: 'real-mall', name: 'Centro Comercial Colombo', lat: 1.001, lng: 2, distanceMeters: 80, primaryType: 'shopping_mall', types: ['shopping_mall', 'point_of_interest', 'establishment'] },
-      ],
+      results: {
+        shopping_mall: [
+          { placeId: 'not-a-mall', name: 'Cais para o carro', lat: 1, lng: 2, distanceMeters: 20, primaryType: 'parking', types: ['parking', 'point_of_interest', 'establishment'] },
+          { placeId: 'real-mall', name: 'Centro Comercial Colombo', lat: 1.001, lng: 2, distanceMeters: 80, primaryType: 'shopping_mall', types: ['shopping_mall', 'point_of_interest', 'establishment'] },
+        ],
+      },
+      source: 'osm',
     });
 
     const snapshot = await downloadMallSnapshot('uid-1', { lat: 1, lng: 2 }, ['atm']);
@@ -138,9 +141,9 @@ describe('downloadMallSnapshot', () => {
   });
 
   it('propagates a downloadAreaSnapshot failure instead of persisting a doc', async () => {
-    mockSearchNearbyPlaces.mockResolvedValue({
+    mockSearchNearbyPlaces.mockResolvedValue({ results: {
       shopping_mall: [{ placeId: 'mall-1', name: 'Test Mall', lat: 1, lng: 2, distanceMeters: 50, primaryType: 'shopping_mall', types: ['shopping_mall', 'point_of_interest', 'establishment'] }],
-    });
+    }, source: 'osm' });
     mockDownloadAreaSnapshot.mockRejectedValue(new Error('network down'));
 
     await expect(downloadMallSnapshot('uid-1', { lat: 1, lng: 2 }, ['atm'])).rejects.toThrow('network down');

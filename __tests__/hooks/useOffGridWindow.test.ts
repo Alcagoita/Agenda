@@ -87,7 +87,6 @@ describe('confirm()', () => {
       expect.any(Number),
       expect.stringMatching(/^og_/),
       expect.any(Number),
-      [],
     );
     expect(mockAddTrip).toHaveBeenCalledWith('test-uid', expect.objectContaining({
       destination: COPY.offGrid.currentAreaLabel,
@@ -115,7 +114,6 @@ describe('confirm()', () => {
       expect.any(Number),
       expect.any(String),
       expect.any(Number),
-      [],
     );
     expect(mockAddTrip).toHaveBeenCalledWith('test-uid', expect.objectContaining({
       destination: 'Faro',

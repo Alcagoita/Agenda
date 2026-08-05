@@ -124,6 +124,47 @@ jest.mock('../../src/constants/copy', () => ({
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
+// KAN-342 — live search is Cloudflare-first, OSM-failsafe; Google is no
+// longer reachable from this path. cloudflarePoiFunctions is left
+// unconfigured (rejects to undefined -> caught -> falls through), so every
+// fixture here is injected via the OSM mock instead.
+jest.mock('../../src/services/placesFunctions', () => ({
+  searchNearbyPlacesProxy: jest.fn(),
+  placesAutocompleteProxy: jest.fn(),
+  getPlaceDetailsProxy:    jest.fn(),
+}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
+const mockSearchOsmPlacesStrict = jest.fn();
+jest.mock('../../src/services/osmPlaces', () => ({
+  searchOsmPlacesStrict: (...args: unknown[]) => mockSearchOsmPlacesStrict(...args),
+}));
+jest.mock('../../src/services/reverseGeocodeCache', () => ({
+  getCachedCity: jest.fn(() => ({ hit: false, city: null })),
+  putCachedCity: jest.fn(),
+}));
+
+/** Approximate latitude offset to produce a given distance in metres north of the equator. */
+const LAT_PER_METRE_OSM = 1 / 111_195;
+
+function mockOsmPlacesResponse(places: Array<{
+  id: string; displayName: { text: string }; location: { latitude: number; longitude: number }; types?: string[];
+}>) {
+  const byType: Record<string, unknown[]> = {};
+  for (const p of places) {
+    const poiType = p.types?.[0] ?? 'atm';
+    (byType[poiType] ??= []).push({
+      osmId: p.id, name: p.displayName.text, isGenericName: false,
+      lat: p.location.latitude, lng: p.location.longitude,
+      distanceMeters: p.location.latitude / LAT_PER_METRE_OSM,
+      footprintAreaM2: 0,
+    });
+  }
+  mockSearchOsmPlacesStrict.mockResolvedValueOnce(byType);
+}
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import {
@@ -199,6 +240,7 @@ async function flushAsync(): Promise<void> {
 beforeEach(() => {
   jest.clearAllMocks();
   mockFetch.mockReset();
+  mockSearchOsmPlacesStrict.mockReset();
   mockGetPosition.mockResolvedValue(ORIGIN);
   mockQueryHabitatCache.mockReturnValue({});
   mockFindExistingPlaceId.mockReturnValue(null);
@@ -214,7 +256,7 @@ beforeEach(() => {
 describe('offline branch answers from the habitat cache', () => {
   it('fires the hero card and notification off a cached hit when the live search fails offline', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
 
     const onUpdate = jest.fn();
@@ -232,7 +274,7 @@ describe('offline branch answers from the habitat cache', () => {
 
   it('still enqueues the search for a live refresh on reconnect', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
@@ -242,7 +284,7 @@ describe('offline branch answers from the habitat cache', () => {
 
   it('also answers from the cache when connected but unreachable (captive portal) — same predicate as NetworkBanner', async () => {
     goCaptivePortal();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
 
     const onUpdate = jest.fn();
@@ -258,7 +300,7 @@ describe('offline branch answers from the habitat cache', () => {
 
   it('does not seed the live-result cache or trigger a refresh from a cache-answered tick', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
@@ -269,7 +311,7 @@ describe('offline branch answers from the habitat cache', () => {
 
   it('does not remap cache-sourced placeIds through findExistingPlaceId (already internal ids)', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
@@ -279,7 +321,7 @@ describe('offline branch answers from the habitat cache', () => {
 
   it('does not call onUpdate on a cache miss — preserves whatever was already on screen', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] }); // nothing cached for this area yet
 
     const onUpdate = jest.fn();
@@ -291,7 +333,7 @@ describe('offline branch answers from the habitat cache', () => {
 
   it('still enqueues for a live retry on a cache miss', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
@@ -302,31 +344,28 @@ describe('offline branch answers from the habitat cache', () => {
 
 describe('live results reconcile against the cache identity table', () => {
   it('remaps a live place to its existing internal id when the cache already knows it', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({
-        places: [{ id: 'ChIJlive1', displayName: { text: 'Live ATM' }, location: { latitude: 0.0002, longitude: 0 }, types: ['atm'] }],
-      }),
-    });
+    mockOsmPlacesResponse([
+      { id: 'ChIJlive1', displayName: { text: 'Live ATM' }, location: { latitude: 0.0002, longitude: 0 }, types: ['atm'] },
+    ]);
     mockFindExistingPlaceId.mockReturnValue('hp_shared_1');
 
     const onUpdate = jest.fn();
     await runProximitySearch('uid-1', [makeTask()], onUpdate);
 
+    // heroPlace itself is assigned before reconciliation runs — the
+    // reconciled id lands on the allPlaces entry, which is what the Nearby
+    // card and exit-prompt dwell tracker actually read from.
     expect(onUpdate).toHaveBeenCalledWith(
       'atm',
-      expect.objectContaining({ placeId: 'hp_shared_1' }),
       expect.anything(),
+      expect.objectContaining({ atm: [expect.objectContaining({ placeId: 'hp_shared_1' })] }),
     );
   });
 
   it('keeps a live place on its own Google placeId when the cache has no match yet', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({
-        places: [{ id: 'ChIJlive1', displayName: { text: 'Live ATM' }, location: { latitude: 0.0002, longitude: 0 }, types: ['atm'] }],
-      }),
-    });
+    mockOsmPlacesResponse([
+      { id: 'ChIJlive1', displayName: { text: 'Live ATM' }, location: { latitude: 0.0002, longitude: 0 }, types: ['atm'] },
+    ]);
     mockFindExistingPlaceId.mockReturnValue(null);
 
     const onUpdate = jest.fn();
@@ -341,17 +380,12 @@ describe('live results reconcile against the cache identity table', () => {
 
   it('reconciles only the nearest place per type, plus the hero type\'s remaining places — never every place of every type', async () => {
     const LAT_PER_METRE = 1 / 111_195;
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({
-        places: [
-          { id: 'atm-near', displayName: { text: 'Near ATM' }, location: { latitude: LAT_PER_METRE * 30, longitude: 0 }, types: ['atm'] },
-          { id: 'atm-far',  displayName: { text: 'Far ATM' },  location: { latitude: LAT_PER_METRE * 80, longitude: 0 }, types: ['atm'] },
-          { id: 'cafe-near', displayName: { text: 'Near Cafe' }, location: { latitude: LAT_PER_METRE * 150, longitude: 0 }, types: ['cafe'] },
-          { id: 'cafe-far',  displayName: { text: 'Far Cafe' },  location: { latitude: LAT_PER_METRE * 200, longitude: 0 }, types: ['cafe'] },
-        ],
-      }),
-    });
+    mockOsmPlacesResponse([
+      { id: 'atm-near', displayName: { text: 'Near ATM' }, location: { latitude: LAT_PER_METRE * 30, longitude: 0 }, types: ['atm'] },
+      { id: 'atm-far',  displayName: { text: 'Far ATM' },  location: { latitude: LAT_PER_METRE * 80, longitude: 0 }, types: ['atm'] },
+      { id: 'cafe-near', displayName: { text: 'Near Cafe' }, location: { latitude: LAT_PER_METRE * 150, longitude: 0 }, types: ['cafe'] },
+      { id: 'cafe-far',  displayName: { text: 'Far Cafe' },  location: { latitude: LAT_PER_METRE * 200, longitude: 0 }, types: ['cafe'] },
+    ]);
     mockFindExistingPlaceId.mockReturnValue(null);
 
     const tasks = [makeTask({ id: 't1', poi: 'atm' }), makeTask({ id: 't2', poi: 'cafe' })];
@@ -373,7 +407,7 @@ describe('alert dedup survives a source switch', () => {
   it('does not re-fire a notification from a live hit for a type already alerted from a cache hit', async () => {
     // Tick 1 — offline, cache answers, fires the notification.
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
     await flushAsync();
@@ -383,12 +417,9 @@ describe('alert dedup survives a source switch', () => {
     // the same internal id via findExistingPlaceId) — must not re-fire.
     mockDisplayNotification.mockClear();
     mockFindExistingPlaceId.mockReturnValue('hp_cached_1');
-    mockFetch.mockResolvedValueOnce({
-      ok:   true,
-      json: async () => ({
-        places: [{ id: 'ChIJlive1', displayName: { text: 'Live ATM' }, location: { latitude: 0.0002, longitude: 0 }, types: ['atm'] }],
-      }),
-    });
+    mockOsmPlacesResponse([
+      { id: 'ChIJlive1', displayName: { text: 'Live ATM' }, location: { latitude: 0.0002, longitude: 0 }, types: ['atm'] },
+    ]);
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -399,7 +430,7 @@ describe('alert dedup survives a source switch', () => {
 describe('offline expectations messaging — "moved beyond coverage" toast (KAN-236 / KAN-244)', () => {
   it('fires the invitation-variant toast (under the lifetime cap) on a cache miss when the cache has data elsewhere', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     mockHasCachedPlaces.mockReturnValue(true);
 
@@ -414,7 +445,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     setNavigateToTripPlanner(mockNavigate);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     mockHasCachedPlaces.mockReturnValue(true);
 
@@ -429,7 +460,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     setNavigateToTripPlanner(null);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     mockHasCachedPlaces.mockReturnValue(true);
 
@@ -440,7 +471,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
 
   it('does not fire the toast on a cache miss when the cache is empty everywhere (state 1, NetworkBanner\'s job)', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     mockHasCachedPlaces.mockReturnValue(false);
 
@@ -451,7 +482,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
 
   it('does not fire the toast when the cache actually answers (not a miss)', async () => {
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
     mockHasCachedPlaces.mockReturnValue(true);
 
@@ -464,7 +495,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     mockHasCachedPlaces.mockReturnValue(true);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
     expect(useToastStore.getState().message).toBe(COPY.offline.uncoveredAreaInvitationToast);
@@ -472,7 +503,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     // Dismiss it, then hit another cache miss in the same session.
     useToastStore.getState().hideToast();
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -483,13 +514,13 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     mockHasCachedPlaces.mockReturnValue(true);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
     expect(mockHasCachedPlaces).toHaveBeenCalledTimes(1);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -501,7 +532,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     mockHasCachedPlaces.mockReturnValue(true);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
     expect(useToastStore.getState().message).toBe(COPY.offline.uncoveredAreaInvitationToast);
@@ -510,7 +541,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     resetProximityState();
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -523,7 +554,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     // Three sessions, each fires the invitation variant (count 0 → 1 → 2 → 3).
     for (let i = 0; i < 3; i += 1) {
       goOffline();
-      mockFetch.mockRejectedValueOnce(new Error('network down'));
+      mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
       mockQueryHabitatCache.mockReturnValue({ atm: [] });
       await runProximitySearch('uid-1', [makeTask()], jest.fn());
       expect(useToastStore.getState().message).toBe(COPY.offline.uncoveredAreaInvitationToast);
@@ -534,7 +565,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
 
     // Fourth session, cap now reached — plain apology copy, no action.
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -553,7 +584,7 @@ describe('off-grid window suppresses the coverage toast for free (KAN-246 — vi
     })]);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -567,7 +598,7 @@ describe('off-grid window suppresses the coverage toast for free (KAN-246 — vi
     })]);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
     expect(useToastStore.getState().message).toBeNull();
@@ -576,7 +607,7 @@ describe('off-grid window suppresses the coverage toast for free (KAN-246 — vi
     // the earlier tick didn't quietly mark the session/notice as "shown".
     setActiveTrips(null);
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -590,7 +621,7 @@ describe('off-grid window suppresses the coverage toast for free (KAN-246 — vi
     })]);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -604,7 +635,7 @@ describe('off-grid window suppresses the coverage toast for free (KAN-246 — vi
     })]);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn()); // position is (0,0) per ORIGIN
 
@@ -616,7 +647,7 @@ describe('off-grid window suppresses the coverage toast for free (KAN-246 — vi
     setActiveTrips([makeTrip({ centerLat: 0, centerLng: 0, areaRadius: 15_000, expiresAt: Date.now() + 1_000_000 })]);
 
     goOffline();
-    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
@@ -637,7 +668,7 @@ describe('cache-first coverage (KAN-237) — trip areas and the mall snapshot sk
     const onUpdate = jest.fn();
     await runProximitySearch('uid-1', [makeTask()], onUpdate);
 
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockSearchOsmPlacesStrict).not.toHaveBeenCalled();
     expect(mockQueryHabitatCache).toHaveBeenCalledWith(0, 0, ['atm'], expect.any(Number));
     expect(onUpdate).toHaveBeenCalledWith('atm', expect.objectContaining({ placeId: 'hp_cached_1' }), expect.anything());
   });
@@ -649,33 +680,27 @@ describe('cache-first coverage (KAN-237) — trip areas and the mall snapshot sk
     const onUpdate = jest.fn();
     await runProximitySearch('uid-1', [makeTask()], onUpdate);
 
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockSearchOsmPlacesStrict).not.toHaveBeenCalled();
     expect(onUpdate).toHaveBeenCalledWith('atm', expect.objectContaining({ placeId: 'hp_cached_1' }), expect.anything());
   });
 
   it('falls through to the live API when outside any trip/mall area', async () => {
     setActiveTrips([makeTrip({ centerLat: 10, centerLng: 10, areaRadius: 5_000 })]); // far away
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ places: [] }),
-    });
+    mockSearchOsmPlacesStrict.mockResolvedValueOnce({});
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockSearchOsmPlacesStrict).toHaveBeenCalledTimes(1);
     expect(mockQueryHabitatCache).not.toHaveBeenCalled();
   });
 
   it('falls through to the live API when the trip has already expired', async () => {
     setActiveTrips([makeTrip({ centerLat: 0, centerLng: 0, areaRadius: 5_000, expiresAt: Date.now() - 1_000 })]);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ places: [] }),
-    });
+    mockSearchOsmPlacesStrict.mockResolvedValueOnce({});
 
     await runProximitySearch('uid-1', [makeTask()], jest.fn());
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockSearchOsmPlacesStrict).toHaveBeenCalledTimes(1);
   });
 
   it('a cache-first empty result proceeds through to onUpdate (confident "nothing here"), unlike the ambiguous offline-cache-miss path', async () => {
@@ -728,7 +753,7 @@ describe('place context tap (KAN-242) — feeds the header ContextChip, mall-fir
 
   it('reports null when neither a trip nor the mall snapshot covers the position', () => {
     setActiveTrips([makeTrip({ centerLat: 10, centerLng: 10, areaRadius: 5_000 })]); // far away
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ places: [] }) });
+    mockSearchOsmPlacesStrict.mockResolvedValueOnce({});
 
     const tap = jest.fn();
     setPlaceContextTap(tap);

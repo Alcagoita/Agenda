@@ -54,6 +54,8 @@ interface MockHabitatRow {
   lng: number;
   google_place_id: string | null;
   osm_id: string | null;
+  /** KAN-342 — Foursquare id, via the Cloudflare POI backend. */
+  fsq_place_id?: string | null;
   osm_fetched_at: number;
   last_matched_at: number;
   cache_area_id: string | null;
@@ -84,7 +86,7 @@ const mockDb = {
     if (s.startsWith('PRAGMA table_info(habitat_places)')) {
       return [
         { name: 'id' }, { name: 'poi_type' }, { name: 'name' }, { name: 'is_generic_name' },
-        { name: 'lat' }, { name: 'lng' }, { name: 'google_place_id' }, { name: 'osm_id' },
+        { name: 'lat' }, { name: 'lng' }, { name: 'google_place_id' }, { name: 'osm_id' }, { name: 'fsq_place_id' },
         { name: 'osm_fetched_at' }, { name: 'last_matched_at' }, { name: 'cache_area_id' }, { name: 'expires_at' },
         { name: 'footprint_area_m2' }, { name: 'website' }, { name: 'restaurant_food_type' }, { name: 'store_subtype' },
       ] as unknown as T[];
@@ -146,20 +148,20 @@ const mockDb = {
     const s = sql.replace(/\s+/g, ' ').trim();
 
     if (s.startsWith('INSERT INTO habitat_places')) {
-      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype] =
-        params as [string, string, string, number, number, number, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null];
-      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype });
+      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype] =
+        params as [string, string, string, number, number, number, string | null, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null];
+      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype });
       return {} as any;
     }
     if (s.startsWith('UPDATE habitat_places')) {
       const [
-        google, osm, osmFlag1, lat, osmFlag2, lng, osmFlag3, osmFetchedAt,
+        google, osm, fsq, osmFlag1, lat, osmFlag2, lng, osmFlag3, osmFetchedAt,
         footprintAreaM2, website,
         restaurantFoodType, storeSubtype,
         tripCacheAreaId, tripExpiresAtA, tripExpiresAtB, tripExpiresAtC,
         lastMatchedAt, id,
       ] = params as [
-        string | null, string | null, number, number, number, number, number, number,
+        string | null, string | null, string | null, number, number, number, number, number, number,
         number | null, string | null,
         string | null, string | null,
         string | null, number | null, number | null, number | null,
@@ -169,6 +171,7 @@ const mockDb = {
       if (row) {
         row.google_place_id = row.google_place_id ?? google;
         row.osm_id = row.osm_id ?? osm;
+        row.fsq_place_id = row.fsq_place_id ?? fsq;
         if (osmFlag1 === 1) { row.lat = lat; }
         if (osmFlag2 === 1) { row.lng = lng; }
         if (osmFlag3 === 1) { row.osm_fetched_at = osmFetchedAt; }
@@ -257,6 +260,10 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchNearbyPlacesProxy: jest.fn(),
   placesAutocompleteProxy: jest.fn(),
   getPlaceDetailsProxy:    jest.fn(),
+}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
 }));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────

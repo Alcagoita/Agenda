@@ -9,7 +9,7 @@
  *   - No duplicate types in catalog
  */
 
-import { POI_CATALOG, POI_GEOFENCE_RADIUS, POI_GOOGLE_TYPES, PoiType } from '../../src/types';
+import { POI_CATALOG, POI_GEOFENCE_RADIUS, POI_GOOGLE_TYPES, PoiType, poiCatalogLabel } from '../../src/types';
 
 const EXPECTED_TYPES: PoiType[] = [
   'atm', 'cafe', 'supermarket', 'pharmacy',
@@ -36,8 +36,10 @@ describe('POI_CATALOG', () => {
   });
 
   it('every entry has a non-empty label', () => {
+    // Labels moved off POI_CATALOG itself and live in COPY.poiCatalog
+    // (KAN-252, language-aware) — read live via poiCatalogLabel().
     for (const entry of POI_CATALOG) {
-      expect(entry.label.trim().length).toBeGreaterThan(0);
+      expect(poiCatalogLabel(entry.type).trim().length).toBeGreaterThan(0);
     }
   });
 });

@@ -31,6 +31,10 @@ jest.mock('../../src/services/placesFunctions', () => ({
   searchNearbyPlacesProxy: jest.fn(),
   searchPlaceTypesProxy: jest.fn(),
 }));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
 
 jest.mock('expo-sqlite', () => ({
   openDatabaseSync: jest.fn(() => ({
@@ -231,8 +235,8 @@ describe('inferPoiForQuickAdd', () => {
     await expect(inferPoiForQuickAdd('make salad')).resolves.not.toBe('restaurant');
   });
 
-  it('keeps coffee roastery when the title is explicit', async () => {
-    expect(await inferPoiForQuickAdd('go to a coffee roastery')).toBe('coffee_roastery');
+  it('maps coffee roastery to cafe — a deliberately trimmed microtype, not its own catalog entry', async () => {
+    expect(await inferPoiForQuickAdd('go to a coffee roastery')).toBe('cafe');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 

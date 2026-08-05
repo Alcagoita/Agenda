@@ -57,6 +57,14 @@ jest.mock('../../src/theme', () => ({
 
 jest.mock('../../src/components/AppIcon', () => ({
   ChevronLeftIcon: () => null,
+  // KAN-105 — AchievementTile (rendered by this screen's achievements grid)
+  // renders one of these per tile via AchievementIcon's icon-key switch.
+  CheckIcon: () => null,
+  SunIcon:   () => null,
+  FlameIcon: () => null,
+  PinIcon:   () => null,
+  StarIcon:  () => null,
+  MedalIcon: () => null,
 }));
 
 jest.mock('../../src/components/Avatar', () => () => null);
@@ -111,7 +119,9 @@ describe('PublicProfileScreen', () => {
       const earned = getAllByLabelText(/achievement, earned/i);
       const locked = getAllByLabelText(/achievement, locked/i);
       expect(earned.length).toBe(1);  // first_task
-      expect(locked.length).toBe(2);  // daily_complete + challenge_winner
+      // KAN-150 — the Tin-tier catalogue (buildAchievementCatalogue) has 7
+      // entries total; 1 earned above leaves the rest locked.
+      expect(locked.length).toBe(6);
     });
   });
 

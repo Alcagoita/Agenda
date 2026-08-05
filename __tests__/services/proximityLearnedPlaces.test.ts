@@ -27,11 +27,22 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
   putCachedCity: jest.fn(),
 }));
 
-const mockSearchNearbyPlacesProxy = jest.fn();
 jest.mock('../../src/services/placesFunctions', () => ({
-  searchNearbyPlacesProxy: (...args: unknown[]) => mockSearchNearbyPlacesProxy(...args),
+  searchNearbyPlacesProxy: jest.fn(),
   placesAutocompleteProxy: jest.fn(),
   getPlaceDetailsProxy: jest.fn(),
+}));
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: jest.fn(),
+  cloudflarePoiAllProxy:   jest.fn(),
+}));
+// KAN-342: live search is Cloudflare-first, OSM-failsafe — Google is no
+// longer part of searchNearbyPlaces's path. cloudflareCoverageProxy above
+// is left unconfigured (rejects to undefined -> caught -> falls through),
+// so every fixture here is injected via the OSM mock instead.
+const mockSearchOsmPlaces = jest.fn();
+jest.mock('../../src/services/osmPlaces', () => ({
+  searchOsmPlacesStrict: (...args: unknown[]) => mockSearchOsmPlaces(...args),
 }));
 
 const mockDisplayNotification = jest.fn().mockResolvedValue(undefined);
@@ -127,20 +138,25 @@ function mockStorePlaces(places: Array<{ id: string; name: string; distanceMeter
 }
 
 function mockPlacesResponse(places: Array<{ id: string; name: string; distanceMeters: number; type: string }>) {
-  mockSearchNearbyPlacesProxy.mockResolvedValueOnce({
-    places: places.map(p => ({
-      id: p.id,
-      displayName: { text: p.name },
-      location: { latitude: LAT_PER_METRE * p.distanceMeters, longitude: 0 },
-      types: [p.type],
-    })),
-  });
+  const byType: Record<string, Array<{ osmId: string; name: string; isGenericName: boolean; lat: number; lng: number; distanceMeters: number; footprintAreaM2: number }>> = {};
+  for (const p of places) {
+    (byType[p.type] ??= []).push({
+      osmId:           p.id,
+      name:            p.name,
+      isGenericName:   false,
+      lat:             LAT_PER_METRE * p.distanceMeters,
+      lng:             0,
+      distanceMeters:  p.distanceMeters,
+      footprintAreaM2: 0,
+    });
+  }
+  mockSearchOsmPlaces.mockResolvedValueOnce(byType);
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockFetch.mockReset();
-  mockSearchNearbyPlacesProxy.mockReset();
+  mockSearchOsmPlaces.mockReset();
   mockGetPosition.mockResolvedValue(ORIGIN);
   jest.spyOn(Date.prototype, 'getHours').mockReturnValue(10);
   resetProximityState();

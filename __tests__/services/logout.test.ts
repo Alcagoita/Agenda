@@ -2,7 +2,7 @@
  * Unit tests for the logout() function — KAN-20
  *
  * Covers:
- *   - stopProximityMonitoring is called before signOut
+ *   - resetProximityState is called before signOut
  *   - firebaseSignOut is called
  *   - Rejects if firebaseSignOut throws
  */
@@ -11,12 +11,12 @@ import { logout } from '../../src/services/auth';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-const mockStopProximityMonitoring = jest.fn();
-const mockFirebaseSignOut         = jest.fn();
+const mockResetProximityState = jest.fn();
+const mockFirebaseSignOut     = jest.fn();
 
 // Mock the proximity module (dynamic import inside logout())
 jest.mock('../../src/services/proximity', () => ({
-  stopProximityMonitoring: (...args: unknown[]) => mockStopProximityMonitoring(...args),
+  resetProximityState: (...args: unknown[]) => mockResetProximityState(...args),
 }));
 
 // Mock Firebase Auth — signOut is the bare `signOut` export from auth/lib/modular
@@ -48,9 +48,9 @@ beforeEach(() => {
 });
 
 describe('logout()', () => {
-  it('calls stopProximityMonitoring', async () => {
+  it('calls resetProximityState', async () => {
     await logout();
-    expect(mockStopProximityMonitoring).toHaveBeenCalledTimes(1);
+    expect(mockResetProximityState).toHaveBeenCalledTimes(1);
   });
 
   it('calls firebaseSignOut', async () => {
@@ -58,9 +58,9 @@ describe('logout()', () => {
     expect(mockFirebaseSignOut).toHaveBeenCalledTimes(1);
   });
 
-  it('calls stopProximityMonitoring before firebaseSignOut', async () => {
+  it('calls resetProximityState before firebaseSignOut', async () => {
     const order: string[] = [];
-    mockStopProximityMonitoring.mockImplementation(() => order.push('stop'));
+    mockResetProximityState.mockImplementation(() => order.push('stop'));
     mockFirebaseSignOut.mockImplementation(async () => order.push('signOut'));
 
     await logout();
