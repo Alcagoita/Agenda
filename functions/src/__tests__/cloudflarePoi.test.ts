@@ -22,7 +22,7 @@ jest.mock('firebase-functions/params', () => ({
   defineSecret: () => ({ value: () => secretValue() }),
 }));
 
-import { cloudflareCoverageProxy, cloudflarePoiAllProxy } from '../cloudflarePoi';
+import { cloudflareCoverageProxy, cloudflarePoiAllProxy, cloudflareRequestCoverageProxy } from '../cloudflarePoi';
 
 const AUTH = { uid: 'uid-1' } as never;
 
@@ -139,5 +139,54 @@ describe('upstream fetch handling', () => {
       expect.stringContaining('/poi/all?lat=38.7&lng=-9.1&radius=200'),
       expect.objectContaining({ headers: expect.objectContaining({ 'X-Api-Key': 'test-api-key' }) }),
     );
+  });
+});
+
+describe('cloudflareRequestCoverageProxy', () => {
+  it('rejects an unauthenticated request', async () => {
+    await expect(cloudflareRequestCoverageProxy.run({ auth: undefined, data: { lat: 38.7, lng: -9.1 } } as never))
+      .rejects.toMatchObject({ code: 'unauthenticated' });
+  });
+
+  it.each([
+    ['lat too high', { lat: 91, lng: 0 }],
+    ['lng too low', { lat: 0, lng: -181 }],
+  ])('rejects %s', async (_label, coords) => {
+    await expect(cloudflareRequestCoverageProxy.run({ auth: AUTH, data: coords } as never))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it('POSTs lat/lng as a JSON body to /coverage/request with the API key header', async () => {
+    await cloudflareRequestCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never);
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/coverage/request'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ lat: 38.7, lng: -9.1 }),
+        headers: expect.objectContaining({ 'X-Api-Key': 'test-api-key', 'Content-Type': 'application/json' }),
+      }),
+    );
+  });
+
+  it('uses its own tighter rate-limit bucket — request 5 in the window is allowed, request 6 is rejected', async () => {
+    mockGet.mockResolvedValue({ data: () => ({ windowStartedAt: Date.now(), requestCount: 4 }) });
+    await expect(cloudflareRequestCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never)).resolves.toBeDefined();
+    expect(mockSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ requestCount: 5 }));
+
+    mockGet.mockResolvedValue({ data: () => ({ windowStartedAt: Date.now(), requestCount: 5 }) });
+    await expect(cloudflareRequestCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never))
+      .rejects.toMatchObject({ code: 'resource-exhausted' });
+  });
+
+  it('does not share its rate-limit bucket with cloudflareCoverageProxy', async () => {
+    await cloudflareRequestCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never);
+    expect(mockCollection).toHaveBeenCalledWith('_cloudflarePoiProxyRateLimits');
+    expect(mockDoc).toHaveBeenCalledWith('uid-1:requestCoverage');
+  });
+
+  it('wraps a non-ok upstream response as an unavailable HttpsError', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'boom' } as Response);
+    await expect(cloudflareRequestCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never))
+      .rejects.toMatchObject({ code: 'unavailable' });
   });
 });

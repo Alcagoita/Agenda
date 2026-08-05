@@ -16,5 +16,13 @@ CREATE TABLE IF NOT EXISTS city (
   max_lng          REAL,
   status           TEXT NOT NULL CHECK (status IN ('none', 'building', 'ready')),
   current_build_id TEXT,
-  last_built_at    TEXT
+  last_built_at    TEXT,
+  -- KAN-346: demand recording, added via migrations/0002_coverage_demand.sql
+  -- against the live DB. A 'none' row created by a real reverse-geocoded
+  -- user request (not a manual build like lisboa/odivelas) counts and
+  -- timestamps repeat requests, so KAN-354's extraction worker knows which
+  -- unbuilt municipalities to prioritize. Untouched once status leaves 'none'.
+  request_count      INTEGER NOT NULL DEFAULT 0,
+  first_requested_at TEXT,
+  last_requested_at  TEXT
 );

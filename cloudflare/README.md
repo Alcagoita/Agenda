@@ -59,10 +59,19 @@ separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
 - `GET /export/:cityId` — the current build's client-download SQLite export
   (KAN-339), streamed from R2. 404 if the city isn't `ready`, or if it's
   `ready` but predates this ticket and has no export object yet.
-- `POST /coverage/request` `{lat,lng}` — trigger a build for an uncovered
-  area. **Not implemented yet** — currently just reports `none`. Real
-  auto-provisioning (new city row + Cloud Function trigger) is follow-up
-  work, deliberately out of this ticket's scope.
+- `POST /coverage/request` `{lat,lng}` — `{coverageStatus, cityId, retryAfterSeconds?}`
+  for this specific location (KAN-346). Reverse-geocodes server-side to a
+  stable municipality id (Nominatim `osm_type:osm_id`, never a display name
+  or a coordinate-derived id) and dedupes on it. An already-`ready` location
+  returns its state as-is. An unknown municipality is recorded as demand
+  (`city` row, `status='none'`, `request_count`/`last_requested_at` bumped
+  on repeat requests) — capped at `MAX_PENDING_DEMAND_CITIES`: once the cap
+  of pending (`status='none'`) rows is reached, a request for a brand new
+  municipality gets HTTP 429 `{error}` instead of a new row. The response
+  **never** reports `building`: nothing can move a row out of that state
+  until KAN-354's extraction worker exists, and reporting it would strand
+  the row forever. `retryAfterSeconds` is only ever present once KAN-354
+  lands.
 - `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?}`
   — called by the extraction pipeline once a city's rows are loaded; flips
   `city.status` to `ready`, sets `city.current_build_id`, and closes out the

@@ -7,6 +7,19 @@ interface CoverageResponse {
   buildId?: string | null;
 }
 
+/**
+ * KAN-346's own response shape, distinct from CoverageResponse above (GET
+ * /coverage) — `coverageStatus` answers for the exact requested location,
+ * not a whole city, and `retryAfterSeconds` is only ever present once
+ * KAN-354's extraction worker exists (this endpoint cannot return
+ * `building` before then — see cloudflare/src/index.ts).
+ */
+export interface RequestCoverageResponse {
+  coverageStatus: 'none' | 'building' | 'ready';
+  cityId: string | null;
+  retryAfterSeconds?: number;
+}
+
 interface PoiAllResponse {
   covered: boolean;
   cityId?: string;
@@ -40,5 +53,15 @@ export async function cloudflarePoiAllProxy(lat: number, lng: number, radiusMete
     'cloudflarePoiAllProxy',
   );
   const result = await callable({ lat, lng, radiusMeters });
+  return result.data;
+}
+
+/** KAN-346 — records demand for an uncovered location. See searchNearbyPlacesCloudflare (maps.ts) for the deduped fire-and-forget caller. */
+export async function cloudflareRequestCoverageProxy(lat: number, lng: number): Promise<RequestCoverageResponse> {
+  const callable = httpsCallable<{ lat: number; lng: number }, RequestCoverageResponse>(
+    functionsService,
+    'cloudflareRequestCoverageProxy',
+  );
+  const result = await callable({ lat, lng });
   return result.data;
 }

@@ -34,4 +34,5 @@ export {
 export {
   cloudflareCoverageProxy,
   cloudflarePoiAllProxy,
+  cloudflareRequestCoverageProxy,
 } from './cloudflarePoi';

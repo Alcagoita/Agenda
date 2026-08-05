@@ -22,7 +22,7 @@ import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
 } from './placesFunctions';
-import { cloudflarePoiAllProxy } from './cloudflarePoiFunctions';
+import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy } from './cloudflarePoiFunctions';
 import { searchOsmPlacesStrict } from './osmPlaces';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { Category, PoiType, poiCatalogLabel } from '../types';
@@ -299,6 +299,33 @@ interface CloudflareAttempt {
  * that needs true multi-type filtering should use the Cloudflare API's own
  * `/poi?type=&attribute=&value=` directly, not this general-purpose function.
  */
+// KAN-346: which coarse cells we've already asked the Worker to record
+// demand for this app session — records demand once per area, not once per
+// proximity tick (proximity.ts re-searches every 200m/3min). Cleared on
+// restart; the real, permanent dedupe lives server-side (the Worker dedupes
+// on the reverse-geocoded municipality id, forever) — this Set is purely a
+// courtesy to skip pointless round-trips, not a correctness requirement.
+const coverageDemandRequestedCells = new Set<string>();
+
+/** ~1km cells (2 decimal places) — matches KAN-354's eventual tier-1 scale, coarse enough that nearby ticks within the same area collapse to one request. */
+function coverageDemandCellKey(lat: number, lng: number): string {
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
+}
+
+/** Fire-and-forget, deduped — never awaited by callers, never throws. */
+function requestCoverageDemandOnce(lat: number, lng: number): void {
+  const cell = coverageDemandCellKey(lat, lng);
+  if (coverageDemandRequestedCells.has(cell)) { return; }
+  coverageDemandRequestedCells.add(cell);
+  cloudflareRequestCoverageProxy(lat, lng).catch(() => {
+    // Best-effort — an uncovered area already falls back to OSM regardless;
+    // losing this one demand-recording call changes nothing for this user.
+    // Un-mark the cell so a later proximity tick retries instead of the
+    // failure permanently suppressing this area's demand for the session.
+    coverageDemandRequestedCells.delete(cell);
+  });
+}
+
 async function searchNearbyPlacesCloudflare(
   lat: number,
   lng: number,
@@ -307,7 +334,10 @@ async function searchNearbyPlacesCloudflare(
 ): Promise<CloudflareAttempt> {
   try {
     const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters);
-    if (!data.covered) { return { ok: false, coverageStatus: data.status ?? 'none' }; }
+    if (!data.covered) {
+      if ((data.status ?? 'none') === 'none') { requestCoverageDemandOnce(lat, lng); }
+      return { ok: false, coverageStatus: data.status ?? 'none' };
+    }
 
     const result: Record<string, NearbyPlace[]> = {};
     for (const poiType of poiTypes) { result[poiType] = []; }
