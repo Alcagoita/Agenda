@@ -9,6 +9,13 @@ import {
   MAX_RADIUS_METERS,
 } from '../geohash';
 
+/** Mirrors index.ts's queryPoiDb range clause: [prefix, prefix + '~'). */
+function inRange(value: string, prefix: string): boolean {
+  return value >= prefix && value < `${prefix}~`;
+}
+
+const BASE32_ORDER = '0123456789bcdefghjkmnpqrstuvwxyz';
+
 /**
  * Ground-truth helper: given a set of random candidate points, which ones
  * are truly within radiusMeters of (lat, lng), by real haversine distance —
@@ -116,5 +123,76 @@ describe('requiredGridCells and the MAX_GRID_CELLS_PER_AXIS budget', () => {
     // itself in degenerate cases, so this is an upper bound, not exact equality —
     // but for these real, non-degenerate coordinates it should hold exactly.
     expect(prefixes.length).toBe((2 * cellsLat + 1) * (2 * cellsLng + 1));
+  });
+});
+
+/**
+ * index.ts's queryPoiDb expresses each geohash prefix as a lexical range
+ * `geohash >= prefix AND geohash < prefix + '~'` rather than
+ * `substr(geohash, 1, n) IN (...)`, so D1 can serve the filter from
+ * idx_poi_city_geo (a function over the indexed column isn't sargable; a
+ * plain range comparison is). This only matches the intended subtree of
+ * descendants under SQLite's default BINARY collation (byte/codepoint
+ * comparison) — schema.sql declares `geohash TEXT NOT NULL` with no
+ * COLLATE clause, so BINARY is what's actually in effect. That, in turn,
+ * only produces a correct range because BASE32 ('0123456789bcdefghjkmnpqrstuvwxyz')
+ * is itself already in strictly ascending codepoint order, and every write
+ * path (encodeGeohash) emits exclusively those lowercase characters — a
+ * stray uppercase geohash would sort BEFORE its lowercase siblings (e.g.
+ * 'B' = 0x42 < 'b' = 0x62) and silently fall outside every range query, not
+ * error. These tests pin that contract down directly rather than relying on
+ * neighborPrefixes' own coverage tests to imply it.
+ */
+describe('geohash range query contract ([prefix, prefix + "~"))', () => {
+  it('BASE32 alphabet is itself in strictly ascending codepoint order (precondition for the range trick)', () => {
+    const sorted = [...BASE32_ORDER].sort();
+    expect(BASE32_ORDER.split('')).toEqual(sorted);
+  });
+
+  it('encodeGeohash never emits anything outside the lowercase BASE32 alphabet', () => {
+    const points = [
+      { lat: 38.7223, lng: -9.1393 }, { lat: -33.9, lng: 151.2 }, { lat: 0, lng: 0 }, { lat: 89.9, lng: -179.9 },
+    ];
+    for (const p of points) {
+      const hash = encodeGeohash(p.lat, p.lng, 7);
+      expect(hash).toMatch(new RegExp(`^[${BASE32_ORDER}]+$`));
+    }
+  });
+
+  it('every full-length descendant of a prefix falls inside its range', () => {
+    const prefix = 'ez';
+    for (const c of BASE32_ORDER) {
+      expect(inRange(`${prefix}s${c}`, prefix)).toBe(true);
+    }
+  });
+
+  it('an adjacent sibling prefix falls outside the range', () => {
+    // 's' -> 't' is the next BASE32 character, so 'ezt...' must not match 'ezs'.
+    expect(inRange('ezt0000', 'ezs')).toBe(false);
+    expect(inRange('ezr9999', 'ezs')).toBe(false); // the sibling below, too
+  });
+
+  it('excludes the exclusive upper bound prefix + "~" itself', () => {
+    const prefix = 'ezs';
+    expect(inRange(`${prefix}~`, prefix)).toBe(false);
+    // '~' sorts after every real BASE32 character, so this is the tightest
+    // possible upper bound short of enumerating every descendant string.
+    expect('~'.charCodeAt(0)).toBeGreaterThan(Math.max(...[...BASE32_ORDER].map(c => c.charCodeAt(0))));
+  });
+
+  it('rejects the contract silently mismatching on case: an uppercase prefix sorts before its lowercase data', () => {
+    // Demonstrates why encodeGeohash must never emit uppercase (previous
+    // test) — this is not a query bug, it's a "the data must already be
+    // right" invariant, unenforceable from the query side alone.
+    expect(inRange('ez00000', 'EZ')).toBe(false);
+  });
+
+  it('the real neighborPrefixes output only ever produces ranges that self-consistently bound their own precision-7 descendants', () => {
+    const lat = 38.7223, lng = -9.1393, precision = 7, radius = 150;
+    const prefixes = neighborPrefixes(lat, lng, precision, radius);
+    const ownHash = encodeGeohash(lat, lng, precision);
+    const matchingPrefix = prefixes.find(p => ownHash.startsWith(p));
+    expect(matchingPrefix).toBeDefined();
+    expect(inRange(ownHash, matchingPrefix!)).toBe(true);
   });
 });

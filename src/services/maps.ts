@@ -32,7 +32,20 @@ import type { StoreSubtype } from './storeSubtypes';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface NearbyPlace {
-  /** Google Places ID (use for place details, deep links, caching). */
+  /**
+   * Source-specific id, raw and unprefixed: a Foursquare `fsq_place_id`
+   * when this result came from Cloudflare, an OSM element id when it came
+   * from OSM — NOT a Google Places id, and not safe to pass to
+   * getPlaceDetails/getPlaceDetailsProxy (Google-only; would silently
+   * query the wrong place or fail). Which source produced it is on the
+   * PoiSearchResult this place came from (see `source` above), not on the
+   * place itself — a caller that needs to tell them apart across a mixed
+   * batch (e.g. writing cross-source identity, like proximity.ts's
+   * recordLiveResult) must track that alongside, not assume from the id's
+   * shape. Safe as a same-batch dedup/lookup key (a single searchNearbyPlaces
+   * call is always single-source), not safe as a stable cross-tick or
+   * cross-source identity.
+   */
   placeId: string;
   /** Human-readable place name. */
   name: string;
