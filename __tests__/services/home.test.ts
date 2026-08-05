@@ -68,18 +68,18 @@ describe('with home set', () => {
   });
 
   it('isNearHome is true within the default HOME_RADIUS_M', () => {
-    // ~0.0005 deg lat ≈ 55 m — well within the 150 m default.
-    expect(isNearHome({ lat: 0.0005, lng: 0 })).toBe(true);
+    // ~0.005 deg lat ≈ 555 m — well within the 1000 m default.
+    expect(isNearHome({ lat: 0.005, lng: 0 })).toBe(true);
   });
 
   it('isNearHome is false just outside the default HOME_RADIUS_M', () => {
-    // ~0.003 deg lat ≈ 333 m — outside 150 m.
-    expect(isNearHome({ lat: 0.003, lng: 0 })).toBe(false);
+    // ~0.02 deg lat ≈ 2222 m — outside 1000 m.
+    expect(isNearHome({ lat: 0.02, lng: 0 })).toBe(false);
   });
 
   it('isNearHome respects a caller-supplied radius', () => {
-    const farCoords = { lat: 0.003, lng: 0 }; // ~333 m away
+    const farCoords = { lat: 0.02, lng: 0 }; // ~2222 m away
     expect(isNearHome(farCoords, HOME_RADIUS_M)).toBe(false);
-    expect(isNearHome(farCoords, 500)).toBe(true);
+    expect(isNearHome(farCoords, 3000)).toBe(true);
   });
 });

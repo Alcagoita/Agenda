@@ -89,16 +89,16 @@ describe('resolveLanternState — priority & filtering', () => {
   });
 });
 
-describe('resolveHomeProximity — hysteresis buffer (KAN-301 AC9)', () => {
-  it('enters Home at ≤150 m, leaves only past 200 m', () => {
-    expect(resolveHomeProximity(HOME_ENTER_M, false)).toBe(true);   // 150 → enter
-    expect(resolveHomeProximity(151, false)).toBe(false);           // 151 → stay out
-    expect(resolveHomeProximity(HOME_LEAVE_M, true)).toBe(true);    // 200 → still home
-    expect(resolveHomeProximity(201, true)).toBe(false);            // 201 → leave
+describe('resolveHomeProximity — hysteresis buffer (KAN-301 AC9, KAN-342 follow-up)', () => {
+  it('enters Home at ≤1000 m, leaves only past 1200 m', () => {
+    expect(resolveHomeProximity(HOME_ENTER_M, false)).toBe(true);   // 1000 → enter
+    expect(resolveHomeProximity(1001, false)).toBe(false);          // 1001 → stay out
+    expect(resolveHomeProximity(HOME_LEAVE_M, true)).toBe(true);    // 1200 → still home
+    expect(resolveHomeProximity(1201, true)).toBe(false);           // 1201 → leave
   });
 
-  it('a position oscillating between 140 m and 190 m produces no change after the first entry', () => {
-    const samples = [200, 140, 190, 140, 190, 140]; // starts outside, enters, then jitters across the boundary
+  it('a position oscillating between 950 m and 1150 m produces no change after the first entry', () => {
+    const samples = [1200, 950, 1150, 950, 1150, 950]; // starts outside, enters, then jitters across the boundary
     let wasHome = false;
     const kinds: string[] = [];
     for (const d of samples) {
@@ -106,8 +106,8 @@ describe('resolveHomeProximity — hysteresis buffer (KAN-301 AC9)', () => {
       wasHome = state.kind === 'home';
       kinds.push(state.kind);
     }
-    // 200 = outside; entry at the first 140; every later 190/140 stays Home
-    // because leaving needs >200. One transition, total.
+    // 1200 = outside; entry at the first 950; every later 1150/950 stays Home
+    // because leaving needs >1200. One transition, total.
     expect(kinds).toEqual(['outside', 'home', 'home', 'home', 'home', 'home']);
   });
 });

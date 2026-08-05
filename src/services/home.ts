@@ -11,8 +11,15 @@
 
 import { getDistanceMeters } from './maps';
 
-/** Default "near home" radius — same order of magnitude as the mall/habitat radii. */
-export const HOME_RADIUS_M = 150;
+/**
+ * Default "near home" radius — the area the user lives in (walking distance
+ * of home), not the building itself. This is unrelated to any "does the app
+ * already know this area" radius elsewhere (e.g. isLocationKnown's habitat
+ * lookup in proximity.ts) — this one is anchored to the stored home address
+ * specifically, that one to wherever the user currently is. Do not merge
+ * them even if a future refactor makes their values coincide.
+ */
+export const HOME_RADIUS_M = 1000;
 
 export interface HomeLocation {
   address: string;

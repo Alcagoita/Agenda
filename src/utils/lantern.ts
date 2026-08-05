@@ -39,14 +39,19 @@ export type LanternState =
 /**
  * Home-boundary hysteresis (KAN-301). GPS jitter at a boundary would otherwise
  * flip Home → Outside → Home every few seconds, so we use a distance buffer,
- * not a timer: enter Home at ≤150 m, but leave only past 200 m.
+ * not a timer: enter Home at ≤1000 m, but leave only past 1200 m.
+ *
+ * Scaled up from the original 150 m / 200 m test values (KAN-342 follow-up):
+ * Home is meant to represent the area the user lives in, not the building —
+ * see HOME_RADIUS_M in services/home.ts. The buffer scales with the radius so
+ * the boundary still sits well clear of normal walking-around jitter.
  */
-export const HOME_ENTER_M = 150;
-export const HOME_LEAVE_M = 200;
+export const HOME_ENTER_M = 1000;
+export const HOME_LEAVE_M = 1200;
 
 /**
  * Applies the enter-fast / leave-slow buffer to a known home distance.
- * Enter Home at ≤150 m; once Home, leave only past 200 m.
+ * Enter Home at ≤1000 m; once Home, leave only past 1200 m.
  */
 export function resolveHomeProximity(distanceM: number, wasHome: boolean): boolean {
   return wasHome ? distanceM <= HOME_LEAVE_M : distanceM <= HOME_ENTER_M;
