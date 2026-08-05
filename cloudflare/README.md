@@ -7,20 +7,23 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
 ## Architecture
 
 - **Workers** (`src/index.ts`) — the API. Deployed at `poi-api.brushaway.app`.
-- **D1** — one shared database (`brush-poi-registry`) for everything: `city`
-  (which settlements exist, build status), `poi` (all cities' places, scoped
-  by a `city_id` column), and `build_log` (one row per extraction run —
-  KAN-333's build lifecycle). **Not** one database per city — 10GB is D1's
-  hard per-database ceiling regardless of plan tier, which breaks past a
-  relatively small number of cities if sharded that way. One shared table
-  scales much further, at current ~7MB/city average.
+- **D1** — one shared database (`brush-poi-registry`) for everything: `place`
+  (which settlements exist, map status — KAN-355, renamed from `city`),
+  `country` (which countries the background worker maps wholesale — KAN-355,
+  new), `poi` (all Places' places, scoped by a `place_id` column), and
+  `build_log` (one row per extraction run — KAN-333's build lifecycle).
+  **Not** one database per Place — 10GB is D1's hard per-database ceiling
+  regardless of plan tier, which breaks past a relatively small number of
+  Places if sharded that way. One shared table scales much further, at
+  current ~7MB/Place average. Full model reasoning:
+  `docs/poi-coverage-model.md`.
 - **Build lifecycle** (KAN-333): every load tags its `poi` rows with a fresh
-  `build_id`. Loading is `INSERT OR REPLACE` on the `(city_id, fsq_place_id)`
+  `build_id`. Loading is `INSERT OR REPLACE` on the `(place_id, fsq_place_id)`
   PK, so a place present in both the old and new build just updates in
-  place. After loading, a sweep (`DELETE ... WHERE city_id = ? AND build_id
+  place. After loading, a sweep (`DELETE ... WHERE place_id = ? AND build_id
   != ?`) retires anything that didn't reappear (closed places) — see the
   comment at the top of `schema.sql` for the non-atomicity tradeoff.
-  `/internal/build-complete` closes out both `city.status` and the matching
+  `/internal/build-complete` closes out both `place.status` and the matching
   `build_log` row.
 - **R2** (`brush-poi-exports`) — holds two things per build: the raw
   Foursquare extract (`raw-extracts/{cityId}/{buildId}.csv`, for
@@ -57,25 +60,39 @@ separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
   build against the current one without fetching `/export/:cityId` just to
   check.
 - `GET /export/:cityId` — the current build's client-download SQLite export
-  (KAN-339), streamed from R2. 404 if the city isn't `ready`, or if it's
-  `ready` but predates this ticket and has no export object yet.
+  (KAN-339), streamed from R2. 404 if the Place isn't `ready`, or if it's
+  `ready` but predates this ticket and has no export object yet. Route and
+  param name unchanged by KAN-355 on purpose — the rename to
+  `/export/:placeId` is explicitly KAN-343's scope.
 - `POST /coverage/request` `{lat,lng}` — `{coverageStatus, cityId, retryAfterSeconds?}`
-  for this specific location (KAN-346). Reverse-geocodes server-side to a
-  stable municipality id (Nominatim `osm_type:osm_id`, never a display name
-  or a coordinate-derived id) and dedupes on it. An already-`ready` location
-  returns its state as-is. An unknown municipality is recorded as demand
-  (`city` row, `status='none'`, `request_count`/`last_requested_at` bumped
-  on repeat requests) — capped at `MAX_PENDING_DEMAND_CITIES`: once the cap
+  for this specific location (KAN-346/355). **Public response shape is
+  unchanged by KAN-355** — `cityId` and the `none`/`building`/`ready` status
+  values are the wire contract KAN-346's Cloud Function proxy and app client
+  already ship against; only the internal DB model changed (see below), and
+  the Worker translates at the response boundary (`toApiStatus` in
+  `index.ts`) so nothing downstream needed to change for this ticket.
+  Reverse-geocodes server-side to a stable Place identity (Nominatim
+  `osm_type:osm_id`, never a display name or a coordinate-derived id, and —
+  KAN-355 — retried at a coarser zoom when the finest zoom resolves to a
+  sub-unit of a named settlement, e.g. a Lisboa freguesia instead of Lisboa
+  itself) and dedupes on it. An already-mapped location returns its state
+  as-is, with no geocode call (the DB's own ingested-extent bbox short-
+  circuits it — see `findPlace`). An unmapped Place is recorded as demand
+  (`place` row, `status='none'`, `request_count`/`last_requested_at` bumped
+  on repeat requests) — capped at `MAX_PENDING_DEMAND_PLACES`: once the cap
   of pending (`status='none'`) rows is reached, a request for a brand new
-  municipality gets HTTP 429 `{error}` instead of a new row. The response
+  Place gets HTTP 429 `{error}` instead of a new row. The response
   **never** reports `building`: nothing can move a row out of that state
   until KAN-354's extraction worker exists, and reporting it would strand
   the row forever. `retryAfterSeconds` is only ever present once KAN-354
   lands.
 - `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?}`
-  — called by the extraction pipeline once a city's rows are loaded; flips
-  `city.status` to `ready`, sets `city.current_build_id`, and closes out the
-  matching `build_log` row.
+  — called by the extraction pipeline once a Place's rows are loaded; flips
+  `place.status` to `mapped` (API-visible as `ready` — see above), sets
+  `place.build_id`, and closes out the matching `build_log` row. `cityId`
+  targets `place.place_id` — kept as the field name for this internal-only
+  contract; KAN-354 (not built yet) is what will actually call this
+  automatically.
 
 ## Local setup
 
@@ -102,6 +119,16 @@ dashboard directly, or get a zone-scoped token addition for
 `brushaway.app` specifically.
 
 ## Extraction pipeline (manual today, not yet automated)
+
+**Known gap (KAN-355):** `extraction/classify_and_load.py` and
+`extraction/extract_*.sql` still generate SQL against the pre-rename column
+name `city_id` — the live D1 schema now has `place_id` (this ticket's rename
+covers the Worker and the schema files, not the Python pipeline). Running
+the pipeline as-is against the current schema will fail. Left unfixed
+deliberately: KAN-354 (the extraction worker, not built yet) already needs
+to substantially rework this pipeline's inputs (per-country, per-Place
+instead of a hand-maintained bbox per city) and is the natural place to fix
+the column name at the same time, rather than patching it twice.
 
 Source: [Foursquare OS Places](https://opensource.foursquare.com/os-places/)
 (Apache 2.0, bulk-storable — unlike the live Foursquare Search API, which
@@ -211,10 +238,17 @@ still worth knowing, just no longer a hard constraint that shapes schema
 decisions. D1's actual hard ceiling is 10GB/database, plan-independent — see
 `schema.sql`.
 
-## Test cities
+## Test Places
 
-- `lisboa` — center 38.7223,-9.1393, radius 10km, 24,216 POIs loaded
-- `odivelas` — center 38.7911,-9.1857, radius 5km, 6,162 POIs loaded
+- `osm-relation-2897141` ("Lisboa") — formerly the `lisboa` slug; migrated by
+  `migrations/0003_place_country_rename.sql` (KAN-355). 24,216 POIs loaded.
+  Ingested extent approximated from the old center 38.7223,-9.1393 /
+  radius 10km circle (the migration has no access to the true loaded-rows
+  extent) — will be overwritten with the real ingested extent the next time
+  KAN-354 re-maps this Place.
+- `osm-relation-6522461` ("Odivelas") — formerly the `odivelas` slug, same
+  migration. 6,162 POIs loaded. Extent approximated from center
+  38.7911,-9.1857 / radius 5km the same way.
 
 Verified against the earlier live-Foursquare-API field test from the same
 session — e.g. Odivelas' top café result ("Côco Verde", ~118m) matches

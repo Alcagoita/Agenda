@@ -312,6 +312,47 @@ function coverageDemandCellKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)},${lng.toFixed(2)}`;
 }
 
+/**
+ * KAN-355 — the "zero check" (docs/poi-coverage-model.md). Reverse-geocodes
+ * a coordinate to classify it into the three cases that decide whether an
+ * empty search result deserves a worker trigger: an unmapped settlement
+ * (record demand), a country with no settlement here — desert, farmland,
+ * between towns (no worker, nothing to map), or no country at all — ocean,
+ * Antarctica (no worker; a zero here is simply the truth). Reuses
+ * extractCityName rather than re-implementing settlement-name extraction —
+ * see its own doc comment for the field-priority reasoning.
+ *
+ * Own Nominatim call, deliberately not sharing reverseGeocode's cache or
+ * rate-limit clock above: this only ever runs on a genuine zero result
+ * (both Cloudflare and OSM came back empty — see searchNearbyPlaces), which
+ * is rare by construction, not a per-tick call that needs pacing against
+ * Nominatim's policy the way the Lantern's ambient polling does.
+ *
+ * Returns null on any transport failure — callers must treat that as
+ * "couldn't classify," and not record demand on a guess.
+ */
+export type LocationClassification = 'no-country' | 'no-settlement' | 'settlement';
+
+async function classifyLocation(lat: number, lng: number): Promise<LocationClassification | null> {
+  const url = `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT },
+      signal: controller.signal,
+    });
+    if (!res.ok) { return null; }
+    const json = (await res.json()) as { address?: OsmAddress & { country_code?: string } };
+    if (!json.address?.country_code) { return 'no-country'; }
+    return extractCityName(json.address) ? 'settlement' : 'no-settlement';
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Fire-and-forget, deduped — never awaited by callers, never throws. */
 function requestCoverageDemandOnce(lat: number, lng: number): void {
   const cell = coverageDemandCellKey(lat, lng);
@@ -335,7 +376,10 @@ async function searchNearbyPlacesCloudflare(
   try {
     const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters);
     if (!data.covered) {
-      if ((data.status ?? 'none') === 'none') { requestCoverageDemandOnce(lat, lng); }
+      // KAN-355: no longer fires the coverage-demand request here — that
+      // now happens in searchNearbyPlaces, only once OSM's own outcome is
+      // known too (the zero check needs a genuine zero, not just "our own
+      // DB doesn't cover this"; see there).
       return { ok: false, coverageStatus: data.status ?? 'none' };
     }
 
@@ -425,6 +469,21 @@ export async function searchNearbyPlaces(
       website:         place.website,
     }));
   }
+
+  // KAN-355 zero check: a genuine zero — Cloudflare doesn't cover this
+  // location AND OSM, tried right above, also found nothing for any
+  // requested type. Classify before deciding whether this is worth
+  // recording as demand: an unmapped settlement is (start the worker via
+  // the existing dedup'd request), a country with no settlement here or no
+  // country at all is not (nothing to map). Fire-and-forget — never blocks
+  // this search's own return, matches the app's "never wait on
+  // provisioning" rule.
+  if (cf.coverageStatus === 'none' && poiTypes.every(poiType => result[poiType].length === 0)) {
+    void classifyLocation(lat, lng).then(classification => {
+      if (classification === 'settlement') { requestCoverageDemandOnce(lat, lng); }
+    });
+  }
+
   return { results: result, source: 'osm', coverageStatus: cf.coverageStatus };
 }
 
