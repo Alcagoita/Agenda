@@ -172,11 +172,17 @@ describe('POST /coverage/request', () => {
     const env = makeEnv();
 
     await worker.fetch(coverageRequest(38.79, -9.38), env);
+    const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakeCityRow> };
+    const firstRequestedAt = fakeDb.rows.get('osm-relation-1294136')?.first_requested_at;
+    expect(firstRequestedAt).toBeTruthy();
+
     await worker.fetch(coverageRequest(38.795, -9.385), env);
 
-    const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakeCityRow> };
     expect(fakeDb.rows.size).toBe(1);
     expect(fakeDb.rows.get('osm-relation-1294136')?.request_count).toBe(2);
+    // first_requested_at is set once on creation and never touched again —
+    // only last_requested_at/request_count move on a repeat request.
+    expect(fakeDb.rows.get('osm-relation-1294136')?.first_requested_at).toBe(firstRequestedAt);
   });
 
   it('never returns building — a legacy row cannot exist in that state without KAN-354, but the contract is asserted anyway', async () => {

@@ -168,7 +168,7 @@ async function reverseGeocodeMunicipality(lat: number, lng: number): Promise<Mun
   const url = `${NOMINATIM_REVERSE_URL}?lat=${lat}&lon=${lng}&format=jsonv2&zoom=${NOMINATIM_MUNICIPALITY_ZOOM}&addressdetails=1`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
-  let data: any;
+  let data: unknown;
   try {
     const res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT }, signal: controller.signal });
     if (!res.ok) return null;
@@ -179,14 +179,19 @@ async function reverseGeocodeMunicipality(lat: number, lng: number): Promise<Mun
     clearTimeout(timer);
   }
 
-  const osmType = data?.osm_type;
-  const osmId = data?.osm_id;
-  const bbox = data?.boundingbox;
+  if (typeof data !== 'object' || data === null) return null;
+  const record = data as Record<string, unknown>;
+
+  const osmType = record.osm_type;
+  const osmId = record.osm_id;
+  const bbox = record.boundingbox;
   if (typeof osmType !== 'string' || !osmType) return null;
   if (typeof osmId !== 'number' && typeof osmId !== 'string') return null;
   if (!Array.isArray(bbox) || bbox.length !== 4) return null;
 
-  const address = (data.address ?? {}) as Record<string, unknown>;
+  const address = (typeof record.address === 'object' && record.address !== null
+    ? record.address
+    : {}) as Record<string, unknown>;
   let name: string | null = null;
   for (const field of MUNICIPALITY_FIELD_PRIORITY) {
     const value = address[field];

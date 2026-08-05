@@ -320,6 +320,9 @@ function requestCoverageDemandOnce(lat: number, lng: number): void {
   cloudflareRequestCoverageProxy(lat, lng).catch(() => {
     // Best-effort — an uncovered area already falls back to OSM regardless;
     // losing this one demand-recording call changes nothing for this user.
+    // Un-mark the cell so a later proximity tick retries instead of the
+    // failure permanently suppressing this area's demand for the session.
+    coverageDemandRequestedCells.delete(cell);
   });
 }
 

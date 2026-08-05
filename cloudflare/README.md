@@ -65,10 +65,13 @@ separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
   or a coordinate-derived id) and dedupes on it. An already-`ready` location
   returns its state as-is. An unknown municipality is recorded as demand
   (`city` row, `status='none'`, `request_count`/`last_requested_at` bumped
-  on repeat requests) — capped at `MAX_PENDING_DEMAND_CITIES` — but **never**
-  returns `building`: nothing can move a row out of that state until
-  KAN-354's extraction worker exists, and reporting it would strand the row
-  forever. `retryAfterSeconds` is only ever present once KAN-354 lands.
+  on repeat requests) — capped at `MAX_PENDING_DEMAND_CITIES`: once the cap
+  of pending (`status='none'`) rows is reached, a request for a brand new
+  municipality gets HTTP 429 `{error}` instead of a new row. The response
+  **never** reports `building`: nothing can move a row out of that state
+  until KAN-354's extraction worker exists, and reporting it would strand
+  the row forever. `retryAfterSeconds` is only ever present once KAN-354
+  lands.
 - `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?}`
   — called by the extraction pipeline once a city's rows are loaded; flips
   `city.status` to `ready`, sets `city.current_build_id`, and closes out the

@@ -193,4 +193,22 @@ describe('searchNearbyPlaces — KAN-346 coverage demand recording', () => {
 
     expect(mockRequestCoverage).toHaveBeenCalledTimes(1);
   });
+
+  it('still resolves with the OSM fallback when the fire-and-forget coverage-request itself rejects', async () => {
+    mockPoiAll.mockResolvedValue({ covered: false, results: [] });
+    mockOsmSearch.mockResolvedValue({
+      cafe: [{ osmId: 'node/99', name: 'OSM Cafe', isGenericName: false, lat: 14.0, lng: 14.0, distanceMeters: 20, footprintAreaM2: 0 }],
+    });
+    mockRequestCoverage.mockRejectedValue(new Error('network error'));
+
+    const result = await searchNearbyPlaces(14.0, 14.0, ['cafe'], RADIUS);
+
+    expect(result.results.cafe.map(p => p.placeId)).toEqual(['node/99']);
+    expect(result.source).toBe('osm');
+    expect(mockRequestCoverage).toHaveBeenCalledWith(14.0, 14.0);
+    // Observe the rejection explicitly — if requestCoverageDemandOnce ever
+    // lost its own .catch(), this would surface as an unhandled rejection
+    // here instead of the assertion above silently passing.
+    await expect(mockRequestCoverage.mock.results[0].value).rejects.toThrow('network error');
+  });
 });
