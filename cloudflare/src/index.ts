@@ -20,6 +20,13 @@ interface CityRow {
   radius_km: number;
   current_build_id: string | null;
   last_built_at: string | null;
+  // KAN-346: demand recording — bumped every time a 'none' row is hit again
+  // by a real user request, so we know which unbuilt municipalities to
+  // prioritize once KAN-354's extraction worker exists. Not touched once a
+  // row leaves 'none'.
+  request_count: number;
+  first_requested_at: string | null;
+  last_requested_at: string | null;
 }
 
 function json(data: unknown, status = 200): Response {
@@ -115,6 +122,97 @@ async function findCoveringCity(env: Env, lat: number, lng: number): Promise<Cit
     }
   }
   return best;
+}
+
+// ─── KAN-346: reverse-geocode to a stable municipality identity ───────────
+//
+// Server-side only — the client never resolves its own municipality id,
+// so it can't be spoofed/mismatched against what the Worker dedupes on.
+// Same Nominatim service the app already uses client-side (maps.ts), same
+// User-Agent policy requirement, own independent isolate-scoped state (no
+// shared clock with the app — different process entirely).
+
+const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+const NOMINATIM_USER_AGENT = 'BrushPoiBackend/1 (poi-api.brushaway.app)';
+const NOMINATIM_TIMEOUT_MS = 8_000;
+// zoom=10 is Nominatim's own city/town/borough level — coarse enough that a
+// point anywhere inside one municipality resolves to the same feature.
+const NOMINATIM_MUNICIPALITY_ZOOM = 10;
+
+interface MunicipalityGeo {
+  cityId: string;
+  name: string;
+  country: string | null;
+  centerLat: number;
+  centerLng: number;
+  radiusKm: number;
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+}
+
+/** Same preference order as the app's own extractCityName (maps.ts) — most specific populated-place field wins. */
+const MUNICIPALITY_FIELD_PRIORITY = ['city', 'town', 'village', 'municipality', 'suburb', 'county'] as const;
+
+/**
+ * Resolves (lat, lng) to a stable administrative identity via Nominatim's
+ * own osm_type+osm_id — never a display name (renames/translations would
+ * silently fork one municipality into two rows) and never a coordinate-
+ * derived id (many coordinates inside one municipality must dedupe to the
+ * same row). Returns null on any transport failure or an unparseable/
+ * incomplete response — callers must treat that as "genuinely unknown,
+ * don't record", not as an empty administrative area.
+ */
+async function reverseGeocodeMunicipality(lat: number, lng: number): Promise<MunicipalityGeo | null> {
+  const url = `${NOMINATIM_REVERSE_URL}?lat=${lat}&lon=${lng}&format=jsonv2&zoom=${NOMINATIM_MUNICIPALITY_ZOOM}&addressdetails=1`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  let data: any;
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT }, signal: controller.signal });
+    if (!res.ok) return null;
+    data = await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const osmType = data?.osm_type;
+  const osmId = data?.osm_id;
+  const bbox = data?.boundingbox;
+  if (typeof osmType !== 'string' || !osmType) return null;
+  if (typeof osmId !== 'number' && typeof osmId !== 'string') return null;
+  if (!Array.isArray(bbox) || bbox.length !== 4) return null;
+
+  const address = (data.address ?? {}) as Record<string, unknown>;
+  let name: string | null = null;
+  for (const field of MUNICIPALITY_FIELD_PRIORITY) {
+    const value = address[field];
+    if (typeof value === 'string' && value) { name = value; break; }
+  }
+  if (!name) return null;
+
+  const [south, north, west, east] = bbox.map(Number);
+  if (![south, north, west, east].every(Number.isFinite)) return null;
+
+  const centerLat = (south + north) / 2;
+  const centerLng = (west + east) / 2;
+  const radiusKm = haversineMeters(centerLat, centerLng, north, east) / 1000;
+
+  return {
+    cityId: `osm-${osmType}-${osmId}`,
+    name,
+    country: typeof address.country === 'string' ? address.country : null,
+    centerLat,
+    centerLng,
+    radiusKm,
+    minLat: south,
+    maxLat: north,
+    minLng: west,
+    maxLng: east,
+  };
 }
 
 /**
@@ -219,6 +317,34 @@ async function queryPoiDb(
     .map(r => ({ ...r, distanceMeters: haversineMeters(lat, lng, r.lat, r.lng) }))
     .filter(r => r.distanceMeters <= radiusMeters)
     .sort((a, b) => a.distanceMeters - b.distanceMeters);
+}
+
+// KAN-346: ceiling on how many not-yet-built ('none') municipalities can be
+// recorded at once, worldwide — recording demand is nearly free (one D1 row,
+// one Nominatim call), but unbounded growth from abuse or a client bug still
+// isn't free, and there's no extraction worker yet to work any of it off.
+const MAX_PENDING_DEMAND_CITIES = 50;
+// Only meaningful once KAN-354 exists and a row can actually be 'building' —
+// unreachable today, kept so the response contract doesn't need to change
+// again when it does.
+const COVERAGE_BUILDING_RETRY_AFTER_SECONDS = 60;
+
+async function bumpCoverageDemand(env: Env, city: CityRow): Promise<void> {
+  // Only 'none' rows are demand signal — a 'ready'/'building' row being
+  // requested again isn't telling us anything new to prioritize.
+  if (city.status !== 'none') return;
+  await env.REGISTRY_DB.prepare(
+    'UPDATE city SET request_count = request_count + 1, last_requested_at = ? WHERE city_id = ?',
+  ).bind(new Date().toISOString(), city.city_id).run();
+}
+
+function respondCoverageRequest(city: CityRow | null): Response {
+  if (!city) return json({ coverageStatus: 'none', cityId: null });
+  return json({
+    coverageStatus: city.status,
+    cityId: city.city_id,
+    ...(city.status === 'building' ? { retryAfterSeconds: COVERAGE_BUILDING_RETRY_AFTER_SECONDS } : {}),
+  });
 }
 
 export default {
@@ -384,25 +510,85 @@ export default {
       });
     }
 
-    // POST /coverage/request  { lat, lng }  — trigger a build for an uncovered area
+    // POST /coverage/request  { lat, lng }  — record demand for an uncovered
+    // area and answer this location's coverage. KAN-346 owns the contract
+    // and the demand bookkeeping; KAN-354 (not built yet) owns actually
+    // extracting anything. Until KAN-354 ships, a row can only be 'none'
+    // (recorded, unbuilt) or already 'ready' from an earlier manual build —
+    // never 'building', because nothing exists yet to move it out of that
+    // state (that would strand it forever, exactly the failure this
+    // endpoint must not create).
     if (url.pathname === '/coverage/request' && request.method === 'POST') {
-      const body = await request.json<{ lat: number; lng: number }>();
-      const { lat, lng } = body;
-      if (typeof lat !== 'number' || typeof lng !== 'number') {
+      const body = await request.json<{ lat: number; lng: number }>().catch(() => null);
+      if (!body || typeof body.lat !== 'number' || typeof body.lng !== 'number') {
         return json({ error: 'lat/lng required' }, 400);
+      }
+      const { lat, lng } = body;
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+        return json({ error: 'lat must be a finite number between -90 and 90' }, 400);
+      }
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+        return json({ error: 'lng must be a finite number between -180 and 180' }, 400);
       }
 
       const existing = await findCoveringCity(env, lat, lng);
       if (existing) {
-        // Already covered or already building — dedup, no-op.
-        return json({ status: existing.status, cityId: existing.city_id });
+        await bumpCoverageDemand(env, existing);
+        return respondCoverageRequest(existing);
       }
 
-      // No city for this area at all yet. Real auto-provisioning (new city
-      // row + Cloud Function trigger) is follow-up work — for now this just
-      // reports that nothing exists so the client falls back to OSM
-      // locally, without creating a phantom city row.
-      return json({ status: 'none', cityId: null, note: 'auto-provisioning not yet implemented' });
+      const geo = await reverseGeocodeMunicipality(lat, lng);
+      if (!geo) {
+        // Transport failure or an unparseable/incomplete Nominatim response
+        // — genuinely unknown, not a real administrative area. Don't
+        // fabricate a demand record without a stable id to dedupe on.
+        return respondCoverageRequest(null);
+      }
+
+      // The radius-circle test above can miss a municipality with an
+      // irregular shape even though we already know its stable id — dedupe
+      // on the id itself before considering this "new".
+      const byStableId = await env.REGISTRY_DB.prepare('SELECT * FROM city WHERE city_id = ?')
+        .bind(geo.cityId).first<CityRow>();
+      if (byStableId) {
+        await bumpCoverageDemand(env, byStableId);
+        return respondCoverageRequest(byStableId);
+      }
+
+      // Brand new municipality. Budget guard: cap total not-yet-built
+      // ('none') demand rows so abuse (or a bug hammering distinct coords)
+      // can't grow the city table unboundedly before KAN-354 exists to work
+      // any of it off. Count-then-insert is best-effort under a concurrent
+      // burst, not a hard atomic guarantee — acceptable for a soft budget,
+      // not a security boundary.
+      const { results: pendingCountRows } = await env.REGISTRY_DB
+        .prepare("SELECT COUNT(*) as n FROM city WHERE status = 'none'")
+        .all<{ n: number }>();
+      if ((pendingCountRows[0]?.n ?? 0) >= MAX_PENDING_DEMAND_CITIES) {
+        return json({ error: 'coverage demand budget exceeded, try again later' }, 429);
+      }
+
+      const now = new Date().toISOString();
+      // ON CONFLICT DO UPDATE (not INSERT OR IGNORE) so a request that loses
+      // the race to a concurrent identical request still counts as demand —
+      // both requests bump request_count instead of the loser's demand
+      // signal being silently dropped. WHERE status = 'none' guards against
+      // clobbering a row that became 'ready'/'building' between our
+      // byStableId check and this insert.
+      await env.REGISTRY_DB.prepare(
+        `INSERT INTO city
+           (city_id, name, country, center_lat, center_lng, radius_km, min_lat, max_lat, min_lng, max_lng, status, request_count, first_requested_at, last_requested_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', 1, ?, ?)
+         ON CONFLICT(city_id) DO UPDATE SET request_count = request_count + 1, last_requested_at = excluded.last_requested_at
+         WHERE status = 'none'`,
+      ).bind(
+        geo.cityId, geo.name, geo.country, geo.centerLat, geo.centerLng, geo.radiusKm,
+        geo.minLat, geo.maxLat, geo.minLng, geo.maxLng, now, now,
+      ).run();
+
+      const created = await env.REGISTRY_DB.prepare('SELECT * FROM city WHERE city_id = ?')
+        .bind(geo.cityId).first<CityRow>();
+      return respondCoverageRequest(created);
     }
 
     return json({ error: 'not found' }, 404);

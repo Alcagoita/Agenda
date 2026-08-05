@@ -13,7 +13,7 @@
  */
 import { searchNearbyPlaces } from '../../src/services/maps';
 import { searchOsmPlacesStrict } from '../../src/services/osmPlaces';
-import { cloudflarePoiAllProxy } from '../../src/services/cloudflarePoiFunctions';
+import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy } from '../../src/services/cloudflarePoiFunctions';
 
 jest.mock('../../src/services/placesFunctions', () => ({
   searchNearbyPlacesProxy: jest.fn(),
@@ -22,7 +22,8 @@ jest.mock('../../src/services/placesFunctions', () => ({
 }));
 
 jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
-  cloudflarePoiAllProxy:   jest.fn(),
+  cloudflarePoiAllProxy:         jest.fn(),
+  cloudflareRequestCoverageProxy: jest.fn(),
 }));
 
 jest.mock('../../src/services/osmPlaces', () => ({
@@ -38,6 +39,7 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
 
 const mockPoiAll = cloudflarePoiAllProxy as jest.Mock;
 const mockOsmSearch = searchOsmPlacesStrict as jest.Mock;
+const mockRequestCoverage = cloudflareRequestCoverageProxy as jest.Mock;
 
 const LAT = 38.7223, LNG = -9.1393, RADIUS = 500;
 
@@ -45,6 +47,7 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
   beforeEach(() => {
     jest.clearAllMocks();
     mockOsmSearch.mockResolvedValue({});
+    mockRequestCoverage.mockResolvedValue({ coverageStatus: 'none', cityId: null });
   });
 
   it('uses Cloudflare results when the city is covered, bucketed by primary_poi_type and distance-sorted', async () => {
@@ -139,5 +142,55 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
     expect(result.results.cafe).toEqual([]);
+  });
+});
+
+// KAN-346: an uncovered ('none') location fires a background demand-request
+// through cloudflareRequestCoverageProxy, deduped per coarse (~1km) cell for
+// the app's session — never blocking or retried for 'building'/'ready'.
+// Distinct coordinates per test (never LAT/LNG above) so the module-scope
+// dedupe Set doesn't leak state across tests in this file.
+describe('searchNearbyPlaces — KAN-346 coverage demand recording', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOsmSearch.mockResolvedValue({ cafe: [] });
+    mockRequestCoverage.mockResolvedValue({ coverageStatus: 'none', cityId: null });
+  });
+
+  it('fires a background coverage-request when the location is uncovered (status none)', async () => {
+    mockPoiAll.mockResolvedValue({ covered: false, results: [] });
+
+    await searchNearbyPlaces(10.0, 10.0, ['cafe'], RADIUS);
+    await Promise.resolve(); // flush the fire-and-forget microtask
+
+    expect(mockRequestCoverage).toHaveBeenCalledWith(10.0, 10.0);
+  });
+
+  it('does not fire a coverage-request when status is building', async () => {
+    mockPoiAll.mockResolvedValue({ covered: false, status: 'building', results: [] });
+
+    await searchNearbyPlaces(11.0, 11.0, ['cafe'], RADIUS);
+    await Promise.resolve();
+
+    expect(mockRequestCoverage).not.toHaveBeenCalled();
+  });
+
+  it('does not fire a coverage-request when the location is covered and ready', async () => {
+    mockPoiAll.mockResolvedValue({ covered: true, cityId: 'lisboa', results: [] });
+
+    await searchNearbyPlaces(12.0, 12.0, ['cafe'], RADIUS);
+    await Promise.resolve();
+
+    expect(mockRequestCoverage).not.toHaveBeenCalled();
+  });
+
+  it('dedupes repeat requests within the same ~1km cell — fires once, not once per tick', async () => {
+    mockPoiAll.mockResolvedValue({ covered: false, results: [] });
+
+    await searchNearbyPlaces(13.0, 13.0, ['cafe'], RADIUS);
+    await searchNearbyPlaces(13.001, 13.001, ['cafe'], RADIUS); // same ~1km cell after rounding
+    await Promise.resolve();
+
+    expect(mockRequestCoverage).toHaveBeenCalledTimes(1);
   });
 });
