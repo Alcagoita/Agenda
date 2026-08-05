@@ -66,6 +66,14 @@ function authenticate(request: Request, env: Env): Response | null {
   return null;
 }
 
+/** All /internal/* routes use this instead of authenticate() — a stronger, separate secret, never the public X-Api-Key. */
+function authenticateInternal(request: Request, env: Env): Response | null {
+  if (request.headers.get('X-Build-Secret') !== env.BUILD_TRIGGER_SECRET) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  return null;
+}
+
 interface ParsedCoords { lat: number; lng: number; }
 interface ParsedCoordsAndRadius extends ParsedCoords { radius: number; }
 interface AttributeFilter { dimension: string; values: string[]; }
@@ -410,12 +418,15 @@ async function queryPoiDb(
 // KAN-346/355: ceiling on how many not-yet-mapped ('none') Places can be
 // recorded at once, worldwide — recording demand is nearly free (one D1 row,
 // one-to-three Nominatim calls), but unbounded growth from abuse or a client
-// bug still isn't free, and there's no extraction worker yet to work any of
-// it off.
+// bug still isn't free. A 'none' row is normally short-lived now (KAN-354
+// promotes it to 'mapping' and triggers a build in the same request), but
+// this still guards the window before that trigger lands, and the case
+// where BUILD_TRIGGER_URL isn't configured at all (local dev).
 const MAX_PENDING_DEMAND_PLACES = 50;
-// Only meaningful once KAN-354 exists and a row can actually be 'mapping' —
-// unreachable today, kept so the response contract doesn't need to change
-// again when it does.
+// How long the client should wait before checking again while a Place is
+// 'mapping' (KAN-354). Not measured against a real build yet — revisit once
+// actual Cloud Run Job durations are known; a flat guess is fine for now
+// since there's no latency target for this pipeline (docs/poi-coverage-model.md).
 const COVERAGE_BUILDING_RETRY_AFTER_SECONDS = 60;
 
 async function bumpCoverageDemand(env: Env, place: PlaceRow): Promise<void> {
@@ -439,6 +450,57 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
   });
 }
 
+/**
+ * KAN-354 — fires the extraction Job's trigger-service and forgets. Never
+ * awaited by a caller that needs to respond promptly (POST /coverage/request
+ * must return immediately per its own contract — never extract inline).
+ * A missing BUILD_TRIGGER_URL (local dev, or before the Cloud Run side is
+ * deployed) is a silent no-op, not an error — the place/country row is
+ * already correctly marked 'mapping'/queued regardless; only the actual
+ * extraction won't start until the trigger service exists.
+ */
+function triggerBuild(env: Env, mode: 'place' | 'country', target: string): void {
+  if (!env.BUILD_TRIGGER_URL) return;
+  fetch(env.BUILD_TRIGGER_URL, {
+    method: 'POST',
+    headers: { 'X-Build-Secret': env.BUILD_TRIGGER_SECRET ?? '', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, target }),
+  }).catch(() => {
+    // Best-effort — if the trigger-service is unreachable, the row stays
+    // 'mapping' until an operator notices (Cloud Run's own job-execution
+    // list is the diagnosable state here, not something D1 needs to track
+    // separately). A future request for the same Place/country won't
+    // re-trigger while status is already 'mapping' — see startPlaceMapping.
+  });
+}
+
+/**
+ * Atomically promotes a 'none' Place to 'mapping' and fires the build
+ * trigger exactly once — WHERE status = 'none' in the UPDATE is what makes
+ * "exactly once per Place" (KAN-354 AC4) hold under concurrent requests:
+ * only the request that actually wins the race (changes === 1) triggers;
+ * every other concurrent/later request for the same Place just re-reads
+ * the now-'mapping' row and does nothing further. A no-op for a Place
+ * that's already 'mapping' or 'mapped'.
+ */
+async function startPlaceMapping(env: Env, place: PlaceRow): Promise<PlaceRow> {
+  if (place.status !== 'none') return place;
+  const result = await env.REGISTRY_DB.prepare(
+    "UPDATE place SET status = 'mapping' WHERE place_id = ? AND status = 'none'",
+  ).bind(place.place_id).run();
+  if (result.meta.changes === 1) {
+    triggerBuild(env, 'place', place.place_id);
+    return { ...place, status: 'mapping' };
+  }
+  // Lost the race — another concurrent request already promoted it (or it
+  // moved further already). Re-read rather than assume: it could be
+  // 'mapping' (don't re-trigger) or already 'mapped' (a very fast build,
+  // or this request was simply slow).
+  const current = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
+    .bind(place.place_id).first<PlaceRow>();
+  return current ?? place;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -446,11 +508,11 @@ export default {
     // Internal, server-to-server only — its own stronger secret, not the
     // public X-Api-Key gate below.
     if (url.pathname === '/internal/build-complete' && request.method === 'POST') {
-      if (request.headers.get('X-Build-Secret') !== env.BUILD_TRIGGER_SECRET) {
-        return json({ error: 'unauthorized' }, 401);
-      }
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
       const body = await request.json<{
         cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; status?: unknown; r2Key?: unknown;
+        minLat?: unknown; maxLat?: unknown; minLng?: unknown; maxLng?: unknown;
       }>();
       if (typeof body.cityId !== 'string' || body.cityId.trim() === '') {
         return json({ error: 'cityId must be a non-empty string' }, 400);
@@ -459,15 +521,36 @@ export default {
         return json({ error: 'buildId must be a non-empty string' }, 400);
       }
       const now = new Date().toISOString();
+      // KAN-354 AC3 — "the extent actually ingested", written here rather
+      // than assumed from any pre-extraction bbox (place_schema.sql's own
+      // contract). Optional per-field: a failed extent computation upstream
+      // shouldn't block the whole build from closing out successfully —
+      // COALESCE keeps whatever the row already had (NULL on a first build)
+      // rather than writing a partial/inconsistent extent.
+      const hasExtent = [body.minLat, body.maxLat, body.minLng, body.maxLng].every(v => typeof v === 'number');
 
       // A crashed/errored extraction run (classify_and_load.py raised, the
       // D1 load failed, etc.) previously had no way to close out its
       // build_log row at all — it stayed 'building' forever with nothing
-      // to explain why. This path marks it 'failed' without touching
-      // `place` — a failed re-map of an already-served Place must not
-      // un-map it; the last successful build's data is still valid and
-      // still being served.
+      // to explain why. This path marks it 'failed'.
+      //
+      // KAN-354: also reverts `place` to 'none' — but ONLY when this Place
+      // was never successfully mapped before (build_id is still null). A
+      // failed FIRST build must not strand the row in 'mapping' forever
+      // (KAN-354 AC6); a failed RE-map of an already-mapped Place must NOT
+      // un-map it — the last successful build's data is still valid and
+      // still being served, exactly the KAN-346-era reasoning this
+      // preserves. Reverting to 'none' (not leaving 'mapping') means a
+      // future zero-check naturally retries it — no separate retry queue
+      // needed.
       if (body.status === 'failed') {
+        const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
+          .bind(body.cityId).first<PlaceRow>();
+        if (place && place.build_id === null) {
+          await env.REGISTRY_DB.prepare(
+            "UPDATE place SET status = 'none' WHERE place_id = ? AND status = 'mapping'",
+          ).bind(body.cityId).run();
+        }
         const buildLogResult = await env.REGISTRY_DB.prepare(
           "UPDATE build_log SET status = 'failed', finished_at = ? WHERE build_id = ? AND place_id = ?",
         ).bind(now, body.buildId, body.cityId).run();
@@ -485,8 +568,16 @@ export default {
       // nothing isn't a batch error) — those are still checked afterward.
       const [placeResult, buildLogResult] = await env.REGISTRY_DB.batch([
         env.REGISTRY_DB.prepare(
-          "UPDATE place SET status = 'mapped', build_id = ?, mapped_at = ? WHERE place_id = ?",
-        ).bind(body.buildId, now, body.cityId),
+          `UPDATE place SET status = 'mapped', build_id = ?, mapped_at = ?,
+             min_lat = COALESCE(?, min_lat), max_lat = COALESCE(?, max_lat),
+             min_lng = COALESCE(?, min_lng), max_lng = COALESCE(?, max_lng)
+           WHERE place_id = ?`,
+        ).bind(
+          body.buildId, now,
+          hasExtent ? body.minLat : null, hasExtent ? body.maxLat : null,
+          hasExtent ? body.minLng : null, hasExtent ? body.maxLng : null,
+          body.cityId,
+        ),
         env.REGISTRY_DB.prepare(
           "UPDATE build_log SET status = 'ready', finished_at = ?, rows_loaded = ?, rows_skipped = ?, raw_extract_r2_key = COALESCE(?, raw_extract_r2_key) WHERE build_id = ? AND place_id = ?",
         ).bind(
@@ -510,6 +601,121 @@ export default {
         // predates this table). Surface it, don't fail the whole request.
         return json({ ok: true, warning: `no build_log row matched buildId '${body.buildId}' for cityId '${body.cityId}'` });
       }
+      return json({ ok: true });
+    }
+
+    // POST /internal/place-failed  { cityId }  — a lighter-weight failure
+    // signal than /internal/build-complete {status:'failed'}: usable at ANY
+    // point in the Job's run, even before a build_id/build_log row exists
+    // (e.g. the Foursquare extraction itself failed, before classification
+    // ever started). Same "never strand it" reasoning as the other failure
+    // paths — reverts 'mapping' -> 'none' only for a Place never previously
+    // mapped, so a future zero-check retries it; leaves an already-mapped
+    // Place's last-good state untouched. No build_log row to close out
+    // here — Cloud Run's own execution log is the diagnosable record for a
+    // failure this early.
+    if (url.pathname === '/internal/place-failed' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ cityId?: unknown }>().catch(() => null);
+      if (typeof body?.cityId !== 'string' || body.cityId.trim() === '') {
+        return json({ error: 'cityId must be a non-empty string' }, 400);
+      }
+      const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
+        .bind(body.cityId).first<PlaceRow>();
+      if (place && place.build_id === null) {
+        await env.REGISTRY_DB.prepare(
+          "UPDATE place SET status = 'none' WHERE place_id = ? AND status = 'mapping'",
+        ).bind(body.cityId).run();
+      }
+      return json({ ok: true });
+    }
+
+    // POST /internal/country/queue  { countryCode }  — KAN-354's country
+    // pre-build trigger. Operational: queued by whoever decides which
+    // country goes next (docs/poi-coverage-model.md — "Country: operational"),
+    // not automatically. Idempotent: queuing an already-mapping/mapped
+    // country is a no-op that just reports its current state, never a
+    // second job.
+    if (url.pathname === '/internal/country/queue' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
+        return json({ error: 'countryCode must be a non-empty string' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+
+      const result = await env.REGISTRY_DB.prepare(
+        "UPDATE country SET status = 'mapping' WHERE country_code = ? AND status = 'none'",
+      ).bind(countryCode).run();
+      if (result.meta.changes === 1) {
+        triggerBuild(env, 'country', countryCode);
+      }
+      const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (!country) return json({ error: `no country row for '${countryCode}' — it must exist before it can be queued` }, 404);
+      return json({ ok: true, status: country.status });
+    }
+
+    // POST /internal/country-progress  { countryCode }  — called by the
+    // country-mode Job once per Place it finishes mapping, so place_count
+    // reflects real progress rather than only flipping at the very end
+    // (KAN-354 AC1: "progress visible on the country row").
+    if (url.pathname === '/internal/country-progress' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
+        return json({ error: 'countryCode must be a non-empty string' }, 400);
+      }
+      const result = await env.REGISTRY_DB.prepare(
+        'UPDATE country SET place_count = place_count + 1 WHERE country_code = ?',
+      ).bind(body.countryCode.toUpperCase()).run();
+      if (result.meta.changes !== 1) {
+        return json({ error: `no country row matched countryCode '${body.countryCode}'` }, 404);
+      }
+      return json({ ok: true });
+    }
+
+    // POST /internal/country-complete  { countryCode, buildId }  — the whole
+    // country finished (every Place attempted, per-Place results already
+    // recorded via /internal/build-complete + /internal/country-progress).
+    if (url.pathname === '/internal/country-complete' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown; buildId?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
+        return json({ error: 'countryCode must be a non-empty string' }, 400);
+      }
+      if (typeof body.buildId !== 'string' || body.buildId.trim() === '') {
+        return json({ error: 'buildId must be a non-empty string' }, 400);
+      }
+      const result = await env.REGISTRY_DB.prepare(
+        "UPDATE country SET status = 'mapped', build_id = ?, mapped_at = ? WHERE country_code = ?",
+      ).bind(body.buildId, new Date().toISOString(), body.countryCode.toUpperCase()).run();
+      if (result.meta.changes !== 1) {
+        return json({ error: `no country row matched countryCode '${body.countryCode}'` }, 404);
+      }
+      return json({ ok: true });
+    }
+
+    // POST /internal/country-failed  { countryCode }  — the whole run
+    // errored (e.g. the Foursquare JWT expired mid-run). Reverts to 'none'
+    // so the country can be re-queued — same "never strand it" reasoning as
+    // /internal/build-complete's per-Place failure path. WHERE status =
+    // 'mapping' guards against a stale/duplicate failure callback clobbering
+    // a country that a later, successful run already completed.
+    if (url.pathname === '/internal/country-failed' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
+        return json({ error: 'countryCode must be a non-empty string' }, 400);
+      }
+      await env.REGISTRY_DB.prepare(
+        "UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'",
+      ).bind(body.countryCode.toUpperCase()).run();
       return json({ ok: true });
     }
 
@@ -606,13 +812,15 @@ export default {
     }
 
     // POST /coverage/request  { lat, lng }  — record demand for an unmapped
-    // area and answer this location's coverage. KAN-346/355 own the contract
-    // and the demand bookkeeping; KAN-354 (not built yet) owns actually
-    // mapping anything. Until KAN-354 ships, a row can only be 'none'
-    // (recorded, unmapped) or already 'mapped' from an earlier manual build
-    // — never 'building' on the wire (DB 'mapping'), because nothing exists
-    // yet to move it out of that state (that would strand it forever,
-    // exactly the failure this endpoint must not create).
+    // area, start mapping it (KAN-354), and answer this location's coverage.
+    // A brand new or previously-recorded-but-unmapped Place is atomically
+    // promoted 'none' -> 'mapping' and the extraction trigger fires exactly
+    // once (startPlaceMapping) — every other concurrent/later request for
+    // the same Place just observes 'mapping' and does nothing further.
+    // Never extracts inline: this handler always returns promptly, whether
+    // or not BUILD_TRIGGER_URL is even configured (a no-op trigger still
+    // leaves the row correctly marked 'mapping', just with nothing yet to
+    // move it forward — see triggerBuild).
     if (url.pathname === '/coverage/request' && request.method === 'POST') {
       const body = await request.json<{ lat: number; lng: number }>().catch(() => null);
       if (!body || typeof body.lat !== 'number' || typeof body.lng !== 'number') {
@@ -628,6 +836,10 @@ export default {
 
       const existing = await findPlace(env, lat, lng);
       if (existing) {
+        // findPlace only ever matches a real bbox — i.e. a 'mapped' Place
+        // (place_schema.sql) — so this is never a candidate for
+        // startPlaceMapping; that only applies to the 'none'/byStableId
+        // branches below.
         await bumpCoverageDemand(env, existing);
         return respondCoverageRequest(existing);
       }
@@ -648,7 +860,7 @@ export default {
         .bind(geo.placeId).first<PlaceRow>();
       if (byStableId) {
         await bumpCoverageDemand(env, byStableId);
-        return respondCoverageRequest(byStableId);
+        return respondCoverageRequest(await startPlaceMapping(env, byStableId));
       }
 
       // Brand new Place. Budget guard: cap total not-yet-mapped ('none')
@@ -696,7 +908,8 @@ export default {
 
       const created = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
         .bind(geo.placeId).first<PlaceRow>();
-      return respondCoverageRequest(created);
+      if (!created) return respondCoverageRequest(null);
+      return respondCoverageRequest(await startPlaceMapping(env, created));
     }
 
     return json({ error: 'not found' }, 404);

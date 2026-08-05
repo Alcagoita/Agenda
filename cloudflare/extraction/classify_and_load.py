@@ -151,7 +151,7 @@ def build_reverse_map(mapping):
 
 MAX_STATEMENT_BYTES = 80_000
 
-def write_batches(f, insert_prefix, pieces, label, city_id):
+def write_batches(f, insert_prefix, pieces, label, place_id):
     """Size-aware batching, not a fixed row count — shared by both the poi
     and poi_type INSERT statements. D1's confirmed hard limits are 100KB per
     statement and 100 bound parameters per query (this pipeline inlines
@@ -180,7 +180,7 @@ def write_batches(f, insert_prefix, pieces, label, city_id):
         solo_size = byte_len(insert_prefix) + byte_len(piece) + byte_len(';\n')
         if solo_size > MAX_STATEMENT_BYTES:
             raise ValueError(
-                f"[{city_id}] {label} row {identifier} is {solo_size} bytes alone, "
+                f"[{place_id}] {label} row {identifier} is {solo_size} bytes alone, "
                 f"exceeds MAX_STATEMENT_BYTES ({MAX_STATEMENT_BYTES}) even in its own statement"
             )
         if values and size + piece_size > MAX_STATEMENT_BYTES:
@@ -190,9 +190,9 @@ def write_batches(f, insert_prefix, pieces, label, city_id):
     flush()
     return batches_written
 
-def write_sqlite_export(city_id, build_id, pipeline_version, poi_rows, poi_type_rows, poi_attribute_rows, out_sqlite_path):
+def write_sqlite_export(place_id, build_id, pipeline_version, poi_rows, poi_type_rows, poi_attribute_rows, out_sqlite_path):
     """KAN-339: client-download export — a single city+build's poi/poi_type/
-    poi_attribute rows flattened into a standalone SQLite file (no city_id/
+    poi_attribute rows flattened into a standalone SQLite file (no place_id/
     build_id columns needed per-row, both are implied by the whole file, and
     are instead recorded once in _export_meta so the client can compare its
     cached build_id against /coverage's current one before deciding whether
@@ -227,7 +227,7 @@ def write_sqlite_export(city_id, build_id, pipeline_version, poi_rows, poi_type_
         );
         CREATE INDEX idx_poi_type_lookup ON poi_type (poi_type);
         CREATE TABLE _export_meta (
-          city_id          TEXT NOT NULL,
+          place_id          TEXT NOT NULL,
           build_id         TEXT NOT NULL,
           generated_at     TEXT NOT NULL,
           pipeline_version TEXT NOT NULL,
@@ -250,13 +250,13 @@ def write_sqlite_export(city_id, build_id, pipeline_version, poi_rows, poi_type_
         [(r[0], r[3], r[4]) for r in poi_attribute_rows],
     )
     conn.execute(
-        'INSERT INTO _export_meta (city_id, build_id, generated_at, pipeline_version, row_count) VALUES (?,?,?,?,?)',
-        (city_id, build_id, datetime.datetime.now(datetime.timezone.utc).isoformat(), pipeline_version, len(poi_rows)),
+        'INSERT INTO _export_meta (place_id, build_id, generated_at, pipeline_version, row_count) VALUES (?,?,?,?,?)',
+        (place_id, build_id, datetime.datetime.now(datetime.timezone.utc).isoformat(), pipeline_version, len(poi_rows)),
     )
     conn.commit()
     conn.close()
 
-def classify(city_id, csv_path, out_sql_path):
+def classify(place_id, csv_path, out_sql_path):
     poi_types = load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'poiTypeCategories.json'))
     store_subtypes = load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'storeSubtypeCategories.json'))
     food_subtypes = load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'foodSubtypeCategories.json'))
@@ -299,7 +299,7 @@ def classify(city_id, csv_path, out_sql_path):
     # build_id is visible at all, and it's needed to close out build_log as
     # 'failed' via POST /internal/build-complete {cityId, buildId,
     # status:'failed'} instead of leaving that row stuck at 'building' forever.
-    print(f"[{city_id}] build_id={build_id} (starting)")
+    print(f"[{place_id}] build_id={build_id} (starting)")
     started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     poi_rows = []
     poi_type_rows = []
@@ -374,24 +374,24 @@ def classify(city_id, csv_path, out_sql_path):
             category_label = raw_category_labels.split('|')[0]
 
             poi_rows.append((
-                row['fsq_place_id'], city_id, build_id, row['name'], lat, lng, geohash,
+                row['fsq_place_id'], place_id, build_id, row['name'], lat, lng, geohash,
                 primary_poi_type, brand, category_label,
                 raw_category_ids or None, raw_category_labels or None,
                 row['address'] or None, started_at,
             ))
             for rank, t in enumerate(ranked_types):
-                poi_type_rows.append((row['fsq_place_id'], city_id, build_id, t, rank))
+                poi_type_rows.append((row['fsq_place_id'], place_id, build_id, t, rank))
             for value in sorted(store_kinds):
-                poi_attribute_rows.append((row['fsq_place_id'], city_id, build_id, 'store_kind', value))
+                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'store_kind', value))
             for value in sorted(food_cuisines):
-                poi_attribute_rows.append((row['fsq_place_id'], city_id, build_id, 'food_cuisine', value))
+                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'food_cuisine', value))
             type_counts[primary_poi_type] = type_counts.get(primary_poi_type, 0) + 1
 
-    print(f"[{city_id}] classified {len(poi_rows)} rows, skipped {skipped} (no matching poi_type)")
-    print(f"[{city_id}] {multi_type_count} rows matched more than one type ({len(poi_type_rows)} total poi_type rows)")
-    print(f"[{city_id}] {brand_matches} rows matched a brand, {len(poi_attribute_rows)} total poi_attribute rows")
-    print(f"[{city_id}] KAN-340 keyword fallback: {keyword_store_kind_matches} store_kind + {keyword_food_cuisine_matches} food_cuisine rows recovered (category tags alone found nothing for these)")
-    print(f"[{city_id}] top primary types: {sorted(type_counts.items(), key=lambda x: -x[1])[:15]}")
+    print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped} (no matching poi_type)")
+    print(f"[{place_id}] {multi_type_count} rows matched more than one type ({len(poi_type_rows)} total poi_type rows)")
+    print(f"[{place_id}] {brand_matches} rows matched a brand, {len(poi_attribute_rows)} total poi_attribute rows")
+    print(f"[{place_id}] KAN-340 keyword fallback: {keyword_store_kind_matches} store_kind + {keyword_food_cuisine_matches} food_cuisine rows recovered (category tags alone found nothing for these)")
+    print(f"[{place_id}] top primary types: {sorted(type_counts.items(), key=lambda x: -x[1])[:15]}")
 
     def poi_row_sql(r):
         return '(' + ','.join([
@@ -409,70 +409,94 @@ def classify(city_id, csv_path, out_sql_path):
 
     poi_insert_prefix = (
         'INSERT OR REPLACE INTO poi '
-        '(fsq_place_id, city_id, build_id, name, lat, lng, geohash, primary_poi_type, brand, '
+        '(fsq_place_id, place_id, build_id, name, lat, lng, geohash, primary_poi_type, brand, '
         'category_label, raw_category_ids, raw_category_labels, address, date_refreshed) '
         'VALUES '
     )
     poi_type_insert_prefix = (
-        'INSERT OR REPLACE INTO poi_type (fsq_place_id, city_id, build_id, poi_type, rank) VALUES '
+        'INSERT OR REPLACE INTO poi_type (fsq_place_id, place_id, build_id, poi_type, rank) VALUES '
     )
     poi_attribute_insert_prefix = (
-        'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, city_id, build_id, dimension, value) VALUES '
+        'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, place_id, build_id, dimension, value) VALUES '
     )
 
     with open(out_sql_path, 'w') as f:
         # build_log start row — closed out by /internal/build-complete once
         # the load + sweep below have actually run against D1.
         f.write(
-            "INSERT INTO build_log (build_id, city_id, started_at, status, pipeline_version, source) "
-            f"VALUES ({sql_escape(build_id)}, {sql_escape(city_id)}, {sql_escape(started_at)}, "
+            "INSERT INTO build_log (build_id, place_id, started_at, status, pipeline_version, source) "
+            f"VALUES ({sql_escape(build_id)}, {sql_escape(place_id)}, {sql_escape(started_at)}, "
             f"'building', {sql_escape(PIPELINE_VERSION)}, 'foursquare_os_places');\n"
         )
 
         poi_batches = write_batches(
             f, poi_insert_prefix,
             [(r[0], poi_row_sql(r)) for r in poi_rows],
-            'poi', city_id,
+            'poi', place_id,
         )
         poi_type_batches = write_batches(
             f, poi_type_insert_prefix,
             [(r[0], poi_type_row_sql(r)) for r in poi_type_rows],
-            'poi_type', city_id,
+            'poi_type', place_id,
         )
         poi_attribute_batches = write_batches(
             f, poi_attribute_insert_prefix,
             [(r[0], poi_attribute_row_sql(r)) for r in poi_attribute_rows],
-            'poi_attribute', city_id,
+            'poi_attribute', place_id,
         )
 
         # Sweep — retires rows from a previous build that didn't reappear in
         # this one (the place closed / Foursquare dropped it). Safe to run
         # even on a city's very first build: nothing has a different
         # build_id yet, so this is a no-op.
-        f.write(f"DELETE FROM poi WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
-        f.write(f"DELETE FROM poi_type WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
-        f.write(f"DELETE FROM poi_attribute WHERE city_id = {sql_escape(city_id)} AND build_id != {sql_escape(build_id)};\n")
+        f.write(f"DELETE FROM poi WHERE place_id = {sql_escape(place_id)} AND build_id != {sql_escape(build_id)};\n")
+        f.write(f"DELETE FROM poi_type WHERE place_id = {sql_escape(place_id)} AND build_id != {sql_escape(build_id)};\n")
+        f.write(f"DELETE FROM poi_attribute WHERE place_id = {sql_escape(place_id)} AND build_id != {sql_escape(build_id)};\n")
 
-    # build_id-specific, not just city_id-specific: a rerun for the same
+    # build_id-specific, not just place_id-specific: a rerun for the same
     # city before the previous run's upload command was actually executed
     # would otherwise overwrite this file with a different build's data,
     # while the already-printed upload command still names the OLD
     # build_id — uploading mismatched content under a stale build_id label.
-    sqlite_path = os.path.join(BUILD_DIR, f'export_{city_id}_{build_id}.sqlite')
-    write_sqlite_export(city_id, build_id, PIPELINE_VERSION, poi_rows, poi_type_rows, poi_attribute_rows, sqlite_path)
-    export_r2_key = f"exports/{city_id}/{build_id}.sqlite"
+    sqlite_path = os.path.join(BUILD_DIR, f'export_{place_id}_{build_id}.sqlite')
+    write_sqlite_export(place_id, build_id, PIPELINE_VERSION, poi_rows, poi_type_rows, poi_attribute_rows, sqlite_path)
+    export_r2_key = f"exports/{place_id}/{build_id}.sqlite"
 
-    r2_key = f"raw-extracts/{city_id}/{build_id}.csv"
-    print(f"[{city_id}] wrote {out_sql_path} ({poi_batches} poi statements + {poi_type_batches} poi_type statements + {poi_attribute_batches} poi_attribute statements, ~{MAX_STATEMENT_BYTES // 1000}KB each max)")
-    print(f"[{city_id}] wrote {sqlite_path} (client-download export, KAN-339)")
-    print(f"[{city_id}] build_id={build_id} rows_loaded={len(poi_rows)} rows_skipped={skipped}")
-    print(f"[{city_id}] after loading this file, upload the raw extract + export and close out the build:")
+    r2_key = f"raw-extracts/{place_id}/{build_id}.csv"
+    print(f"[{place_id}] wrote {out_sql_path} ({poi_batches} poi statements + {poi_type_batches} poi_type statements + {poi_attribute_batches} poi_attribute statements, ~{MAX_STATEMENT_BYTES // 1000}KB each max)")
+    print(f"[{place_id}] wrote {sqlite_path} (client-download export, KAN-339)")
+    print(f"[{place_id}] build_id={build_id} rows_loaded={len(poi_rows)} rows_skipped={skipped}")
+    print(f"[{place_id}] after loading this file, upload the raw extract + export and close out the build:")
     print(f"  npx wrangler r2 object put brush-poi-exports/{r2_key} --file={csv_path} --remote")
     print(f"  npx wrangler r2 object put brush-poi-exports/{export_r2_key} --file={sqlite_path} --remote")
     print(f"  curl -X POST https://poi-api.brushaway.app/internal/build-complete "
           f"-H \"X-Build-Secret: $BUILD_TRIGGER_SECRET\" -H \"Content-Type: application/json\" "
-          f"-d '{{\"cityId\":\"{city_id}\",\"buildId\":\"{build_id}\",\"rowsLoaded\":{len(poi_rows)},"
+          f"-d '{{\"cityId\":\"{place_id}\",\"buildId\":\"{build_id}\",\"rowsLoaded\":{len(poi_rows)},"
           f"\"rowsSkipped\":{skipped},\"r2Key\":\"{r2_key}\"}}'")
+
+    # KAN-354: run_job.py's automated path needs these back programmatically
+    # instead of re-parsing the printed curl command — the manual/CLI usage
+    # below still works unchanged, this return is additive.
+    lats = [r[4] for r in poi_rows]
+    lngs = [r[5] for r in poi_rows]
+    return {
+        'place_id': place_id,
+        'build_id': build_id,
+        'rows_loaded': len(poi_rows),
+        'rows_skipped': skipped,
+        'sql_path': out_sql_path,
+        'sqlite_path': sqlite_path,
+        'raw_extract_r2_key': r2_key,
+        'export_r2_key': export_r2_key,
+        # None (not 0/0/0/0) when nothing was loaded — an empty extent isn't
+        # a real extent, and place.status must stay whatever it already was
+        # (worker_client.build_complete's caller checks this before sending
+        # minLat/etc at all).
+        'min_lat': min(lats) if lats else None,
+        'max_lat': max(lats) if lats else None,
+        'min_lng': min(lngs) if lngs else None,
+        'max_lng': max(lngs) if lngs else None,
+    }
 
 if __name__ == '__main__':
     city = sys.argv[1]
