@@ -1,14 +1,15 @@
--- Single shared D1 database for ALL cities — one shared table with a
--- city_id column, not one database per city (still true even off the Free
+-- Single shared D1 database for ALL places — one shared table with a
+-- place_id column, not one database per place (still true even off the Free
 -- plan: 10GB is the hard per-database ceiling regardless of plan tier).
 -- No R-tree support on D1 — geohash prefix range queries stand in for
--- radius search instead. Lives in the same DB as `city` (city_schema.sql)
--- and `build_log` (build_log_schema.sql) — one database serves all three.
+-- radius search instead. Lives in the same DB as `place` (place_schema.sql),
+-- `country` (country_schema.sql) and `build_log` (build_log_schema.sql) —
+-- one database serves all four.
 --
 -- build_id (KAN-333): every load tags its rows with a fresh build_id.
--- Loading is INSERT OR REPLACE on the (city_id, fsq_place_id) PK, so a
+-- Loading is INSERT OR REPLACE on the (place_id, fsq_place_id) PK, so a
 -- place present in both the old and new build updates in place — no
--- duplicate risk. After loading, a sweep (DELETE WHERE city_id = ? AND
+-- duplicate risk. After loading, a sweep (DELETE WHERE place_id = ? AND
 -- build_id != ?) removes anything that didn't reappear in the new build
 -- (closed places). Not atomic with the load — a closed place can linger
 -- for the duration of one load cycle between the two steps, never longer,
@@ -18,10 +19,15 @@
 -- match more than one type, and search matches against the poi_type table
 -- (poi_type_schema.sql), not this column. Deliberate denormalization: every
 -- result needs exactly one icon/label, and that shouldn't cost a join.
+--
+-- place_id (KAN-355): renamed from city_id — kept as a column (not
+-- normalized away) because it's how you rebuild or delete one Place's POIs.
+-- Whether it stays in the read query's predicate is measured against the
+-- pre-rename ~23ms baseline (see index.ts's queryPoiDb), not assumed.
 
 CREATE TABLE IF NOT EXISTS poi (
   fsq_place_id        TEXT NOT NULL,
-  city_id             TEXT NOT NULL,          -- which city this row belongs to (city.city_id)
+  place_id            TEXT NOT NULL,          -- which Place this row belongs to (place.place_id)
   build_id            TEXT NOT NULL,          -- generation tag for the sweep-delete build/swap procedure
   name                TEXT NOT NULL,
   lat                 REAL NOT NULL,
@@ -34,8 +40,8 @@ CREATE TABLE IF NOT EXISTS poi (
   raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
   address             TEXT,
   date_refreshed      TEXT NOT NULL,
-  PRIMARY KEY (city_id, fsq_place_id)         -- same place could theoretically appear in two overlapping cities
+  PRIMARY KEY (place_id, fsq_place_id)         -- same place could theoretically appear in two overlapping Places
 );
 
-CREATE INDEX IF NOT EXISTS idx_poi_city_geo   ON poi (city_id, geohash);
-CREATE INDEX IF NOT EXISTS idx_poi_city_build ON poi (city_id, build_id);
+CREATE INDEX IF NOT EXISTS idx_poi_place_geo   ON poi (place_id, geohash);
+CREATE INDEX IF NOT EXISTS idx_poi_place_build ON poi (place_id, build_id);

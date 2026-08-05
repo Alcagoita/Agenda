@@ -14,15 +14,15 @@
 -- order that specific row's tags).
 
 CREATE TABLE IF NOT EXISTS poi_type (
-  city_id      TEXT NOT NULL,
+  place_id      TEXT NOT NULL,
   fsq_place_id TEXT NOT NULL,
   build_id     TEXT NOT NULL,
   poi_type     TEXT NOT NULL,
   rank         INTEGER NOT NULL,
-  PRIMARY KEY (city_id, fsq_place_id, poi_type)
+  PRIMARY KEY (place_id, fsq_place_id, poi_type)
 );
 
 -- No secondary index: the only lookup against this table (index.ts EXISTS
--- subquery) filters on (city_id, fsq_place_id), the PK's own leading
--- columns — already covered. A (city_id, poi_type) index would never be
+-- subquery) filters on (place_id, fsq_place_id), the PK's own leading
+-- columns — already covered. A (place_id, poi_type) index would never be
 -- hit by that predicate shape, so it'd cost write overhead for nothing.

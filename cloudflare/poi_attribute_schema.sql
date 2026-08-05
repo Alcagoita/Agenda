@@ -14,10 +14,10 @@
 -- added speculatively ahead of an actual query needing it.
 
 CREATE TABLE IF NOT EXISTS poi_attribute (
-  city_id      TEXT NOT NULL,
+  place_id      TEXT NOT NULL,
   fsq_place_id TEXT NOT NULL,
   build_id     TEXT NOT NULL,
   dimension    TEXT NOT NULL,
   value        TEXT NOT NULL,
-  PRIMARY KEY (city_id, fsq_place_id, dimension, value)
+  PRIMARY KEY (place_id, fsq_place_id, dimension, value)
 );
