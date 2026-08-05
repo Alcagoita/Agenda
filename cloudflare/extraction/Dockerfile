@@ -1,6 +1,12 @@
-# KAN-354. The extraction Cloud Run Job. Same image for both triggers —
-# MODE/TARGET (set as per-execution env var overrides, see
-# cloudflare/deploy/README.md) is the only thing that differs.
+# KAN-354. The extraction pipeline, as a Cloudflare Container. Same image
+# for both triggers — MODE/TARGET (set per-invocation via envVars when the
+# Worker calls container.start(), see src/index.ts's triggerBuild) is the
+# only thing that differs.
+#
+# Build context is the REPO ROOT, not this directory — set explicitly via
+# `image_build_context` in wrangler.jsonc (wrangler's own default is the
+# Dockerfile's own directory, too narrow for what this image needs; see
+# that config's comment). Every COPY below is repo-root-relative.
 FROM python:3.12-slim
 
 # httpfs (DuckDB's Iceberg REST support) needs libcurl at runtime.
@@ -10,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY extraction/requirements.txt .
+COPY cloudflare/extraction/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # The pipeline reads src/poiTypeCategories.json, src/storeSubtypeCategories.json,

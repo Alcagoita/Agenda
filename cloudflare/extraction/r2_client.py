@@ -1,23 +1,21 @@
 """
-KAN-354. R2 upload via its S3-compatible API (boto3) — replaces the manual
-pipeline's printed `wrangler r2 object put` instructions the same way
-d1_client.py replaces `wrangler d1 execute`: the Job container has no reason
-to carry Node/wrangler for this.
+KAN-354. R2 upload via the Worker's own binding, same "outbound Worker"
+mechanism as d1_client.py — a PUT to `http://r2.internal/<key>` is
+intercepted and translated into `env.POI_EXPORTS.put(key, body)`. No R2
+access-key/secret-key pair needed.
 """
-import os
-import boto3
+import urllib.parse
+import requests
 
-def _client():
-    account_id = os.environ['CLOUDFLARE_ACCOUNT_ID']
-    return boto3.client(
-        's3',
-        endpoint_url=f'https://{account_id}.r2.cloudflarestorage.com',
-        aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
-        aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
-        region_name='auto',
-    )
+R2_BASE_URL = 'http://r2.internal/'
 
-def upload_file(local_path, r2_key, bucket=None):
-    bucket = bucket or os.environ.get('R2_BUCKET', 'brush-poi-exports')
-    _client().upload_file(local_path, bucket, r2_key)
+class R2Error(Exception):
+    pass
+
+def upload_file(local_path, r2_key):
+    url = R2_BASE_URL + urllib.parse.quote(r2_key, safe='')
+    with open(local_path, 'rb') as f:
+        res = requests.put(url, data=f, timeout=120)
+    if not res.ok:
+        raise R2Error(f'R2 outbound upload failed ({res.status_code}) for {r2_key}: {res.text[:500]}')
     return r2_key

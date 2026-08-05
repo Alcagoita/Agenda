@@ -142,13 +142,16 @@ dashboard directly, or get a zone-scoped token addition for
 entrypoint — reads `MODE`/`TARGET` from the environment, resolves scope
 (a Place's bbox via Nominatim, or a whole country via Foursquare's own
 `country` field), runs extraction + `classify_and_load.py`'s classification
-(now `place_id`-keyed, matching the KAN-355 schema) automatically, uploads
-to D1 (`d1_client.py`, Cloudflare's HTTP Query API) and R2 (`r2_client.py`,
-S3-compatible API) without a human running `wrangler` by hand, and closes
-the build out via the Worker's `/internal/*` routes
-(`worker_client.py`). Deployed as a Cloud Run Job — see
-`cloudflare/deploy/README.md` for the actual `gcloud` commands (not run
-from the environment that wrote this, see that file's own caveat).
+(now `place_id`-keyed, matching the KAN-355 schema) automatically, writes
+to D1 and R2 through the Worker's own bindings (`d1_client.py`/`r2_client.py`,
+via `extractionContainer.ts`'s `outboundByHost` — no separate Cloudflare
+API token or R2 keys) without a human running `wrangler` by hand, and
+closes the build out via the Worker's `/internal/*` routes
+(`worker_client.py`). Runs as a **Cloudflare Container** bound to this same
+Worker (`src/extractionContainer.ts`) — deployed with the same `wrangler
+deploy` you already use, no separate service or cloud account. See
+`cloudflare/deploy/README.md` (not run from the environment that wrote
+this, see that file's own caveat).
 
 `classify_and_load.py`'s direct CLI usage (`python3 classify_and_load.py
 <place_id>`) still works for a one-off manual run against an

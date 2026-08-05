@@ -1,4 +1,11 @@
 import { haversineMeters, neighborPrefixes, precisionForRadius, requiredGridCells, MAX_GRID_CELLS_PER_AXIS, MAX_RADIUS_METERS } from './geohash';
+import { getContainer } from '@cloudflare/containers';
+import { ExtractionContainer } from './extractionContainer';
+
+// Re-exported (not just imported) — the Workers runtime resolves the
+// `durable_objects` binding's `class_name` against this module's exports,
+// per wrangler.jsonc. See extractionContainer.ts for what it actually runs.
+export { ExtractionContainer };
 
 export interface Env {
   // One shared D1 database for everything — 10GB is D1's hard per-database
@@ -9,8 +16,16 @@ export interface Env {
   REGISTRY_DB: D1Database;
   POI_EXPORTS: R2Bucket;
   API_KEY: string;
-  BUILD_TRIGGER_URL?: string;
+  // KAN-354 — the extraction Container. Its own D1/R2 access goes through
+  // extractionContainer.ts's outboundByHost handlers, not a separate
+  // Cloudflare API token; BUILD_TRIGGER_SECRET is what it uses to call back
+  // /internal/* (passed to it as an env var when started — see triggerBuild).
+  EXTRACTION_CONTAINER: DurableObjectNamespace<ExtractionContainer>;
   BUILD_TRIGGER_SECRET?: string;
+  // Foursquare Places Portal JWT (expires, manual renewal — see
+  // cloudflare/README.md's Extraction pipeline section). Passed to the
+  // Container as an env var; the Worker itself never calls Foursquare.
+  FOURSQUARE_JWT?: string;
 }
 
 /**
@@ -419,13 +434,12 @@ async function queryPoiDb(
 // recorded at once, worldwide — recording demand is nearly free (one D1 row,
 // one-to-three Nominatim calls), but unbounded growth from abuse or a client
 // bug still isn't free. A 'none' row is normally short-lived now (KAN-354
-// promotes it to 'mapping' and triggers a build in the same request), but
-// this still guards the window before that trigger lands, and the case
-// where BUILD_TRIGGER_URL isn't configured at all (local dev).
+// promotes it to 'mapping' and starts the Container in the same request),
+// but this still guards the window before that start actually lands.
 const MAX_PENDING_DEMAND_PLACES = 50;
 // How long the client should wait before checking again while a Place is
 // 'mapping' (KAN-354). Not measured against a real build yet — revisit once
-// actual Cloud Run Job durations are known; a flat guess is fine for now
+// actual Container run durations are known; a flat guess is fine for now
 // since there's no latency target for this pipeline (docs/poi-coverage-model.md).
 const COVERAGE_BUILDING_RETRY_AFTER_SECONDS = 60;
 
@@ -451,24 +465,29 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
 }
 
 /**
- * KAN-354 — fires the extraction Job's trigger-service and forgets. Never
- * awaited by a caller that needs to respond promptly (POST /coverage/request
- * must return immediately per its own contract — never extract inline).
- * A missing BUILD_TRIGGER_URL (local dev, or before the Cloud Run side is
- * deployed) is a silent no-op, not an error — the place/country row is
- * already correctly marked 'mapping'/queued regardless; only the actual
- * extraction won't start until the trigger service exists.
+ * KAN-354 — starts the extraction Container in-process (no separate service
+ * to reach over the network — see extractionContainer.ts) and forgets.
+ * Never awaited by a caller that needs to respond promptly
+ * (POST /coverage/request must return immediately per its own contract —
+ * never extract inline). A fresh Durable Object key per call
+ * (`${mode}:${target}:${timestamp}`) — each invocation is a one-shot batch
+ * job, never resumed, so there's no reason to route repeat calls for the
+ * same Place/country to the same instance.
  */
 function triggerBuild(env: Env, mode: 'place' | 'country', target: string): void {
-  if (!env.BUILD_TRIGGER_URL) return;
-  fetch(env.BUILD_TRIGGER_URL, {
-    method: 'POST',
-    headers: { 'X-Build-Secret': env.BUILD_TRIGGER_SECRET ?? '', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, target }),
+  const key = `${mode}:${target}:${Date.now()}`;
+  const container = getContainer(env.EXTRACTION_CONTAINER, key);
+  container.start({
+    envVars: {
+      MODE: mode,
+      TARGET: target,
+      BUILD_TRIGGER_SECRET: env.BUILD_TRIGGER_SECRET ?? '',
+      FOURSQUARE_JWT: env.FOURSQUARE_JWT ?? '',
+    },
   }).catch(() => {
-    // Best-effort — if the trigger-service is unreachable, the row stays
-    // 'mapping' until an operator notices (Cloud Run's own job-execution
-    // list is the diagnosable state here, not something D1 needs to track
+    // Best-effort — if starting the Container fails, the row stays
+    // 'mapping' until an operator notices (the Containers dashboard's own
+    // logs are the diagnosable state here, not something D1 needs to track
     // separately). A future request for the same Place/country won't
     // re-trigger while status is already 'mapping' — see startPlaceMapping.
   });
@@ -612,8 +631,8 @@ export default {
     // paths — reverts 'mapping' -> 'none' only for a Place never previously
     // mapped, so a future zero-check retries it; leaves an already-mapped
     // Place's last-good state untouched. No build_log row to close out
-    // here — Cloud Run's own execution log is the diagnosable record for a
-    // failure this early.
+    // here — the Containers dashboard's own logs are the diagnosable
+    // record for a failure this early.
     if (url.pathname === '/internal/place-failed' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;

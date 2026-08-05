@@ -20,5 +20,41 @@
       "binding": "POI_EXPORTS",
       "bucket_name": "brush-poi-exports"
     }
+  ],
+  // KAN-354. The extraction pipeline (Python + DuckDB) runs as a Cloudflare
+  // Container, not a separate cloud service — same account, same `wrangler
+  // deploy`, no second bill. `wrangler deploy` builds extraction/Dockerfile
+  // with Docker (must be running locally) and pushes the image alongside
+  // the Worker. See extractionContainer.ts and deploy/README.md.
+  "containers": [
+    {
+      "class_name": "ExtractionContainer",
+      "image": "./extraction/Dockerfile",
+      // Wrangler's own default build context is the Dockerfile's directory
+      // (cloudflare/extraction/) — too narrow, since the Dockerfile also
+      // needs the repo root's src/ (category mapping + brand/keyword
+      // dictionaries classify_and_load.py classifies against, see that
+      // Dockerfile's own comment). Verified against wrangler's bundled
+      // source (resolveImageBuildConfig), not just the docs — the default
+      // is genuinely path.dirname(image), confirmed by reading
+      // node_modules/wrangler/wrangler-dist/cli.js directly.
+      "image_build_context": "..",
+      "max_instances": 3,
+      "instance_type": "standard-2"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "EXTRACTION_CONTAINER",
+        "class_name": "ExtractionContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ExtractionContainer"]
+    }
   ]
 }

@@ -1,4 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+/**
+ * KAN-354: the extraction pipeline runs as a Cloudflare Container, started
+ * via getContainer(env.EXTRACTION_CONTAINER, key).start(...) — mocked here
+ * so these tests assert "a build was triggered" without needing a real
+ * Container runtime. `Container` (the base class extractionContainer.ts
+ * extends) only needs to exist and be extendable — its actual behavior
+ * isn't exercised by these Worker-level tests.
+ */
+const { mockContainerStart, mockGetContainer } = vi.hoisted(() => {
+  const mockContainerStart = vi.fn().mockResolvedValue(undefined);
+  const mockGetContainer = vi.fn((_namespace: unknown, _key: unknown) => ({ start: mockContainerStart }));
+  return { mockContainerStart, mockGetContainer };
+});
+vi.mock('@cloudflare/containers', () => ({
+  getContainer: (namespace: unknown, key: unknown) => mockGetContainer(namespace, key),
+  Container: class {},
+}));
+
 import worker, { type Env } from '../index';
 
 /**
@@ -219,12 +238,14 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
 const API_KEY = 'test-key';
 const BUILD_SECRET = 'build-secret';
 
-function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; withTrigger?: boolean } = {}): Env {
+function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[] } = {}): Env {
   return {
     REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed),
     POI_EXPORTS: {} as R2Bucket,
     API_KEY,
-    ...(opts.withTrigger !== false ? { BUILD_TRIGGER_URL: 'https://trigger.example/run', BUILD_TRIGGER_SECRET: BUILD_SECRET } : {}),
+    EXTRACTION_CONTAINER: {} as Env['EXTRACTION_CONTAINER'], // getContainer() itself is mocked — never really touches this
+    BUILD_TRIGGER_SECRET: BUILD_SECRET,
+    FOURSQUARE_JWT: 'test-jwt',
   };
 }
 
@@ -254,18 +275,13 @@ const NOMINATIM_RESPONSE = {
 };
 
 function mockNominatim(body: unknown = NOMINATIM_RESPONSE) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString();
-    if (url.includes('nominatim.openstreetmap.org')) {
-      return new Response(JSON.stringify(body), { status: 200 });
-    }
-    // Any other fetch (the build trigger) — succeed, don't care about the body in most tests.
-    return new Response('{}', { status: 200 });
-  });
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 }));
 }
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  mockGetContainer.mockClear();
+  mockContainerStart.mockClear();
 });
 
 describe('POST /coverage/request', () => {
@@ -285,7 +301,7 @@ describe('POST /coverage/request', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('KAN-354: records demand, promotes a brand new Place to mapping, and fires the build trigger', async () => {
+  it('KAN-354: records demand, promotes a brand new Place to mapping, and starts the extraction Container', async () => {
     mockNominatim();
     const env = makeEnv();
 
@@ -302,26 +318,10 @@ describe('POST /coverage/request', () => {
     expect(stored?.country_code).toBe('PT');
     expect(fakeDb.countryRows.get('PT')).toMatchObject({ country_code: 'PT', status: 'none' });
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://trigger.example/run',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ 'X-Build-Secret': BUILD_SECRET }),
-        body: JSON.stringify({ mode: 'place', target: 'osm-relation-1294136' }),
-      }),
-    );
-  });
-
-  it('does not fire the build trigger, still promotes the row, when BUILD_TRIGGER_URL is not configured (local dev)', async () => {
-    mockNominatim();
-    const env = makeEnv([], { withTrigger: false });
-
-    const res = await worker.fetch(coverageRequest(38.79, -9.38), env);
-    const body = await res.json() as { coverageStatus: string };
-
-    expect(body.coverageStatus).toBe('building');
-    const fetchCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
-    expect(fetchCalls.every(([u]) => String(u).includes('nominatim'))).toBe(true); // only the geocode call, never a trigger
+    expect(mockGetContainer).toHaveBeenCalledWith(env.EXTRACTION_CONTAINER, expect.stringContaining('place:osm-relation-1294136:'));
+    expect(mockContainerStart).toHaveBeenCalledWith({
+      envVars: { MODE: 'place', TARGET: 'osm-relation-1294136', BUILD_TRIGGER_SECRET: BUILD_SECRET, FOURSQUARE_JWT: 'test-jwt' },
+    });
   });
 
   it('dedupes: a second request for the same Place does not queue a second build — the row is already mapping', async () => {
@@ -331,18 +331,14 @@ describe('POST /coverage/request', () => {
     await worker.fetch(coverageRequest(38.79, -9.38), env);
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
     expect(fakeDb.rows.get('osm-relation-1294136')?.status).toBe('mapping');
-    const triggerCallsAfterFirst = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([u]) => String(u).includes('trigger.example')).length;
-    expect(triggerCallsAfterFirst).toBe(1);
+    expect(mockContainerStart).toHaveBeenCalledTimes(1);
 
     await worker.fetch(coverageRequest(38.795, -9.385), env);
 
     expect(fakeDb.rows.size).toBe(1);
     // Still 'mapping' — bumpCoverageDemand and startPlaceMapping are both
     // no-ops once status has left 'none', so a second real trigger never fires.
-    const triggerCallsAfterSecond = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([u]) => String(u).includes('trigger.example')).length;
-    expect(triggerCallsAfterSecond).toBe(1);
+    expect(mockContainerStart).toHaveBeenCalledTimes(1);
   });
 
   it('KAN-354: concurrent requests for the same brand new Place trigger the build exactly once', async () => {
@@ -359,9 +355,7 @@ describe('POST /coverage/request', () => {
 
     expect(res1.status).toBe(200);
     expect(res2.status).toBe(200);
-    const triggerCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([u]) => String(u).includes('trigger.example'));
-    expect(triggerCalls).toHaveLength(1);
+    expect(mockContainerStart).toHaveBeenCalledTimes(1);
   });
 
   it('a Place already mapping is found by stable id (no bbox yet) and does not re-trigger', async () => {
@@ -380,9 +374,7 @@ describe('POST /coverage/request', () => {
 
     expect(body.coverageStatus).toBe('building');
     expect(body.retryAfterSeconds).toBeGreaterThan(0);
-    const triggerCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([u]) => String(u).includes('trigger.example'));
-    expect(triggerCalls).toHaveLength(0);
+    expect(mockContainerStart).not.toHaveBeenCalled();
   });
 
   // Regression test for the real bug found while building this ticket: a
@@ -617,29 +609,27 @@ describe('POST /internal/place-failed', () => {
 });
 
 describe('POST /internal/country/queue', () => {
-  it('promotes a none country to mapping and fires the country-mode trigger', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+  it('promotes a none country to mapping and starts the country-mode Container', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'none', build_id: null, mapped_at: null, place_count: 0 }] });
 
     const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'pt' }), env);
     const body = await res.json() as { ok: boolean; status: string };
 
     expect(body).toEqual({ ok: true, status: 'mapping' });
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://trigger.example/run',
-      expect.objectContaining({ body: JSON.stringify({ mode: 'country', target: 'PT' }) }),
-    );
+    expect(mockGetContainer).toHaveBeenCalledWith(env.EXTRACTION_CONTAINER, expect.stringContaining('country:PT:'));
+    expect(mockContainerStart).toHaveBeenCalledWith({
+      envVars: { MODE: 'country', TARGET: 'PT', BUILD_TRIGGER_SECRET: BUILD_SECRET, FOURSQUARE_JWT: 'test-jwt' },
+    });
   });
 
   it('is idempotent — queuing an already-mapping country does not re-trigger', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 5 }] });
 
     const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'PT' }), env);
     const body = await res.json() as { ok: boolean; status: string };
 
     expect(body).toEqual({ ok: true, status: 'mapping' });
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(mockContainerStart).not.toHaveBeenCalled();
   });
 
   it('404s for a country with no row yet', async () => {

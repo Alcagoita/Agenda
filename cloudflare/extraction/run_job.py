@@ -1,8 +1,8 @@
 """
-KAN-354. Entrypoint for the Cloud Run Job — reads MODE/TARGET from the
-environment (Cloud Run Jobs pass per-execution overrides as env vars, not
-CLI args, when triggered via the Jobs API's `overrides.containerOverrides`)
-and runs the one pipeline both triggers share, per docs/poi-coverage-model.md:
+KAN-354. Entrypoint for the extraction Container — reads MODE/TARGET from
+the environment (set per-invocation via `envVars` when the Worker calls
+`container.start(...)`, see cloudflare/src/index.ts's triggerBuild) and
+runs the one pipeline both triggers share, per docs/poi-coverage-model.md:
 
   MODE=place   TARGET=<place_id>       — on-demand, whole Place, all types
   MODE=country TARGET=<country_code>   — pre-build, every settlement in the
@@ -11,11 +11,11 @@ and runs the one pipeline both triggers share, per docs/poi-coverage-model.md:
 Same extraction/classification code either way (extract.py, classify_and_load.py)
 — only how the target scope is discovered differs.
 
-Required environment (see cloudflare/deploy/README.md for how these get set):
-  FOURSQUARE_JWT            — Iceberg catalog auth (expires; see cloudflare/README.md)
-  CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_API_TOKEN — D1 HTTP API
-  R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET (optional) — R2 upload
-  BUILD_TRIGGER_SECRET       — the same secret the Worker's /internal/* routes check
+D1 and R2 access go through the Worker's own bindings (d1_client.py /
+r2_client.py, via extractionContainer.ts's outboundByHost) — no Cloudflare
+API token or R2 keys needed here. Required environment:
+  FOURSQUARE_JWT       — Iceberg catalog auth (expires; see cloudflare/README.md)
+  BUILD_TRIGGER_SECRET — the same secret the Worker's /internal/* routes check
   POI_API_BASE_URL (optional, defaults to the production Worker)
 """
 import os
