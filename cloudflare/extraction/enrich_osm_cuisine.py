@@ -9,23 +9,28 @@ if its name hadn't happened to contain "sushi" — Foursquare's row has
 nothing to classify from at all, so the only way to recover it is a second,
 independent data source: OpenStreetMap.
 
-One-time bulk backfill per city, not live per-user (same reasoning as the
+One-time bulk backfill per Place, not live per-user (same reasoning as the
 rest of this pipeline) — matches OSM elements (by name + proximity) against
 `poi` rows already loaded by classify_and_load.py that still have no
 food_cuisine/store_kind poi_attribute row after BOTH the category-tag and
 keyword-fallback passes, and writes new poi_attribute rows for confident
-matches, tagged with the city's CURRENT build_id (read live from D1) so they
-survive that build's sweep-delete cycle. Must be re-run after every future
-Foursquare re-extraction for the same city, or this enrichment is lost when
-that build's sweep retires the previous build's poi_attribute rows — same
-requirement documented for the keyword pass, just run as a separate step
-here instead of inline, since Overpass is a slow, flaky, retryable external
-call (~40-60% single-attempt failure rate per KAN-322) that doesn't belong
-in the fast synchronous Foursquare pipeline.
+matches, tagged with the Place's CURRENT build_id (read live from D1) so
+they survive that build's sweep-delete cycle. Must be re-run after every
+future Foursquare re-extraction for the same Place, or this enrichment is
+lost when that build's sweep retires the previous build's poi_attribute
+rows — same requirement documented for the keyword pass, just run as a
+separate step here instead of inline, since Overpass is a slow, flaky,
+retryable external call (~40-60% single-attempt failure rate per KAN-322)
+that doesn't belong in the fast synchronous Foursquare pipeline.
 
-Usage: python3 enrich_osm_cuisine.py <city_id>
-Requires CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID exported (same as the
-rest of this pipeline) — shells out to `wrangler d1 execute` for reads.
+KAN-355 note: this script queries `place`/`place_id` (min/max lat/lng), not
+the pre-rename `city`/`city_id` (center/radius) — updated 2026-08-06, was
+broken (still targeting the old schema) until then; nothing had run it
+since the rename.
+
+Usage: python3 enrich_osm_cuisine.py <place_id>
+Uses wrangler's own ambient auth (same login `wrangler d1 execute` already
+uses elsewhere in this pipeline) — no separate token env vars required.
 """
 import json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
 
@@ -132,41 +137,46 @@ def haversine_m(lat1, lng1, lat2, lng2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def enrich(city_id):
-    print(f"[{city_id}] fetching city bounds + current build_id from D1...")
-    city_rows = run_d1_query(f"SELECT center_lat, center_lng, radius_km, current_build_id FROM city WHERE city_id = {sql_escape(city_id)};")
-    if not city_rows:
-        raise ValueError(f"no city row for '{city_id}'")
-    city = city_rows[0]
-    build_id = city['current_build_id']
+def enrich(place_id):
+    print(f"[{place_id}] fetching Place bounds + current build_id from D1...")
+    place_rows = run_d1_query(f"SELECT min_lat, max_lat, min_lng, max_lng, build_id FROM place WHERE place_id = {sql_escape(place_id)};")
+    if not place_rows:
+        raise ValueError(f"no place row for '{place_id}'")
+    place = place_rows[0]
+    build_id = place['build_id']
     if not build_id:
-        raise ValueError(f"city '{city_id}' has no current_build_id — run the regular extraction pipeline first")
-    center_lat, center_lng, radius_m = city['center_lat'], city['center_lng'], city['radius_km'] * 1000
-    print(f"[{city_id}] center=({center_lat},{center_lng}) radius={radius_m}m build_id={build_id}")
+        raise ValueError(f"place '{place_id}' has no build_id — run the regular extraction pipeline first")
+    min_lat, max_lat, min_lng, max_lng = place['min_lat'], place['max_lat'], place['min_lng'], place['max_lng']
+    if min_lat is None:
+        raise ValueError(f"place '{place_id}' has no ingested extent yet — run the regular extraction pipeline first")
+    print(f"[{place_id}] bbox=({min_lat},{min_lng})-({max_lat},{max_lng}) build_id={build_id}")
 
-    print(f"[{city_id}] fetching restaurant/store rows still missing a subtype after category-tag + keyword matching...")
+    print(f"[{place_id}] fetching restaurant/store rows still missing a subtype after category-tag + keyword matching...")
     restaurant_candidates = run_d1_query(f"""
         SELECT fsq_place_id, name, lat, lng FROM poi p
-        WHERE p.city_id = {sql_escape(city_id)} AND p.primary_poi_type = 'restaurant'
-        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.city_id = p.city_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'food_cuisine');
+        WHERE p.place_id = {sql_escape(place_id)} AND p.primary_poi_type = 'restaurant'
+        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.place_id = p.place_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'food_cuisine');
     """)
     store_candidates = run_d1_query(f"""
         SELECT fsq_place_id, name, lat, lng FROM poi p
-        WHERE p.city_id = {sql_escape(city_id)} AND p.primary_poi_type = 'store'
-        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.city_id = p.city_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'store_kind');
+        WHERE p.place_id = {sql_escape(place_id)} AND p.primary_poi_type = 'store'
+        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.place_id = p.place_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'store_kind');
     """)
-    print(f"[{city_id}] {len(restaurant_candidates)} restaurant + {len(store_candidates)} store candidates")
+    print(f"[{place_id}] {len(restaurant_candidates)} restaurant + {len(store_candidates)} store candidates")
 
-    print(f"[{city_id}] querying Overpass (cuisine-tagged restaurants + tagged shops)...")
+    print(f"[{place_id}] querying Overpass (cuisine-tagged restaurants + tagged shops)...")
+    # bbox filter (south,west,north,east) directly from the Place's own
+    # ingested extent — no lossy center+radius round-trip needed now that
+    # KAN-355 stores the real bbox.
     query = (
         f"[out:json][timeout:{OVERPASS_TIMEOUT_S - 10}];"
-        f'(nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub)$"]["cuisine"](around:{radius_m},{center_lat},{center_lng});'
-        f'nwr["shop"](around:{radius_m},{center_lat},{center_lng}););'
+        f'(nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub)$"]["cuisine"]({min_lat},{min_lng},{max_lat},{max_lng});'
+        f'nwr["shop"]({min_lat},{min_lng},{max_lat},{max_lng}););'
         "out center;"
     )
     data = fetch_overpass(query)
     elements = data.get('elements', [])
-    print(f"[{city_id}] Overpass returned {len(elements)} elements")
+    print(f"[{place_id}] Overpass returned {len(elements)} elements")
 
     # Index candidates by normalized name for fast lookup — proximity is
     # checked per-candidate-match, not per-full-scan, since name collisions
@@ -246,13 +256,13 @@ def enrich(city_id):
                     matched_place_ids.add(candidate['fsq_place_id'])
                     store_kind_matches += 1
 
-    print(f"[{city_id}] matched {cuisine_matches} food_cuisine + {store_kind_matches} store_kind rows from OSM ({ambiguous_skipped} skipped as ambiguous — multiple same-named candidates equidistant)")
+    print(f"[{place_id}] matched {cuisine_matches} food_cuisine + {store_kind_matches} store_kind rows from OSM ({ambiguous_skipped} skipped as ambiguous — multiple same-named candidates equidistant)")
 
     if not matched_rows:
-        print(f"[{city_id}] nothing to write, done")
+        print(f"[{place_id}] nothing to write, done")
         return
 
-    out_path = os.path.join(BUILD_DIR, f'osm_enrich_{city_id}_{build_id}.sql')
+    out_path = os.path.join(BUILD_DIR, f'osm_enrich_{place_id}_{build_id}.sql')
     # This script writes a file for the operator to apply later, by hand —
     # an arbitrary time gap in which a regular classify_and_load.py run for
     # the same city could produce a NEW build_id, making these rows stale
@@ -262,15 +272,15 @@ def enrich(city_id):
     # city.current_build_id still equals the build_id captured at the start
     # of this run, otherwise it's a silent no-op for that statement rather
     # than corrupting data under a stale build_id.
-    guard = f"WHERE EXISTS (SELECT 1 FROM city WHERE city_id = {sql_escape(city_id)} AND current_build_id = {sql_escape(build_id)})"
-    insert_prefix = 'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, city_id, build_id, dimension, value) SELECT * FROM (VALUES '
+    guard = f"WHERE EXISTS (SELECT 1 FROM place WHERE place_id = {sql_escape(place_id)} AND build_id = {sql_escape(build_id)})"
+    insert_prefix = 'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, place_id, build_id, dimension, value) SELECT * FROM (VALUES '
     with open(out_path, 'w') as f:
         batches = 0
         chunk = []
         chunk_size = 0
         MAX_CHUNK_BYTES = 80_000
         for fsq_place_id, dimension, value in matched_rows:
-            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(city_id), sql_escape(build_id), sql_escape(dimension), sql_escape(value)]) + ')'
+            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(place_id), sql_escape(build_id), sql_escape(dimension), sql_escape(value)]) + ')'
             piece_bytes = len(piece.encode('utf-8')) + 1
             if chunk and chunk_size + piece_bytes > MAX_CHUNK_BYTES:
                 f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
@@ -282,13 +292,13 @@ def enrich(city_id):
         if chunk:
             f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
             batches += 1
-    print(f"[{city_id}] wrote {out_path} ({batches} statements, each guarded against build drift)")
-    print(f"[{city_id}] apply with:")
+    print(f"[{place_id}] wrote {out_path} ({batches} statements, each guarded against build drift)")
+    print(f"[{place_id}] apply with:")
     print(f"  npx wrangler d1 execute brush-poi-registry --remote --file={out_path}")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("usage: python3 enrich_osm_cuisine.py <city_id>")
+        print("usage: python3 enrich_osm_cuisine.py <place_id>")
         sys.exit(1)
     enrich(sys.argv[1])

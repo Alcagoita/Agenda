@@ -179,22 +179,30 @@ two of the three subtype sources automatically, no extra step needed:
 the third source (OSM `cuisine=`/`shop=` tag enrichment via Overpass,
 per `cloudflare/README.md`'s "OSM enrichment" section). This is a
 **separate, standalone script**, never called from `run_job.py` or wired
-into the Container pipeline at all. It has never been run for any place
-built through the automated (Container) path — only the original manual
-Lisboa/Odivelas builds ever had it applied, and even those were wiped and
-reloaded in the recovery above *without* re-running it (the recovery used
-`classify_and_load.py`'s two automatic sources only, matching what the
-Container pipeline itself does — so current subtype coverage for all three
-Places is exactly what a normal automated build produces, nothing more).
+into the Container pipeline at all.
 
-Current subtype coverage (`poi_attribute` row counts) after the recovery,
-for reference:
+**Update 2026-08-06:** the script was broken against the post-KAN-355
+schema (still queried the old `city`/`city_id`/`center_lat`/`center_lng`/
+`radius_km`/`current_build_id` columns — fixed to use `place`/`place_id`/
+`min_lat`/`max_lat`/`min_lng`/`max_lng`/`build_id`) and has now been run
+manually for all three current Places:
 
-| Place | `food_cuisine` rows | `store_kind` rows |
+| Place | new `food_cuisine` rows | new `store_kind` rows |
 |---|---|---|
-| Lisboa | 4,752 | 4,963 |
-| Odivelas | 834 | 1,510 |
-| Sertã | 6 | 8 |
+| Lisboa | 50 | 0 |
+| Odivelas | 11 | 0 |
+| Sertã | 0 | 0 |
+
+Applied directly to remote D1. Sertã matched nothing (small town, sparse
+OSM tagging — not a bug: 9 restaurant + 3 store candidates were queried,
+Overpass returned 55 elements, none matched by name+proximity). `store_kind`
+came back 0 for every Place despite real `shop=`-tagged candidates existing
+in the Overpass results — worth checking `OSM_SHOP_TO_STORE_KIND` matching
+logic (line ~69) before relying on this path for stores; `food_cuisine`
+matching is confirmed working end-to-end.
+
+Still only run manually, still not wired into `run_job.py` — the automation
+decision below is unchanged.
 
 ### What to do
 
@@ -221,11 +229,12 @@ behavior for the Overpass calls (same backoff-not-retry-harder policy the
 rest of this codebase uses for Overpass/Nominatim) before wiring it in,
 rather than adding a fourth source of flakiness to every build silently.
 
-### Backfilling the 3 already-recovered Places
+### Backfilling the 3 already-recovered Places — done 2026-08-06
 
-Once wired in (or if doing it manually per option (a) as a one-off), run
-it for all three current Places to bring their subtype coverage up to what
-the original manual Lisboa/Odivelas builds had:
+This step is complete for the current three Places (see the coverage table
+above). Re-run the same commands after any future re-extraction of these
+Places, since a new `build_id` sweep retires the previous build's
+`poi_attribute` rows same as the keyword-fallback pass:
 
 ```bash
 cd cloudflare/extraction
