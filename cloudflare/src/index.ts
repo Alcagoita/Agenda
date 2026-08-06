@@ -753,6 +753,47 @@ export default {
       return json({ ok: true });
     }
 
+    // POST /internal/country-audit — the country Container submits its
+    // full-source accounting after the mandatory generic pass. Persist it
+    // before marking coverage ready: logs expire, this proof must not.
+    if (url.pathname === '/internal/country-audit' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      const numericFields = ['sourceRows', 'rowsWithLocality', 'rowsWithoutLocality', 'rowsLoaded', 'rowsSkipped', 'resolvedLocalities', 'unresolvedLocalities', 'failedPlaces'] as const;
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.buildId !== 'string' || body.buildId.trim() === '' ||
+          numericFields.some(field => typeof body[field] !== 'number' || !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
+        return json({ error: 'countryCode, buildId, and non-negative integer audit counts are required' }, 400);
+      }
+      const sourceRows = body.sourceRows as number;
+      const rowsWithLocality = body.rowsWithLocality as number;
+      const rowsWithoutLocality = body.rowsWithoutLocality as number;
+      const rowsLoaded = body.rowsLoaded as number;
+      const rowsSkipped = body.rowsSkipped as number;
+      const failedPlaces = body.failedPlaces as number;
+      if (failedPlaces > 0) {
+        return json({ error: 'country audit cannot be complete with failed Places' }, 409);
+      }
+      if (sourceRows !== rowsLoaded + rowsSkipped || sourceRows !== rowsWithLocality + rowsWithoutLocality) {
+        return json({ error: 'country audit counts do not reconcile' }, 409);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const country = await env.REGISTRY_DB.prepare('SELECT country_code FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ country_code: string }>();
+      if (!country) return json({ error: `no country row matched countryCode '${countryCode}'` }, 404);
+      await env.REGISTRY_DB.prepare(
+        `INSERT INTO country_import_audit
+          (build_id, country_code, source_rows, rows_with_locality, rows_without_locality, rows_loaded, rows_skipped, resolved_localities, unresolved_localities, failed_places, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        body.buildId, countryCode, sourceRows, rowsWithLocality, rowsWithoutLocality,
+        rowsLoaded, rowsSkipped, body.resolvedLocalities, body.unresolvedLocalities,
+        failedPlaces, new Date().toISOString(),
+      ).run();
+      return json({ ok: true });
+    }
+
     // POST /internal/country-complete  { countryCode, buildId }  — the whole
     // country finished (every Place attempted, per-Place results already
     // recorded via /internal/build-complete + /internal/country-progress).
@@ -767,10 +808,15 @@ export default {
         return json({ error: 'buildId must be a non-empty string' }, 400);
       }
       const result = await env.REGISTRY_DB.prepare(
-        "UPDATE country SET status = 'mapped', build_id = ?, mapped_at = ? WHERE country_code = ?",
-      ).bind(body.buildId, new Date().toISOString(), body.countryCode.toUpperCase()).run();
+        `UPDATE country SET status = 'mapped', build_id = ?, mapped_at = ?
+         WHERE country_code = ? AND status = 'mapping'
+           AND EXISTS (
+             SELECT 1 FROM country_import_audit
+             WHERE country_code = ? AND build_id = ? AND failed_places = 0
+           )`,
+      ).bind(body.buildId, new Date().toISOString(), body.countryCode.toUpperCase(), body.countryCode.toUpperCase(), body.buildId).run();
       if (result.meta.changes !== 1) {
-        return json({ error: `no country row matched countryCode '${body.countryCode}'` }, 404);
+        return json({ error: `no mapping country with a valid audit matched '${body.countryCode}'` }, 409);
       }
       return json({ ok: true });
     }

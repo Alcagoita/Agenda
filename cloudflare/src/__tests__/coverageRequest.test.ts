@@ -61,10 +61,18 @@ interface FakeBuildLogRow {
   finished_at: string | null;
 }
 
+interface FakeCountryAuditRow {
+  build_id: string; country_code: string; source_rows: number;
+  rows_with_locality: number; rows_without_locality: number;
+  rows_loaded: number; rows_skipped: number;
+  resolved_localities: number; unresolved_localities: number; failed_places: number;
+}
+
 function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] = [], buildLogSeed: FakeBuildLogRow[] = []) {
   const rows = new Map(seed.map(r => [r.place_id, { ...r }]));
   const countryRows = new Map(countrySeed.map(r => [r.country_code, { ...r }]));
   const buildLogRows = new Map(buildLogSeed.map(r => [r.build_id, { ...r }]));
+  const countryAuditRows = new Map<string, FakeCountryAuditRow>();
 
   function prepare(sql: string) {
     const trimmed = sql.trim();
@@ -80,6 +88,10 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
           }
           if (trimmed.startsWith('SELECT * FROM country WHERE country_code = ?')) {
             return (countryRows.get(args[0] as string) ?? null) as T | null;
+          }
+          if (trimmed.startsWith('SELECT country_code FROM country WHERE country_code = ?')) {
+            const row = countryRows.get(args[0] as string);
+            return (row ? { country_code: row.country_code } : null) as T | null;
           }
           throw new Error(`fake D1: unhandled first() query: ${trimmed}`);
         },
@@ -193,10 +205,16 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
           if (trimmed.startsWith("UPDATE country SET status = 'mapped'")) {
             const [buildId, mappedAt, countryCode] = args as [string, string, string];
             const row = countryRows.get(countryCode);
-            if (!row) return { meta: { changes: 0 } };
+            const audit = countryAuditRows.get(buildId);
+            if (!row || row.status !== 'mapping' || !audit || audit.country_code !== countryCode || audit.failed_places !== 0) return { meta: { changes: 0 } };
             row.status = 'mapped';
             row.build_id = buildId;
             row.mapped_at = mappedAt;
+            return { meta: { changes: 1 } };
+          }
+          if (trimmed.startsWith('INSERT INTO country_import_audit')) {
+            const [buildId, countryCode, sourceRows, withLocality, withoutLocality, rowsLoaded, rowsSkipped, resolved, unresolved, failed] = args as [string, string, number, number, number, number, number, number, number, number];
+            countryAuditRows.set(buildId, { build_id: buildId, country_code: countryCode, source_rows: sourceRows, rows_with_locality: withLocality, rows_without_locality: withoutLocality, rows_loaded: rowsLoaded, rows_skipped: rowsSkipped, resolved_localities: resolved, unresolved_localities: unresolved, failed_places: failed });
             return { meta: { changes: 1 } };
           }
           if (trimmed.startsWith('INSERT INTO place (place_id, country_code, name, place_kind, status, request_count)')) {
@@ -253,8 +271,8 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
     return results;
   }
 
-  return { prepare, batch, rows, countryRows, buildLogRows } as unknown as D1Database & {
-    rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow>; buildLogRows: Map<string, FakeBuildLogRow>;
+  return { prepare, batch, rows, countryRows, buildLogRows, countryAuditRows } as unknown as D1Database & {
+    rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow>; buildLogRows: Map<string, FakeBuildLogRow>; countryAuditRows: Map<string, FakeCountryAuditRow>;
   };
 }
 
@@ -703,6 +721,40 @@ describe('POST /internal/place/ensure', () => {
   });
 });
 
+describe('POST /internal/country-audit', () => {
+  it('persists reconciled full-country accounting', async () => {
+    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
+    const res = await worker.fetch(internalRequest('/internal/country-audit', {
+      countryCode: 'PT', buildId: 'country-audit-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
+    }), env);
+    expect(res.status).toBe(200);
+    const db = env.REGISTRY_DB as unknown as { countryAuditRows: Map<string, FakeCountryAuditRow> };
+    expect(db.countryAuditRows.get('country-audit-1')).toEqual({
+      build_id: 'country-audit-1', country_code: 'PT', source_rows: 10,
+      rows_with_locality: 8, rows_without_locality: 2, rows_loaded: 7, rows_skipped: 3,
+      resolved_localities: 5, unresolved_localities: 1, failed_places: 0,
+    });
+  });
+
+  it('rejects unreconciled counts before a country can be marked ready', async () => {
+    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
+    const res = await worker.fetch(internalRequest('/internal/country-audit', {
+      countryCode: 'PT', buildId: 'bad-audit', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      rowsLoaded: 6, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
+    }), env);
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects non-integer counts, failed Places, and an unknown country', async () => {
+    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
+    const base = { countryCode: 'PT', buildId: 'audit', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2, rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0 };
+    expect((await worker.fetch(internalRequest('/internal/country-audit', { ...base, sourceRows: 10.5 }), env)).status).toBe(400);
+    expect((await worker.fetch(internalRequest('/internal/country-audit', { ...base, failedPlaces: 1 }), env)).status).toBe(409);
+    expect((await worker.fetch(internalRequest('/internal/country-audit', { ...base, countryCode: 'ES' }), env)).status).toBe(404);
+  });
+});
+
 describe('POST /internal/country-progress / country-complete / country-failed', () => {
   it('increments place_count on each progress call', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 3 }] });
@@ -716,11 +768,24 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
   it('marks a country mapped with its build id', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 300 }] });
 
+    await worker.fetch(internalRequest('/internal/country-audit', {
+      countryCode: 'PT', buildId: 'country-build-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
+    }), env);
+
     const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', buildId: 'country-build-1' }), env);
 
     expect(res.status).toBe(200);
     const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
     expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'mapped', build_id: 'country-build-1' });
+  });
+
+  it('blocks completion without a matching valid audit', async () => {
+    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
+    const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', buildId: 'missing-audit' }), env);
+    expect(res.status).toBe(409);
+    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
+    expect(fakeDb.countryRows.get('PT')?.status).toBe('mapping');
   });
 
   it('reverts a mapping country to none on failure, so it can be re-queued', async () => {

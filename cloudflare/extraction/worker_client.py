@@ -63,5 +63,17 @@ def country_progress(country_code):
 def country_complete(country_code, build_id):
     return _post('/internal/country-complete', {'countryCode': country_code, 'buildId': build_id})
 
+def country_audit(country_code, build_id, stats):
+    return _post('/internal/country-audit', {
+        'countryCode': country_code, 'buildId': build_id,
+        'sourceRows': stats['source_rows'],
+        'rowsWithLocality': stats['rows_with_locality'],
+        'rowsWithoutLocality': stats['rows_without_locality'],
+        'rowsLoaded': stats['rows_loaded'], 'rowsSkipped': stats['rows_skipped'],
+        'resolvedLocalities': stats['resolved_localities'],
+        'unresolvedLocalities': stats['unresolved_localities'],
+        'failedPlaces': stats['failed_places'],
+    })
+
 def country_failed(country_code):
     return _post('/internal/country-failed', {'countryCode': country_code})

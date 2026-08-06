@@ -15,3 +15,20 @@ CREATE TABLE IF NOT EXISTS country (
   mapped_at    TEXT,
   place_count  INTEGER NOT NULL DEFAULT 0   -- worker progress
 );
+
+-- KAN-357: one durable reconciliation record for each completed country run.
+CREATE TABLE IF NOT EXISTS country_import_audit (
+  build_id TEXT PRIMARY KEY,
+  country_code TEXT NOT NULL,
+  source_rows INTEGER NOT NULL,
+  rows_with_locality INTEGER NOT NULL,
+  rows_without_locality INTEGER NOT NULL,
+  rows_loaded INTEGER NOT NULL,
+  rows_skipped INTEGER NOT NULL,
+  resolved_localities INTEGER NOT NULL,
+  unresolved_localities INTEGER NOT NULL,
+  failed_places INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  CHECK (source_rows = rows_loaded + rows_skipped),
+  CHECK (source_rows = rows_with_locality + rows_without_locality)
+);
