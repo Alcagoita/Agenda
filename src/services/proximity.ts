@@ -52,10 +52,8 @@
  *   A cache miss (nothing cached near this position) fires a one-time,
  *   once-per-session toast telling the user they've walked beyond what the
  *   cache knows — but only when the cache has data *somewhere* (hasCachedPlaces).
- *   If the cache is empty everywhere (fresh install/new phone), that's a
- *   different, more persistent state — NetworkBanner handles it directly
- *   (it doesn't need a position, just "is there anything cached at all"), so
- *   this file doesn't duplicate that check into a toast.
+ *   If the cache is empty everywhere (fresh install/new phone), the app stays
+ *   quiet rather than showing a coverage toast.
  *
  * Learned places (KAN-230):
  *   setLearnedPlaces feeds in the on-device ranking computed elsewhere
@@ -704,7 +702,7 @@ async function runProximitySearch(
         // (timeout, API error while online) keep showing whatever was shown
         // before.
         reportProximityError('searchNearbyPlaces failed', err);
-        // Same offline predicate as NetworkBanner — isConnected===true but
+        // The same offline predicate applies when isConnected===true but
         // isInternetReachable===false (captive portal, no real internet) must
         // still fall back to the cache, not sit on a silent "keep showing
         // what's there" state that never resolves.
@@ -744,8 +742,7 @@ async function runProximitySearch(
     if (isConnectivityFallback && uniquePoiTypes.every(t => (results[t] ?? []).length === 0)) {
       // KAN-236 — only worth telling the user if the cache has data
       // *somewhere* (they've genuinely walked past its coverage); if it's
-      // empty everywhere, NetworkBanner's own "still learning your area"
-      // copy already covers that — no need to also fire a toast for it.
+      // empty everywhere, stay quiet — there is no coverage gap to describe.
       if (!_offlineUncoveredNoticeShown && hasCachedPlaces()) {
         _offlineUncoveredNoticeShown = true;
         // KAN-244 — the user who just felt the offline gap is the most

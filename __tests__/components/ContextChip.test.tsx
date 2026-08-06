@@ -2,7 +2,7 @@
  * ContextChip — KAN-241
  *
  * Covers the 4 offline/coverage situations (only #2/#4 render the glyph;
- * #1/#3 are absent here — #3 is NetworkBanner's job instead) plus the tap
+ * #1/#3 remain quiet) plus the tap
  * sheet: last-learned date line, and the manual refresh action.
  */
 
@@ -147,7 +147,7 @@ describe('ContextChip — the 4 situations', () => {
     expect(screen.getByLabelText(COPY.contextChip.offlineGlyphA11y)).toBeTruthy();
   });
 
-  it('renders nothing when offline + no cache at all (situation #3 — NetworkBanner\'s job)', () => {
+  it('renders nothing when offline + no cache at all (situation #3)', () => {
     mockUseOfflineCoverage.mockReturnValue({ offline: true, hasCache: false });
     render(<ContextChip />);
     expect(screen.queryByLabelText(COPY.contextChip.offlineGlyphA11y)).toBeNull();

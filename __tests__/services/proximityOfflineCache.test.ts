@@ -32,8 +32,8 @@
  *     every type (avoids an N+1 synchronous SQLite read per search)
  *   - a cache miss fires a one-time, once-per-session toast when the cache
  *     has data *somewhere* (the user has walked beyond its coverage) but
- *     stays silent when the cache is empty everywhere (that's NetworkBanner's
- *     job, not a toast) or when the cache actually answered (not a miss)
+ *     stays silent when the cache is empty everywhere or when the cache
+ *     actually answered (not a miss)
  */
 
 jest.mock('@react-native-community/netinfo', () =>
@@ -105,7 +105,6 @@ jest.mock('../../src/constants/copy', () => ({
     },
     offline: {
       genericBanner:       'Offline — changes may not sync',
-      noCacheYetBanner:    "No connection — I can't look around for places yet. I'll start learning your area once you're online.",
       uncoveredAreaToast:  "You're outside the area I know by heart — I'll need a connection to spot places here.",
       uncoveredAreaInvitationToast:  "You're outside the area I know by heart. Next time, tell me before you go — I can learn a place ahead of time.",
       uncoveredAreaInvitationAction: 'Show me',
@@ -187,7 +186,7 @@ function goOffline(): void {
   (NetInfo.fetch as jest.Mock).mockResolvedValueOnce({ isConnected: false });
 }
 
-/** Connected but no real internet (captive portal) — same "offline" predicate as NetworkBanner. */
+/** Connected but no real internet (captive portal) still counts as offline. */
 function goCaptivePortal(): void {
   (NetInfo.fetch as jest.Mock).mockResolvedValueOnce({ isConnected: true, isInternetReachable: false });
 }
@@ -282,7 +281,7 @@ describe('offline branch answers from the habitat cache', () => {
     expect(__getPendingQueue()).toHaveLength(1);
   });
 
-  it('also answers from the cache when connected but unreachable (captive portal) — same predicate as NetworkBanner', async () => {
+  it('also answers from the cache when connected but unreachable (captive portal)', async () => {
     goCaptivePortal();
     mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
@@ -469,7 +468,7 @@ describe('offline expectations messaging — "moved beyond coverage" toast (KAN-
     expect(() => useToastStore.getState().action?.onPress()).not.toThrow();
   });
 
-  it('does not fire the toast on a cache miss when the cache is empty everywhere (state 1, NetworkBanner\'s job)', async () => {
+  it('does not fire the toast on a cache miss when the cache is empty everywhere', async () => {
     goOffline();
     mockSearchOsmPlacesStrict.mockRejectedValueOnce(new Error('network down'));
     mockQueryHabitatCache.mockReturnValue({ atm: [] });

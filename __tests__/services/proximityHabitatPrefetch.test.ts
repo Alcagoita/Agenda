@@ -80,7 +80,7 @@ jest.mock('../../src/constants/copy', () => ({
       proximityTitle: (label: string) => `You're near ${label}`,
       proximityBody:  (count: number) => `${count} task(s) nearby`,
     },
-    offline: { genericBanner: '', noCacheYetBanner: '', uncoveredAreaToast: '' },
+    offline: { genericBanner: '', uncoveredAreaToast: '' },
     // poiCatalogLabel() reads this; a Proxy keeps the stub from having to
     // enumerate all 16 built-in types (plus shopping_mall) by hand.
     poiCatalog: new Proxy({}, { get: (_t, key) => String(key) }),

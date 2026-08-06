@@ -136,7 +136,6 @@ jest.mock('../../src/components/Lantern',               () => () => null);
 jest.mock('../../src/hooks/useLanternState', () => ({ useLanternState: () => ({ kind: 'unset' }) }));
 jest.mock('../../src/components/ProgressRing',          () => () => null);
 jest.mock('../../src/components/NearbyCard',            () => () => null);
-jest.mock('../../src/components/NetworkBanner',         () => () => null);
 jest.mock('../../src/components/ContextChip',           () => () => null);
 jest.mock('../../src/components/ErrandBundleCard',      () => () => null);
 jest.mock('../../src/components/TripSuggestionCard',    () => () => null);
