@@ -38,6 +38,8 @@ import { COPY } from '../constants/copy';
 import { Task, Category } from '../types';
 import { logTap } from '../services/analytics';
 import { openTakeMeThereMaps, getTakeMeThereA11yLabel } from '../services/takeMeThere';
+import { storeSubtypeDisplayLabel } from '../services/storeSubtypes';
+import { restaurantFoodTypeDisplayLabel } from '../services/restaurantFoodTypes';
 
 interface TaskRowProps {
   task: Task;
@@ -62,7 +64,7 @@ const FALLBACK_CAT = { color: fallbackCategoryColor, label: 'Other' };
 const DEBUG_TASKROW_LIGHT = false;
 
 function TaskRow({ task, nearbyPoiType = null, onToggle, onPress, customCategories = [], isFar = false }: TaskRowProps) {
-  const { palette } = useTheme();
+  const { palette, language } = useTheme();
   const builtIn = categories[task.category as keyof typeof categories];
   const custom  = customCategories.find(c => c.id === task.category);
   const cat     = builtIn
@@ -70,6 +72,12 @@ function TaskRow({ task, nearbyPoiType = null, onToggle, onPress, customCategori
     : custom
     ? { color: custom.color,  label: custom.name }
     : FALLBACK_CAT;
+  const subtypeLabel = task.poi === 'store' && task.storeSubtype && task.storeSubtype !== 'any'
+    ? storeSubtypeDisplayLabel(task.storeSubtype, language)
+    : task.poi === 'restaurant' && task.restaurantFoodType
+      ? restaurantFoodTypeDisplayLabel(task.restaurantFoodType, language)
+      : null;
+  const bodyAccessibilityLabel = `${onPress ? COPY.taskRow.editA11y(task.title) : task.title}${subtypeLabel ? `, ${subtypeLabel}` : ''}`;
 
   // ── Checkbox fill animation ──
   const fillProgress = useSharedValue(task.done ? 1 : 0);
@@ -264,7 +272,7 @@ function TaskRow({ task, nearbyPoiType = null, onToggle, onPress, customCategori
         style={({ pressed }) => [styles.body, { opacity: pressed && onPress ? 0.65 : 1 }]}
         onPress={onPress ? () => onPress(task) : undefined}
         accessibilityRole={onPress ? 'button' : 'text'}
-        accessibilityLabel={onPress ? COPY.taskRow.editA11y(task.title) : task.title}>
+        accessibilityLabel={bodyAccessibilityLabel}>
 
         <View style={styles.content}>
           {/* Title + brushstroke overlay */}
@@ -312,6 +320,17 @@ function TaskRow({ task, nearbyPoiType = null, onToggle, onPress, customCategori
                 poi={task.poi}
                 isNearby={task.poi === nearbyPoiType}
               />
+            )}
+
+            {task.poi === 'store' && task.storeSubtype && task.storeSubtype !== 'any' && (
+              <View style={[styles.catChip, { backgroundColor: palette.surface2, borderColor: palette.line }]}>
+                <Text style={[styles.catLabel, { color: palette.muted }]}>{storeSubtypeDisplayLabel(task.storeSubtype, language)}</Text>
+              </View>
+            )}
+            {task.poi === 'restaurant' && task.restaurantFoodType && (
+              <View style={[styles.catChip, { backgroundColor: palette.surface2, borderColor: palette.line }]}>
+                <Text style={[styles.catLabel, { color: palette.muted }]}>{restaurantFoodTypeDisplayLabel(task.restaurantFoodType, language)}</Text>
+              </View>
             )}
 
             {/* Birthday glyph (KAN-248) — quiet, no chip background, just the icon */}

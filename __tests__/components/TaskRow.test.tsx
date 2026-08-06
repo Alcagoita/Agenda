@@ -127,6 +127,14 @@ describe('TaskRow — built-in categories', () => {
   });
 });
 
+describe('TaskRow — subtype accessibility', () => {
+  it('includes the rendered subtype in the editable row label', () => {
+    const onPress = jest.fn();
+    render(<TaskRow task={{ ...BASE_TASK, poi: 'restaurant', restaurantFoodType: 'vegetarian' }} onToggle={onToggle} onPress={onPress} />);
+    expect(screen.getByLabelText(/Vegetarian/)).toBeTruthy();
+  });
+});
+
 describe('TaskRow — birthday tasks (KAN-248)', () => {
   it('renders the cake glyph for a kind:birthday task', () => {
     render(<TaskRow task={{ ...BASE_TASK, category: 'personal', kind: 'birthday' }} onToggle={onToggle} />);
