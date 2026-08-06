@@ -92,6 +92,11 @@ function authenticateInternal(request: Request, env: Env): Response | null {
 interface ParsedCoords { lat: number; lng: number; }
 interface ParsedCoordsAndRadius extends ParsedCoords { radius: number; }
 interface AttributeFilter { dimension: string; values: string[]; }
+interface NearbySearchParams extends ParsedCoordsAndRadius { types: string[]; limitPerType: number; }
+
+const DEFAULT_NEARBY_LIMIT_PER_TYPE = 20;
+const MAX_NEARBY_TYPES = 10;
+const MAX_NEARBY_LIMIT_PER_TYPE = 50;
 
 /** attribute+value are optional but must appear together — e.g. attribute=food_cuisine&value=sushi, or value=sushi,italian for an OR match. Capped at 2 values (matches the current real use case: a place tagged with two cuisines, not an open-ended list). */
 function parseAttributeFilter(url: URL): AttributeFilter | null | Response {
@@ -144,6 +149,23 @@ function parseCoordsAndRadius(url: URL): ParsedCoordsAndRadius | Response {
     return json({ error: `radius ${radius}m at this latitude needs a search grid larger than supported (max ${MAX_GRID_CELLS_PER_AXIS} cells/axis)` }, 400);
   }
   return { ...coords, radius };
+}
+
+/** Public global-search contract. Types are de-duplicated so a caller cannot
+ * accidentally multiply a bucket or its D1 bind parameters. */
+function parseNearbySearch(url: URL): NearbySearchParams | Response {
+  const parsed = parseCoordsAndRadius(url);
+  if (parsed instanceof Response) return parsed;
+  const types = [...new Set((url.searchParams.get('types') ?? '').split(',').map(type => type.trim()).filter(Boolean))];
+  if (types.length === 0 || types.length > MAX_NEARBY_TYPES) {
+    return json({ error: `types must contain between 1 and ${MAX_NEARBY_TYPES} comma-separated values` }, 400);
+  }
+  const rawLimit = url.searchParams.get('limitPerType');
+  const limitPerType = rawLimit === null ? DEFAULT_NEARBY_LIMIT_PER_TYPE : Number(rawLimit);
+  if (!Number.isInteger(limitPerType) || limitPerType < 1 || limitPerType > MAX_NEARBY_LIMIT_PER_TYPE) {
+    return json({ error: `limitPerType must be an integer between 1 and ${MAX_NEARBY_LIMIT_PER_TYPE}` }, 400);
+  }
+  return { ...parsed, types, limitPerType };
 }
 
 /**
@@ -427,6 +449,110 @@ async function queryPoiDb(
     .map(r => ({ ...r, distanceMeters: haversineMeters(lat, lng, r.lat, r.lng) }))
     .filter(r => r.distanceMeters <= radiusMeters)
     .sort((a, b) => a.distanceMeters - b.distanceMeters);
+}
+
+type NearbyPoi = {
+  fsq_place_id: string; name: string; lat: number; lng: number;
+  primary_poi_type: string; brand: string | null;
+  category_label: string | null; address: string | null;
+  distanceMeters: number;
+};
+
+interface NearbyQueryResult {
+  results: Record<string, NearbyPoi[]>;
+  timings: { d1Ms: number; filterMs: number };
+}
+
+/**
+ * KAN-347: global, typed nearby search. POIs are deliberately never joined
+ * to Place: the Place that first imported a venue is only coverage metadata.
+ * The join is restricted to requested/related types before candidates reach
+ * the Worker, then a POI is assigned to each requested type it matches.
+ */
+async function queryNearbyPoiDb(
+  db: D1Database,
+  lat: number,
+  lng: number,
+  radiusMeters: number,
+  requestedTypes: string[],
+  limitPerType: number,
+): Promise<NearbyQueryResult> {
+  const relatedTypes = await Promise.all(requestedTypes.map(type => typesForSearch(db, type)));
+  const acceptedTypes = [...new Set(relatedTypes.flat())];
+  const precision = precisionForRadius(radiusMeters);
+  const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
+  const geohashClauses = prefixes.map(() => '(poi.geohash >= ? AND poi.geohash < ?)');
+  const typePlaceholders = acceptedTypes.map(() => '?').join(',');
+  const d1StartedAt = performance.now();
+  const { results: rows } = await db.prepare(
+    `SELECT poi.fsq_place_id, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
+            poi.brand, poi.category_label, poi.address, poi_type.poi_type AS matched_type
+     FROM poi
+     INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
+     WHERE (${geohashClauses.join(' OR ')}) AND poi_type.poi_type IN (${typePlaceholders})`,
+  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
+    fsq_place_id: string; name: string; lat: number; lng: number;
+    primary_poi_type: string; brand: string | null; category_label: string | null;
+    address: string | null; matched_type: string;
+  }>();
+  const d1Ms = performance.now() - d1StartedAt;
+
+  const filteringStartedAt = performance.now();
+  const candidates = new Map<string, NearbyPoi & { matchedTypes: Set<string> }>();
+  for (const row of rows) {
+    const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
+    if (distanceMeters > radiusMeters) continue;
+    const existing = candidates.get(row.fsq_place_id);
+    if (existing) {
+      existing.matchedTypes.add(row.matched_type);
+    } else {
+      candidates.set(row.fsq_place_id, {
+        fsq_place_id: row.fsq_place_id, name: row.name, lat: row.lat, lng: row.lng,
+        primary_poi_type: row.primary_poi_type, brand: row.brand,
+        category_label: row.category_label, address: row.address,
+        distanceMeters, matchedTypes: new Set([row.matched_type]),
+      });
+    }
+  }
+
+  const result = Object.fromEntries(requestedTypes.map(type => [type, [] as NearbyPoi[]])) as Record<string, NearbyPoi[]>;
+  const nearestCandidates = [...candidates.values()].sort((a, b) => a.distanceMeters - b.distanceMeters);
+  for (const candidate of nearestCandidates) {
+    const poi: NearbyPoi = {
+      fsq_place_id: candidate.fsq_place_id, name: candidate.name, lat: candidate.lat, lng: candidate.lng,
+      primary_poi_type: candidate.primary_poi_type, brand: candidate.brand,
+      category_label: candidate.category_label, address: candidate.address,
+      distanceMeters: candidate.distanceMeters,
+    };
+    for (let index = 0; index < requestedTypes.length; index++) {
+      const requestedType = requestedTypes[index];
+      if (result[requestedType].length >= limitPerType) continue;
+      if (relatedTypes[index].some(type => candidate.matchedTypes.has(type))) {
+        result[requestedType].push(poi);
+      }
+    }
+  }
+  return { results: result, timings: { d1Ms, filterMs: performance.now() - filteringStartedAt } };
+}
+
+function jsonWithServerTiming(data: unknown, timings: Record<string, number>): Response {
+  const serializationStartedAt = performance.now();
+  const body = JSON.stringify(data);
+  const serializationMs = performance.now() - serializationStartedAt;
+  const timingEntries: Array<[string, number]> = [...Object.entries(timings), ['serialize', serializationMs]];
+  const serverTiming = timingEntries
+    .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
+    .join(', ');
+  return new Response(body, { headers: { 'Content-Type': 'application/json', 'Server-Timing': serverTiming } });
+}
+
+/** One in sixteen requests emits structured timing to Workers Logs. The event
+ * intentionally includes no coordinates, identifiers, or user data. */
+function logNearbyTiming(timings: Record<string, number>): void {
+  const sample = new Uint8Array(1);
+  crypto.getRandomValues(sample);
+  if (sample[0] >= 16) return;
+  console.log(JSON.stringify({ event: 'poi_nearby_timing', ...timings }));
 }
 
 // KAN-346/355: ceiling on how many not-yet-mapped ('none') Places can be
@@ -842,6 +968,23 @@ export default {
 
     const authError = authenticate(request, env);
     if (authError) return authError;
+
+    // GET /poi/nearby?lat=&lng=&radius=&types=cafe,pharmacy&limitPerType=20
+    // KAN-347's normal hot path: global POIs only. Coverage/Place resolution
+    // is intentionally absent and happens only after a settled zero result.
+    if (url.pathname === '/poi/nearby' && request.method === 'GET') {
+      const parsed = parseNearbySearch(url);
+      if (parsed instanceof Response) return parsed;
+      const { lat, lng, radius, types, limitPerType } = parsed;
+      const startedAt = performance.now();
+      const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, types, limitPerType);
+      const totalMs = performance.now() - startedAt;
+      logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
+      return jsonWithServerTiming(
+        { results },
+        { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
+      );
+    }
 
     // GET /poi?lat=&lng=&radius=&type=&attribute=&value=  — POIs of one type
     // within a radius, optionally narrowed to 1-2 attribute values (e.g.

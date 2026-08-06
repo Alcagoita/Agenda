@@ -274,30 +274,21 @@ export function isPoiSearchDegraded(source: PoiSearchSource, coverageStatus?: Po
 interface CloudflareAttempt {
   ok: boolean;
   results?: Record<string, NearbyPlace[]>;
-  /** Set whenever the Worker actually told us its coverage state — i.e. whenever a /poi/all response came back at all, ok or not. Left undefined only when the request itself never completed (network error, timeout). */
-  coverageStatus?: PoiCoverageStatus;
+  /** A completed global query with no matches. This is the only API result
+   * that can contribute to the settled-zero coverage-demand decision. */
+  settledEmpty?: boolean;
 }
 
 /**
- * Brush's own Cloudflare-backed POI database (poi-api.brushaway.app) for
- * cities it covers. Tried first on every call; any failure (not covered,
- * API error, rejected radius — our Worker's own MAX_RADIUS_METERS is
+ * Brush's own Cloudflare-backed global POI database (poi-api.brushaway.app).
+ * Tried first on every call; any failure (API error, rejected radius — our Worker's own MAX_RADIUS_METERS is
  * 4500m, tighter than some callers' radii like destinationResolver's
  * 5000m ROUTE_MAX_RADIUS_M) falls straight through to OSM, silently — this
  * must never be the reason a search comes back empty when OSM would have
  * answered.
  *
- * A single /poi/all call carries both the results AND the coverage status
- * (its own `status` field, populated whenever `covered` is false) — no
- * separate /coverage round-trip needed.
- *
- * Buckets by `primary_poi_type` only, not the full multi-type match a place
- * can have server-side (poi_type table) — /poi/all doesn't join that table,
- * it's a single flat query across all types in range. A place matching two
- * of our requested types under a secondary type would only bucket under its
- * primary one here. Acceptable simplification for live search; a caller
- * that needs true multi-type filtering should use the Cloudflare API's own
- * `/poi?type=&attribute=&value=` directly, not this general-purpose function.
+ * KAN-347's single /poi/nearby call returns already-filtered buckets for the
+ * requested types. A venue can correctly appear in more than one bucket.
  */
 // KAN-346: which coarse cells we've already asked the Worker to record
 // demand for this app session — records demand once per area, not once per
@@ -374,34 +365,23 @@ async function searchNearbyPlacesCloudflare(
   radiusMeters: number,
 ): Promise<CloudflareAttempt> {
   try {
-    const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters);
-    if (!data.covered) {
-      // KAN-355: no longer fires the coverage-demand request here — that
-      // now happens in searchNearbyPlaces, only once OSM's own outcome is
-      // known too (the zero check needs a genuine zero, not just "our own
-      // DB doesn't cover this"; see there).
-      return { ok: false, coverageStatus: data.status ?? 'none' };
-    }
-
     const result: Record<string, NearbyPlace[]> = {};
     for (const poiType of poiTypes) { result[poiType] = []; }
-
-    for (const p of data.results) {
-      if (!result[p.primary_poi_type]) { continue; }
-      result[p.primary_poi_type].push({
-        placeId:        p.fsq_place_id,
-        name:           p.name,
-        lat:            p.lat,
-        lng:            p.lng,
-        distanceMeters: p.distanceMeters,
-        primaryType:    p.primary_poi_type,
-      });
-    }
-
+    const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters, poiTypes);
     for (const poiType of poiTypes) {
-      result[poiType].sort((a, b) => a.distanceMeters - b.distanceMeters);
+      result[poiType] = (data.results[poiType] ?? []).map(p => ({
+        placeId: p.fsq_place_id,
+        name: p.name,
+        lat: p.lat,
+        lng: p.lng,
+        distanceMeters: p.distanceMeters,
+        primaryType: p.primary_poi_type,
+      }));
     }
-    return { ok: true, results: result, coverageStatus: 'ready' };
+    if (poiTypes.every(poiType => result[poiType].length === 0)) {
+      return { ok: false, settledEmpty: true };
+    }
+    return { ok: true, results: result };
   } catch {
     // Network error/timeout before any response — genuinely unknown, not
     // "none". A caller that cares can treat undefined as "couldn't tell."
@@ -470,21 +450,20 @@ export async function searchNearbyPlaces(
     }));
   }
 
-  // KAN-355 zero check: a genuine zero — Cloudflare doesn't cover this
-  // location AND OSM, tried right above, also found nothing for any
-  // requested type. Classify before deciding whether this is worth
+  // KAN-347 zero check: both the completed global query and OSM, tried
+  // right above, found nothing for any requested type. Classify before deciding whether this is worth
   // recording as demand: an unmapped settlement is (start the worker via
   // the existing dedup'd request), a country with no settlement here or no
   // country at all is not (nothing to map). Fire-and-forget — never blocks
   // this search's own return, matches the app's "never wait on
   // provisioning" rule.
-  if (cf.coverageStatus === 'none' && poiTypes.every(poiType => result[poiType].length === 0)) {
+  if (cf.settledEmpty && poiTypes.every(poiType => result[poiType].length === 0)) {
     void classifyLocation(lat, lng).then(classification => {
       if (classification === 'settlement') { requestCoverageDemandOnce(lat, lng); }
     });
   }
 
-  return { results: result, source: 'osm', coverageStatus: cf.coverageStatus };
+  return { results: result, source: 'osm' };
 }
 
 /** Google types carried by every place regardless of what it actually is —
