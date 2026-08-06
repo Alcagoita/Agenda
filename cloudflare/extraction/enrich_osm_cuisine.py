@@ -156,13 +156,15 @@ def enrich(place_id):
     print(f"[{place_id}] fetching restaurant/store rows still missing a subtype after category-tag + keyword matching...")
     restaurant_candidates = run_d1_query(f"""
         SELECT fsq_place_id, name, lat, lng FROM poi p
-        WHERE p.place_id = {sql_escape(place_id)} AND p.primary_poi_type = 'restaurant'
-        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.place_id = p.place_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'food_cuisine');
+        WHERE p.lat BETWEEN {min_lat} AND {max_lat} AND p.lng BETWEEN {min_lng} AND {max_lng}
+          AND p.primary_poi_type = 'restaurant'
+          AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.fsq_place_id = p.fsq_place_id AND a.dimension = 'food_cuisine');
     """)
     store_candidates = run_d1_query(f"""
         SELECT fsq_place_id, name, lat, lng FROM poi p
-        WHERE p.place_id = {sql_escape(place_id)} AND p.primary_poi_type = 'store'
-        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.place_id = p.place_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'store_kind');
+        WHERE p.lat BETWEEN {min_lat} AND {max_lat} AND p.lng BETWEEN {min_lng} AND {max_lng}
+          AND p.primary_poi_type = 'store'
+          AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.fsq_place_id = p.fsq_place_id AND a.dimension = 'store_kind');
     """)
     print(f"[{place_id}] {len(restaurant_candidates)} restaurant + {len(store_candidates)} store candidates")
 
@@ -297,35 +299,29 @@ def enrich(place_id):
 
     out_path = os.path.join(BUILD_DIR, f'osm_enrich_{place_id}_{build_id}.sql')
     # This script writes a file for the operator to apply later, by hand —
-    # an arbitrary time gap in which a regular classify_and_load.py run for
-    # the same city could produce a NEW build_id, making these rows stale
-    # the moment they'd be written (attached to a build_id that's no longer
-    # current, and due to be swept by the next re-run after that). Each
-    # INSERT is guarded with a build-drift check: it only writes if
-    # city.current_build_id still equals the build_id captured at the start
-    # of this run, otherwise it's a silent no-op for that statement rather
-    # than corrupting data under a stale build_id.
-    guard = f"WHERE EXISTS (SELECT 1 FROM place WHERE place_id = {sql_escape(place_id)} AND build_id = {sql_escape(build_id)})"
-    insert_prefix = 'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, place_id, build_id, dimension, value) SELECT * FROM (VALUES '
+    # Attributes are global just like POIs. They are not tied to a Place
+    # build: a confident OSM/Foursquare match remains valid if the same POI
+    # is encountered by a neighbouring Place on a later import.
+    insert_prefix = 'INSERT OR IGNORE INTO poi_attribute (fsq_place_id, dimension, value) VALUES '
     with open(out_path, 'w') as f:
         batches = 0
         chunk = []
         chunk_size = 0
         MAX_CHUNK_BYTES = 80_000
         for fsq_place_id, dimension, value in matched_rows:
-            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(place_id), sql_escape(build_id), sql_escape(dimension), sql_escape(value)]) + ')'
+            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(dimension), sql_escape(value)]) + ')'
             piece_bytes = len(piece.encode('utf-8')) + 1
             if chunk and chunk_size + piece_bytes > MAX_CHUNK_BYTES:
-                f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
+                f.write(insert_prefix + ','.join(chunk) + ';\n')
                 batches += 1
                 chunk = []
                 chunk_size = 0
             chunk.append(piece)
             chunk_size += piece_bytes
         if chunk:
-            f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
+            f.write(insert_prefix + ','.join(chunk) + ';\n')
             batches += 1
-    print(f"[{place_id}] wrote {out_path} ({batches} statements, each guarded against build drift)")
+    print(f"[{place_id}] wrote {out_path} ({batches} statements)")
     print(f"[{place_id}] apply with:")
     print(f"  npx wrangler d1 execute brush-poi-registry --remote --file={out_path}")
 
