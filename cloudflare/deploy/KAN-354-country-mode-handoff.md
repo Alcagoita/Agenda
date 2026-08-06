@@ -1,4 +1,13 @@
-# KAN-354 handoff — fix country mode, wire OSM subtype enrichment
+# KAN-354 handoff — country mode recovery notes
+
+> **Status — superseded by the KAN-354 global-POI refactor.** Country mode
+> no longer loads raw Foursquare `locality` buckets. It uses localities only
+> to discover and deduplicate stable Place IDs, then calls the same whole-
+> Place mapper as on-demand builds. POIs are global Foursquare records keyed
+> by `fsq_place_id`; Place is coverage/build metadata, never a POI partition.
+> A final `generic:<country>` pass upserts country POIs that cannot be
+> resolved to a settlement. The historical incident analysis below is kept
+> for context only; do not restore its former locality-load design.
 
 Two pieces of unfinished work, written up for a fresh agent/session to pick
 up. Both live in `cloudflare/extraction/` and `cloudflare/src/index.ts`.

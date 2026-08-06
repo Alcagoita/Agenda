@@ -161,6 +161,14 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
             }
             return { meta: { changes: 1 } };
           }
+          if (trimmed.startsWith("UPDATE country SET status = 'mapping', place_count = 0 WHERE country_code = ? AND status = 'none'")) {
+            const [countryCode] = args as [string];
+            const row = countryRows.get(countryCode);
+            if (!row || row.status !== 'none') return { meta: { changes: 0 } };
+            row.status = 'mapping';
+            row.place_count = 0;
+            return { meta: { changes: 1 } };
+          }
           if (trimmed.startsWith("UPDATE country SET status = 'mapping' WHERE country_code = ? AND status = 'none'")) {
             const [countryCode] = args as [string];
             const row = countryRows.get(countryCode);
@@ -209,6 +217,17 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
               status: 'none', min_lat: null, max_lat: null, min_lng: null, max_lng: null,
               build_id: null, mapped_at: null,
               request_count: 1, first_requested_at: firstRequestedAt, last_requested_at: lastRequestedAt,
+            });
+            return { meta: { changes: 1 } };
+          }
+          if (trimmed.startsWith('INSERT OR IGNORE INTO place')) {
+            const [placeId, countryCode, name, placeKind] = args as [string, string, string, string | null];
+            if (rows.has(placeId)) return { meta: { changes: 0 } };
+            rows.set(placeId, {
+              place_id: placeId, country_code: countryCode, name, place_kind: placeKind,
+              status: 'mapping', min_lat: null, max_lat: null, min_lng: null, max_lng: null,
+              build_id: null, mapped_at: null,
+              request_count: 0, first_requested_at: null, last_requested_at: null,
             });
             return { meta: { changes: 1 } };
           }
@@ -627,28 +646,38 @@ describe('POST /internal/place-failed', () => {
   });
 });
 
-describe('POST /internal/country/queue — disabled (KAN-354, 2026-08-06)', () => {
-  // A real country-mode run against Portugal destroyed the good data for
-  // every already-mapped Place (Lisboa ~24k rows -> 1, Odivelas ~6k -> 1,
-  // Sertã 90 -> 3; recovered from R2 raw-extract backups). Root cause:
-  // run_country's locality-based Foursquare grouping can resolve to an
-  // ALREADY-mapped place_id with a tiny/degenerate row group, and the
-  // normal sweep-delete then retires the real data in favor of that
-  // slice. Endpoint returns 503 unconditionally until a real fix lands —
-  // see the comment above the check in index.ts.
-  it('always returns 503, regardless of auth or country state', async () => {
+describe('POST /internal/country/queue', () => {
+  it('starts an authenticated country job and resets visible progress', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'none', build_id: null, mapped_at: null, place_count: 0 }] });
 
     const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'PT' }), env);
 
-    expect(res.status).toBe(503);
-    expect(mockContainerStart).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mockContainerStart).toHaveBeenCalledTimes(1);
+    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
+    expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'mapping', place_count: 0 });
   });
 
-  it('503s even without a valid X-Build-Secret — the route is dead, not just gated', async () => {
+  it('rejects a missing X-Build-Secret', async () => {
     const env = makeEnv();
     const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'PT' }, null), env);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /internal/place/ensure', () => {
+  it('creates a newly discovered country Place in mapping state without touching its identity', async () => {
+    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
+
+    const res = await worker.fetch(internalRequest('/internal/place/ensure', {
+      placeId: 'osm-relation-99', countryCode: 'pt', name: 'Example Town', placeKind: 'town',
+    }), env);
+
+    expect(res.status).toBe(200);
+    const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
+    expect(fakeDb.rows.get('osm-relation-99')).toMatchObject({
+      country_code: 'PT', name: 'Example Town', place_kind: 'town', status: 'mapping',
+    });
   });
 });
 

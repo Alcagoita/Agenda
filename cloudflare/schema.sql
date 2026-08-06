@@ -27,8 +27,6 @@
 
 CREATE TABLE IF NOT EXISTS poi (
   fsq_place_id        TEXT NOT NULL,
-  place_id            TEXT NOT NULL,          -- which Place this row belongs to (place.place_id)
-  build_id            TEXT NOT NULL,          -- generation tag for the sweep-delete build/swap procedure
   name                TEXT NOT NULL,
   lat                 REAL NOT NULL,
   lng                 REAL NOT NULL,
@@ -40,8 +38,7 @@ CREATE TABLE IF NOT EXISTS poi (
   raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
   address             TEXT,
   date_refreshed      TEXT NOT NULL,
-  PRIMARY KEY (place_id, fsq_place_id)         -- same place could theoretically appear in two overlapping Places
+  PRIMARY KEY (fsq_place_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_poi_place_geo   ON poi (place_id, geohash);
-CREATE INDEX IF NOT EXISTS idx_poi_place_build ON poi (place_id, build_id);
+CREATE INDEX IF NOT EXISTS idx_poi_geo ON poi (geohash);

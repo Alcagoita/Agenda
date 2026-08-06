@@ -46,6 +46,17 @@ def place_failed(place_id, stage=None, error=None):
         body['error'] = str(error)[:1_000]
     return _post('/internal/place-failed', body)
 
+def ensure_place(place_id, country_code, name, place_kind):
+    """Create a coverage row for a Place discovered by country mode.
+
+    This deliberately goes through the Worker rather than duplicating the
+    Place schema/upsert rules in the Container.
+    """
+    return _post('/internal/place/ensure', {
+        'placeId': place_id, 'countryCode': country_code,
+        'name': name, 'placeKind': place_kind,
+    })
+
 def country_progress(country_code):
     return _post('/internal/country-progress', {'countryCode': country_code})
 

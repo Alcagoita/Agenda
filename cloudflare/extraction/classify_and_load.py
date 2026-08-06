@@ -395,29 +395,28 @@ def classify(place_id, csv_path, out_sql_path):
 
     def poi_row_sql(r):
         return '(' + ','.join([
-            sql_escape(r[0]), sql_escape(r[1]), sql_escape(r[2]), sql_escape(r[3]), str(r[4]), str(r[5]),
-            sql_escape(r[6]), sql_escape(r[7]), sql_escape(r[8]),
-            sql_escape(r[9]), sql_escape(r[10]), sql_escape(r[11]),
-            sql_escape(r[12]), sql_escape(r[13]),
+            sql_escape(r[0]), sql_escape(r[3]), str(r[4]), str(r[5]), sql_escape(r[6]),
+            sql_escape(r[7]), sql_escape(r[8]), sql_escape(r[9]), sql_escape(r[10]),
+            sql_escape(r[11]), sql_escape(r[12]), sql_escape(r[13]),
         ]) + ')'
 
     def poi_type_row_sql(r):
-        return '(' + ','.join([sql_escape(r[0]), sql_escape(r[1]), sql_escape(r[2]), sql_escape(r[3]), str(r[4])]) + ')'
+        return '(' + ','.join([sql_escape(r[0]), sql_escape(r[3]), str(r[4])]) + ')'
 
     def poi_attribute_row_sql(r):
-        return '(' + ','.join([sql_escape(r[0]), sql_escape(r[1]), sql_escape(r[2]), sql_escape(r[3]), sql_escape(r[4])]) + ')'
+        return '(' + ','.join([sql_escape(r[0]), sql_escape(r[3]), sql_escape(r[4])]) + ')'
 
     poi_insert_prefix = (
         'INSERT OR REPLACE INTO poi '
-        '(fsq_place_id, place_id, build_id, name, lat, lng, geohash, primary_poi_type, brand, '
+        '(fsq_place_id, name, lat, lng, geohash, primary_poi_type, brand, '
         'category_label, raw_category_ids, raw_category_labels, address, date_refreshed) '
         'VALUES '
     )
     poi_type_insert_prefix = (
-        'INSERT OR REPLACE INTO poi_type (fsq_place_id, place_id, build_id, poi_type, rank) VALUES '
+        'INSERT OR REPLACE INTO poi_type (fsq_place_id, poi_type, rank) VALUES '
     )
     poi_attribute_insert_prefix = (
-        'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, place_id, build_id, dimension, value) VALUES '
+        'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, dimension, value) VALUES '
     )
 
     with open(out_sql_path, 'w') as f:
@@ -445,13 +444,6 @@ def classify(place_id, csv_path, out_sql_path):
             'poi_attribute', place_id,
         )
 
-        # Sweep — retires rows from a previous build that didn't reappear in
-        # this one (the place closed / Foursquare dropped it). Safe to run
-        # even on a city's very first build: nothing has a different
-        # build_id yet, so this is a no-op.
-        f.write(f"DELETE FROM poi WHERE place_id = {sql_escape(place_id)} AND build_id != {sql_escape(build_id)};\n")
-        f.write(f"DELETE FROM poi_type WHERE place_id = {sql_escape(place_id)} AND build_id != {sql_escape(build_id)};\n")
-        f.write(f"DELETE FROM poi_attribute WHERE place_id = {sql_escape(place_id)} AND build_id != {sql_escape(build_id)};\n")
 
     # build_id-specific, not just place_id-specific: a rerun for the same
     # city before the previous run's upload command was actually executed

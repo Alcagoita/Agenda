@@ -381,7 +381,6 @@ async function typesForSearch(db: D1Database, poiType: string): Promise<string[]
  */
 async function queryPoiDb(
   db: D1Database,
-  placeId: string,
   lat: number,
   lng: number,
   radiusMeters: number,
@@ -395,12 +394,12 @@ async function queryPoiDb(
   const types = poiType ? await typesForSearch(db, poiType) : null;
   const typePlaceholders = types?.map(() => '?').join(',');
 
-  const clauses = ['place_id = ?', `(${geohashClauses.join(' OR ')})`];
-  const binds: unknown[] = [placeId, ...prefixes.flatMap(prefix => [prefix, `${prefix}~`])];
+  const clauses = [`(${geohashClauses.join(' OR ')})`];
+  const binds: unknown[] = [...prefixes.flatMap(prefix => [prefix, `${prefix}~`])];
 
   if (types) {
     clauses.push(
-      `EXISTS (SELECT 1 FROM poi_type WHERE poi_type.place_id = poi.place_id AND poi_type.fsq_place_id = poi.fsq_place_id AND poi_type.poi_type IN (${typePlaceholders}))`,
+      `EXISTS (SELECT 1 FROM poi_type WHERE poi_type.fsq_place_id = poi.fsq_place_id AND poi_type.poi_type IN (${typePlaceholders}))`,
     );
     binds.push(...types);
   }
@@ -411,7 +410,7 @@ async function queryPoiDb(
   if (attributeFilter) {
     const valuePlaceholders = attributeFilter.values.map(() => '?').join(',');
     clauses.push(
-      `EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.place_id = poi.place_id AND poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value IN (${valuePlaceholders}))`,
+      `EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value IN (${valuePlaceholders}))`,
     );
     binds.push(attributeFilter.dimension, ...attributeFilter.values);
   }
@@ -679,6 +678,33 @@ export default {
       return json({ ok: true });
     }
 
+    // Country mode discovers Places before it maps them. Keep creation in the
+    // Worker so the Container never owns a second copy of Place schema rules.
+    // Existing mapped Places are intentionally left untouched: their last
+    // good coverage remains usable while a country refresh runs.
+    if (url.pathname === '/internal/place/ensure' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{
+        placeId?: unknown; countryCode?: unknown; name?: unknown; placeKind?: unknown;
+      }>().catch(() => null);
+      if (typeof body?.placeId !== 'string' || body.placeId.trim() === '' ||
+          typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.name !== 'string' || body.name.trim() === '') {
+        return json({ error: 'placeId, two-letter countryCode, and name are required' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ country_code: string }>();
+      if (!country) return json({ error: `no country row matched countryCode '${countryCode}'` }, 404);
+      await env.REGISTRY_DB.prepare(
+        "INSERT OR IGNORE INTO place (place_id, country_code, name, place_kind, status, request_count) VALUES (?, ?, ?, ?, 'mapping', 0)",
+      ).bind(body.placeId, countryCode, body.name, typeof body.placeKind === 'string' ? body.placeKind : null).run();
+      const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
+        .bind(body.placeId).first<PlaceRow>();
+      return json({ ok: true, status: place ? toApiStatus(place.status) : 'none' });
+    }
+
     // POST /internal/country/queue  { countryCode }  — KAN-354's country
     // pre-build trigger. Operational: queued by whoever decides which
     // country goes next (docs/poi-coverage-model.md — "Country: operational"),
@@ -686,20 +712,22 @@ export default {
     // country is a no-op that just reports its current state, never a
     // second job.
     //
-    // DISABLED 2026-08-06. A real country-mode run against Portugal wiped
-    // the good data for every already-mapped Place (Lisboa ~24k rows,
-    // Odivelas ~6k, Sertã 90 — all reduced to 1-3 garbage rows, since
-    // recovered from R2 raw-extract backups). Root cause: run_country's
-    // locality-based Foursquare grouping can produce a tiny/degenerate
-    // group that resolves to an ALREADY-mapped place_id, and the normal
-    // sweep-delete (correct for a genuine full re-extraction) then retires
-    // the real data in favor of that tiny slice. Do not re-enable without
-    // a real fix — e.g. never let a country-mode locality write replace an
-    // existing 'mapped' Place with fewer rows than it already has, or
-    // route country mode through the same real-boundary (not
-    // locality-centroid) resolution place mode already uses safely.
     if (url.pathname === '/internal/country/queue' && request.method === 'POST') {
-      return json({ error: 'country pre-build is temporarily disabled — see the comment above this check in index.ts' }, 503);
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
+        return json({ error: 'countryCode must be a non-empty string' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const result = await env.REGISTRY_DB.prepare(
+        "UPDATE country SET status = 'mapping', place_count = 0 WHERE country_code = ? AND status = 'none'",
+      ).bind(countryCode).run();
+      if (result.meta.changes === 1) triggerBuild(env, ctx, 'country', countryCode);
+      const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (!country) return json({ error: `no country row for '${countryCode}' — it must exist before it can be queued` }, 404);
+      return json({ ok: true, status: country.status });
     }
 
     // POST /internal/country-progress  { countryCode }  — called by the
@@ -782,7 +810,7 @@ export default {
       if (!place || place.status !== 'mapped') {
         return json({ covered: false, status: toApiStatus(place?.status ?? 'none'), results: [] });
       }
-      const results = await queryPoiDb(env.REGISTRY_DB, place.place_id, lat, lng, radius, poiType, attributeFilter);
+      const results = await queryPoiDb(env.REGISTRY_DB, lat, lng, radius, poiType, attributeFilter);
       return json({ covered: true, cityId: place.place_id, results });
     }
 
@@ -796,7 +824,7 @@ export default {
       if (!place || place.status !== 'mapped') {
         return json({ covered: false, status: toApiStatus(place?.status ?? 'none'), results: [] });
       }
-      const results = await queryPoiDb(env.REGISTRY_DB, place.place_id, lat, lng, radius, null, null);
+      const results = await queryPoiDb(env.REGISTRY_DB, lat, lng, radius, null, null);
       return json({ covered: true, cityId: place.place_id, results });
     }
 
