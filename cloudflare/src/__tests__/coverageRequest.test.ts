@@ -627,40 +627,28 @@ describe('POST /internal/place-failed', () => {
   });
 });
 
-describe('POST /internal/country/queue', () => {
-  it('promotes a none country to mapping and starts the country-mode Container', async () => {
+describe('POST /internal/country/queue — disabled (KAN-354, 2026-08-06)', () => {
+  // A real country-mode run against Portugal destroyed the good data for
+  // every already-mapped Place (Lisboa ~24k rows -> 1, Odivelas ~6k -> 1,
+  // Sertã 90 -> 3; recovered from R2 raw-extract backups). Root cause:
+  // run_country's locality-based Foursquare grouping can resolve to an
+  // ALREADY-mapped place_id with a tiny/degenerate row group, and the
+  // normal sweep-delete then retires the real data in favor of that
+  // slice. Endpoint returns 503 unconditionally until a real fix lands —
+  // see the comment above the check in index.ts.
+  it('always returns 503, regardless of auth or country state', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'none', build_id: null, mapped_at: null, place_count: 0 }] });
 
-    const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'pt' }), env);
-    const body = await res.json() as { ok: boolean; status: string };
-
-    expect(body).toEqual({ ok: true, status: 'mapping' });
-    expect(mockGetContainer).toHaveBeenCalledWith(env.EXTRACTION_CONTAINER, expect.stringContaining('country:PT:'));
-    expect(mockContainerStart).toHaveBeenCalledWith({
-      envVars: { MODE: 'country', TARGET: 'PT', BUILD_TRIGGER_SECRET: BUILD_SECRET, FOURSQUARE_JWT: 'test-jwt' },
-    });
-  });
-
-  it('is idempotent — queuing an already-mapping country does not re-trigger', async () => {
-    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 5 }] });
-
     const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'PT' }), env);
-    const body = await res.json() as { ok: boolean; status: string };
 
-    expect(body).toEqual({ ok: true, status: 'mapping' });
+    expect(res.status).toBe(503);
     expect(mockContainerStart).not.toHaveBeenCalled();
   });
 
-  it('404s for a country with no row yet', async () => {
-    const env = makeEnv();
-    const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'JP' }), env);
-    expect(res.status).toBe(404);
-  });
-
-  it('rejects a missing X-Build-Secret', async () => {
+  it('503s even without a valid X-Build-Secret — the route is dead, not just gated', async () => {
     const env = makeEnv();
     const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'PT' }, null), env);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(503);
   });
 });
 

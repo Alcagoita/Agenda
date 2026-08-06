@@ -685,25 +685,21 @@ export default {
     // not automatically. Idempotent: queuing an already-mapping/mapped
     // country is a no-op that just reports its current state, never a
     // second job.
+    //
+    // DISABLED 2026-08-06. A real country-mode run against Portugal wiped
+    // the good data for every already-mapped Place (Lisboa ~24k rows,
+    // Odivelas ~6k, Sertã 90 — all reduced to 1-3 garbage rows, since
+    // recovered from R2 raw-extract backups). Root cause: run_country's
+    // locality-based Foursquare grouping can produce a tiny/degenerate
+    // group that resolves to an ALREADY-mapped place_id, and the normal
+    // sweep-delete (correct for a genuine full re-extraction) then retires
+    // the real data in favor of that tiny slice. Do not re-enable without
+    // a real fix — e.g. never let a country-mode locality write replace an
+    // existing 'mapped' Place with fewer rows than it already has, or
+    // route country mode through the same real-boundary (not
+    // locality-centroid) resolution place mode already uses safely.
     if (url.pathname === '/internal/country/queue' && request.method === 'POST') {
-      const internalAuthError = authenticateInternal(request, env);
-      if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
-      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
-        return json({ error: 'countryCode must be a non-empty string' }, 400);
-      }
-      const countryCode = body.countryCode.toUpperCase();
-
-      const result = await env.REGISTRY_DB.prepare(
-        "UPDATE country SET status = 'mapping' WHERE country_code = ? AND status = 'none'",
-      ).bind(countryCode).run();
-      if (result.meta.changes === 1) {
-        triggerBuild(env, ctx, 'country', countryCode);
-      }
-      const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
-        .bind(countryCode).first<{ status: string }>();
-      if (!country) return json({ error: `no country row for '${countryCode}' — it must exist before it can be queued` }, 404);
-      return json({ ok: true, status: country.status });
+      return json({ error: 'country pre-build is temporarily disabled — see the comment above this check in index.ts' }, 503);
     }
 
     // POST /internal/country-progress  { countryCode }  — called by the
