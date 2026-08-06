@@ -587,6 +587,25 @@ describe('POST /internal/place-failed', () => {
     expect(fakeDb.rows.get('osm-relation-4')?.status).toBe('none');
   });
 
+  it('logs bounded diagnostic metadata from the trusted Container callback', async () => {
+    const env = makeEnv([{
+      place_id: 'osm-relation-6', name: 'Failed Early', country_code: 'PT', place_kind: null,
+      min_lat: null, max_lat: null, min_lng: null, max_lng: null,
+      status: 'mapping', build_id: null, mapped_at: null,
+      request_count: 1, first_requested_at: null, last_requested_at: null,
+    }]);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const res = await worker.fetch(internalRequest('/internal/place-failed', {
+      cityId: 'osm-relation-6', stage: 'foursquare_extract', error: 'CatalogException',
+    }), env);
+
+    expect(res.status).toBe(200);
+    expect(errorSpy).toHaveBeenCalledWith('[extraction] Place job failed', {
+      cityId: 'osm-relation-6', stage: 'foursquare_extract', error: 'CatalogException',
+    });
+  });
+
   it('does not un-map an already-mapped Place', async () => {
     const env = makeEnv([{
       place_id: 'osm-relation-5', name: 'Already Mapped', country_code: 'PT', place_kind: null,

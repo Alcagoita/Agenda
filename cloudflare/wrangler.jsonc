@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   "workers_dev": false,
+  "observability": {
+    "enabled": true
+  },
   // Route poi-api.brushaway.app/* -> brush-poi-backend is managed manually in
   // the Cloudflare dashboard (Zone > Workers Routes), not here — this token's
   // permissions don't cover Zone:Workers Routes, so wrangler can't sync a

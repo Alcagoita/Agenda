@@ -33,10 +33,18 @@ def build_complete(place_id, build_id, rows_loaded, rows_skipped, r2_key, extent
 def build_failed(place_id, build_id):
     return _post('/internal/build-complete', {'cityId': place_id, 'buildId': build_id, 'status': 'failed'})
 
-def place_failed(place_id):
+def place_failed(place_id, stage=None, error=None):
     """Usable at any point in a run, even before a build_id exists — see
     /internal/place-failed's own doc comment in cloudflare/src/index.ts."""
-    return _post('/internal/place-failed', {'cityId': place_id})
+    body = {'cityId': place_id}
+    if stage:
+        body['stage'] = stage
+    if error:
+        # This is diagnostic metadata for the Worker log, never a full
+        # traceback. Keep callbacks small and avoid accidentally propagating
+        # a credential from a lower-level library error.
+        body['error'] = str(error)[:1_000]
+    return _post('/internal/place-failed', body)
 
 def country_progress(country_code):
     return _post('/internal/country-progress', {'countryCode': country_code})

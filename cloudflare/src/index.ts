@@ -1,11 +1,11 @@
 import { haversineMeters, neighborPrefixes, precisionForRadius, requiredGridCells, MAX_GRID_CELLS_PER_AXIS, MAX_RADIUS_METERS } from './geohash';
-import { getContainer } from '@cloudflare/containers';
+import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
 
 // Re-exported (not just imported) — the Workers runtime resolves the
 // `durable_objects` binding's `class_name` against this module's exports,
 // per wrangler.jsonc. See extractionContainer.ts for what it actually runs.
-export { ExtractionContainer };
+export { ContainerProxy, ExtractionContainer };
 
 export interface Env {
   // One shared D1 database for everything — 10GB is D1's hard per-database
@@ -474,23 +474,41 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
  * job, never resumed, so there's no reason to route repeat calls for the
  * same Place/country to the same instance.
  */
-function triggerBuild(env: Env, mode: 'place' | 'country', target: string): void {
+function triggerBuild(
+  env: Env,
+  ctx: ExecutionContext | undefined,
+  mode: 'place' | 'country',
+  target: string,
+): void {
   const key = `${mode}:${target}:${Date.now()}`;
   const container = getContainer(env.EXTRACTION_CONTAINER, key);
-  container.start({
+  const startup = container.start({
     envVars: {
       MODE: mode,
       TARGET: target,
       BUILD_TRIGGER_SECRET: env.BUILD_TRIGGER_SECRET ?? '',
       FOURSQUARE_JWT: env.FOURSQUARE_JWT ?? '',
     },
-  }).catch(() => {
-    // Best-effort — if starting the Container fails, the row stays
-    // 'mapping' until an operator notices (the Containers dashboard's own
-    // logs are the diagnosable state here, not something D1 needs to track
-    // separately). A future request for the same Place/country won't
-    // re-trigger while status is already 'mapping' — see startPlaceMapping.
+  }).catch(async (error) => {
+    // A detached promise is cancelled when the Worker finishes the request.
+    // Keep it alive via waitUntil below, and make a startup failure retryable
+    // instead of stranding the Place/country in its in-progress state.
+    console.error('[extraction] Container failed to start', { mode, target, error: String(error) });
+    if (mode === 'place') {
+      await env.REGISTRY_DB.prepare(
+        "UPDATE place SET status = 'none' WHERE place_id = ? AND status = 'mapping' AND build_id IS NULL",
+      ).bind(target).run();
+    } else {
+      await env.REGISTRY_DB.prepare(
+        "UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'",
+      ).bind(target).run();
+    }
   });
+
+  // Container startup is asynchronous, but must outlive this fast coverage
+  // response. In production Workers always supplies ctx; the fallback keeps
+  // the pure route tests usable when they call fetch() directly.
+  if (ctx) ctx.waitUntil(startup);
 }
 
 /**
@@ -502,13 +520,13 @@ function triggerBuild(env: Env, mode: 'place' | 'country', target: string): void
  * the now-'mapping' row and does nothing further. A no-op for a Place
  * that's already 'mapping' or 'mapped'.
  */
-async function startPlaceMapping(env: Env, place: PlaceRow): Promise<PlaceRow> {
+async function startPlaceMapping(env: Env, ctx: ExecutionContext | undefined, place: PlaceRow): Promise<PlaceRow> {
   if (place.status !== 'none') return place;
   const result = await env.REGISTRY_DB.prepare(
     "UPDATE place SET status = 'mapping' WHERE place_id = ? AND status = 'none'",
   ).bind(place.place_id).run();
   if (result.meta.changes === 1) {
-    triggerBuild(env, 'place', place.place_id);
+    triggerBuild(env, ctx, 'place', place.place_id);
     return { ...place, status: 'mapping' };
   }
   // Lost the race — another concurrent request already promoted it (or it
@@ -521,7 +539,7 @@ async function startPlaceMapping(env: Env, place: PlaceRow): Promise<PlaceRow> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // Internal, server-to-server only — its own stronger secret, not the
@@ -623,7 +641,7 @@ export default {
       return json({ ok: true });
     }
 
-    // POST /internal/place-failed  { cityId }  — a lighter-weight failure
+    // POST /internal/place-failed  { cityId, stage?, error? }  — a lighter-weight failure
     // signal than /internal/build-complete {status:'failed'}: usable at ANY
     // point in the Job's run, even before a build_id/build_log row exists
     // (e.g. the Foursquare extraction itself failed, before classification
@@ -636,9 +654,20 @@ export default {
     if (url.pathname === '/internal/place-failed' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ cityId?: unknown }>().catch(() => null);
+      const body = await request.json<{ cityId?: unknown; stage?: unknown; error?: unknown }>().catch(() => null);
       if (typeof body?.cityId !== 'string' || body.cityId.trim() === '') {
         return json({ error: 'cityId must be a non-empty string' }, 400);
+      }
+      // A one-shot Container's stdout is not surfaced by `wrangler tail`.
+      // Log only bounded, structured failure metadata from the trusted
+      // internal callback: enough to diagnose the failed stage without
+      // allowing a large traceback or any unbounded payload into logs.
+      if (typeof body.stage === 'string' || typeof body.error === 'string') {
+        console.error('[extraction] Place job failed', {
+          cityId: body.cityId,
+          stage: typeof body.stage === 'string' ? body.stage.slice(0, 100) : 'unknown',
+          error: typeof body.error === 'string' ? body.error.slice(0, 1_000) : 'unknown',
+        });
       }
       const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
         .bind(body.cityId).first<PlaceRow>();
@@ -669,7 +698,7 @@ export default {
         "UPDATE country SET status = 'mapping' WHERE country_code = ? AND status = 'none'",
       ).bind(countryCode).run();
       if (result.meta.changes === 1) {
-        triggerBuild(env, 'country', countryCode);
+        triggerBuild(env, ctx, 'country', countryCode);
       }
       const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
         .bind(countryCode).first<{ status: string }>();
@@ -879,7 +908,7 @@ export default {
         .bind(geo.placeId).first<PlaceRow>();
       if (byStableId) {
         await bumpCoverageDemand(env, byStableId);
-        return respondCoverageRequest(await startPlaceMapping(env, byStableId));
+        return respondCoverageRequest(await startPlaceMapping(env, ctx, byStableId));
       }
 
       // Brand new Place. Budget guard: cap total not-yet-mapped ('none')
@@ -928,7 +957,7 @@ export default {
       const created = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
         .bind(geo.placeId).first<PlaceRow>();
       if (!created) return respondCoverageRequest(null);
-      return respondCoverageRequest(await startPlaceMapping(env, created));
+      return respondCoverageRequest(await startPlaceMapping(env, ctx, created));
     }
 
     return json({ error: 'not found' }, 404);

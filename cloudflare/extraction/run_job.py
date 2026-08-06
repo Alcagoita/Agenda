@@ -31,36 +31,43 @@ from classify_and_load import classify
 
 def run_place(place_id):
     print(f'[run_job] place mode: {place_id}')
+    stage = 'resolve_place_bounds'
     try:
         min_lat, max_lat, min_lng, max_lng = nominatim_client.lookup_bbox(place_id)
     except nominatim_client.PlaceNotResolvable as e:
         print(f'[run_job] {e} — cannot scope extraction, failing the Place')
-        worker_client.place_failed(place_id)
+        worker_client.place_failed(place_id, stage, type(e).__name__)
         sys.exit(1)
 
     try:
+        stage = 'foursquare_extract'
         csv_path = extract.extract_place(os.environ['FOURSQUARE_JWT'], place_id, min_lat, max_lat, min_lng, max_lng)
+        stage = 'classify'
         sql_path = os.path.join(extract.BUILD_DIR, f'load_{place_id}.sql')
         result = classify(place_id, csv_path, sql_path)
+        stage = 'd1_load'
         d1_client.execute_sql_file(result['sql_path'])
+        stage = 'raw_extract_upload'
         r2_client.upload_file(csv_path, result['raw_extract_r2_key'])
+        stage = 'export_upload'
         r2_client.upload_file(result['sqlite_path'], result['export_r2_key'])
         extent = None
         if result['min_lat'] is not None:
             extent = {k: result[k] for k in ('min_lat', 'max_lat', 'min_lng', 'max_lng')}
+        stage = 'build_complete_callback'
         worker_client.build_complete(
             place_id=place_id, build_id=result['build_id'],
             rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'],
             r2_key=result['raw_extract_r2_key'], extent=extent,
         )
         print(f"[run_job] place {place_id} mapped: {result['rows_loaded']} rows")
-    except Exception:
+    except Exception as e:
         traceback.print_exc()
         # place-failed, not build-complete{status:'failed'} — this can fire
         # before classify() ever ran (extract() itself failing), when no
         # build_id/build_log row exists yet to close out. See
         # /internal/place-failed's own doc comment in cloudflare/src/index.ts.
-        worker_client.place_failed(place_id)
+        worker_client.place_failed(place_id, stage, type(e).__name__)
         sys.exit(1)
 
 def run_country(country_code):
