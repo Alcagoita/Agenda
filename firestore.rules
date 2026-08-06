@@ -153,6 +153,13 @@ service cloud.firestore {
       return value is string && validPoiType(value);
     }
 
+    function validRestaurantFoodType(value) {
+      return value in [
+        'sushi', 'vegetarian', 'portuguese', 'italian', 'burger',
+        'healthy', 'indian', 'thai', 'mexican', 'steak',
+      ];
+    }
+
     function validPointsReason(reason) {
       return reason in [
         'task_completed',
@@ -191,6 +198,7 @@ service cloud.firestore {
           'source',
           'poi',
           'storeSubtype',
+          'restaurantFoodType',
           'poiPlaceId',
           'completedPlaceId',
           'completedPlaceName',
@@ -214,6 +222,8 @@ service cloud.firestore {
         && (!('source' in data.keys()) || validTaskSource(data.source))
         && (!('poi' in data.keys()) || validPoiType(data.poi))
         && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
+        && (!('restaurantFoodType' in data.keys()) ||
+          (data.poi == 'restaurant' && validRestaurantFoodType(data.restaurantFoodType)))
         && (!('poiPlaceId' in data.keys()) || validString(data.poiPlaceId, 200))
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))

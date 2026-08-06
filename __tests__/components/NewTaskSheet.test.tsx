@@ -556,6 +556,17 @@ describe('addTask submission', () => {
     );
   });
 
+  it('persists the selected restaurant food type when creating a restaurant task', async () => {
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Have dinner');
+    fireEvent.press(screen.getByLabelText('Restaurant'));
+    fireEvent.press(screen.getByLabelText('Vegetarian'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    expect(mockAddTask).toHaveBeenCalledWith('test-uid', expect.objectContaining({
+      poi: 'restaurant', restaurantFoodType: 'vegetarian',
+    }));
+  });
+
   it('does not call onTaskAdded when addTask fails', async () => {
     mockAddTask.mockRejectedValue(new Error('Network error'));
     const onTaskAdded = jest.fn();
@@ -634,6 +645,19 @@ describe('"More details" navigation', () => {
         initialStoreSubtypeExplicitlySelected: true,
         initialPoiExplicitlySelected: true,
       });
+    }, { timeout: 500 });
+  });
+
+  it('passes the selected restaurant food type through More details', async () => {
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Have dinner');
+    fireEvent.press(screen.getByLabelText('Restaurant'));
+    fireEvent.press(screen.getByLabelText('Vegetarian'));
+    fireEvent.press(screen.getByLabelText('More details'));
+    await waitFor(() => {
+      expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', expect.objectContaining({
+        initialPoi: 'restaurant', initialRestaurantFoodType: 'vegetarian',
+      }));
     }, { timeout: 500 });
   });
 

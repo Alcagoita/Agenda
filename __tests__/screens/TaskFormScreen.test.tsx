@@ -164,6 +164,7 @@ type RouteParams = {
   initialDate?: string;
   initialTitle?: string;
   initialPoi?: string;
+  initialRestaurantFoodType?: string;
   initialStoreSubtype?: string;
   initialPoiExplicitlySelected?: boolean;
 };
@@ -753,6 +754,18 @@ describe('TaskFormScreen — save (create)', () => {
         }),
       );
     });
+  });
+
+  it('hydrates and saves a restaurant food type passed from quick create', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'restaurant', initialRestaurantFoodType: 'vegetarian' });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    expect(screen.getByLabelText('Vegetarian').props.accessibilityState?.selected).toBe(true);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Have dinner');
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'restaurant', restaurantFoodType: 'vegetarian',
+    })));
   });
 });
 

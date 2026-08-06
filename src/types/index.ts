@@ -1,6 +1,7 @@
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { COPY } from '../constants/copy';
 import type { StoreSubtype } from '../services/storeSubtypes';
+import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -196,6 +197,8 @@ export interface Task {
   poi?: string;
   /** Optional store subtype selected by the user for store tasks (KAN-315). */
   storeSubtype?: StoreSubtype;
+  /** Optional cuisine preference selected for restaurant tasks. */
+  restaurantFoodType?: RestaurantFoodType;
   /** Google Places ID if the user pinned a specific place — optional. */
   poiPlaceId?: string;
   /**
