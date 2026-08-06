@@ -9,15 +9,31 @@ CREATE TABLE poi_global (
   raw_category_ids TEXT, raw_category_labels TEXT, address TEXT, date_refreshed TEXT NOT NULL
 );
 INSERT INTO poi_global
-SELECT fsq_place_id, MIN(name), MIN(lat), MIN(lng), MIN(geohash), MIN(primary_poi_type),
-       MIN(brand), MIN(category_label), MIN(raw_category_ids), MIN(raw_category_labels), MIN(address), MAX(date_refreshed)
-FROM poi GROUP BY fsq_place_id;
+WITH ranked AS (
+  SELECT *, ROW_NUMBER() OVER (
+    PARTITION BY fsq_place_id ORDER BY date_refreshed DESC, place_id ASC
+  ) AS row_number
+  FROM poi
+)
+SELECT fsq_place_id, name, lat, lng, geohash, primary_poi_type, brand,
+       category_label, raw_category_ids, raw_category_labels, address, date_refreshed
+FROM ranked WHERE row_number = 1;
 
 CREATE TABLE poi_type_global (
   fsq_place_id TEXT NOT NULL, poi_type TEXT NOT NULL, rank INTEGER NOT NULL,
   PRIMARY KEY (fsq_place_id, poi_type)
 );
-INSERT INTO poi_type_global SELECT fsq_place_id, poi_type, MIN(rank) FROM poi_type GROUP BY fsq_place_id, poi_type;
+INSERT INTO poi_type_global
+WITH distinct_types AS (
+  SELECT fsq_place_id, poi_type, MIN(rank) AS source_rank
+  FROM poi_type
+  GROUP BY fsq_place_id, poi_type
+), ranked_types AS (
+  SELECT fsq_place_id, poi_type,
+         ROW_NUMBER() OVER (PARTITION BY fsq_place_id ORDER BY source_rank, poi_type) - 1 AS rank
+  FROM distinct_types
+)
+SELECT fsq_place_id, poi_type, rank FROM ranked_types;
 
 CREATE TABLE poi_attribute_global (
   fsq_place_id TEXT NOT NULL, dimension TEXT NOT NULL, value TEXT NOT NULL,

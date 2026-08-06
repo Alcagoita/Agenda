@@ -698,7 +698,10 @@ export default {
         .bind(countryCode).first<{ country_code: string }>();
       if (!country) return json({ error: `no country row matched countryCode '${countryCode}'` }, 404);
       await env.REGISTRY_DB.prepare(
-        "INSERT OR IGNORE INTO place (place_id, country_code, name, place_kind, status, request_count) VALUES (?, ?, ?, ?, 'mapping', 0)",
+        `INSERT INTO place (place_id, country_code, name, place_kind, status, request_count)
+         VALUES (?, ?, ?, ?, 'mapping', 0)
+         ON CONFLICT(place_id) DO UPDATE SET status =
+           CASE WHEN place.status = 'none' THEN 'mapping' ELSE place.status END`,
       ).bind(body.placeId, countryCode, body.name, typeof body.placeKind === 'string' ? body.placeKind : null).run();
       const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
         .bind(body.placeId).first<PlaceRow>();

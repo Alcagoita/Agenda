@@ -199,6 +199,21 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
             row.mapped_at = mappedAt;
             return { meta: { changes: 1 } };
           }
+          if (trimmed.startsWith('INSERT INTO place (place_id, country_code, name, place_kind, status, request_count)')) {
+            const [placeId, countryCode, name, placeKind] = args as [string, string, string, string | null];
+            const existing = rows.get(placeId);
+            if (existing) {
+              if (existing.status === 'none') existing.status = 'mapping';
+              return { meta: { changes: 1 } };
+            }
+            rows.set(placeId, {
+              place_id: placeId, country_code: countryCode, name, place_kind: placeKind,
+              status: 'mapping', min_lat: null, max_lat: null, min_lng: null, max_lng: null,
+              build_id: null, mapped_at: null,
+              request_count: 0, first_requested_at: null, last_requested_at: null,
+            });
+            return { meta: { changes: 1 } };
+          }
           if (trimmed.startsWith('INSERT INTO place')) {
             const [placeId, countryCode, name, placeKind, firstRequestedAt, lastRequestedAt] = args as [
               string, string | null, string, string | null, string, string,
@@ -217,17 +232,6 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
               status: 'none', min_lat: null, max_lat: null, min_lng: null, max_lng: null,
               build_id: null, mapped_at: null,
               request_count: 1, first_requested_at: firstRequestedAt, last_requested_at: lastRequestedAt,
-            });
-            return { meta: { changes: 1 } };
-          }
-          if (trimmed.startsWith('INSERT OR IGNORE INTO place')) {
-            const [placeId, countryCode, name, placeKind] = args as [string, string, string, string | null];
-            if (rows.has(placeId)) return { meta: { changes: 0 } };
-            rows.set(placeId, {
-              place_id: placeId, country_code: countryCode, name, place_kind: placeKind,
-              status: 'mapping', min_lat: null, max_lat: null, min_lng: null, max_lng: null,
-              build_id: null, mapped_at: null,
-              request_count: 0, first_requested_at: null, last_requested_at: null,
             });
             return { meta: { changes: 1 } };
           }
@@ -677,6 +681,24 @@ describe('POST /internal/place/ensure', () => {
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
     expect(fakeDb.rows.get('osm-relation-99')).toMatchObject({
       country_code: 'PT', name: 'Example Town', place_kind: 'town', status: 'mapping',
+    });
+  });
+
+  it('promotes an existing demand-only Place to mapping without changing its identity', async () => {
+    const env = makeEnv([{
+      place_id: 'osm-relation-100', name: 'Demand Town', country_code: 'PT', place_kind: 'town',
+      status: 'none', min_lat: null, max_lat: null, min_lng: null, max_lng: null,
+      build_id: null, mapped_at: null, request_count: 4,
+      first_requested_at: '2026-08-01T00:00:00.000Z', last_requested_at: '2026-08-02T00:00:00.000Z',
+    }], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
+
+    await worker.fetch(internalRequest('/internal/place/ensure', {
+      placeId: 'osm-relation-100', countryCode: 'PT', name: 'Ignored Rename', placeKind: 'city',
+    }), env);
+
+    const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
+    expect(fakeDb.rows.get('osm-relation-100')).toMatchObject({
+      name: 'Demand Town', place_kind: 'town', request_count: 4, status: 'mapping',
     });
   });
 });

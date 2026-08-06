@@ -11,17 +11,12 @@ independent data source: OpenStreetMap.
 
 One-time bulk backfill per Place, not live per-user (same reasoning as the
 rest of this pipeline) — matches OSM elements (by name + proximity) against
-`poi` rows already loaded by classify_and_load.py that still have no
-food_cuisine/store_kind poi_attribute row after BOTH the category-tag and
-keyword-fallback passes, and writes new poi_attribute rows for confident
-matches, tagged with the Place's CURRENT build_id (read live from D1) so
-they survive that build's sweep-delete cycle. Must be re-run after every
-future Foursquare re-extraction for the same Place, or this enrichment is
-lost when that build's sweep retires the previous build's poi_attribute
-rows — same requirement documented for the keyword pass, just run as a
-separate step here instead of inline, since Overpass is a slow, flaky,
-retryable external call (~40-60% single-attempt failure rate per KAN-322)
-that doesn't belong in the fast synchronous Foursquare pipeline.
+global Foursquare `poi` rows inside that Place's bounds which still have no
+food_cuisine/store_kind attribute after BOTH the category-tag and keyword-
+fallback passes. Confident matches write global `poi_attribute` rows keyed
+by Foursquare ID. It remains a separate operator step because Overpass is a
+slow, flaky, retryable external call (~40-60% single-attempt failure rate
+per KAN-322), not part of the Foursquare extraction path.
 
 KAN-355 note: this script queries `place`/`place_id` (min/max lat/lng), not
 the pre-rename `city`/`city_id` (center/radius) — updated 2026-08-06, was
@@ -32,7 +27,7 @@ Usage: python3 enrich_osm_cuisine.py <place_id>
 Uses wrangler's own ambient auth (same login `wrangler d1 execute` already
 uses elsewhere in this pipeline) — no separate token env vars required.
 """
-import difflib, json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
+import datetime, difflib, json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify_and_load import normalize_text, sql_escape, CLOUDFLARE_DIR, BUILD_DIR
@@ -47,7 +42,8 @@ USER_AGENT = 'BrushPoiBackend-Enrichment/1.0 (one-time batch backfill)'
 OVERPASS_TIMEOUT_S = 90
 MATCH_RADIUS_METERS = 75  # confident-match proximity threshold — tight enough to avoid matching the wrong nearby business with a similar name
 NAME_SIMILARITY_THRESHOLD = 0.72  # below this, name+location together aren't confident enough to be the same business
-GRID_CELL_DEG = MATCH_RADIUS_METERS / 111_000  # ~radius-sized spatial bucket, so a 3x3 neighborhood covers the full search radius
+GRID_LAT_DEG = MATCH_RADIUS_METERS / 111_000
+MIN_CONTAINED_NAME_LENGTH = 3  # mirrors the app's minimum meaningful token length
 
 # OSM's cuisine= tag vocabulary doesn't map 1:1 onto ours — only mapping
 # values with a clear, unambiguous correspondence to one of our 10 existing
@@ -146,12 +142,11 @@ def enrich(place_id):
         raise ValueError(f"no place row for '{place_id}'")
     place = place_rows[0]
     build_id = place['build_id']
-    if not build_id:
-        raise ValueError(f"place '{place_id}' has no build_id — run the regular extraction pipeline first")
+    output_id = build_id or datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     min_lat, max_lat, min_lng, max_lng = place['min_lat'], place['max_lat'], place['min_lng'], place['max_lng']
-    if min_lat is None:
+    if any(v is None for v in (min_lat, max_lat, min_lng, max_lng)):
         raise ValueError(f"place '{place_id}' has no ingested extent yet — run the regular extraction pipeline first")
-    print(f"[{place_id}] bbox=({min_lat},{min_lng})-({max_lat},{max_lng}) build_id={build_id}")
+    print(f"[{place_id}] bbox=({min_lat},{min_lng})-({max_lat},{max_lng}) build_id={build_id or 'none'}")
 
     print(f"[{place_id}] fetching restaurant/store rows still missing a subtype after category-tag + keyword matching...")
     restaurant_candidates = run_d1_query(f"""
@@ -188,16 +183,19 @@ def enrich(place_id):
     # accents) even though it's clearly the same place at the same spot.
     # Bucket size matches MATCH_RADIUS_METERS so a 3x3 neighborhood always
     # covers the full search radius without scanning every candidate.
+    center_lat = (min_lat + max_lat) / 2
+    grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
+
     def build_grid(candidates):
         grid = {}
         for c in candidates:
             c['_norm'] = normalize_text(c['name'])
-            bucket = (int(c['lat'] / GRID_CELL_DEG), int(c['lng'] / GRID_CELL_DEG))
+            bucket = (int(c['lat'] / GRID_LAT_DEG), int(c['lng'] / grid_lng_deg))
             grid.setdefault(bucket, []).append(c)
         return grid
 
     def nearby(grid, lat, lng):
-        bucket = (int(lat / GRID_CELL_DEG), int(lng / GRID_CELL_DEG))
+        bucket = (int(lat / GRID_LAT_DEG), int(lng / grid_lng_deg))
         for dlat in (-1, 0, 1):
             for dlng in (-1, 0, 1):
                 for c in grid.get((bucket[0] + dlat, bucket[1] + dlng), ()):
@@ -225,7 +223,9 @@ def enrich(place_id):
             return 0.0
         if a == b:
             return 1.0
-        if a in b or b in a:
+        shorter, longer = sorted((a, b), key=len)
+        if (len(shorter) >= MIN_CONTAINED_NAME_LENGTH and
+                (longer.startswith(shorter + ' ') or longer.endswith(' ' + shorter))):
             return 0.9
         return difflib.SequenceMatcher(None, a, b).ratio()
 
@@ -248,9 +248,8 @@ def enrich(place_id):
             return None
         scored.sort(key=lambda t: (-t[0], t[1]))
         best_sim, best_dist, best_candidate = scored[0]
-        if len(scored) > 1:
-            second_sim, second_dist, _ = scored[1]
-            if (best_sim - second_sim) < 0.05 and abs(best_dist - second_dist) < 15:
+        for candidate_sim, candidate_dist, _ in scored[1:]:
+            if (best_sim - candidate_sim) < 0.05 and abs(best_dist - candidate_dist) < 15:
                 return 'ambiguous'
         return best_candidate
 
@@ -297,7 +296,7 @@ def enrich(place_id):
         print(f"[{place_id}] nothing to write, done")
         return
 
-    out_path = os.path.join(BUILD_DIR, f'osm_enrich_{place_id}_{build_id}.sql')
+    out_path = os.path.join(BUILD_DIR, f'osm_enrich_{place_id}_{output_id}.sql')
     # This script writes a file for the operator to apply later, by hand —
     # Attributes are global just like POIs. They are not tied to a Place
     # build: a confident OSM/Foursquare match remains valid if the same POI
