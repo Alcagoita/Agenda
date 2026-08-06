@@ -195,11 +195,25 @@ manually for all three current Places:
 
 Applied directly to remote D1. Sertã matched nothing (small town, sparse
 OSM tagging — not a bug: 9 restaurant + 3 store candidates were queried,
-Overpass returned 55 elements, none matched by name+proximity). `store_kind`
-came back 0 for every Place despite real `shop=`-tagged candidates existing
-in the Overpass results — worth checking `OSM_SHOP_TO_STORE_KIND` matching
-logic (line ~69) before relying on this path for stores; `food_cuisine`
-matching is confirmed working end-to-end.
+Overpass returned 55 elements, none matched by name+proximity).
+
+**`store_kind` root cause (diagnosed, not a bug in the matching code):**
+matching is exact-normalized-name (`normalize_text`, diacritics/case/punct
+stripped) + haversine ≤75m, no fuzzy/token matching. For Lisboa, 2,591
+Overpass elements had a mappable `shop=` tag, but only **2** had a
+normalized name overlapping any of the 522 store candidates. Root cause is
+the candidate pool itself, not the matcher: these 522 are exactly the rows
+Foursquare's category tag *and* the KAN-340 keyword pass already failed to
+classify — i.e. by construction the long tail of small businesses with
+legal-entity names ("Redidáctica - Reparações, Montagens e Comércio de
+Equipamentos Didácticos", "Chaveca & Martins", "Cab. N."), which OSM
+mappers essentially never tag under a matching name. Restaurants don't hit
+this as hard because cuisine-tagged OSM elements skew toward recognizable
+eatery names that actually overlap Foursquare's restaurant names.
+Fuzzy/token-subset matching could recover a handful more, but most of this
+cohort likely has no usable OSM counterpart regardless of match strategy —
+diminishing-returns territory, not worth chasing without evidence it moves
+the needle. `food_cuisine` matching is confirmed working end-to-end.
 
 Still only run manually, still not wired into `run_job.py` — the automation
 decision below is unchanged.
