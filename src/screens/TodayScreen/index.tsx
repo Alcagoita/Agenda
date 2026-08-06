@@ -50,7 +50,6 @@ import TaskRow from '../../components/TaskRow';
 import NearbyCard from '../../components/NearbyCard';
 import ErrandBundleCard from '../../components/ErrandBundleCard';
 import TripSuggestionCard from '../../components/TripSuggestionCard';
-import NetworkBanner from '../../components/NetworkBanner';
 import NewTaskSheetHost from '../../components/NewTaskSheetHost';
 import { useNewTaskSheetStore } from '../../store/newTaskSheetStore';
 import StoreTuningPromptSheet from '../../components/StoreTuningPromptSheet';
@@ -366,9 +365,6 @@ export default function TodayScreen() {
           onPeoplePress={() => navigation.navigate('SocialHub')}
         />
       </View>
-
-      {/* ── Offline banner — below app bar ── */}
-      <NetworkBanner />
 
       {/* ── Scroll area — ring section overlaid on content ── */}
       {(DEBUG_SHOW_LIST || DEBUG_SHOW_RING) && (

@@ -66,11 +66,6 @@ jest.mock('../src/theme/ThemeContext', () => ({
   }),
 }));
 
-jest.mock('../src/components/NetworkBanner', () => {
-  const { View } = require('react-native');
-  return () => <View testID="network-banner" />;
-});
-
 jest.mock('../src/components/ErrorBoundary', () => {
   const React = require('react');
   return ({ children }: { children: React.ReactNode }) => children;

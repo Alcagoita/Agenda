@@ -92,7 +92,7 @@ jest.mock('../../src/constants/copy', () => ({
       proximityTitle: (label: string) => `You're near ${label}`,
       proximityBody:  (count: number) => `${count} task(s) nearby`,
     },
-    offline: { genericBanner: '', noCacheYetBanner: '', uncoveredAreaToast: '' },
+    offline: { genericBanner: '', uncoveredAreaToast: '' },
     poiCatalog: new Proxy({}, { get: (_t, key) => String(key) }),
   },
 }));

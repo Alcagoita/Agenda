@@ -2,7 +2,7 @@
  * toastStore — KAN-149
  *
  * Global toast state. A single <Toast /> is mounted once at the App root
- * (sibling to <NetworkBanner />) so the confirmation message survives the
+ * (sibling to the app shell) so the confirmation message survives the
  * New Task sheet closing or the More Details screen navigating back —
  * both of which unmount immediately after a successful add.
  *

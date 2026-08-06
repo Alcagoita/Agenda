@@ -1,9 +1,8 @@
 /**
  * useOfflineCoverage — shared offline/habitat-coverage detection (KAN-241).
  *
- * Lifted out of NetworkBanner's original logic so it and ContextChip can't
- * disagree on what "offline" and "has coverage" mean — both need to reach
- * the same conclusion for the banner-vs-chip decision to be consistent.
+ * Keeps the connectivity and cache-coverage checks together so the offline
+ * glyph only appears after coverage is known.
  *
  * hasCachedPlaces() opens/queries SQLite, so it must never run during
  * render (the first call can synchronously create the DB + schema) — it's
@@ -11,10 +10,8 @@
  *
  * `hasCache` is tri-state (`null` = not yet known) rather than defaulting to
  * false: on the render where `offline` first flips true, the real cache
- * state hasn't been read yet. Defaulting to false would make NetworkBanner
- * (which now shows only for offline+no-cache) flash its "broken" banner for
- * a tick even when the cache is actually seeded. Callers must treat `null`
- * as "don't render either the banner or the chip yet."
+ * state hasn't been read yet. Callers must treat `null` as "don't render the
+ * coverage-dependent glyph yet."
  */
 import { useEffect, useState } from 'react';
 import { useNetInfo } from '@react-native-community/netinfo';

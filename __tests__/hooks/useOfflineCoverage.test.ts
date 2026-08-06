@@ -8,8 +8,7 @@
  *   - isInternetReachable: false counts as offline even when isConnected is true
  *   - connectivity state not yet known (null) → stays offline: false
  *   - hasCache is null (not false) on the render before the cache check
- *     resolves — callers must not treat "unknown" as "no cache" (review fix:
- *     avoids NetworkBanner flashing its broken-state copy for a tick)
+ *     resolves — callers must not treat "unknown" as "no cache"
  */
 
 import { renderHook, waitFor } from '@testing-library/react-native';

@@ -173,7 +173,7 @@ src/
     TripSuggestionCard.tsx
     TierLadder.tsx / TierMedal.tsx
     EventCard.tsx / MiniCalendar.tsx / CalendarRing.tsx
-    NetworkBanner.tsx / ErrorBoundary.tsx / Toast.tsx
+    ErrorBoundary.tsx / Toast.tsx
     …
 
   services/
