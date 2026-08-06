@@ -118,6 +118,21 @@ def partition_by_locality(country_csv_path, country_code):
         out_paths[locality] = out_path
     return out_paths
 
+def country_stats(country_csv_path):
+    """Counts every country-source row once, independently of locality
+    resolution. The generic pass must reconcile against these values."""
+    source_rows = rows_with_locality = 0
+    with open(country_csv_path) as f:
+        for row in csv.DictReader(f):
+            source_rows += 1
+            if (row.get('locality') or '').strip():
+                rows_with_locality += 1
+    return {
+        'source_rows': source_rows,
+        'rows_with_locality': rows_with_locality,
+        'rows_without_locality': source_rows - rows_with_locality,
+    }
+
 def locality_centroid(country_csv_path, locality):
     """Average lat/lng of a locality's rows — enough precision to reverse-
     geocode which settlement this is; not used for anything spatial beyond

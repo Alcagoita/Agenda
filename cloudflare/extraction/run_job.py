@@ -21,6 +21,7 @@ API token or R2 keys needed here. Required environment:
 import os
 import sys
 import traceback
+import uuid
 
 import d1_client
 import r2_client
@@ -82,6 +83,7 @@ def run_country(country_code):
     print(f'[run_job] country mode: {country_code}')
     try:
         country_csv = extract.extract_country(os.environ['FOURSQUARE_JWT'], country_code)
+        audit = extract.country_stats(country_csv)
         localities = extract.partition_by_locality(country_csv, country_code)
         print(f'[run_job] {len(localities)} distinct localities found for {country_code}')
 
@@ -137,15 +139,24 @@ def run_country(country_code):
             r2_client.upload_file(country_csv, result['raw_extract_r2_key'])
             r2_client.upload_file(result['sqlite_path'], result['export_r2_key'])
             worker_client.build_complete(generic_id, result['build_id'], result['rows_loaded'], result['rows_skipped'], result['raw_extract_r2_key'])
+            audit.update(rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'])
         except Exception:
             traceback.print_exc()
             failed_count += 1
 
-        country_build_id = f'{country_code}-{mapped_count}-places'
-        if failed_count:
+        country_build_id = str(uuid.uuid4())
+        audit.update(
+            resolved_localities=len(places), unresolved_localities=unresolved_count,
+            failed_places=failed_count,
+        )
+        # The generic pass classifies the full country CSV, so this equality is
+        # the durable proof that every source row was loaded or intentionally
+        # skipped by the supported-type policy.
+        if failed_count or audit.get('rows_loaded', 0) + audit.get('rows_skipped', 0) != audit['source_rows']:
             print(f'[run_job] country {country_code} incomplete: {mapped_count} mapped, {failed_count} failed, {unresolved_count} unresolved localities covered by generic import')
             worker_client.country_failed(country_code)
             sys.exit(1)
+        worker_client.country_audit(country_code, country_build_id, audit)
         worker_client.country_complete(country_code, country_build_id)
         print(f'[run_job] country {country_code} complete: {mapped_count} Places mapped')
     except Exception:
