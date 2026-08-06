@@ -32,7 +32,7 @@ Usage: python3 enrich_osm_cuisine.py <place_id>
 Uses wrangler's own ambient auth (same login `wrangler d1 execute` already
 uses elsewhere in this pipeline) — no separate token env vars required.
 """
-import json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
+import difflib, json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify_and_load import normalize_text, sql_escape, CLOUDFLARE_DIR, BUILD_DIR
@@ -46,6 +46,8 @@ OVERPASS_ENDPOINTS = [
 USER_AGENT = 'BrushPoiBackend-Enrichment/1.0 (one-time batch backfill)'
 OVERPASS_TIMEOUT_S = 90
 MATCH_RADIUS_METERS = 75  # confident-match proximity threshold — tight enough to avoid matching the wrong nearby business with a similar name
+NAME_SIMILARITY_THRESHOLD = 0.72  # below this, name+location together aren't confident enough to be the same business
+GRID_CELL_DEG = MATCH_RADIUS_METERS / 111_000  # ~radius-sized spatial bucket, so a 3x3 neighborhood covers the full search radius
 
 # OSM's cuisine= tag vocabulary doesn't map 1:1 onto ours — only mapping
 # values with a clear, unambiguous correspondence to one of our 10 existing
@@ -178,19 +180,31 @@ def enrich(place_id):
     elements = data.get('elements', [])
     print(f"[{place_id}] Overpass returned {len(elements)} elements")
 
-    # Index candidates by normalized name for fast lookup — proximity is
-    # checked per-candidate-match, not per-full-scan, since name collisions
-    # across an entire city are rare and this keeps the match loop cheap.
-    def index_by_name(candidates):
-        index = {}
+    # Grid-indexed by location, not name — an exact-name index missed
+    # confident matches where OSM and Foursquare disagree slightly on a
+    # business's name (legal-entity suffixes, franchise/branch qualifiers,
+    # accents) even though it's clearly the same place at the same spot.
+    # Bucket size matches MATCH_RADIUS_METERS so a 3x3 neighborhood always
+    # covers the full search radius without scanning every candidate.
+    def build_grid(candidates):
+        grid = {}
         for c in candidates:
-            key = normalize_text(c['name'])
-            if key:
-                index.setdefault(key, []).append(c)
-        return index
+            c['_norm'] = normalize_text(c['name'])
+            bucket = (int(c['lat'] / GRID_CELL_DEG), int(c['lng'] / GRID_CELL_DEG))
+            grid.setdefault(bucket, []).append(c)
+        return grid
 
-    restaurant_index = index_by_name(restaurant_candidates)
-    store_index = index_by_name(store_candidates)
+    def nearby(grid, lat, lng):
+        bucket = (int(lat / GRID_CELL_DEG), int(lng / GRID_CELL_DEG))
+        for dlat in (-1, 0, 1):
+            for dlng in (-1, 0, 1):
+                for c in grid.get((bucket[0] + dlat, bucket[1] + dlng), ()):
+                    dist = haversine_m(lat, lng, c['lat'], c['lng'])
+                    if dist <= MATCH_RADIUS_METERS:
+                        yield c, dist
+
+    restaurant_grid = build_grid(restaurant_candidates)
+    store_grid = build_grid(store_candidates)
 
     matched_rows = []  # (fsq_place_id, dimension, value)
     matched_place_ids = set()  # a place already matched by an earlier OSM element shouldn't match a second one under a different dimension by accident
@@ -198,26 +212,45 @@ def enrich(place_id):
     store_kind_matches = 0
     ambiguous_skipped = 0
 
-    def closest_unambiguous_candidate(index, normalized_name, lat, lng):
-        """All unassigned same-normalized-name candidates within
-        MATCH_RADIUS_METERS, picking the strictly closest one — but only
-        when it's unambiguously closest (no other eligible candidate at the
-        same distance). Two candidates at an identical distance means we
-        can't tell which business the OSM element actually refers to, so
-        neither gets guessed at; returns None for that case too."""
-        eligible = []
-        for candidate in index.get(normalized_name, []):
+    def name_similarity(a, b):
+        """1.0 for identical, 0.9 for one name fully containing the other
+        (covers franchise/branch suffixes like "McDonald's Amadora" vs
+        "McDonald's", or a legal-entity suffix OSM never carries), otherwise
+        a fuzzy ratio (stdlib difflib, no extra dependency) — same signal
+        edit-distance-based matching would give, cheap enough for this
+        candidate-pool scale."""
+        if not a or not b:
+            return 0.0
+        if a == b:
+            return 1.0
+        if a in b or b in a:
+            return 0.9
+        return difflib.SequenceMatcher(None, a, b).ratio()
+
+    def best_unambiguous_match(grid, lat, lng, osm_norm):
+        """Combines name similarity with proximity: every unassigned
+        candidate within MATCH_RADIUS_METERS is scored on name_similarity,
+        and only a confident (>=NAME_SIMILARITY_THRESHOLD), unambiguous
+        winner is returned. 'Unambiguous' means no other eligible candidate
+        scored within 0.05 similarity AND 15m distance of the winner — close
+        enough on both axes that we can't tell which business the OSM
+        element actually refers to, so neither gets guessed at."""
+        scored = []
+        for candidate, dist in nearby(grid, lat, lng):
             if candidate['fsq_place_id'] in matched_place_ids:
                 continue
-            dist = haversine_m(lat, lng, candidate['lat'], candidate['lng'])
-            if dist <= MATCH_RADIUS_METERS:
-                eligible.append((dist, candidate))
-        if not eligible:
+            sim = name_similarity(osm_norm, candidate['_norm'])
+            if sim >= NAME_SIMILARITY_THRESHOLD:
+                scored.append((sim, dist, candidate))
+        if not scored:
             return None
-        eligible.sort(key=lambda pair: pair[0])
-        if len(eligible) > 1 and eligible[0][0] == eligible[1][0]:
-            return 'ambiguous'
-        return eligible[0][1]
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        best_sim, best_dist, best_candidate = scored[0]
+        if len(scored) > 1:
+            second_sim, second_dist, _ = scored[1]
+            if (best_sim - second_sim) < 0.05 and abs(best_dist - second_dist) < 15:
+                return 'ambiguous'
+        return best_candidate
 
     for el in elements:
         tags = el.get('tags') or {}
@@ -236,7 +269,7 @@ def enrich(place_id):
         if cuisine_tag:
             value = first_mapped_cuisine(cuisine_tag)
             if value:
-                candidate = closest_unambiguous_candidate(restaurant_index, normalized_name, lat, lng)
+                candidate = best_unambiguous_match(restaurant_grid, lat, lng, normalized_name)
                 if candidate == 'ambiguous':
                     ambiguous_skipped += 1
                 elif candidate:
@@ -248,7 +281,7 @@ def enrich(place_id):
         if shop_tag:
             value = OSM_SHOP_TO_STORE_KIND.get(shop_tag.strip().lower())
             if value:
-                candidate = closest_unambiguous_candidate(store_index, normalized_name, lat, lng)
+                candidate = best_unambiguous_match(store_grid, lat, lng, normalized_name)
                 if candidate == 'ambiguous':
                     ambiguous_skipped += 1
                 elif candidate:
