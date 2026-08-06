@@ -80,7 +80,12 @@ No bbox **if** the Foursquare dataset carries a country field — then extractio
 
 ### `poi`
 
-`city_id` → `place_id`. **Keep the column** — it's how you rebuild or delete one Place's POIs. Whether it stays in the read query's predicate should be **measured** against the existing ~23 ms baseline, not assumed.
+POIs are global Foursquare entities keyed by `fsq_place_id`, with a global
+geohash index. A nearby query is always coordinate + radius based and never
+filters by Place: a venue first encountered while mapping Odivelas must still
+be returned to someone standing beside it in Lisboa. Place only records
+coverage/build state. Repeated imports upsert the same POI rather than
+creating overlap duplicates.
 
 ---
 

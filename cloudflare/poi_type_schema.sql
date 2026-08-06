@@ -14,12 +14,10 @@
 -- order that specific row's tags).
 
 CREATE TABLE IF NOT EXISTS poi_type (
-  place_id      TEXT NOT NULL,
   fsq_place_id TEXT NOT NULL,
-  build_id     TEXT NOT NULL,
   poi_type     TEXT NOT NULL,
   rank         INTEGER NOT NULL,
-  PRIMARY KEY (place_id, fsq_place_id, poi_type)
+  PRIMARY KEY (fsq_place_id, poi_type)
 );
 
 -- No secondary index: the only lookup against this table (index.ts EXISTS

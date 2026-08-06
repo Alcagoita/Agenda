@@ -65,34 +65,52 @@ separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
   param name unchanged by KAN-355 on purpose — the rename to
   `/export/:placeId` is explicitly KAN-343's scope.
 - `POST /coverage/request` `{lat,lng}` — `{coverageStatus, cityId, retryAfterSeconds?}`
-  for this specific location (KAN-346/355). **Public response shape is
-  unchanged by KAN-355** — `cityId` and the `none`/`building`/`ready` status
-  values are the wire contract KAN-346's Cloud Function proxy and app client
-  already ship against; only the internal DB model changed (see below), and
-  the Worker translates at the response boundary (`toApiStatus` in
-  `index.ts`) so nothing downstream needed to change for this ticket.
+  for this specific location (KAN-346/355/354). **Public response shape is
+  unchanged since KAN-346** — `cityId` and the `none`/`building`/`ready`
+  status values are the wire contract the Cloud Function proxy and app
+  client ship against; only the internal DB model changed, and the Worker
+  translates at the response boundary (`toApiStatus` in `index.ts`).
   Reverse-geocodes server-side to a stable Place identity (Nominatim
-  `osm_type:osm_id`, never a display name or a coordinate-derived id, and —
-  KAN-355 — retried at a coarser zoom when the finest zoom resolves to a
-  sub-unit of a named settlement, e.g. a Lisboa freguesia instead of Lisboa
-  itself) and dedupes on it. An already-mapped location returns its state
-  as-is, with no geocode call (the DB's own ingested-extent bbox short-
-  circuits it — see `findPlace`). An unmapped Place is recorded as demand
-  (`place` row, `status='none'`, `request_count`/`last_requested_at` bumped
-  on repeat requests) — capped at `MAX_PENDING_DEMAND_PLACES`: once the cap
-  of pending (`status='none'`) rows is reached, a request for a brand new
-  Place gets HTTP 429 `{error}` instead of a new row. The response
-  **never** reports `building`: nothing can move a row out of that state
-  until KAN-354's extraction worker exists, and reporting it would strand
-  the row forever. `retryAfterSeconds` is only ever present once KAN-354
-  lands.
-- `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?}`
-  — called by the extraction pipeline once a Place's rows are loaded; flips
-  `place.status` to `mapped` (API-visible as `ready` — see above), sets
-  `place.build_id`, and closes out the matching `build_log` row. `cityId`
-  targets `place.place_id` — kept as the field name for this internal-only
-  contract; KAN-354 (not built yet) is what will actually call this
-  automatically.
+  `osm_type:osm_id`, retried at a coarser zoom when the finest zoom
+  resolves to a sub-unit of a named settlement, e.g. a Lisboa freguesia
+  instead of Lisboa itself) and dedupes on it. An already-mapped location
+  returns its state as-is, with no geocode call (the DB's own
+  ingested-extent bbox short-circuits it — see `findPlace`). A brand new or
+  previously-recorded-but-unmapped Place is atomically promoted `none` ->
+  `mapping` and the extraction trigger (`BUILD_TRIGGER_URL`, KAN-354) fires
+  exactly once (`startPlaceMapping`) — every other concurrent/later request
+  for the same Place just observes `mapping` and does nothing further.
+  Capped at `MAX_PENDING_DEMAND_PLACES` pending (`status='none'`) rows
+  before a brand new Place gets HTTP 429 `{error}` instead — a `'none'` row
+  is normally short-lived now (promoted in the same request), so this
+  mostly guards the case where `BUILD_TRIGGER_URL` isn't configured at all
+  (local dev) and rows can't move past `none`.
+- `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?, status?, r2Key?}`
+  — called by the extraction Job once a Place's rows are loaded (or failed);
+  `cityId` targets `place.place_id` — kept as the field name for this
+  internal-only contract. On success, flips `place.status` to `mapped`
+  (API-visible as `ready`), sets `place.build_id`, closes out the matching
+  `build_log` row. On `status: 'failed'`, closes `build_log` as `failed`
+  and — only if this Place was never previously mapped (`build_id` still
+  null) — reverts `place.status` back to `none` so a future zero-check
+  naturally retries it; a failed *re-map* of an already-mapped Place never
+  un-maps it, the last successful build keeps serving.
+- `POST /internal/country/queue` `{countryCode}` — KAN-354's country
+  pre-build trigger, operational (queued by whoever decides which country
+  goes next, not automatically). Promotes `none` -> `mapping` and fires the
+  trigger with `mode: 'country'`; idempotent — queuing an
+  already-`mapping`/`mapped` country just reports its current status,
+  never a second job. 404s if the country has no row yet (create one first
+  — e.g. via a `/coverage/request` for a point in it, or a direct D1 insert).
+- `POST /internal/country-progress` `{countryCode}` — called by a
+  country-mode Job once per Place it finishes, incrementing
+  `country.place_count` so progress is visible before the whole run ends.
+- `POST /internal/country-complete` `{countryCode, buildId}` — the whole
+  country finished; sets `country.status` to `mapped`.
+- `POST /internal/country-failed` `{countryCode}` — the whole run errored;
+  reverts `country.status` to `none` (only if still `mapping` — a stale
+  duplicate callback must not clobber a country a later run already
+  completed) so it can be re-queued.
 
 ## Local setup
 
@@ -120,15 +138,25 @@ dashboard directly, or get a zone-scoped token addition for
 
 ## Extraction pipeline (manual today, not yet automated)
 
-**Known gap (KAN-355):** `extraction/classify_and_load.py` and
-`extraction/extract_*.sql` still generate SQL against the pre-rename column
-name `city_id` — the live D1 schema now has `place_id` (this ticket's rename
-covers the Worker and the schema files, not the Python pipeline). Running
-the pipeline as-is against the current schema will fail. Left unfixed
-deliberately: KAN-354 (the extraction worker, not built yet) already needs
-to substantially rework this pipeline's inputs (per-country, per-Place
-instead of a hand-maintained bbox per city) and is the natural place to fix
-the column name at the same time, rather than patching it twice.
+**KAN-354 automated this.** `extraction/run_job.py` is now the real
+entrypoint — reads `MODE`/`TARGET` from the environment, resolves scope
+(a Place's bbox via Nominatim, or a whole country via Foursquare's own
+`country` field), runs extraction + `classify_and_load.py`'s classification
+(now `place_id`-keyed, matching the KAN-355 schema) automatically, writes
+to D1 and R2 through the Worker's own bindings (`d1_client.py`/`r2_client.py`,
+via `extractionContainer.ts`'s `outboundByHost` — no separate Cloudflare
+API token or R2 keys) without a human running `wrangler` by hand, and
+closes the build out via the Worker's `/internal/*` routes
+(`worker_client.py`). Runs as a **Cloudflare Container** bound to this same
+Worker (`src/extractionContainer.ts`) — deployed with the same `wrangler
+deploy` you already use, no separate service or cloud account. See
+`cloudflare/deploy/README.md` (not run from the environment that wrote
+this, see that file's own caveat).
+
+`classify_and_load.py`'s direct CLI usage (`python3 classify_and_load.py
+<place_id>`) still works for a one-off manual run against an
+already-extracted CSV — useful for debugging a single Place's
+classification without going through the whole Job.
 
 Source: [Foursquare OS Places](https://opensource.foursquare.com/os-places/)
 (Apache 2.0, bulk-storable — unlike the live Foursquare Search API, which
@@ -175,36 +203,49 @@ store kinds): +120 `food_cuisine` / +36 `store_kind` rows on Lisboa,
 higher-priority source)**: run separately from `classify_and_load.py`, not
 inline — Overpass is a slow, flaky, retryable external call (~40-60%
 single-attempt failure rate per KAN-322) that doesn't belong in the fast
-synchronous Foursquare pipeline. Queries Overpass for the city's
+synchronous Foursquare pipeline. Queries Overpass for the place's
 `cuisine=`/`shop=`-tagged elements, matches them to `poi` rows still
 missing a subtype after *both* the category-tag and keyword-fallback
-passes (by normalized name + ≤75m proximity — deliberately conservative to
-avoid mismatching two different nearby businesses with similar names), and
-writes new `poi_attribute` rows tagged with the city's current
+passes, and writes new `poi_attribute` rows tagged with the place's current
 `build_id` (read live from D1) so they survive that build's sweep.
 **Must be re-run after every future Foursquare re-extraction for the same
-city**, or this enrichment is lost when the next build's sweep retires the
+place**, or this enrichment is lost when the next build's sweep retires the
 previous build's `poi_attribute` rows — same requirement as the keyword
 pass, just a separate manual step here instead of automatic.
 
-Usage: `python3 extraction/enrich_osm_cuisine.py <city_id>` (after the
-regular pipeline has already loaded that city), then run the printed
+**Matching rule (KAN-354, 2026-08-06 — exact-name matching replaced):**
+candidates are grid-indexed by location, not name — bucket size ≈
+`MATCH_RADIUS_METERS` (75m), 3x3-neighborhood scan, so every candidate
+within radius is considered regardless of name spelling. Each candidate is
+then scored on `name_similarity()`: 1.0 identical, 0.9 if one name fully
+contains the other (covers franchise/branch qualifiers and legal-entity
+suffixes OSM never carries, e.g. "Redidáctica" vs "Redidáctica -
+Reparações, Montagens e Comércio de Equipamentos Didácticos"), else a
+`difflib.SequenceMatcher` ratio (stdlib, no dependency added) — must clear
+`NAME_SIMILARITY_THRESHOLD = 0.72`. A candidate is only accepted if
+**unambiguous**: no second eligible candidate scores within 0.05 similarity
+*and* 15m distance of the winner. Exact-name-only matching was tried first
+and undershot badly — of 2,591 Overpass elements with a mappable `shop=`
+tag near Lisboa, only 2 had a name exactly equal to a leftover store
+candidate, because the leftover pool is by construction the long tail
+category-tag + keyword matching already failed on (legal-entity names OSM
+mappers don't tag verbatim). Fuzzy name + location recovered the rest
+without needing exact spelling agreement.
+
+Usage: `python3 extraction/enrich_osm_cuisine.py <place_id>` (after the
+regular pipeline has already loaded that place), then run the printed
 `wrangler d1 execute --file=...` command.
 
-Real yield, measured against actual OSM/Foursquare name overlap in these
-two cities (most OSM elements simply don't share a listing with
-Foursquare at all — of 200 sampled cuisine-tagged OSM elements near
-Odivelas, only 22% had any same-named Foursquare row, 18% also within
-75m): +5 `food_cuisine` on Lisboa, +2 on Odivelas (a later review round
-tightened the OSM tag mapping — removed `japanese`→`sushi` and
-`stationery`→`books`, both broad-to-narrow guesses that could mislabel a
-real place, and matching now requires an unambiguous closest candidate
-rather than the first one found — smaller yield, but every match is one
-we're actually confident in). Smaller than the keyword pass's yield, as
-expected for a third, supplementary source layered on top of two already-run passes — but real,
-verified live, and recovers cases neither of the other two passes can
-(a place whose name gives no cuisine hint at all, and whose Foursquare row
-was never tagged with one either).
+Real yield, measured live against Lisboa/Odivelas/Sertã (most OSM elements
+simply don't share a listing with Foursquare at all — most of a Place's
+Overpass results never match anything): Lisboa +50 `food_cuisine` / +10
+`store_kind`, Odivelas +15 `food_cuisine` / +2 `store_kind`, Sertã +0/+0
+(town too small — only 55 Overpass elements total, none overlapping the 9
+restaurant + 3 store candidates). Smaller than the keyword pass's yield, as
+expected for a third, supplementary source layered on top of two
+already-run passes — but real, verified live, and recovers cases neither
+of the other two passes can (a place whose name gives no cuisine hint at
+all, and whose Foursquare row was never tagged with one either).
 
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL

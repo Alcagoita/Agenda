@@ -9,25 +9,25 @@ if its name hadn't happened to contain "sushi" — Foursquare's row has
 nothing to classify from at all, so the only way to recover it is a second,
 independent data source: OpenStreetMap.
 
-One-time bulk backfill per city, not live per-user (same reasoning as the
+One-time bulk backfill per Place, not live per-user (same reasoning as the
 rest of this pipeline) — matches OSM elements (by name + proximity) against
-`poi` rows already loaded by classify_and_load.py that still have no
-food_cuisine/store_kind poi_attribute row after BOTH the category-tag and
-keyword-fallback passes, and writes new poi_attribute rows for confident
-matches, tagged with the city's CURRENT build_id (read live from D1) so they
-survive that build's sweep-delete cycle. Must be re-run after every future
-Foursquare re-extraction for the same city, or this enrichment is lost when
-that build's sweep retires the previous build's poi_attribute rows — same
-requirement documented for the keyword pass, just run as a separate step
-here instead of inline, since Overpass is a slow, flaky, retryable external
-call (~40-60% single-attempt failure rate per KAN-322) that doesn't belong
-in the fast synchronous Foursquare pipeline.
+global Foursquare `poi` rows inside that Place's bounds which still have no
+food_cuisine/store_kind attribute after BOTH the category-tag and keyword-
+fallback passes. Confident matches write global `poi_attribute` rows keyed
+by Foursquare ID. It remains a separate operator step because Overpass is a
+slow, flaky, retryable external call (~40-60% single-attempt failure rate
+per KAN-322), not part of the Foursquare extraction path.
 
-Usage: python3 enrich_osm_cuisine.py <city_id>
-Requires CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID exported (same as the
-rest of this pipeline) — shells out to `wrangler d1 execute` for reads.
+KAN-355 note: this script queries `place`/`place_id` (min/max lat/lng), not
+the pre-rename `city`/`city_id` (center/radius) — updated 2026-08-06, was
+broken (still targeting the old schema) until then; nothing had run it
+since the rename.
+
+Usage: python3 enrich_osm_cuisine.py <place_id>
+Uses wrangler's own ambient auth (same login `wrangler d1 execute` already
+uses elsewhere in this pipeline) — no separate token env vars required.
 """
-import json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
+import datetime, difflib, json, math, os, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify_and_load import normalize_text, sql_escape, CLOUDFLARE_DIR, BUILD_DIR
@@ -41,6 +41,9 @@ OVERPASS_ENDPOINTS = [
 USER_AGENT = 'BrushPoiBackend-Enrichment/1.0 (one-time batch backfill)'
 OVERPASS_TIMEOUT_S = 90
 MATCH_RADIUS_METERS = 75  # confident-match proximity threshold — tight enough to avoid matching the wrong nearby business with a similar name
+NAME_SIMILARITY_THRESHOLD = 0.72  # below this, name+location together aren't confident enough to be the same business
+GRID_LAT_DEG = MATCH_RADIUS_METERS / 111_000
+MIN_CONTAINED_NAME_LENGTH = 3  # mirrors the app's minimum meaningful token length
 
 # OSM's cuisine= tag vocabulary doesn't map 1:1 onto ours — only mapping
 # values with a clear, unambiguous correspondence to one of our 10 existing
@@ -132,55 +135,76 @@ def haversine_m(lat1, lng1, lat2, lng2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def enrich(city_id):
-    print(f"[{city_id}] fetching city bounds + current build_id from D1...")
-    city_rows = run_d1_query(f"SELECT center_lat, center_lng, radius_km, current_build_id FROM city WHERE city_id = {sql_escape(city_id)};")
-    if not city_rows:
-        raise ValueError(f"no city row for '{city_id}'")
-    city = city_rows[0]
-    build_id = city['current_build_id']
-    if not build_id:
-        raise ValueError(f"city '{city_id}' has no current_build_id — run the regular extraction pipeline first")
-    center_lat, center_lng, radius_m = city['center_lat'], city['center_lng'], city['radius_km'] * 1000
-    print(f"[{city_id}] center=({center_lat},{center_lng}) radius={radius_m}m build_id={build_id}")
+def enrich(place_id):
+    print(f"[{place_id}] fetching Place bounds + current build_id from D1...")
+    place_rows = run_d1_query(f"SELECT min_lat, max_lat, min_lng, max_lng, build_id FROM place WHERE place_id = {sql_escape(place_id)};")
+    if not place_rows:
+        raise ValueError(f"no place row for '{place_id}'")
+    place = place_rows[0]
+    build_id = place['build_id']
+    output_id = build_id or datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    min_lat, max_lat, min_lng, max_lng = place['min_lat'], place['max_lat'], place['min_lng'], place['max_lng']
+    if any(v is None for v in (min_lat, max_lat, min_lng, max_lng)):
+        raise ValueError(f"place '{place_id}' has no ingested extent yet — run the regular extraction pipeline first")
+    print(f"[{place_id}] bbox=({min_lat},{min_lng})-({max_lat},{max_lng}) build_id={build_id or 'none'}")
 
-    print(f"[{city_id}] fetching restaurant/store rows still missing a subtype after category-tag + keyword matching...")
+    print(f"[{place_id}] fetching restaurant/store rows still missing a subtype after category-tag + keyword matching...")
     restaurant_candidates = run_d1_query(f"""
         SELECT fsq_place_id, name, lat, lng FROM poi p
-        WHERE p.city_id = {sql_escape(city_id)} AND p.primary_poi_type = 'restaurant'
-        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.city_id = p.city_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'food_cuisine');
+        WHERE p.lat BETWEEN {min_lat} AND {max_lat} AND p.lng BETWEEN {min_lng} AND {max_lng}
+          AND p.primary_poi_type = 'restaurant'
+          AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.fsq_place_id = p.fsq_place_id AND a.dimension = 'food_cuisine');
     """)
     store_candidates = run_d1_query(f"""
         SELECT fsq_place_id, name, lat, lng FROM poi p
-        WHERE p.city_id = {sql_escape(city_id)} AND p.primary_poi_type = 'store'
-        AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.city_id = p.city_id AND a.fsq_place_id = p.fsq_place_id AND a.dimension = 'store_kind');
+        WHERE p.lat BETWEEN {min_lat} AND {max_lat} AND p.lng BETWEEN {min_lng} AND {max_lng}
+          AND p.primary_poi_type = 'store'
+          AND NOT EXISTS (SELECT 1 FROM poi_attribute a WHERE a.fsq_place_id = p.fsq_place_id AND a.dimension = 'store_kind');
     """)
-    print(f"[{city_id}] {len(restaurant_candidates)} restaurant + {len(store_candidates)} store candidates")
+    print(f"[{place_id}] {len(restaurant_candidates)} restaurant + {len(store_candidates)} store candidates")
 
-    print(f"[{city_id}] querying Overpass (cuisine-tagged restaurants + tagged shops)...")
+    print(f"[{place_id}] querying Overpass (cuisine-tagged restaurants + tagged shops)...")
+    # bbox filter (south,west,north,east) directly from the Place's own
+    # ingested extent — no lossy center+radius round-trip needed now that
+    # KAN-355 stores the real bbox.
     query = (
         f"[out:json][timeout:{OVERPASS_TIMEOUT_S - 10}];"
-        f'(nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub)$"]["cuisine"](around:{radius_m},{center_lat},{center_lng});'
-        f'nwr["shop"](around:{radius_m},{center_lat},{center_lng}););'
+        f'(nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub)$"]["cuisine"]({min_lat},{min_lng},{max_lat},{max_lng});'
+        f'nwr["shop"]({min_lat},{min_lng},{max_lat},{max_lng}););'
         "out center;"
     )
     data = fetch_overpass(query)
     elements = data.get('elements', [])
-    print(f"[{city_id}] Overpass returned {len(elements)} elements")
+    print(f"[{place_id}] Overpass returned {len(elements)} elements")
 
-    # Index candidates by normalized name for fast lookup — proximity is
-    # checked per-candidate-match, not per-full-scan, since name collisions
-    # across an entire city are rare and this keeps the match loop cheap.
-    def index_by_name(candidates):
-        index = {}
+    # Grid-indexed by location, not name — an exact-name index missed
+    # confident matches where OSM and Foursquare disagree slightly on a
+    # business's name (legal-entity suffixes, franchise/branch qualifiers,
+    # accents) even though it's clearly the same place at the same spot.
+    # Bucket size matches MATCH_RADIUS_METERS so a 3x3 neighborhood always
+    # covers the full search radius without scanning every candidate.
+    center_lat = (min_lat + max_lat) / 2
+    grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
+
+    def build_grid(candidates):
+        grid = {}
         for c in candidates:
-            key = normalize_text(c['name'])
-            if key:
-                index.setdefault(key, []).append(c)
-        return index
+            c['_norm'] = normalize_text(c['name'])
+            bucket = (int(c['lat'] / GRID_LAT_DEG), int(c['lng'] / grid_lng_deg))
+            grid.setdefault(bucket, []).append(c)
+        return grid
 
-    restaurant_index = index_by_name(restaurant_candidates)
-    store_index = index_by_name(store_candidates)
+    def nearby(grid, lat, lng):
+        bucket = (int(lat / GRID_LAT_DEG), int(lng / grid_lng_deg))
+        for dlat in (-1, 0, 1):
+            for dlng in (-1, 0, 1):
+                for c in grid.get((bucket[0] + dlat, bucket[1] + dlng), ()):
+                    dist = haversine_m(lat, lng, c['lat'], c['lng'])
+                    if dist <= MATCH_RADIUS_METERS:
+                        yield c, dist
+
+    restaurant_grid = build_grid(restaurant_candidates)
+    store_grid = build_grid(store_candidates)
 
     matched_rows = []  # (fsq_place_id, dimension, value)
     matched_place_ids = set()  # a place already matched by an earlier OSM element shouldn't match a second one under a different dimension by accident
@@ -188,26 +212,46 @@ def enrich(city_id):
     store_kind_matches = 0
     ambiguous_skipped = 0
 
-    def closest_unambiguous_candidate(index, normalized_name, lat, lng):
-        """All unassigned same-normalized-name candidates within
-        MATCH_RADIUS_METERS, picking the strictly closest one — but only
-        when it's unambiguously closest (no other eligible candidate at the
-        same distance). Two candidates at an identical distance means we
-        can't tell which business the OSM element actually refers to, so
-        neither gets guessed at; returns None for that case too."""
-        eligible = []
-        for candidate in index.get(normalized_name, []):
+    def name_similarity(a, b):
+        """1.0 for identical, 0.9 for one name fully containing the other
+        (covers franchise/branch suffixes like "McDonald's Amadora" vs
+        "McDonald's", or a legal-entity suffix OSM never carries), otherwise
+        a fuzzy ratio (stdlib difflib, no extra dependency) — same signal
+        edit-distance-based matching would give, cheap enough for this
+        candidate-pool scale."""
+        if not a or not b:
+            return 0.0
+        if a == b:
+            return 1.0
+        shorter, longer = sorted((a, b), key=len)
+        if (len(shorter) >= MIN_CONTAINED_NAME_LENGTH and
+                (longer.startswith(shorter + ' ') or longer.endswith(' ' + shorter))):
+            return 0.9
+        return difflib.SequenceMatcher(None, a, b).ratio()
+
+    def best_unambiguous_match(grid, lat, lng, osm_norm):
+        """Combines name similarity with proximity: every unassigned
+        candidate within MATCH_RADIUS_METERS is scored on name_similarity,
+        and only a confident (>=NAME_SIMILARITY_THRESHOLD), unambiguous
+        winner is returned. 'Unambiguous' means no other eligible candidate
+        scored within 0.05 similarity AND 15m distance of the winner — close
+        enough on both axes that we can't tell which business the OSM
+        element actually refers to, so neither gets guessed at."""
+        scored = []
+        for candidate, dist in nearby(grid, lat, lng):
             if candidate['fsq_place_id'] in matched_place_ids:
                 continue
-            dist = haversine_m(lat, lng, candidate['lat'], candidate['lng'])
-            if dist <= MATCH_RADIUS_METERS:
-                eligible.append((dist, candidate))
-        if not eligible:
+            sim = name_similarity(osm_norm, candidate['_norm'])
+            if sim >= NAME_SIMILARITY_THRESHOLD:
+                scored.append((sim, dist, candidate))
+        if not scored:
             return None
-        eligible.sort(key=lambda pair: pair[0])
-        if len(eligible) > 1 and eligible[0][0] == eligible[1][0]:
-            return 'ambiguous'
-        return eligible[0][1]
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        best_sim, best_dist, best_candidate = scored[0]
+        for candidate_sim, candidate_dist, _ in scored[1:]:
+            if (best_sim - candidate_sim) < 0.05 and abs(best_dist - candidate_dist) < 15:
+                return 'ambiguous'
+        return best_candidate
 
     for el in elements:
         tags = el.get('tags') or {}
@@ -226,7 +270,7 @@ def enrich(city_id):
         if cuisine_tag:
             value = first_mapped_cuisine(cuisine_tag)
             if value:
-                candidate = closest_unambiguous_candidate(restaurant_index, normalized_name, lat, lng)
+                candidate = best_unambiguous_match(restaurant_grid, lat, lng, normalized_name)
                 if candidate == 'ambiguous':
                     ambiguous_skipped += 1
                 elif candidate:
@@ -238,7 +282,7 @@ def enrich(city_id):
         if shop_tag:
             value = OSM_SHOP_TO_STORE_KIND.get(shop_tag.strip().lower())
             if value:
-                candidate = closest_unambiguous_candidate(store_index, normalized_name, lat, lng)
+                candidate = best_unambiguous_match(store_grid, lat, lng, normalized_name)
                 if candidate == 'ambiguous':
                     ambiguous_skipped += 1
                 elif candidate:
@@ -246,49 +290,43 @@ def enrich(city_id):
                     matched_place_ids.add(candidate['fsq_place_id'])
                     store_kind_matches += 1
 
-    print(f"[{city_id}] matched {cuisine_matches} food_cuisine + {store_kind_matches} store_kind rows from OSM ({ambiguous_skipped} skipped as ambiguous — multiple same-named candidates equidistant)")
+    print(f"[{place_id}] matched {cuisine_matches} food_cuisine + {store_kind_matches} store_kind rows from OSM ({ambiguous_skipped} skipped as ambiguous — multiple same-named candidates equidistant)")
 
     if not matched_rows:
-        print(f"[{city_id}] nothing to write, done")
+        print(f"[{place_id}] nothing to write, done")
         return
 
-    out_path = os.path.join(BUILD_DIR, f'osm_enrich_{city_id}_{build_id}.sql')
+    out_path = os.path.join(BUILD_DIR, f'osm_enrich_{place_id}_{output_id}.sql')
     # This script writes a file for the operator to apply later, by hand —
-    # an arbitrary time gap in which a regular classify_and_load.py run for
-    # the same city could produce a NEW build_id, making these rows stale
-    # the moment they'd be written (attached to a build_id that's no longer
-    # current, and due to be swept by the next re-run after that). Each
-    # INSERT is guarded with a build-drift check: it only writes if
-    # city.current_build_id still equals the build_id captured at the start
-    # of this run, otherwise it's a silent no-op for that statement rather
-    # than corrupting data under a stale build_id.
-    guard = f"WHERE EXISTS (SELECT 1 FROM city WHERE city_id = {sql_escape(city_id)} AND current_build_id = {sql_escape(build_id)})"
-    insert_prefix = 'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, city_id, build_id, dimension, value) SELECT * FROM (VALUES '
+    # Attributes are global just like POIs. They are not tied to a Place
+    # build: a confident OSM/Foursquare match remains valid if the same POI
+    # is encountered by a neighbouring Place on a later import.
+    insert_prefix = 'INSERT OR IGNORE INTO poi_attribute (fsq_place_id, dimension, value) VALUES '
     with open(out_path, 'w') as f:
         batches = 0
         chunk = []
         chunk_size = 0
         MAX_CHUNK_BYTES = 80_000
         for fsq_place_id, dimension, value in matched_rows:
-            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(city_id), sql_escape(build_id), sql_escape(dimension), sql_escape(value)]) + ')'
+            piece = '(' + ','.join([sql_escape(fsq_place_id), sql_escape(dimension), sql_escape(value)]) + ')'
             piece_bytes = len(piece.encode('utf-8')) + 1
             if chunk and chunk_size + piece_bytes > MAX_CHUNK_BYTES:
-                f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
+                f.write(insert_prefix + ','.join(chunk) + ';\n')
                 batches += 1
                 chunk = []
                 chunk_size = 0
             chunk.append(piece)
             chunk_size += piece_bytes
         if chunk:
-            f.write(insert_prefix + ','.join(chunk) + ') ' + guard + ';\n')
+            f.write(insert_prefix + ','.join(chunk) + ';\n')
             batches += 1
-    print(f"[{city_id}] wrote {out_path} ({batches} statements, each guarded against build drift)")
-    print(f"[{city_id}] apply with:")
+    print(f"[{place_id}] wrote {out_path} ({batches} statements)")
+    print(f"[{place_id}] apply with:")
     print(f"  npx wrangler d1 execute brush-poi-registry --remote --file={out_path}")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("usage: python3 enrich_osm_cuisine.py <city_id>")
+        print("usage: python3 enrich_osm_cuisine.py <place_id>")
         sys.exit(1)
     enrich(sys.argv[1])
