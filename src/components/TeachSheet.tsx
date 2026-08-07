@@ -9,7 +9,7 @@
  * reopening always starts empty.
  */
 import React, { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, type ListRenderItemInfo } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
@@ -17,18 +17,11 @@ import { CloseIcon, FoodTypeIcon, PoiIcon } from './AppIcon';
 import { TEACHABLE_POI_TYPES, poiCatalogLabel, type PoiType } from '../types';
 import { COPY } from '../constants/copy';
 import { getBrandSuggestions, getCanonicalBrand } from '../services/brandDictionary';
+import FoodTypeSelector from './FoodTypeSelector';
 import {
-  restaurantFoodTypeDisplayLabel,
   restaurantFoodTypeFavouriteName,
-  restaurantFoodTypeSuggestions,
   type RestaurantFoodType,
 } from '../services/restaurantFoodTypes';
-import {
-  storeSubtypeDisplayLabel,
-  storeSubtypeFavouriteName,
-  storeSubtypeSuggestions,
-  type StoreSubtype,
-} from '../services/storeSubtypes';
 
 export interface TeachSheetProps {
   visible: boolean;
@@ -36,12 +29,8 @@ export interface TeachSheetProps {
   onSave: (poiType: string, name: string) => void;
 }
 
-function SuggestionSeparator() {
-  return <View style={styles.suggestionSeparator} />;
-}
-
 export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps) {
-  const { palette, language } = useTheme();
+  const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const themedStyles = useMemo(() => StyleSheet.create({
     suggestionRow: {
@@ -55,34 +44,19 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
     saveBtn: {
       backgroundColor: palette.accent,
     },
-    storeTypeChip: {
-      borderColor: palette.line,
-      backgroundColor: palette.surface,
-    },
-    storeTypeChipSelected: {
-      borderColor: palette.accent,
-      backgroundColor: palette.nearTint,
-    },
   }), [palette]);
-  const [kind, setKind] = useState<'place' | 'food' | 'store'>('place');
+  const [kind, setKind] = useState<'place' | 'food'>('place');
   const [type, setType] = useState<PoiType | null>(null);
   const [name, setName] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedFoodType, setSelectedFoodType] = useState<RestaurantFoodType | null>(null);
-  const [selectedStoreSubtype, setSelectedStoreSubtype] = useState<StoreSubtype | null>(null);
   const trimmedName = name.trim();
   const canonicalName = kind === 'place' ? getCanonicalBrand(type, name) : null;
   const brandSuggestions = kind === 'place' && trimmedName.length >= 2 ? getBrandSuggestions(type, name) : [];
-  const foodSuggestions = kind === 'food' && trimmedName.length >= 2 ? restaurantFoodTypeSuggestions(name, language) : [];
-  const storeSuggestions = kind === 'store' && trimmedName.length >= 2 ? storeSubtypeSuggestions(name, language) : [];
   const shouldShowBrandSuggestions = kind === 'place' && type != null && brandSuggestions.length > 0;
-  const shouldShowFoodSuggestions = kind === 'food' && foodSuggestions.length > 0;
-  const shouldShowStoreSuggestions = kind === 'store' && storeSuggestions.length > 0;
   const canSave = kind === 'food'
     ? selectedFoodType != null
-    : kind === 'store'
-      ? selectedStoreSubtype != null
-      : type != null && selectedBrand != null && selectedBrand === canonicalName;
+    : type != null && selectedBrand != null && selectedBrand === canonicalName;
 
   const reset = () => {
     setKind('place');
@@ -90,46 +64,19 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
     setName('');
     setSelectedBrand(null);
     setSelectedFoodType(null);
-    setSelectedStoreSubtype(null);
   };
   // Every dismissal clears the form, so reopening always starts empty.
   const handleClose = () => { reset(); onClose(); };
-  const renderStoreSuggestion = ({ item: subtype }: ListRenderItemInfo<StoreSubtype>) => {
-    const label = storeSubtypeDisplayLabel(subtype, language);
-    const selected = subtype === selectedStoreSubtype;
-    return (
-      <Pressable
-        onPress={() => { setName(label); setSelectedStoreSubtype(subtype); }}
-        style={[
-          styles.suggestionRow,
-          selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
-        ]}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        accessibilityLabel={label}>
-        <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
-          {label}
-        </Text>
-      </Pressable>
-    );
-  };
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={[styles.scrim, { backgroundColor: palette.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityLabel={COPY.places.teachCancelA11y} />
         <View style={[styles.sheet, { backgroundColor: palette.bg, paddingBottom: spacing.page + insets.bottom }]}>
-          <FlatList
-            data={shouldShowStoreSuggestions ? storeSuggestions : []}
-            renderItem={renderStoreSuggestion}
-            keyExtractor={subtype => subtype}
+          <ScrollView
             style={styles.scroller}
             contentContainerStyle={styles.scrollerContent}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            ItemSeparatorComponent={SuggestionSeparator}
-            ListHeaderComponent={(
-              <>
+            showsVerticalScrollIndicator={false}>
             <View style={styles.header}>
               <Text style={[styles.title, { color: palette.text }]}>{COPY.places.teachTitle}</Text>
               <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={COPY.places.teachCancelA11y}>
@@ -145,7 +92,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 return (
                   <Pressable
                     key={t}
-                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
+                    onPress={() => { setKind('place'); setType(t); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
                     style={[
                       styles.typeChip,
                       { borderColor: selected ? palette.accent : palette.line, backgroundColor: selected ? palette.nearTint : palette.surface },
@@ -159,7 +106,7 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 );
               })}
               <Pressable
-                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
+                onPress={() => { setKind('food'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); }}
                 style={[
                   styles.typeChip,
                   {
@@ -175,41 +122,25 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                   {COPY.places.teachFoodType}
                 </Text>
               </Pressable>
-              <Pressable
-                onPress={() => { setKind('store'); setType(null); setName(''); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
-                style={[
-                  styles.typeChip,
-                  kind === 'store' ? themedStyles.storeTypeChipSelected : themedStyles.storeTypeChip,
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: kind === 'store' }}
-                accessibilityLabel={COPY.places.teachStoreType}>
-                <PoiIcon type="store" color={kind === 'store' ? palette.nearText : palette.muted} size={18} />
-                <Text style={[styles.typeChipLabel, { color: kind === 'store' ? palette.nearText : palette.text }]}>
-                  {COPY.places.teachStoreType}
-                </Text>
-              </Pressable>
             </View>
 
-            <Text style={[styles.fieldLabel, { color: palette.muted }]}>
+            <Text style={[styles.fieldLabel, kind === 'food' && styles.dynamicFieldLabel, { color: palette.muted }]}>
               {kind === 'food'
                 ? COPY.places.teachFoodTypeNameLabel
-                : kind === 'store'
-                  ? COPY.places.teachStoreTypeNameLabel
-                  : COPY.places.teachNameLabel}
+                : COPY.places.teachNameLabel}
             </Text>
-            <TextInput
-              style={[styles.nameInput, { color: palette.text, borderColor: palette.line, backgroundColor: palette.surface }]}
-              placeholder={kind === 'food'
-                ? COPY.places.teachFoodTypePlaceholder
-                : kind === 'store'
-                  ? COPY.places.teachStoreTypePlaceholder
-                  : COPY.places.teachNamePlaceholder}
-              placeholderTextColor={palette.muted}
-              value={name}
-              onChangeText={value => { setName(value); setSelectedBrand(null); setSelectedFoodType(null); setSelectedStoreSubtype(null); }}
-              returnKeyType="done"
-            />
+            {kind === 'food' ? (
+              <FoodTypeSelector selected={selectedFoodType} onSelect={setSelectedFoodType} />
+            ) : (
+              <TextInput
+                style={[styles.nameInput, { color: palette.text, borderColor: palette.line, backgroundColor: palette.surface }]}
+                placeholder={COPY.places.teachNamePlaceholder}
+                placeholderTextColor={palette.muted}
+                value={name}
+                onChangeText={value => { setName(value); setSelectedBrand(null); }}
+                returnKeyType="done"
+              />
+            )}
             {shouldShowBrandSuggestions && (
               <View style={styles.suggestionList}>
                 {brandSuggestions.map(brand => {
@@ -233,33 +164,6 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                 })}
               </View>
             )}
-            {shouldShowFoodSuggestions && (
-              <View style={styles.suggestionList}>
-                {foodSuggestions.map(foodType => {
-                  const label = restaurantFoodTypeDisplayLabel(foodType, language);
-                  const selected = foodType === selectedFoodType;
-                  return (
-                    <Pressable
-                      key={foodType}
-                      onPress={() => { setName(label); setSelectedFoodType(foodType); }}
-                      style={[
-                        styles.suggestionRow,
-                        selected ? themedStyles.suggestionRowSelected : themedStyles.suggestionRow,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={label}>
-                      <Text style={[styles.suggestionLabel, { color: selected ? palette.nearText : palette.text }]}>
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-              </>
-            )}
-            ListFooterComponent={(
             <Pressable
               style={[styles.saveBtn, themedStyles.saveBtn, !canSave && styles.saveBtnDisabled]}
               disabled={!canSave}
@@ -269,19 +173,13 @@ export default function TeachSheet({ visible, onClose, onSave }: TeachSheetProps
                   reset();
                   return;
                 }
-                if (kind === 'store' && selectedStoreSubtype) {
-                  onSave('store', storeSubtypeFavouriteName(selectedStoreSubtype));
-                  reset();
-                  return;
-                }
                 if (canSave && type && selectedBrand) { onSave(type, selectedBrand); reset(); }
               }}
               accessibilityRole="button"
               accessibilityLabel={COPY.places.teachSaveAction}>
               <Text style={[styles.saveLabel, { color: palette.onAccent }]}>{COPY.places.teachSaveAction}</Text>
             </Pressable>
-            )}
-          />
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -298,6 +196,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
   subtitle: { fontSize: 13, fontFamily: 'Geist-Regular', marginTop: -4 },
   fieldLabel: { fontSize: 12, fontFamily: 'Geist-Medium', fontWeight: '500', marginTop: 4 },
+  dynamicFieldLabel: { marginTop: 12 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44,
@@ -309,7 +208,6 @@ const styles = StyleSheet.create({
     fontSize: 15, fontFamily: 'Geist-Regular',
   },
   suggestionList: { gap: 8, marginTop: -4 },
-  suggestionSeparator: { height: 8 },
   suggestionRow: {
     minHeight: 44,
     borderRadius: radii.ctaBtn,
