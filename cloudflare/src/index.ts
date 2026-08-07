@@ -602,8 +602,10 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
-  mode: 'place' | 'country',
+  mode: 'place' | 'country' | 'country-reconcile',
   target: string,
+  countrySourceR2Key?: string,
+  countryRunId?: string,
 ): void {
   const key = `${mode}:${target}:${Date.now()}`;
   const container = getContainer(env.EXTRACTION_CONTAINER, key);
@@ -613,6 +615,8 @@ function triggerBuild(
       TARGET: target,
       BUILD_TRIGGER_SECRET: env.BUILD_TRIGGER_SECRET ?? '',
       FOURSQUARE_JWT: env.FOURSQUARE_JWT ?? '',
+      ...(countrySourceR2Key ? { COUNTRY_SOURCE_R2_KEY: countrySourceR2Key } : {}),
+      ...(countryRunId ? { COUNTRY_RUN_ID: countryRunId } : {}),
     },
   }).catch(async (error) => {
     // A detached promise is cancelled when the Worker finishes the request.
@@ -837,9 +841,9 @@ export default {
     // POST /internal/country/queue  { countryCode }  — KAN-354's country
     // pre-build trigger. Operational: queued by whoever decides which
     // country goes next (docs/poi-coverage-model.md — "Country: operational"),
-    // not automatically. Idempotent: queuing an already-mapping/mapped
-    // country is a no-op that just reports its current state, never a
-    // second job.
+    // not automatically. Queuing an already-mapping/mapped country is a
+    // no-op. A stopped run must use the reconciliation route below, which
+    // resumes from its durable source rather than starting over.
     //
     if (url.pathname === '/internal/country/queue' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
@@ -849,13 +853,58 @@ export default {
         return json({ error: 'countryCode must be a non-empty string' }, 400);
       }
       const countryCode = body.countryCode.toUpperCase();
+      const now = new Date().toISOString();
+      const runId = crypto.randomUUID();
       const result = await env.REGISTRY_DB.prepare(
-        "UPDATE country SET status = 'mapping', place_count = 0 WHERE country_code = ? AND status = 'none'",
-      ).bind(countryCode).run();
-      if (result.meta.changes === 1) triggerBuild(env, ctx, 'country', countryCode);
+        `UPDATE country
+         SET status = 'mapping', place_count = 0, last_run_started_at = ?,
+             last_failure_stage = NULL, last_failure_error = NULL, last_failed_at = NULL, active_run_id = ?
+         WHERE country_code = ? AND status = 'none'`,
+      ).bind(now, runId, countryCode).run();
+      if (result.meta.changes === 1) triggerBuild(env, ctx, 'country', countryCode, undefined, runId);
       const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
         .bind(countryCode).first<{ status: string }>();
       if (!country) return json({ error: `no country row for '${countryCode}' — it must exist before it can be queued` }, 404);
+      return json({ ok: true, status: country.status });
+    }
+
+    // POST /internal/country-source — records the raw country extract as
+    // soon as it exists. Later recovery uses this artifact, never Foursquare.
+    if (url.pathname === '/internal/country-source' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown; runId?: unknown; rawExtractR2Key?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || typeof body.runId !== 'string' || typeof body.rawExtractR2Key !== 'string' || !body.rawExtractR2Key.startsWith('country-sources/')) {
+        return json({ error: 'countryCode, runId, and a country-sources rawExtractR2Key are required' }, 400);
+      }
+      await env.REGISTRY_DB.prepare(
+        "UPDATE country SET source_raw_extract_r2_key = ? WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?",
+      ).bind(body.rawExtractR2Key, body.countryCode.toUpperCase(), body.runId).run();
+      return json({ ok: true });
+    }
+
+    // POST /internal/country/reconcile — starts only the missing generic,
+    // audit, and completion tail from a previously saved country source.
+    if (url.pathname === '/internal/country/reconcile' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown; rawExtractR2Key?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || typeof body.rawExtractR2Key !== 'string' || body.rawExtractR2Key.trim() === '') {
+        return json({ error: 'countryCode and rawExtractR2Key are required' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const rawExtractR2Key = body.rawExtractR2Key;
+      const runId = crypto.randomUUID();
+      const result = await env.REGISTRY_DB.prepare(
+        `UPDATE country
+         SET status = 'mapping', source_raw_extract_r2_key = ?, last_run_started_at = ?,
+             last_failure_stage = NULL, last_failure_error = NULL, last_failed_at = NULL, active_run_id = ?
+         WHERE country_code = ? AND status IN ('none', 'mapping')`,
+      ).bind(rawExtractR2Key, new Date().toISOString(), runId, countryCode).run();
+      if (result.meta.changes === 1) triggerBuild(env, ctx, 'country-reconcile', countryCode, rawExtractR2Key, runId);
+      const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (!country) return json({ error: `no country row for '${countryCode}'` }, 404);
       return json({ ok: true, status: country.status });
     }
 
@@ -866,17 +915,25 @@ export default {
     if (url.pathname === '/internal/country-progress' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
-      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
-        return json({ error: 'countryCode must be a non-empty string' }, 400);
+      const body = await request.json<{ countryCode?: unknown; runId?: unknown; placeId?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '' ||
+          typeof body.runId !== 'string' || body.runId.trim() === '' ||
+          typeof body.placeId !== 'string' || body.placeId.trim() === '') {
+        return json({ error: 'countryCode, runId, and placeId must be non-empty strings' }, 400);
       }
-      const result = await env.REGISTRY_DB.prepare(
-        'UPDATE country SET place_count = place_count + 1 WHERE country_code = ?',
-      ).bind(body.countryCode.toUpperCase()).run();
-      if (result.meta.changes !== 1) {
-        return json({ error: `no country row matched countryCode '${body.countryCode}'` }, 404);
+      const countryCode = body.countryCode.toUpperCase();
+      const delivery = await env.REGISTRY_DB.prepare(
+        `INSERT OR IGNORE INTO country_progress_delivery (country_code, run_id, place_id)
+         SELECT ?, ?, ? WHERE EXISTS (
+           SELECT 1 FROM country WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?
+         )`,
+      ).bind(countryCode, body.runId, body.placeId, countryCode, body.runId).run();
+      if (delivery.meta.changes === 1) {
+        await env.REGISTRY_DB.prepare(
+          "UPDATE country SET place_count = place_count + 1 WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?",
+        ).bind(countryCode, body.runId).run();
       }
-      return json({ ok: true });
+      return json({ ok: true, applied: delivery.meta.changes === 1 });
     }
 
     // POST /internal/country-audit — the country Container submits its
@@ -888,9 +945,10 @@ export default {
       const body = await request.json<Record<string, unknown>>().catch(() => null);
       const numericFields = ['sourceRows', 'rowsWithLocality', 'rowsWithoutLocality', 'rowsLoaded', 'rowsSkipped', 'resolvedLocalities', 'unresolvedLocalities', 'failedPlaces'] as const;
       if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.runId !== 'string' || body.runId.trim() === '' ||
           typeof body.buildId !== 'string' || body.buildId.trim() === '' ||
           numericFields.some(field => typeof body[field] !== 'number' || !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
-        return json({ error: 'countryCode, buildId, and non-negative integer audit counts are required' }, 400);
+        return json({ error: 'countryCode, runId, buildId, and non-negative integer audit counts are required' }, 400);
       }
       const sourceRows = body.sourceRows as number;
       const rowsWithLocality = body.rowsWithLocality as number;
@@ -905,19 +963,26 @@ export default {
         return json({ error: 'country audit counts do not reconcile' }, 409);
       }
       const countryCode = body.countryCode.toUpperCase();
-      const country = await env.REGISTRY_DB.prepare('SELECT country_code FROM country WHERE country_code = ?')
-        .bind(countryCode).first<{ country_code: string }>();
-      if (!country) return json({ error: `no country row matched countryCode '${countryCode}'` }, 404);
-      await env.REGISTRY_DB.prepare(
-        `INSERT INTO country_import_audit
+      const inserted = await env.REGISTRY_DB.prepare(
+        `INSERT OR IGNORE INTO country_import_audit
           (build_id, country_code, source_rows, rows_with_locality, rows_without_locality, rows_loaded, rows_skipped, resolved_localities, unresolved_localities, failed_places, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (
+           SELECT 1 FROM country WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?
+         )`,
       ).bind(
         body.buildId, countryCode, sourceRows, rowsWithLocality, rowsWithoutLocality,
         rowsLoaded, rowsSkipped, body.resolvedLocalities, body.unresolvedLocalities,
-        failedPlaces, new Date().toISOString(),
+        failedPlaces, new Date().toISOString(), countryCode, body.runId,
       ).run();
-      return json({ ok: true });
+      if (inserted.meta.changes === 1) return json({ ok: true, applied: true });
+      const existing = await env.REGISTRY_DB.prepare(
+        'SELECT build_id FROM country_import_audit WHERE build_id = ? AND country_code = ?',
+      ).bind(body.buildId, countryCode).first<{ build_id: string }>();
+      if (existing) return json({ ok: true, applied: false });
+      const country = await env.REGISTRY_DB.prepare('SELECT country_code FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ country_code: string }>();
+      if (!country) return json({ error: `no country row matched countryCode '${countryCode}'` }, 404);
+      return json({ ok: true, applied: false, ignored: true });
     }
 
     // POST /internal/country-complete  { countryCode, buildId }  — the whole
@@ -926,21 +991,24 @@ export default {
     if (url.pathname === '/internal/country-complete' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ countryCode?: unknown; buildId?: unknown }>().catch(() => null);
+      const body = await request.json<{ countryCode?: unknown; runId?: unknown; buildId?: unknown }>().catch(() => null);
       if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
         return json({ error: 'countryCode must be a non-empty string' }, 400);
       }
       if (typeof body.buildId !== 'string' || body.buildId.trim() === '') {
         return json({ error: 'buildId must be a non-empty string' }, 400);
       }
+      if (typeof body.runId !== 'string' || body.runId.trim() === '') {
+        return json({ error: 'runId must be a non-empty string' }, 400);
+      }
       const result = await env.REGISTRY_DB.prepare(
         `UPDATE country SET status = 'mapped', build_id = ?, mapped_at = ?
-         WHERE country_code = ? AND status = 'mapping'
+         WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?
            AND EXISTS (
              SELECT 1 FROM country_import_audit
              WHERE country_code = ? AND build_id = ? AND failed_places = 0
            )`,
-      ).bind(body.buildId, new Date().toISOString(), body.countryCode.toUpperCase(), body.countryCode.toUpperCase(), body.buildId).run();
+      ).bind(body.buildId, new Date().toISOString(), body.countryCode.toUpperCase(), body.runId, body.countryCode.toUpperCase(), body.buildId).run();
       if (result.meta.changes !== 1) {
         return json({ error: `no mapping country with a valid audit matched '${body.countryCode}'` }, 409);
       }
@@ -956,13 +1024,21 @@ export default {
     if (url.pathname === '/internal/country-failed' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      const body = await request.json<{ countryCode?: unknown; runId?: unknown; stage?: unknown; error?: unknown }>().catch(() => null);
       if (typeof body?.countryCode !== 'string' || body.countryCode.trim() === '') {
         return json({ error: 'countryCode must be a non-empty string' }, 400);
       }
+      if (typeof body.runId !== 'string' || body.runId.trim() === '') {
+        return json({ error: 'runId must be a non-empty string' }, 400);
+      }
       await env.REGISTRY_DB.prepare(
-        "UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'",
-      ).bind(body.countryCode.toUpperCase()).run();
+        `UPDATE country SET status = 'none', last_failure_stage = ?, last_failure_error = ?, last_failed_at = ?
+         WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?`,
+      ).bind(
+        typeof body.stage === 'string' ? body.stage.slice(0, 100) : 'unknown',
+        typeof body.error === 'string' ? body.error.slice(0, 1_000) : 'unknown',
+        new Date().toISOString(), body.countryCode.toUpperCase(), body.runId,
+      ).run();
       return json({ ok: true });
     }
 

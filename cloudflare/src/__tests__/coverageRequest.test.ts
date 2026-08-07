@@ -52,6 +52,12 @@ interface FakeCountryRow {
   build_id: string | null;
   mapped_at: string | null;
   place_count: number;
+  last_run_started_at?: string | null;
+  last_failure_stage?: string | null;
+  last_failure_error?: string | null;
+  last_failed_at?: string | null;
+  source_raw_extract_r2_key?: string | null;
+  active_run_id?: string | null;
 }
 
 interface FakeBuildLogRow {
@@ -83,9 +89,12 @@ function createFakeDb(
   poiTypeSeed: FakePoiTypeRow[] = [],
 ) {
   const rows = new Map(seed.map(r => [r.place_id, { ...r }]));
-  const countryRows = new Map(countrySeed.map(r => [r.country_code, { ...r }]));
+  const countryRows = new Map<string, FakeCountryRow>(countrySeed.map(r => [r.country_code, {
+    ...r, active_run_id: r.active_run_id ?? (r.status === 'mapping' ? 'run-current' : null),
+  }]));
   const buildLogRows = new Map(buildLogSeed.map(r => [r.build_id, { ...r }]));
   const countryAuditRows = new Map<string, FakeCountryAuditRow>();
+  const progressDeliveries = new Set<string>();
 
   function prepare(sql: string) {
     const trimmed = sql.trim();
@@ -105,6 +114,10 @@ function createFakeDb(
           if (trimmed.startsWith('SELECT country_code FROM country WHERE country_code = ?')) {
             const row = countryRows.get(args[0] as string);
             return (row ? { country_code: row.country_code } : null) as T | null;
+          }
+          if (trimmed.startsWith('SELECT build_id FROM country_import_audit WHERE build_id = ?')) {
+            const row = countryAuditRows.get(args[0] as string);
+            return (row && row.country_code === args[1] ? { build_id: row.build_id } : null) as T | null;
           }
           throw new Error(`fake D1: unhandled first() query: ${trimmed}`);
         },
@@ -189,19 +202,45 @@ function createFakeDb(
             row.finished_at = finishedAt;
             return { meta: { changes: 1 } };
           }
-          if (trimmed.startsWith('INSERT OR IGNORE INTO country')) {
+          if (trimmed.startsWith('INSERT OR IGNORE INTO country (')) {
             const [countryCode, name] = args as [string, string];
             if (!countryRows.has(countryCode)) {
               countryRows.set(countryCode, { country_code: countryCode, name, status: 'none', build_id: null, mapped_at: null, place_count: 0 });
             }
             return { meta: { changes: 1 } };
           }
-          if (trimmed.startsWith("UPDATE country SET status = 'mapping', place_count = 0 WHERE country_code = ? AND status = 'none'")) {
-            const [countryCode] = args as [string];
+          if (trimmed.startsWith("UPDATE country\n         SET status = 'mapping', place_count = 0")) {
+            const [startedAt, runId, countryCode] = args as [string, string, string];
             const row = countryRows.get(countryCode);
             if (!row || row.status !== 'none') return { meta: { changes: 0 } };
             row.status = 'mapping';
             row.place_count = 0;
+            row.last_run_started_at = startedAt;
+            row.last_failure_stage = null;
+            row.last_failure_error = null;
+            row.last_failed_at = null;
+            row.active_run_id = runId;
+            return { meta: { changes: 1 } };
+          }
+          if (trimmed.startsWith("UPDATE country\n         SET status = 'mapping', source_raw_extract_r2_key = ?")) {
+            const [sourceKey, startedAt, runId, countryCode] = args as [string, string, string, string];
+            const row = countryRows.get(countryCode);
+            if (!row || (row.status !== 'none' && row.status !== 'mapping')) return { meta: { changes: 0 } };
+            row.status = 'mapping';
+            row.source_raw_extract_r2_key = sourceKey;
+            row.last_run_started_at = startedAt;
+            row.last_failure_stage = null;
+            row.last_failure_error = null;
+            row.last_failed_at = null;
+            row.active_run_id = runId;
+            return { meta: { changes: 1 } };
+          }
+          if (trimmed.startsWith('INSERT OR IGNORE INTO country_progress_delivery')) {
+            const [countryCode, runId, placeId] = args as [string, string, string];
+            const row = countryRows.get(countryCode);
+            const key = `${countryCode}:${runId}:${placeId}`;
+            if (!row || row.status !== 'mapping' || row.active_run_id !== runId || progressDeliveries.has(key)) return { meta: { changes: 0 } };
+            progressDeliveries.add(key);
             return { meta: { changes: 1 } };
           }
           if (trimmed.startsWith("UPDATE country SET status = 'mapping' WHERE country_code = ? AND status = 'none'")) {
@@ -211,32 +250,38 @@ function createFakeDb(
             row.status = 'mapping';
             return { meta: { changes: 1 } };
           }
-          if (trimmed.startsWith("UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'")) {
-            const [countryCode] = args as [string];
+          if (trimmed.startsWith("UPDATE country SET status = 'none', last_failure_stage = ?")) {
+            const [stage, error, failedAt, countryCode, runId] = args as [string, string, string, string, string];
             const row = countryRows.get(countryCode);
-            if (!row || row.status !== 'mapping') return { meta: { changes: 0 } };
+            if (!row || row.status !== 'mapping' || row.active_run_id !== runId) return { meta: { changes: 0 } };
             row.status = 'none';
+            row.last_failure_stage = stage;
+            row.last_failure_error = error;
+            row.last_failed_at = failedAt;
             return { meta: { changes: 1 } };
           }
           if (trimmed.startsWith('UPDATE country SET place_count = place_count + 1')) {
-            const [countryCode] = args as [string];
+            const [countryCode, runId] = args as [string, string];
             const row = countryRows.get(countryCode);
-            if (!row) return { meta: { changes: 0 } };
+            if (!row || row.active_run_id !== runId) return { meta: { changes: 0 } };
             row.place_count += 1;
             return { meta: { changes: 1 } };
           }
           if (trimmed.startsWith("UPDATE country SET status = 'mapped'")) {
-            const [buildId, mappedAt, countryCode] = args as [string, string, string];
+            const [buildId, mappedAt, countryCode, runId] = args as [string, string, string, string];
             const row = countryRows.get(countryCode);
             const audit = countryAuditRows.get(buildId);
-            if (!row || row.status !== 'mapping' || !audit || audit.country_code !== countryCode || audit.failed_places !== 0) return { meta: { changes: 0 } };
+            if (!row || row.status !== 'mapping' || row.active_run_id !== runId || !audit || audit.country_code !== countryCode || audit.failed_places !== 0) return { meta: { changes: 0 } };
             row.status = 'mapped';
             row.build_id = buildId;
             row.mapped_at = mappedAt;
             return { meta: { changes: 1 } };
           }
-          if (trimmed.startsWith('INSERT INTO country_import_audit')) {
-            const [buildId, countryCode, sourceRows, withLocality, withoutLocality, rowsLoaded, rowsSkipped, resolved, unresolved, failed] = args as [string, string, number, number, number, number, number, number, number, number];
+          if (trimmed.startsWith('INSERT OR IGNORE INTO country_import_audit')) {
+            const [buildId, countryCode, sourceRows, withLocality, withoutLocality, rowsLoaded, rowsSkipped, resolved, unresolved, failed, , guardedCountryCode, runId] = args as [string, string, number, number, number, number, number, number, number, number, string, string, string];
+            const country = countryRows.get(guardedCountryCode);
+            if (!country || country.status !== 'mapping' || country.active_run_id !== runId) return { meta: { changes: 0 } };
+            if (countryAuditRows.has(buildId)) return { meta: { changes: 0 } };
             countryAuditRows.set(buildId, { build_id: buildId, country_code: countryCode, source_rows: sourceRows, rows_with_locality: withLocality, rows_without_locality: withoutLocality, rows_loaded: rowsLoaded, rows_skipped: rowsSkipped, resolved_localities: resolved, unresolved_localities: unresolved, failed_places: failed });
             return { meta: { changes: 1 } };
           }
@@ -729,6 +774,31 @@ describe('POST /internal/place-failed', () => {
     const res = await worker.fetch(internalRequest('/internal/place-failed', { cityId: 'x' }, null), env);
     expect(res.status).toBe(401);
   });
+
+  it('reconciles an interrupted mapping run from its saved source and clears its previous error', async () => {
+    const env = makeEnv([], { countrySeed: [{
+      country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 17,
+      last_failure_stage: 'map_place', last_failure_error: 'ReadTimeout', last_failed_at: '2026-08-07T04:00:00.000Z',
+    }] });
+
+    const res = await worker.fetch(internalRequest('/internal/country/reconcile', {
+      countryCode: 'PT', rawExtractR2Key: 'raw-extracts/osm-relation-295480/build.csv',
+    }), env);
+
+    expect(res.status).toBe(200);
+    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
+    expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'mapping', place_count: 17, last_failure_stage: null, source_raw_extract_r2_key: 'raw-extracts/osm-relation-295480/build.csv' });
+    expect(mockContainerStart).toHaveBeenCalledWith(expect.objectContaining({
+      envVars: expect.objectContaining({ MODE: 'country-reconcile', COUNTRY_SOURCE_R2_KEY: 'raw-extracts/osm-relation-295480/build.csv' }),
+    }));
+  });
+
+  it('does not reclaim an active mapping run without explicit retry', async () => {
+    const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 17 }] });
+    const res = await worker.fetch(internalRequest('/internal/country/queue', { countryCode: 'PT' }), env);
+    expect(res.status).toBe(200);
+    expect(mockContainerStart).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /internal/country/queue', () => {
@@ -788,7 +858,7 @@ describe('POST /internal/country-audit', () => {
   it('persists reconciled full-country accounting', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
     const res = await worker.fetch(internalRequest('/internal/country-audit', {
-      countryCode: 'PT', buildId: 'country-audit-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      countryCode: 'PT', runId: 'run-current', buildId: 'country-audit-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
       rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
     }), env);
     expect(res.status).toBe(200);
@@ -798,12 +868,17 @@ describe('POST /internal/country-audit', () => {
       rows_with_locality: 8, rows_without_locality: 2, rows_loaded: 7, rows_skipped: 3,
       resolved_localities: 5, unresolved_localities: 1, failed_places: 0,
     });
+    const retry = await worker.fetch(internalRequest('/internal/country-audit', {
+      countryCode: 'PT', runId: 'run-current', buildId: 'country-audit-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
+    }), env);
+    expect(retry.status).toBe(200);
   });
 
   it('rejects unreconciled counts before a country can be marked ready', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
     const res = await worker.fetch(internalRequest('/internal/country-audit', {
-      countryCode: 'PT', buildId: 'bad-audit', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      countryCode: 'PT', runId: 'run-current', buildId: 'bad-audit', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
       rowsLoaded: 6, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
     }), env);
     expect(res.status).toBe(409);
@@ -811,7 +886,7 @@ describe('POST /internal/country-audit', () => {
 
   it('rejects non-integer counts, failed Places, and an unknown country', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
-    const base = { countryCode: 'PT', buildId: 'audit', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2, rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0 };
+    const base = { countryCode: 'PT', runId: 'run-current', buildId: 'audit', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2, rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0 };
     expect((await worker.fetch(internalRequest('/internal/country-audit', { ...base, sourceRows: 10.5 }), env)).status).toBe(400);
     expect((await worker.fetch(internalRequest('/internal/country-audit', { ...base, failedPlaces: 1 }), env)).status).toBe(409);
     expect((await worker.fetch(internalRequest('/internal/country-audit', { ...base, countryCode: 'ES' }), env)).status).toBe(404);
@@ -819,10 +894,11 @@ describe('POST /internal/country-audit', () => {
 });
 
 describe('POST /internal/country-progress / country-complete / country-failed', () => {
-  it('increments place_count on each progress call', async () => {
+  it('counts each progress delivery once', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 3 }] });
 
-    await worker.fetch(internalRequest('/internal/country-progress', { countryCode: 'PT' }), env);
+    await worker.fetch(internalRequest('/internal/country-progress', { countryCode: 'PT', runId: 'run-current', placeId: 'osm-1' }), env);
+    await worker.fetch(internalRequest('/internal/country-progress', { countryCode: 'PT', runId: 'run-current', placeId: 'osm-1' }), env);
 
     const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
     expect(fakeDb.countryRows.get('PT')?.place_count).toBe(4);
@@ -832,11 +908,11 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 300 }] });
 
     await worker.fetch(internalRequest('/internal/country-audit', {
-      countryCode: 'PT', buildId: 'country-build-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
+      countryCode: 'PT', runId: 'run-current', buildId: 'country-build-1', sourceRows: 10, rowsWithLocality: 8, rowsWithoutLocality: 2,
       rowsLoaded: 7, rowsSkipped: 3, resolvedLocalities: 5, unresolvedLocalities: 1, failedPlaces: 0,
     }), env);
 
-    const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', buildId: 'country-build-1' }), env);
+    const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', runId: 'run-current', buildId: 'country-build-1' }), env);
 
     expect(res.status).toBe(200);
     const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
@@ -845,7 +921,7 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
 
   it('blocks completion without a matching valid audit', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
-    const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', buildId: 'missing-audit' }), env);
+    const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', runId: 'run-current', buildId: 'missing-audit' }), env);
     expect(res.status).toBe(409);
     const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
     expect(fakeDb.countryRows.get('PT')?.status).toBe('mapping');
@@ -854,19 +930,38 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
   it('reverts a mapping country to none on failure, so it can be re-queued', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 12 }] });
 
-    const res = await worker.fetch(internalRequest('/internal/country-failed', { countryCode: 'PT' }), env);
+    const res = await worker.fetch(internalRequest('/internal/country-failed', { countryCode: 'PT', runId: 'run-current', stage: 'map_place', error: 'ReadTimeout' }), env);
 
     expect(res.status).toBe(200);
     const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
-    expect(fakeDb.countryRows.get('PT')?.status).toBe('none');
+    expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'none', last_failure_stage: 'map_place', last_failure_error: 'ReadTimeout' });
   });
 
   it('does not clobber an already-mapped country on a stale failure callback', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapped', build_id: 'b1', mapped_at: '2026-01-01T00:00:00.000Z', place_count: 300 }] });
 
-    await worker.fetch(internalRequest('/internal/country-failed', { countryCode: 'PT' }), env);
+    await worker.fetch(internalRequest('/internal/country-failed', { countryCode: 'PT', runId: 'run-stale' }), env);
 
     const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
     expect(fakeDb.countryRows.get('PT')?.status).toBe('mapped');
+  });
+
+  it('ignores callbacks from a prior run after reconciliation starts a new run', async () => {
+    const env = makeEnv([], { countrySeed: [{
+      country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 12,
+      active_run_id: 'run-new', last_failure_stage: null, last_failure_error: null, last_failed_at: null,
+    }] });
+
+    const staleProgress = await worker.fetch(internalRequest('/internal/country-progress', {
+      countryCode: 'PT', runId: 'run-old', placeId: 'osm-old',
+    }), env);
+    const staleFailure = await worker.fetch(internalRequest('/internal/country-failed', {
+      countryCode: 'PT', runId: 'run-old', stage: 'country_complete', error: 'ReadTimeout',
+    }), env);
+
+    expect((await staleProgress.json()) as { applied: boolean }).toMatchObject({ applied: false });
+    expect(staleFailure.status).toBe(200);
+    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
+    expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'mapping', place_count: 12, active_run_id: 'run-new' });
   });
 });
