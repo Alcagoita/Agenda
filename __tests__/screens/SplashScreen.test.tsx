@@ -15,6 +15,7 @@ jest.mock('../../src/hooks/useAuth', () => ({
 
 jest.mock('../../src/services/firestore', () => ({
   getTasksForDate:            jest.fn(),
+  ensureCurrentDay:           jest.fn(),
   getUser:                    jest.fn(),
   getUserPreferences:         jest.fn(),
   getPoiPreferencesMap:       jest.fn(),
@@ -23,7 +24,6 @@ jest.mock('../../src/services/firestore', () => ({
   getInboxUnreadCount:        jest.fn(),
   getTrips:                   jest.fn(),
   loadLearnedKeywords:        jest.fn(),
-  rolloverIncompleteTasks:    jest.fn(),
   backfillLearnedPlaceCounts: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -75,6 +75,7 @@ import { render, act } from '@testing-library/react-native';
 import { useAuth } from '../../src/hooks/useAuth';
 import {
   getTasksForDate,
+  ensureCurrentDay,
   getUser,
   getUserPreferences,
   getPoiPreferencesMap,
@@ -83,7 +84,6 @@ import {
   getInboxUnreadCount,
   getTrips,
   loadLearnedKeywords,
-  rolloverIncompleteTasks,
 } from '../../src/services/firestore';
 import { getIncomingSharedTasksCount } from '../../src/services/sharing';
 import { useAppStore } from '../../src/store/appStore';
@@ -91,6 +91,7 @@ import SplashScreen from '../../src/screens/SplashScreen';
 
 const mockUseAuth = useAuth as jest.Mock;
 const mockGetTasksForDate      = getTasksForDate      as jest.Mock;
+const mockEnsureCurrentDay     = ensureCurrentDay     as jest.Mock;
 const mockGetUser              = getUser              as jest.Mock;
 const mockGetUserPreferences   = getUserPreferences   as jest.Mock;
 const mockGetPoiPreferencesMap = getPoiPreferencesMap as jest.Mock;
@@ -100,13 +101,16 @@ const mockGetIncomingCount     = getIncomingSharedTasksCount as jest.Mock;
 const mockGetInboxUnreadCount  = getInboxUnreadCount  as jest.Mock;
 const mockGetTrips             = getTrips             as jest.Mock;
 const mockLoadLearnedKeywords  = loadLearnedKeywords  as jest.Mock;
-const mockRolloverIncompleteTasks = rolloverIncompleteTasks as jest.Mock;
 
 beforeEach(() => {
   jest.useFakeTimers();
   useAppStore.setState({ bootData: null });
 
   mockGetTasksForDate.mockResolvedValue([]);
+  mockEnsureCurrentDay.mockImplementation(async (uid: string) => ({
+    tasks: await mockGetTasksForDate(uid, '2026-06-15'),
+    persistence: Promise.resolve(),
+  }));
   mockGetUser.mockResolvedValue({ uid: 'u1', username: 'alice', onboardingDone: true });
   mockGetUserPreferences.mockResolvedValue({});
   mockGetPoiPreferencesMap.mockResolvedValue({});
@@ -117,7 +121,6 @@ beforeEach(() => {
   mockGetTrips.mockResolvedValue([]);
   mockGetMallSnapshot.mockResolvedValue(null);
   mockLoadLearnedKeywords.mockResolvedValue(undefined);
-  mockRolloverIncompleteTasks.mockResolvedValue(undefined);
   mockCheckAndRunTripPreRefresh.mockResolvedValue(undefined);
   mockDeleteExpiredTripPlaces.mockReturnValue(undefined);
   mockRefreshHabitatCacheIfStale.mockResolvedValue(undefined);
@@ -160,25 +163,23 @@ describe('SplashScreen', () => {
       expect(mockGetTasksForDate).toHaveBeenCalledWith('u1', '2026-06-15');
     });
 
-    it('rolls over incomplete tasks before fetching today\'s task list (KAN-146)', async () => {
-      const callOrder: string[] = [];
-      mockRolloverIncompleteTasks.mockImplementation(async () => { callOrder.push('rollover'); });
-      mockGetTasksForDate.mockImplementation(async () => { callOrder.push('getTasksForDate'); return []; });
+    it('loads the current-day task list without waiting for persistence (KAN-352)', async () => {
+      const persistence = new Promise<void>(() => undefined);
+      mockEnsureCurrentDay.mockResolvedValue({ tasks: [], persistence });
 
       render(<SplashScreen onExit={jest.fn()} />);
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-      expect(mockRolloverIncompleteTasks).toHaveBeenCalledWith('u1');
-      expect(callOrder).toEqual(['rollover', 'getTasksForDate']);
+      expect(mockEnsureCurrentDay).toHaveBeenCalledWith('u1');
+      expect(useAppStore.getState().bootData).not.toBeNull();
     });
 
-    it('still loads today\'s data when rollover fails (non-fatal)', async () => {
-      mockRolloverIncompleteTasks.mockRejectedValue(new Error('rollover boom'));
+    it('still loads auxiliary boot data when the current-day read fails (non-fatal)', async () => {
+      mockEnsureCurrentDay.mockRejectedValue(new Error('rollover boom'));
 
       render(<SplashScreen onExit={jest.fn()} />);
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-      expect(mockGetTasksForDate).toHaveBeenCalledWith('u1', '2026-06-15');
       expect(useAppStore.getState().bootData).not.toBeNull();
     });
 
@@ -345,7 +346,7 @@ describe('SplashScreen', () => {
       expect(mockGetTrips).not.toHaveBeenCalled();
       expect(mockGetMallSnapshot).not.toHaveBeenCalled();
       expect(mockLoadLearnedKeywords).not.toHaveBeenCalled();
-      expect(mockRolloverIncompleteTasks).not.toHaveBeenCalled();
+      expect(mockEnsureCurrentDay).not.toHaveBeenCalled();
       expect(mockCheckAndRunTripPreRefresh).not.toHaveBeenCalled();
       expect(mockRefreshHabitatCacheIfStale).not.toHaveBeenCalled();
     });
@@ -393,7 +394,7 @@ describe('SplashScreen', () => {
       expect(mockGetTrips).not.toHaveBeenCalled();
       expect(mockGetMallSnapshot).not.toHaveBeenCalled();
       expect(mockLoadLearnedKeywords).not.toHaveBeenCalled();
-      expect(mockRolloverIncompleteTasks).not.toHaveBeenCalled();
+      expect(mockEnsureCurrentDay).not.toHaveBeenCalled();
       expect(mockCheckAndRunTripPreRefresh).not.toHaveBeenCalled();
       expect(mockRefreshHabitatCacheIfStale).not.toHaveBeenCalled();
     });

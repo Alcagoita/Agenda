@@ -99,6 +99,7 @@ export default function TodayScreen() {
     isRefreshing,
     error,
     refresh,
+    ensureCurrentDay,
     nearbyPoiType,
     poiPlaces,
     placeContext,
@@ -134,8 +135,9 @@ export default function TodayScreen() {
   const hasFocusedOnce = useRef(false);
   useFocusEffect(useCallback(() => {
     if (!hasFocusedOnce.current) { hasFocusedOnce.current = true; return; }
-    if (consumeTasksDirty()) { refresh(); }
-  }, [refresh]));
+    void ensureCurrentDay();
+    if (consumeTasksDirty()) { void refresh(); }
+  }, [ensureCurrentDay, refresh]));
 
   // ── New Task sheet open trigger ───────────────────────────────────────────────
   // Visibility lives in useNewTaskSheetStore, NOT screen state. `openSheet` is

@@ -46,6 +46,8 @@ export interface TodayScreenState {
   error:            string | null;
   /** Call to re-run the full data fetch (error retry, focus refresh, or after task creation). Awaitable. */
   refresh:          () => Promise<void>;
+  /** Ensures the displayed task day advances after a local midnight. */
+  ensureCurrentDay: () => Promise<void>;
   /** Active nearby POI type from the proximity engine. Null when none nearby. */
   nearbyPoiType:    string | null;
   nearbyPlace:      NearbyPlace | null;
@@ -181,6 +183,7 @@ export function useTodayScreen(uid: string | undefined): TodayScreenState {
     isRefreshing: data.isRefreshing,
     error: data.error,
     refresh: data.refresh,
+    ensureCurrentDay: data.ensureCurrentDay,
     nearbyPoiType: proximity.nearbyPoiType,
     nearbyPlace: proximity.nearbyPlace,
     poiPlaces: proximity.poiPlaces,

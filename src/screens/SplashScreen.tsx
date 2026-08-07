@@ -44,13 +44,12 @@ import {
   getCategories,
   getInboxUnreadCount,
   getPoiPreferencesMap,
-  getTasksForDate,
+  ensureCurrentDay,
   getTotalPoints,
   getTrips,
   getUser,
   getUserPreferences,
   loadLearnedKeywords,
-  rolloverIncompleteTasks,
 } from '../services/firestore';
 import { getIncomingSharedTasksCount } from '../services/sharing';
 import { checkAndRunTripPreRefresh, getAreaDownloadPoiTypes } from '../services/tripDownload';
@@ -58,7 +57,6 @@ import { deleteExpiredTripPlaces, refreshHabitatCacheIfStale } from '../services
 import { getMallSnapshot } from '../services/mallSnapshots';
 import { setHomeLocation } from '../services/home';
 import { CLUSTER_LEISURE_TYPES } from '../types';
-import { todayISO } from '../utils/date';
 import { lightPalette } from '../theme/tokens';
 
 // ─── Timing constants ─────────────────────────────────────────────────────────
@@ -364,15 +362,15 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
     // learned-places ranking is missing historical visits until next boot.
     backfillLearnedPlaceCounts(uid)
       .catch(err => console.warn('[SplashScreen] backfillLearnedPlaceCounts failed (non-critical)', err));
-    // Roll forward yesterday's undone tasks before fetching today's list, so
-    // they're already included (KAN-146 — tasks persist until brushed away).
-    // This is the per-user-timezone-correct fallback to the best-effort UTC
-    // server-side rollover Cloud Function; failures here are non-fatal — the
-    // server-side job (or tomorrow's rollover) will catch anything missed.
-    rolloverIncompleteTasks(uid)
-      .catch(err => console.warn('[SplashScreen] rolloverIncompleteTasks failed (non-critical)', err))
-      .then(() => Promise.allSettled([
-        getTasksForDate(uid, todayISO()),
+    // Resolve stale tasks into today's in-memory list before loading the
+    // screen, but do not make splash navigation wait for their Firestore
+    // write. ensureCurrentDay keeps the per-device local-day behaviour and
+    // retries naturally on the next active/focus refresh if persistence fails.
+    Promise.allSettled([
+        ensureCurrentDay(uid).then(({ tasks, persistence }) => {
+          persistence.catch(err => console.warn('[SplashScreen] current-day persistence failed (non-critical)', err));
+          return tasks;
+        }),
         getUser(uid),
         getUserPreferences(uid),
         getPoiPreferencesMap(uid),
@@ -382,7 +380,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         getInboxUnreadCount(uid),
         getTrips(uid),
         getMallSnapshot(uid),
-      ]))
+      ])
       .then(([
         tasksResult,
         userDataResult,
@@ -397,7 +395,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
       ]) => {
         if (cancelled) { return; }
 
-        if (tasksResult.status === 'rejected') { console.warn('[SplashScreen] getTasksForDate failed (non-critical)', tasksResult.reason); }
+        if (tasksResult.status === 'rejected') { console.warn('[SplashScreen] ensureCurrentDay failed (non-critical)', tasksResult.reason); }
         if (userDataResult.status === 'rejected') { console.warn('[SplashScreen] getUser failed (non-critical)', userDataResult.reason); }
         if (userPrefsResult.status === 'rejected') { console.warn('[SplashScreen] getUserPreferences failed (non-critical)', userPrefsResult.reason); }
         if (poiPrefsMapResult.status === 'rejected') { console.warn('[SplashScreen] getPoiPreferencesMap failed (non-critical)', poiPrefsMapResult.reason); }

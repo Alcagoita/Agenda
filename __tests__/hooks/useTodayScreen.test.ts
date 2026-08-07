@@ -15,6 +15,7 @@
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockGetTasksForDate        = jest.fn();
+const mockEnsureCurrentDay       = jest.fn();
 const mockGetCategories          = jest.fn();
 const mockGetUser                = jest.fn();
 const mockGetUserPreferences     = jest.fn();
@@ -34,6 +35,7 @@ const mockSetHomeLocation            = jest.fn();
 
 jest.mock('../../src/services/firestore', () => ({
   getTasksForDate:      (...args: unknown[]) => mockGetTasksForDate(...args),
+  ensureCurrentDay:     (...args: unknown[]) => mockEnsureCurrentDay(...args),
   getCategories:        (...args: unknown[]) => mockGetCategories(...args),
   getUser:              (...args: unknown[]) => mockGetUser(...args),
   upsertUser:           jest.fn().mockResolvedValue(undefined),
@@ -228,6 +230,10 @@ const POI_TASK = {
 
 function setupDefaults() {
   mockGetTasksForDate.mockResolvedValue([]);
+  mockEnsureCurrentDay.mockImplementation(async (uid: string) => ({
+    tasks: await mockGetTasksForDate(uid, '2026-06-15'),
+    persistence: Promise.resolve(),
+  }));
   mockGetCategories.mockResolvedValue([]);
   mockGetUser.mockResolvedValue(null);
   mockGetUserPreferences.mockResolvedValue({});
@@ -309,6 +315,7 @@ describe('useTodayScreen — one-shot fetch', () => {
     jest.useFakeTimers();
     try {
       mockGetTasksForDate.mockResolvedValue([TASK]);
+      mockEnsureCurrentDay.mockResolvedValue({ tasks: [TASK], persistence: Promise.resolve() });
       mockGetCategories.mockReturnValue(new Promise(() => {}));
 
       const { result } = renderHook(() => useTodayScreen(UID));
