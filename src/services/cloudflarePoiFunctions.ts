@@ -21,11 +21,7 @@ export interface RequestCoverageResponse {
 }
 
 interface PoiAllResponse {
-  covered: boolean;
-  cityId?: string;
-  /** Only present when `covered` is false — the Worker's own city.status ('none' | 'building' | 'ready'), defaulted to 'none' server-side when no city row exists at all. Lets the caller distinguish "no city built here yet" from "a build is in progress" without a second round-trip to /coverage. */
-  status?: 'none' | 'building' | 'ready';
-  results: Array<{
+  results: Record<string, Array<{
     fsq_place_id: string;
     name: string;
     lat: number;
@@ -35,7 +31,7 @@ interface PoiAllResponse {
     category_label: string | null;
     address: string | null;
     distanceMeters: number;
-  }>;
+  }>>;
 }
 
 export async function cloudflareCoverageProxy(lat: number, lng: number): Promise<CoverageResponse> {
@@ -47,12 +43,14 @@ export async function cloudflareCoverageProxy(lat: number, lng: number): Promise
   return result.data;
 }
 
-export async function cloudflarePoiAllProxy(lat: number, lng: number, radiusMeters: number): Promise<PoiAllResponse> {
-  const callable = httpsCallable<{ lat: number; lng: number; radiusMeters: number }, PoiAllResponse>(
+/** KAN-347 global typed nearby-search proxy. The callable name is retained
+ * for a backwards-compatible Firebase deployment; it now calls /poi/nearby. */
+export async function cloudflarePoiAllProxy(lat: number, lng: number, radiusMeters: number, poiTypes: string[], limitPerType = 20): Promise<PoiAllResponse> {
+  const callable = httpsCallable<{ lat: number; lng: number; radiusMeters: number; poiTypes: string[]; limitPerType: number }, PoiAllResponse>(
     functionsService,
     'cloudflarePoiAllProxy',
   );
-  const result = await callable({ lat, lng, radiusMeters });
+  const result = await callable({ lat, lng, radiusMeters, poiTypes, limitPerType });
   return result.data;
 }
 

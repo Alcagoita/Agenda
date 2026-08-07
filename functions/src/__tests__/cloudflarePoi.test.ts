@@ -43,8 +43,8 @@ describe('authentication', () => {
       .rejects.toMatchObject({ code: 'unauthenticated' });
   });
 
-  it('rejects an unauthenticated poi/all request', async () => {
-    await expect(cloudflarePoiAllProxy.run({ auth: undefined, data: { lat: 38.7, lng: -9.1, radiusMeters: 200 } } as never))
+  it('rejects an unauthenticated nearby request', async () => {
+    await expect(cloudflarePoiAllProxy.run({ auth: undefined, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe'], limitPerType: 20 } } as never))
       .rejects.toMatchObject({ code: 'unauthenticated' });
   });
 });
@@ -67,20 +67,44 @@ describe('coordinate validation', () => {
   });
 });
 
-describe('radiusMeters validation (poi/all)', () => {
+describe('nearby-search validation', () => {
   it.each([
     ['zero', 0],
     ['negative', -1],
     ['above the 4500 cap', 4501],
     ['non-integer', 200.5],
   ])('rejects %s', async (_label, radiusMeters) => {
-    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters } } as never))
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters, poiTypes: ['cafe'], limitPerType: 20 } } as never))
       .rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
   it('accepts the 1 and 4500 boundaries', async () => {
-    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 1 } } as never)).resolves.toBeDefined();
-    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 4500 } } as never)).resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 1, poiTypes: ['cafe'], limitPerType: 20 } } as never)).resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 4500, poiTypes: ['cafe'], limitPerType: 20 } } as never)).resolves.toBeDefined();
+  });
+
+  it.each([
+    ['no types', []],
+    ['blank type', ['']],
+    ['too many types', Array.from({ length: 11 }, () => 'cafe')],
+  ])('rejects %s', async (_label, poiTypes) => {
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes, limitPerType: 20 } } as never))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it.each([
+    ['zero', 0],
+    ['above the cap', 51],
+    ['decimal', 20.5],
+    ['omitted', undefined],
+  ])('rejects limitPerType %s', async (_label, limitPerType) => {
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe'], limitPerType } } as never))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it('accepts limitPerType boundaries 1 and 50', async () => {
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe'], limitPerType: 1 } } as never)).resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe'], limitPerType: 50 } } as never)).resolves.toBeDefined();
   });
 });
 
@@ -133,10 +157,10 @@ describe('upstream fetch handling', () => {
     await expect(cloudflareCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never)).rejects.toThrow();
   });
 
-  it('passes lat/lng/radius through to the /poi/all URL', async () => {
-    await cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200 } } as never);
+  it('passes the typed, bounded query through to /poi/nearby', async () => {
+    await cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe', 'pharmacy'], limitPerType: 20 } } as never);
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/poi/all?lat=38.7&lng=-9.1&radius=200'),
+      expect.stringContaining('/poi/nearby?lat=38.7&lng=-9.1&radius=200&types=cafe%2Cpharmacy&limitPerType=20'),
       expect.objectContaining({ headers: expect.objectContaining({ 'X-Api-Key': 'test-api-key' }) }),
     );
   });

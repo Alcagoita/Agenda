@@ -68,7 +68,20 @@ interface FakeCountryAuditRow {
   resolved_localities: number; unresolved_localities: number; failed_places: number;
 }
 
-function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] = [], buildLogSeed: FakeBuildLogRow[] = []) {
+interface FakePoiRow {
+  fsq_place_id: string; name: string; lat: number; lng: number; geohash: string;
+  primary_poi_type: string; brand: string | null; category_label: string | null; address: string | null;
+}
+
+interface FakePoiTypeRow { fsq_place_id: string; poi_type: string; }
+
+function createFakeDb(
+  seed: FakePlaceRow[] = [],
+  countrySeed: FakeCountryRow[] = [],
+  buildLogSeed: FakeBuildLogRow[] = [],
+  poiSeed: FakePoiRow[] = [],
+  poiTypeSeed: FakePoiTypeRow[] = [],
+) {
   const rows = new Map(seed.map(r => [r.place_id, { ...r }]));
   const countryRows = new Map(countrySeed.map(r => [r.country_code, { ...r }]));
   const buildLogRows = new Map(buildLogSeed.map(r => [r.build_id, { ...r }]));
@@ -96,6 +109,16 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
           throw new Error(`fake D1: unhandled first() query: ${trimmed}`);
         },
         async all<T>(): Promise<{ results: T[] }> {
+          if (trimmed.startsWith('SELECT search_type, include_type FROM type_relation')) {
+            return { results: [] as T[] };
+          }
+          if (trimmed.startsWith('SELECT poi.fsq_place_id')) {
+            const results = poiTypeSeed.flatMap(type => {
+              const poi = poiSeed.find(row => row.fsq_place_id === type.fsq_place_id);
+              return poi ? [{ ...poi, matched_type: type.poi_type }] : [];
+            });
+            return { results: results as T[] };
+          }
           if (trimmed.startsWith('SELECT * FROM place WHERE min_lat IS NOT NULL')) {
             const [lat, lng] = args as [number, number];
             const matches = [...rows.values()].filter(r =>
@@ -279,9 +302,9 @@ function createFakeDb(seed: FakePlaceRow[] = [], countrySeed: FakeCountryRow[] =
 const API_KEY = 'test-key';
 const BUILD_SECRET = 'build-secret';
 
-function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[] } = {}): Env {
+function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[] } = {}): Env {
   return {
-    REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed),
+    REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed, opts.poiSeed, opts.poiTypeSeed),
     POI_EXPORTS: {} as R2Bucket,
     API_KEY,
     EXTRACTION_CONTAINER: {} as Env['EXTRACTION_CONTAINER'], // getContainer() itself is mocked — never really touches this
@@ -306,6 +329,10 @@ function internalRequest(path: string, body: unknown, secret: string | null = BU
   });
 }
 
+function apiRequest(path: string) {
+  return new Request(`https://poi-api.brushaway.app${path}`, { headers: { 'X-Api-Key': API_KEY } });
+}
+
 /** Resolves cleanly on the first (finest) zoom candidate — no address.city/town/etc key at all means the resolved feature already IS the settlement (Sertã/Odivelas-shaped response, not Lisboa/Porto's freguesia case — that retry path has its own dedicated test). */
 const NOMINATIM_RESPONSE = {
   osm_type: 'relation',
@@ -323,6 +350,42 @@ beforeEach(() => {
   vi.restoreAllMocks();
   mockGetContainer.mockClear();
   mockContainerStart.mockClear();
+});
+
+describe('GET /poi/nearby', () => {
+  it('searches global POIs without a Place lookup, returns typed nearest buckets, and limits each bucket', async () => {
+    const env = makeEnv([], {
+      poiSeed: [
+        { fsq_place_id: 'cafe-near', name: 'Near Cafe', lat: 38.7223, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { fsq_place_id: 'both', name: 'Cafe Pharmacy', lat: 38.7225, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { fsq_place_id: 'cafe-far', name: 'Far Cafe', lat: 38.7231, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { fsq_place_id: 'cafe-outside-radius', name: 'Outside Cafe', lat: 38.7273, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { fsq_place_id: 'pharmacy-far', name: 'Far Pharmacy', lat: 38.7228, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'pharmacy', brand: null, category_label: null, address: null },
+      ],
+      poiTypeSeed: [
+        { fsq_place_id: 'cafe-near', poi_type: 'cafe' },
+        { fsq_place_id: 'both', poi_type: 'cafe' },
+        { fsq_place_id: 'both', poi_type: 'pharmacy' },
+        { fsq_place_id: 'cafe-far', poi_type: 'cafe' },
+        { fsq_place_id: 'cafe-outside-radius', poi_type: 'cafe' },
+        { fsq_place_id: 'pharmacy-far', poi_type: 'pharmacy' },
+      ],
+    });
+
+    const res = await worker.fetch(apiRequest('/poi/nearby?lat=38.7223&lng=-9.1393&radius=500&types=cafe,pharmacy&limitPerType=2'), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Server-Timing')).toContain('d1;dur=');
+    const body = await res.json() as { results: Record<string, Array<{ fsq_place_id: string }>> };
+    expect(body.results.cafe.map(poi => poi.fsq_place_id)).toEqual(['cafe-near', 'both']);
+    expect(body.results.pharmacy.map(poi => poi.fsq_place_id)).toEqual(['both', 'pharmacy-far']);
+    expect(body.results.cafe.map(poi => poi.fsq_place_id)).not.toContain('cafe-outside-radius');
+  });
+
+  it('requires requested types and a bounded per-type limit', async () => {
+    const env = makeEnv();
+    expect((await worker.fetch(apiRequest('/poi/nearby?lat=38.7&lng=-9.1&radius=500'), env)).status).toBe(400);
+    expect((await worker.fetch(apiRequest('/poi/nearby?lat=38.7&lng=-9.1&radius=500&types=cafe&limitPerType=0'), env)).status).toBe(400);
+  });
 });
 
 describe('POST /coverage/request', () => {

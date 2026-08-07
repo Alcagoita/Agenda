@@ -33,6 +33,8 @@ interface PoiAllInput {
   lat: number;
   lng: number;
   radiusMeters: number;
+  poiTypes: string[];
+  limitPerType: number;
 }
 
 interface RateLimitDoc {
@@ -175,10 +177,16 @@ export const cloudflarePoiAllProxy = onCall(
     if (!Number.isInteger(data?.radiusMeters) || data.radiusMeters <= 0 || data.radiusMeters > 4_500) {
       throw new HttpsError('invalid-argument', '"radiusMeters" must be an integer between 1 and 4500.');
     }
+    if (!Array.isArray(data?.poiTypes) || data.poiTypes.length === 0 || data.poiTypes.length > 10 || data.poiTypes.some(type => typeof type !== 'string' || type.trim() === '')) {
+      throw new HttpsError('invalid-argument', '"poiTypes" must contain between 1 and 10 non-empty strings.');
+    }
+    if (!Number.isInteger(data?.limitPerType) || data.limitPerType < 1 || data.limitPerType > 50) {
+      throw new HttpsError('invalid-argument', '"limitPerType" must be an integer between 1 and 50.');
+    }
     await enforceUserRateLimit(request.auth!.uid, 'poiAll');
 
     return requireOkJson(
-      `${CLOUDFLARE_POI_BASE_URL}/poi/all?lat=${encodeURIComponent(data.lat)}&lng=${encodeURIComponent(data.lng)}&radius=${encodeURIComponent(data.radiusMeters)}`,
+      `${CLOUDFLARE_POI_BASE_URL}/poi/nearby?lat=${encodeURIComponent(data.lat)}&lng=${encodeURIComponent(data.lng)}&radius=${encodeURIComponent(data.radiusMeters)}&types=${encodeURIComponent(data.poiTypes.join(','))}&limitPerType=${encodeURIComponent(data.limitPerType)}`,
     );
   },
 );
