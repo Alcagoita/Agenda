@@ -12,9 +12,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import {
   getCategories,
-  getTasksForDate,
+  ensureCurrentDay,
   getUserPreferences,
   getPoiPreferencesMap,
   getUser,
@@ -36,6 +37,7 @@ import { DEBUG_DISABLE_BACKGROUND } from './debugFlags';
 
 const DATA_FETCH_TIMEOUT_MS = 5_000;
 const TASKS_LOAD_ERROR = 'Could not load tasks. Check your connection.';
+const ROLLOVER_RETRY_DELAYS_MS = [1_000, 3_000, 10_000];
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return Promise.race([
@@ -62,6 +64,8 @@ export interface TodayScreenData {
    *  need to know when the data has actually landed can await it — firing and
    *  forgetting made a refresh look instantaneous. */
   refresh:           () => Promise<void>;
+  /** Runs the current-day rollover only when the local calendar day changed. */
+  ensureCurrentDay:  () => Promise<void>;
   customCategories:  Category[];
   totalPoints:       number;
   setTotalPoints:    React.Dispatch<React.SetStateAction<number>>;
@@ -99,6 +103,10 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
   const [mallSnapshot, setMallSnapshot] = useState<MallSnapshot | null>(null);
 
   const latestTasksRef = useRef<Task[]>([]);
+  const currentDayRef = useRef(todayISO());
+  const rolloverRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rolloverRetryAttemptRef = useRef(0);
+  const scheduleRolloverRetryRef = useRef<() => void>(() => undefined);
   useEffect(() => { latestTasksRef.current = tasks; }, [tasks]);
 
   const latestDataRef = useRef({
@@ -222,7 +230,7 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
         fetchedTripsResult,
         fetchedMallSnapshotResult,
       ] = await Promise.allSettled([
-        withTimeout(getTasksForDate(uid, todayISO()), 'tasks'),
+        withTimeout(ensureCurrentDay(uid), 'tasks'),
         withTimeout(getUser(uid), 'user'),
         withTimeout(getUserPreferences(uid), 'userPrefs'),
         withTimeout(getPoiPreferencesMap(uid), 'poiPrefs'),
@@ -248,11 +256,20 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
       logFetchFailure('mallSnapshot', fetchedMallSnapshotResult);
 
       const cachedTasks = latestTasksRef.current;
-      setTasks(
-        fetchedTasksResult.status === 'fulfilled'
-          ? fetchedTasksResult.value
-          : cachedTasks,
-      );
+      if (fetchedTasksResult.status === 'fulfilled') {
+        setTasks(fetchedTasksResult.value.tasks);
+        // The useful list is already rendered. Persist the date move in the
+        // background so a slow/offline write never blocks Today.
+        fetchedTasksResult.value.persistence
+          .then(() => { rolloverRetryAttemptRef.current = 0; })
+          .catch(err => {
+            console.warn('[useTodayScreenData] current-day persistence failed', err);
+            scheduleRolloverRetryRef.current();
+          });
+      } else {
+        setTasks(cachedTasks);
+        scheduleRolloverRetryRef.current();
+      }
       if (fetchedTasksResult.status === 'rejected' && cachedTasks.length === 0) {
         setError(TASKS_LOAD_ERROR);
       }
@@ -326,6 +343,64 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
 
   const refresh = useCallback(() => loadData(true), [loadData]);
 
+  const scheduleRolloverRetry = useCallback(() => {
+    if (AppState.currentState !== 'active') { return; }
+    const attempt = rolloverRetryAttemptRef.current;
+    const delay = ROLLOVER_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined || rolloverRetryTimerRef.current) { return; }
+    rolloverRetryAttemptRef.current += 1;
+    rolloverRetryTimerRef.current = setTimeout(() => {
+      rolloverRetryTimerRef.current = null;
+      void loadData(true);
+    }, delay);
+  }, [loadData]);
+
+  useEffect(() => {
+    scheduleRolloverRetryRef.current = scheduleRolloverRetry;
+    return () => {
+      scheduleRolloverRetryRef.current = () => undefined;
+      if (rolloverRetryTimerRef.current) {
+        clearTimeout(rolloverRetryTimerRef.current);
+        rolloverRetryTimerRef.current = null;
+      }
+    };
+  }, [scheduleRolloverRetry]);
+
+  const ensureCurrentDayForLifecycle = useCallback(async () => {
+    const currentDay = todayISO();
+    if (currentDay === currentDayRef.current) { return; }
+    currentDayRef.current = currentDay;
+    await loadData(true);
+  }, [loadData]);
+
+  // A foreground session can cross midnight without navigating away. Wake just
+  // after the local boundary; resume and focus use the same idempotent guard.
+  useEffect(() => {
+    if (!uid) { return; }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleNextMidnight = () => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(24, 0, 1, 0);
+      timer = setTimeout(() => {
+        void ensureCurrentDayForLifecycle().finally(scheduleNextMidnight);
+      }, next.getTime() - now.getTime());
+    };
+    scheduleNextMidnight();
+    return () => { if (timer) { clearTimeout(timer); } };
+  }, [uid, ensureCurrentDayForLifecycle]);
+
+  useEffect(() => {
+    if (!uid) { return; }
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        void ensureCurrentDayForLifecycle();
+        scheduleRolloverRetryRef.current();
+      }
+    });
+    return () => subscription.remove();
+  }, [uid, ensureCurrentDayForLifecycle]);
+
   // ── Wear OS sync (KAN-35) ──────────────────────────────────────────────────
 
   useEffect(() => {
@@ -340,6 +415,7 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
     isRefreshing,
     error,
     refresh,
+    ensureCurrentDay: ensureCurrentDayForLifecycle,
     customCategories,
     totalPoints,
     setTotalPoints,

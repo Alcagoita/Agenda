@@ -39,10 +39,10 @@ jest.mock('@react-native-firebase/firestore', () => ({
 
 /** Non-birthday doc fixture — data() must exist since rolloverIncompleteTasks reads d.data().kind (KAN-248). */
 function makeDoc(id: string, data: Record<string, unknown> = {}) {
-  return { ref: { id }, data: () => data };
+  return { id, ref: { id }, data: () => data };
 }
 
-import { rolloverIncompleteTasks } from '../../src/services/firestore';
+import { ensureCurrentDay, rolloverIncompleteTasks } from '../../src/services/firestore';
 
 describe('rolloverIncompleteTasks', () => {
   const TODAY = '2026-06-16';
@@ -157,5 +157,52 @@ describe('rolloverIncompleteTasks', () => {
     expect(dateArgs).toBeDefined();
     expect(typeof dateArgs?.[2]).toBe('string');
     expect(dateArgs?.[2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('ensureCurrentDay', () => {
+  const TODAY = '2026-06-16';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockBatchCommit.mockResolvedValue(undefined);
+  });
+
+  it('returns stale unfinished tasks as today before their write is confirmed', async () => {
+    const stale = makeDoc('stale-1', {
+      title: 'Buy milk', category: 'errands', done: false,
+      date: '2026-06-14', createdAt: { toMillis: () => 1 },
+    });
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ empty: false, docs: [stale] });
+    let finishCommit: (() => void) | undefined;
+    mockBatchCommit.mockImplementation(() => new Promise<void>(resolve => { finishCommit = resolve; }));
+
+    const result = await ensureCurrentDay('uid-1', TODAY);
+
+    expect(result.tasks).toEqual([expect.objectContaining({
+      id: 'stale-1', date: TODAY, originDate: '2026-06-14',
+    })]);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(stale.ref, expect.objectContaining({ date: TODAY }));
+
+    finishCommit?.();
+    await expect(result.persistence).resolves.toBeUndefined();
+  });
+
+  it('excludes expired birthday tasks from the immediate Today list', async () => {
+    const birthday = makeDoc('birthday-1', {
+      title: 'Happy birthday', category: 'personal', done: false,
+      kind: 'birthday', date: '2026-06-14', createdAt: { toMillis: () => 1 },
+    });
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [] })
+      .mockResolvedValueOnce({ empty: false, docs: [birthday] });
+
+    const result = await ensureCurrentDay('uid-1', TODAY);
+
+    expect(result.tasks).toEqual([]);
+    expect(mockBatchDelete).toHaveBeenCalledWith(birthday.ref);
+    await expect(result.persistence).resolves.toBeUndefined();
   });
 });

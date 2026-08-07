@@ -15,7 +15,6 @@ if (getApps().length === 0) {
 export { onUserInactive } from './onUserInactive';
 export { onUserLapsed } from './onUserLapsed';
 export { onFriendActivity } from './onFriendActivity';
-export { rolloverIncompleteTasks } from './rolloverIncompleteTasks';
 export { sweepPoiInferenceMisses } from './sweepPoiInferenceMisses';
 export { onFollowRequest } from './onFollowRequest';
 export { onSharedTaskCreated } from './onSharedTaskCreated';

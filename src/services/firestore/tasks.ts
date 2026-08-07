@@ -161,6 +161,75 @@ export async function getTasksForDate(uid: string, date: string): Promise<Task[]
   return mapSnapshotDocs<Task>(snap);
 }
 
+export interface CurrentDayTasks {
+  /** Today's stored tasks plus unfinished tasks carried forward in memory. */
+  tasks: Task[];
+  /**
+   * The carry-forward write runs after `tasks` has been returned. Callers must
+   * observe failures, but must not delay rendering the useful task list for it.
+   */
+  persistence: Promise<void>;
+}
+
+function sortTasksByCreatedAt(tasks: Task[]): Task[] {
+  return tasks.sort((a, b) => {
+    const aMillis = a.createdAt?.toMillis?.() ?? 0;
+    const bMillis = b.createdAt?.toMillis?.() ?? 0;
+    return aMillis - bMillis;
+  });
+}
+
+/**
+ * Resolves the usable Today list for the device's current local calendar day.
+ *
+ * Unlike the legacy rollover-only call, this deliberately returns stale
+ * unfinished tasks immediately and persists their new date in the background.
+ * That keeps the Today screen useful across midnight even when a Firestore
+ * write is slow or temporarily offline. The query is idempotent: once the
+ * write lands, those documents no longer match `date < today`.
+ */
+export async function ensureCurrentDay(
+  uid: string,
+  today: string = todayISO(),
+): Promise<CurrentDayTasks> {
+  const staleQuery = query(
+    tasksRef(uid),
+    where('done', '==', false),
+    where('date', '<', today),
+  );
+  const [todayTasks, staleSnap] = await Promise.all([
+    getTasksForDate(uid, today),
+    getDocs(staleQuery),
+  ]);
+
+  const staleTasks = mapSnapshotDocs<Task>(staleSnap)
+    .filter(task => task.kind !== 'birthday')
+    .map(task => ({
+      ...task,
+      date: today,
+      createdAt: Timestamp.now(),
+      originDate: task.originDate ?? task.date,
+    }));
+
+  const tasks = sortTasksByCreatedAt([...todayTasks, ...staleTasks]);
+  const persistence = staleSnap.empty
+    ? Promise.resolve()
+    : commitInChunks(staleSnap.docs, (batch, d) => {
+      const existing = d.data() as Task;
+      if (existing.kind === 'birthday') {
+        batch.delete(d.ref);
+      } else {
+        batch.update(d.ref, {
+          date:       today,
+          createdAt:  Timestamp.now(),
+          originDate: existing.originDate ?? existing.date,
+        });
+      }
+    });
+
+  return { tasks, persistence };
+}
+
 /**
  * Roll forward any undone task still dated before `today` so it becomes
  * today's task (KAN-146 — tasks persist until brushed away; an unfinished
@@ -182,36 +251,16 @@ export async function getTasksForDate(uid: string, date: string): Promise<Task[]
  * gated strictly on `kind === 'birthday'`. A birthday wish three days late
  * is meaningless, so persistence has no value for this one kind.
  *
- * This is the client-side correctness fallback: the per-user `today` here is
- * computed in the device's local timezone, unlike the best-effort UTC-anchored
- * server-side `rolloverIncompleteTasks` Cloud Function. Calling this is safe
- * even if the server-side job already ran — there's nothing left to roll over.
+ * `today` is computed in the device's local timezone. Calling this is safe
+ * repeatedly — after a successful write there is nothing left to roll over.
  *
- * Idempotent and cheap when there's nothing to roll over (single query, no
- * writes). Intended to run once during SplashScreen boot, before the task
- * list is fetched for the day.
+ * Compatibility wrapper for callers that only need persistence. New UI paths
+ * should use `ensureCurrentDay` so the task list is available before a slow
+ * write completes.
  */
 export async function rolloverIncompleteTasks(uid: string, today: string = todayISO()): Promise<void> {
-  const q = query(
-    tasksRef(uid),
-    where('done', '==', false),
-    where('date', '<', today),
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) { return; }
-
-  await commitInChunks(snap.docs, (batch, d) => {
-    const existing = d.data() as Task;
-    if (existing.kind === 'birthday') {
-      batch.delete(d.ref);
-    } else {
-      batch.update(d.ref, {
-        date:       today,
-        createdAt:  Timestamp.now(),
-        originDate: existing.originDate ?? existing.date,
-      });
-    }
-  });
+  const { persistence } = await ensureCurrentDay(uid, today);
+  await persistence;
 }
 
 /**
