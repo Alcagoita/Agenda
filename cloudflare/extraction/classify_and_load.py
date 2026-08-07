@@ -130,7 +130,8 @@ def byte_len(s):
     return len(s.encode('utf-8'))
 
 def load_mapping(path):
-    return json.load(open(path))
+    with open(path) as source:
+        return json.load(source)
 
 def build_reverse_map(mapping):
     """Warns on category_id collisions instead of silently letting the last
@@ -190,6 +191,41 @@ def write_batches(f, insert_prefix, pieces, label, place_id):
     flush()
     return batches_written
 
+def write_guarded_child_batches(f, table, columns, pieces, label, place_id):
+    """Write child rows only when their parent POI survived canonical
+    deduplication. A different Foursquare ID for the same real-world POI is
+    intentionally ignored by the parent INSERT, so its child rows must not be
+    allowed to become orphans."""
+    prefix = f'INSERT OR IGNORE INTO {table} ({columns}) SELECT * FROM ('
+    suffix = ') AS incoming WHERE EXISTS (SELECT 1 FROM poi WHERE poi.fsq_place_id = incoming.fsq_place_id)'
+    batches_written = 0
+    selects: list[str] = []
+    size = byte_len(prefix) + byte_len(suffix) + byte_len(';\n')
+
+    def flush():
+        nonlocal selects, size, batches_written
+        if not selects:
+            return
+        f.write(prefix + ' UNION ALL '.join(selects) + suffix + ';\n')
+        batches_written += 1
+        selects = []
+        size = byte_len(prefix) + byte_len(suffix) + byte_len(';\n')
+
+    for identifier, select in pieces:
+        select_size = byte_len(select) + byte_len(' UNION ALL ')
+        solo_size = byte_len(prefix) + byte_len(select) + byte_len(suffix) + byte_len(';\n')
+        if solo_size > MAX_STATEMENT_BYTES:
+            raise ValueError(
+                f"[{place_id}] {label} row {identifier} is {solo_size} bytes alone, "
+                f"exceeds MAX_STATEMENT_BYTES ({MAX_STATEMENT_BYTES}) even in its own statement"
+            )
+        if selects and size + select_size > MAX_STATEMENT_BYTES:
+            flush()
+        selects.append(select)
+        size += select_size
+    flush()
+    return batches_written
+
 def write_sqlite_export(place_id, build_id, pipeline_version, poi_rows, poi_type_rows, poi_attribute_rows, out_sqlite_path):
     """KAN-339: client-download export — a single city+build's poi/poi_type/
     poi_attribute rows flattened into a standalone SQLite file (no place_id/
@@ -242,11 +278,11 @@ def write_sqlite_export(place_id, build_id, pipeline_version, poi_rows, poi_type
         [(r[0], r[3], r[4], r[5], r[7], r[8], r[9], r[12]) for r in poi_rows],
     )
     conn.executemany(
-        'INSERT INTO poi_type (fsq_place_id, poi_type, rank) VALUES (?,?,?)',
+        'INSERT OR IGNORE INTO poi_type (fsq_place_id, poi_type, rank) VALUES (?,?,?)',
         [(r[0], r[3], r[4]) for r in poi_type_rows],
     )
     conn.executemany(
-        'INSERT INTO poi_attribute (fsq_place_id, dimension, value) VALUES (?,?,?)',
+        'INSERT OR IGNORE INTO poi_attribute (fsq_place_id, dimension, value) VALUES (?,?,?)',
         [(r[0], r[3], r[4]) for r in poi_attribute_rows],
     )
     conn.execute(
@@ -307,6 +343,8 @@ def classify(place_id, csv_path, out_sql_path):
     type_counts = {}
     skipped = 0
     multi_type_count = 0
+    deduplicated = 0
+    seen_identities = {}
 
     with open(csv_path) as f:
         for row in csv.DictReader(f):
@@ -346,14 +384,16 @@ def classify(place_id, csv_path, out_sql_path):
             # store/restaurant by real Foursquare category tags (never
             # invents a store_kind/food_cuisine attribute on a place that
             # isn't even tagged as a store/restaurant to begin with).
+            keyword_store_kind_match = False
             if 'store' in matched_types and not store_kinds:
                 store_kinds = match_keyword_subtypes(row['name'], store_kind_aliases)
                 if store_kinds:
-                    keyword_store_kind_matches += 1
+                    keyword_store_kind_match = True
+            keyword_food_cuisine_match = False
             if 'restaurant' in matched_types and not food_cuisines:
                 food_cuisines = match_keyword_subtypes(row['name'], food_cuisine_aliases)
                 if food_cuisines:
-                    keyword_food_cuisine_matches += 1
+                    keyword_food_cuisine_match = True
 
             if not matched_types:
                 skipped += 1
@@ -364,30 +404,51 @@ def classify(place_id, csv_path, out_sql_path):
             if len(ranked_types) > 1:
                 multi_type_count += 1
 
-            brand = find_brand(row['name'], ranked_types, brand_dictionary)
-            if brand is not None:
-                brand_matches += 1
-
             lat = float(row['latitude'])
             lng = float(row['longitude'])
             geohash = encode_geohash(lat, lng, 7)
             category_label = raw_category_labels.split('|')[0]
+            dedupe_name = normalize_text(row['name']) or row['name'].strip().lower()
+            identity = (dedupe_name, lat, lng)
+            if identity in seen_identities:
+                # The first row is the deterministic canonical source record
+                # for this load. The D1 unique index applies the same rule
+                # across earlier and later loads.
+                skipped += 1
+                deduplicated += 1
+                canonical_fsq_place_id = seen_identities[identity]
+                for rank, t in enumerate(ranked_types):
+                    poi_type_rows.append((canonical_fsq_place_id, place_id, build_id, t, rank, dedupe_name, lat, lng))
+                for value in sorted(store_kinds):
+                    poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'store_kind', value, dedupe_name, lat, lng))
+                for value in sorted(food_cuisines):
+                    poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
+                continue
+            seen_identities[identity] = row['fsq_place_id']
+            if keyword_store_kind_match:
+                keyword_store_kind_matches += 1
+            if keyword_food_cuisine_match:
+                keyword_food_cuisine_matches += 1
+            brand = find_brand(row['name'], ranked_types, brand_dictionary)
+            if brand is not None:
+                brand_matches += 1
 
             poi_rows.append((
                 row['fsq_place_id'], place_id, build_id, row['name'], lat, lng, geohash,
                 primary_poi_type, brand, category_label,
                 raw_category_ids or None, raw_category_labels or None,
-                row['address'] or None, started_at,
+                row['address'] or None, started_at, dedupe_name,
             ))
             for rank, t in enumerate(ranked_types):
-                poi_type_rows.append((row['fsq_place_id'], place_id, build_id, t, rank))
+                poi_type_rows.append((row['fsq_place_id'], place_id, build_id, t, rank, dedupe_name, lat, lng))
             for value in sorted(store_kinds):
-                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'store_kind', value))
+                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'store_kind', value, dedupe_name, lat, lng))
             for value in sorted(food_cuisines):
-                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'food_cuisine', value))
+                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
             type_counts[primary_poi_type] = type_counts.get(primary_poi_type, 0) + 1
 
-    print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped} (no matching poi_type)")
+    print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped} (no matching poi_type or duplicate identity)")
+    print(f"[{place_id}] deduplicated {deduplicated} same-name, same-coordinate source rows")
     print(f"[{place_id}] {multi_type_count} rows matched more than one type ({len(poi_type_rows)} total poi_type rows)")
     print(f"[{place_id}] {brand_matches} rows matched a brand, {len(poi_attribute_rows)} total poi_attribute rows")
     print(f"[{place_id}] KAN-340 keyword fallback: {keyword_store_kind_matches} store_kind + {keyword_food_cuisine_matches} food_cuisine rows recovered (category tags alone found nothing for these)")
@@ -397,26 +458,28 @@ def classify(place_id, csv_path, out_sql_path):
         return '(' + ','.join([
             sql_escape(r[0]), sql_escape(r[3]), str(r[4]), str(r[5]), sql_escape(r[6]),
             sql_escape(r[7]), sql_escape(r[8]), sql_escape(r[9]), sql_escape(r[10]),
-            sql_escape(r[11]), sql_escape(r[12]), sql_escape(r[13]),
+            sql_escape(r[11]), sql_escape(r[12]), sql_escape(r[13]), sql_escape(r[14]),
         ]) + ')'
 
-    def poi_type_row_sql(r):
-        return '(' + ','.join([sql_escape(r[0]), sql_escape(r[3]), str(r[4])]) + ')'
+    def poi_type_row_select(r):
+        return 'SELECT ' + ','.join([
+            'fsq_place_id', f'{sql_escape(r[3])} AS poi_type', f'{r[4]} AS rank',
+        ]) + ' FROM poi WHERE ' + ' AND '.join([
+            f'dedupe_name = {sql_escape(r[5])}', f'lat = {r[6]}', f'lng = {r[7]}',
+        ])
 
-    def poi_attribute_row_sql(r):
-        return '(' + ','.join([sql_escape(r[0]), sql_escape(r[3]), sql_escape(r[4])]) + ')'
+    def poi_attribute_row_select(r):
+        return 'SELECT ' + ','.join([
+            'fsq_place_id', f'{sql_escape(r[3])} AS dimension', f'{sql_escape(r[4])} AS value',
+        ]) + ' FROM poi WHERE ' + ' AND '.join([
+            f'dedupe_name = {sql_escape(r[5])}', f'lat = {r[6]}', f'lng = {r[7]}',
+        ])
 
     poi_insert_prefix = (
-        'INSERT OR REPLACE INTO poi '
+        'INSERT OR IGNORE INTO poi '
         '(fsq_place_id, name, lat, lng, geohash, primary_poi_type, brand, '
-        'category_label, raw_category_ids, raw_category_labels, address, date_refreshed) '
+        'category_label, raw_category_ids, raw_category_labels, address, date_refreshed, dedupe_name) '
         'VALUES '
-    )
-    poi_type_insert_prefix = (
-        'INSERT OR REPLACE INTO poi_type (fsq_place_id, poi_type, rank) VALUES '
-    )
-    poi_attribute_insert_prefix = (
-        'INSERT OR REPLACE INTO poi_attribute (fsq_place_id, dimension, value) VALUES '
     )
 
     with open(out_sql_path, 'w') as f:
@@ -433,14 +496,14 @@ def classify(place_id, csv_path, out_sql_path):
             [(r[0], poi_row_sql(r)) for r in poi_rows],
             'poi', place_id,
         )
-        poi_type_batches = write_batches(
-            f, poi_type_insert_prefix,
-            [(r[0], poi_type_row_sql(r)) for r in poi_type_rows],
+        poi_type_batches = write_guarded_child_batches(
+            f, 'poi_type', 'fsq_place_id, poi_type, rank',
+            [(r[0], poi_type_row_select(r)) for r in poi_type_rows],
             'poi_type', place_id,
         )
-        poi_attribute_batches = write_batches(
-            f, poi_attribute_insert_prefix,
-            [(r[0], poi_attribute_row_sql(r)) for r in poi_attribute_rows],
+        poi_attribute_batches = write_guarded_child_batches(
+            f, 'poi_attribute', 'fsq_place_id, dimension, value',
+            [(r[0], poi_attribute_row_select(r)) for r in poi_attribute_rows],
             'poi_attribute', place_id,
         )
 
