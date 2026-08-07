@@ -32,13 +32,14 @@ def _post(path, body):
             time.sleep(attempt + 1)
     raise last_error
 
-def build_complete(place_id, build_id, rows_loaded, rows_skipped, r2_key, extent=None):
+def build_complete(place_id, build_id, rows_loaded, rows_skipped, r2_key, extent=None, deduplicated=0):
     """extent, when given: {'min_lat','max_lat','min_lng','max_lng'} — the
     Worker writes these onto the Place row (KAN-354 AC3). Omitted (None)
     when classify() loaded zero rows — an empty extent isn't a real one."""
     body = {
         'cityId': place_id, 'buildId': build_id,
         'rowsLoaded': rows_loaded, 'rowsSkipped': rows_skipped, 'r2Key': r2_key,
+        'deduplicated': deduplicated,
     }
     if extent is not None:
         body.update(minLat=extent['min_lat'], maxLat=extent['max_lat'], minLng=extent['min_lng'], maxLng=extent['max_lng'])

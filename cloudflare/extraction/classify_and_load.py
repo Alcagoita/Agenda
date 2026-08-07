@@ -151,8 +151,11 @@ def build_reverse_map(mapping):
     return reverse
 
 MAX_STATEMENT_BYTES = 80_000
+# SQLite's default SQLITE_MAX_COMPOUND_SELECT is 500. Keep below it so a
+# short child-row SELECT cannot bypass the byte cap and still fail in D1.
+MAX_CHILD_SELECT_TERMS = 400
 
-def write_batches(f, insert_prefix, pieces, label, place_id):
+def write_batches(f, insert_prefix, pieces, label, place_id, statement_suffix=''):
     """Size-aware batching, not a fixed row count — shared by both the poi
     and poi_type INSERT statements. D1's confirmed hard limits are 100KB per
     statement and 100 bound parameters per query (this pipeline inlines
@@ -161,16 +164,16 @@ def write_batches(f, insert_prefix, pieces, label, place_id):
     100KB hard cap. Returns the number of statements written."""
     batches_written = 0
     values: list[str] = []
-    size = byte_len(insert_prefix) + byte_len(';\n')
+    size = byte_len(insert_prefix) + byte_len(statement_suffix) + byte_len(';\n')
 
     def flush():
         nonlocal values, size, batches_written
         if not values:
             return
-        f.write(insert_prefix + ','.join(values) + ';\n')
+        f.write(insert_prefix + ','.join(values) + statement_suffix + ';\n')
         batches_written += 1
         values = []
-        size = byte_len(insert_prefix) + byte_len(';\n')
+        size = byte_len(insert_prefix) + byte_len(statement_suffix) + byte_len(';\n')
 
     for identifier, piece in pieces:
         piece_size = byte_len(piece) + 1  # +1 for the joining comma
@@ -178,7 +181,7 @@ def write_batches(f, insert_prefix, pieces, label, place_id):
         # otherwise be silently appended anyway — not caught here, not
         # caught until the actual D1 execute fails later with a confusing
         # native error instead of a clear one now.
-        solo_size = byte_len(insert_prefix) + byte_len(piece) + byte_len(';\n')
+        solo_size = byte_len(insert_prefix) + byte_len(piece) + byte_len(statement_suffix) + byte_len(';\n')
         if solo_size > MAX_STATEMENT_BYTES:
             raise ValueError(
                 f"[{place_id}] {label} row {identifier} is {solo_size} bytes alone, "
@@ -192,24 +195,25 @@ def write_batches(f, insert_prefix, pieces, label, place_id):
     return batches_written
 
 def write_guarded_child_batches(f, table, columns, pieces, label, place_id):
-    """Write child rows only when their parent POI survived canonical
-    deduplication. A different Foursquare ID for the same real-world POI is
-    intentionally ignored by the parent INSERT, so its child rows must not be
-    allowed to become orphans."""
+    """Write child rows resolved to the canonical parent by each inner
+    SELECT. The source SELECT emits no row when the parent did not survive
+    canonical deduplication, so no extra existence lookup is necessary."""
     prefix = f'INSERT OR IGNORE INTO {table} ({columns}) SELECT * FROM ('
-    suffix = ') AS incoming WHERE EXISTS (SELECT 1 FROM poi WHERE poi.fsq_place_id = incoming.fsq_place_id)'
+    suffix = ') AS incoming'
     batches_written = 0
     selects: list[str] = []
     size = byte_len(prefix) + byte_len(suffix) + byte_len(';\n')
+    term_count = 0
 
     def flush():
-        nonlocal selects, size, batches_written
+        nonlocal selects, size, term_count, batches_written
         if not selects:
             return
         f.write(prefix + ' UNION ALL '.join(selects) + suffix + ';\n')
         batches_written += 1
         selects = []
         size = byte_len(prefix) + byte_len(suffix) + byte_len(';\n')
+        term_count = 0
 
     for identifier, select in pieces:
         select_size = byte_len(select) + byte_len(' UNION ALL ')
@@ -219,10 +223,11 @@ def write_guarded_child_batches(f, table, columns, pieces, label, place_id):
                 f"[{place_id}] {label} row {identifier} is {solo_size} bytes alone, "
                 f"exceeds MAX_STATEMENT_BYTES ({MAX_STATEMENT_BYTES}) even in its own statement"
             )
-        if selects and size + select_size > MAX_STATEMENT_BYTES:
+        if selects and (size + select_size > MAX_STATEMENT_BYTES or term_count + 1 > MAX_CHILD_SELECT_TERMS):
             flush()
         selects.append(select)
         size += select_size
+        term_count += 1
     flush()
     return batches_written
 
@@ -341,7 +346,7 @@ def classify(place_id, csv_path, out_sql_path):
     poi_type_rows = []
     poi_attribute_rows = []
     type_counts = {}
-    skipped = 0
+    skipped_no_type = 0
     multi_type_count = 0
     deduplicated = 0
     seen_identities = {}
@@ -396,7 +401,7 @@ def classify(place_id, csv_path, out_sql_path):
                     keyword_food_cuisine_match = True
 
             if not matched_types:
-                skipped += 1
+                skipped_no_type += 1
                 continue
 
             ranked_types = sorted(matched_types, key=lambda t: type_priority.get(t, len(type_priority)))
@@ -414,7 +419,6 @@ def classify(place_id, csv_path, out_sql_path):
                 # The first row is the deterministic canonical source record
                 # for this load. The D1 unique index applies the same rule
                 # across earlier and later loads.
-                skipped += 1
                 deduplicated += 1
                 canonical_fsq_place_id = seen_identities[identity]
                 for rank, t in enumerate(ranked_types):
@@ -447,7 +451,7 @@ def classify(place_id, csv_path, out_sql_path):
                 poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
             type_counts[primary_poi_type] = type_counts.get(primary_poi_type, 0) + 1
 
-    print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped} (no matching poi_type or duplicate identity)")
+    print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped_no_type} (no matching poi_type)")
     print(f"[{place_id}] deduplicated {deduplicated} same-name, same-coordinate source rows")
     print(f"[{place_id}] {multi_type_count} rows matched more than one type ({len(poi_type_rows)} total poi_type rows)")
     print(f"[{place_id}] {brand_matches} rows matched a brand, {len(poi_attribute_rows)} total poi_attribute rows")
@@ -481,6 +485,14 @@ def classify(place_id, csv_path, out_sql_path):
         'category_label, raw_category_ids, raw_category_labels, address, date_refreshed, dedupe_name) '
         'VALUES '
     )
+    poi_insert_suffix = (
+        ' ON CONFLICT(fsq_place_id) DO UPDATE SET '
+        'name = excluded.name, lat = excluded.lat, lng = excluded.lng, geohash = excluded.geohash, '
+        'primary_poi_type = excluded.primary_poi_type, brand = excluded.brand, '
+        'category_label = excluded.category_label, raw_category_ids = excluded.raw_category_ids, '
+        'raw_category_labels = excluded.raw_category_labels, address = excluded.address, '
+        'date_refreshed = excluded.date_refreshed, dedupe_name = excluded.dedupe_name'
+    )
 
     with open(out_sql_path, 'w') as f:
         # build_log start row — closed out by /internal/build-complete once
@@ -492,9 +504,8 @@ def classify(place_id, csv_path, out_sql_path):
         )
 
         poi_batches = write_batches(
-            f, poi_insert_prefix,
-            [(r[0], poi_row_sql(r)) for r in poi_rows],
-            'poi', place_id,
+            f, poi_insert_prefix, [(r[0], poi_row_sql(r)) for r in poi_rows],
+            'poi', place_id, poi_insert_suffix,
         )
         poi_type_batches = write_guarded_child_batches(
             f, 'poi_type', 'fsq_place_id, poi_type, rank',
@@ -520,14 +531,14 @@ def classify(place_id, csv_path, out_sql_path):
     r2_key = f"raw-extracts/{place_id}/{build_id}.csv"
     print(f"[{place_id}] wrote {out_sql_path} ({poi_batches} poi statements + {poi_type_batches} poi_type statements + {poi_attribute_batches} poi_attribute statements, ~{MAX_STATEMENT_BYTES // 1000}KB each max)")
     print(f"[{place_id}] wrote {sqlite_path} (client-download export, KAN-339)")
-    print(f"[{place_id}] build_id={build_id} rows_loaded={len(poi_rows)} rows_skipped={skipped}")
+    print(f"[{place_id}] build_id={build_id} rows_loaded={len(poi_rows)} rows_skipped={skipped_no_type} deduplicated={deduplicated}")
     print(f"[{place_id}] after loading this file, upload the raw extract + export and close out the build:")
     print(f"  npx wrangler r2 object put brush-poi-exports/{r2_key} --file={csv_path} --remote")
     print(f"  npx wrangler r2 object put brush-poi-exports/{export_r2_key} --file={sqlite_path} --remote")
     print(f"  curl -X POST https://poi-api.brushaway.app/internal/build-complete "
           f"-H \"X-Build-Secret: $BUILD_TRIGGER_SECRET\" -H \"Content-Type: application/json\" "
           f"-d '{{\"cityId\":\"{place_id}\",\"buildId\":\"{build_id}\",\"rowsLoaded\":{len(poi_rows)},"
-          f"\"rowsSkipped\":{skipped},\"r2Key\":\"{r2_key}\"}}'")
+          f"\"rowsSkipped\":{skipped_no_type},\"deduplicated\":{deduplicated},\"r2Key\":\"{r2_key}\"}}'")
 
     # KAN-354: run_job.py's automated path needs these back programmatically
     # instead of re-parsing the printed curl command — the manual/CLI usage
@@ -538,7 +549,8 @@ def classify(place_id, csv_path, out_sql_path):
         'place_id': place_id,
         'build_id': build_id,
         'rows_loaded': len(poi_rows),
-        'rows_skipped': skipped,
+        'rows_skipped': skipped_no_type,
+        'deduplicated': deduplicated,
         'sql_path': out_sql_path,
         'sqlite_path': sqlite_path,
         'raw_extract_r2_key': r2_key,

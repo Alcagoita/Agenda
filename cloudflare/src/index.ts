@@ -677,7 +677,7 @@ export default {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
       const body = await request.json<{
-        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; status?: unknown; r2Key?: unknown;
+        cityId?: unknown; buildId?: unknown; rowsLoaded?: unknown; rowsSkipped?: unknown; deduplicated?: unknown; status?: unknown; r2Key?: unknown;
         minLat?: unknown; maxLat?: unknown; minLng?: unknown; maxLng?: unknown;
       }>();
       if (typeof body.cityId !== 'string' || body.cityId.trim() === '') {

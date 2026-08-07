@@ -61,6 +61,7 @@ def map_place(place_id):
             place_id=place_id, build_id=result['build_id'],
             rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'],
             r2_key=result['raw_extract_r2_key'], extent=extent,
+            deduplicated=result['deduplicated'],
         )
         print(f"[run_job] place {place_id} mapped: {result['rows_loaded']} rows")
         return result
@@ -158,8 +159,8 @@ def run_country(country_code, run_id):
             d1_client.execute_sql_file(result['sql_path'])
             r2_client.upload_file(country_csv, result['raw_extract_r2_key'])
             r2_client.upload_file(result['sqlite_path'], result['export_r2_key'])
-            worker_client.build_complete(generic_id, result['build_id'], result['rows_loaded'], result['rows_skipped'], result['raw_extract_r2_key'])
-            audit.update(rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'])
+            worker_client.build_complete(generic_id, result['build_id'], result['rows_loaded'], result['rows_skipped'], result['raw_extract_r2_key'], deduplicated=result['deduplicated'])
+            audit.update(rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'] + result['deduplicated'])
         except Exception:
             traceback.print_exc()
             failed_count += 1
@@ -202,8 +203,8 @@ def run_country_reconcile(country_code, run_id, source_key):
         stage = 'export_upload'
         r2_client.upload_file(result['sqlite_path'], result['export_r2_key'])
         stage = 'build_complete_callback'
-        worker_client.build_complete(generic_id, result['build_id'], result['rows_loaded'], result['rows_skipped'], source_key)
-        audit.update(rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'],
+        worker_client.build_complete(generic_id, result['build_id'], result['rows_loaded'], result['rows_skipped'], source_key, deduplicated=result['deduplicated'])
+        audit.update(rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'] + result['deduplicated'],
                      resolved_localities=0, unresolved_localities=0, failed_places=0)
         if audit['rows_loaded'] + audit['rows_skipped'] != audit['source_rows']:
             raise RuntimeError('reconciliation source accounting failed')
