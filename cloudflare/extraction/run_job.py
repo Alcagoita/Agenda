@@ -79,10 +79,17 @@ def run_place(place_id):
     except Exception:
         sys.exit(1)
 
-def run_country(country_code):
+def run_country(country_code, run_id):
     print(f'[run_job] country mode: {country_code}')
+    stage = 'country_extract'
     try:
         country_csv = extract.extract_country(os.environ['FOURSQUARE_JWT'], country_code)
+        # Persist the source before the slower locality stage so recovery can
+        # finish a stopped run without downloading Foursquare again.
+        source_key = f'country-sources/{country_code}/{uuid.uuid4()}.csv'
+        r2_client.upload_file(country_csv, source_key)
+        worker_client.country_source(country_code, run_id, source_key)
+        stage = 'resolve_localities'
         audit = extract.country_stats(country_csv)
         localities = extract.partition_by_locality(country_csv, country_code)
         print(f'[run_job] {len(localities)} distinct localities found for {country_code}')
@@ -105,6 +112,14 @@ def run_country(country_code):
                     unresolved_count += 1
                     print(f"[run_job] locality '{locality_name}' resolved outside {country_code} — skipping")
                     continue
+                if geo['place_kind'] == 'country':
+                    # A Foursquare locality value may itself be a country
+                    # name. It is not coverage metadata and mapping its bbox
+                    # turns the per-Place stage into an accidental country
+                    # extraction. The mandatory generic pass owns such rows.
+                    unresolved_count += 1
+                    print(f"[run_job] locality '{locality_name}' resolved to a country boundary — skipping")
+                    continue
                 places.setdefault(geo['place_id'], geo)
             except Exception:
                 traceback.print_exc()
@@ -118,9 +133,12 @@ def run_country(country_code):
         for geo in places.values():
             place_id = geo['place_id']
             try:
+                stage = 'ensure_place'
                 worker_client.ensure_place(place_id, country_code, geo['name'], geo['place_kind'])
+                stage = 'map_place'
                 result = map_place(place_id)
-                worker_client.country_progress(country_code)
+                stage = 'country_progress'
+                worker_client.country_progress(country_code, run_id, place_id)
                 mapped_count += 1
                 print(f"[run_job] {place_id}: {result['rows_loaded']} rows ({mapped_count}/{len(places)})")
             except Exception:
@@ -132,7 +150,9 @@ def run_country(country_code):
         # never influence coverage lookup; it only upserts global POIs.
         generic_id = f'generic:{country_code}'
         try:
+            stage = 'generic_ensure_place'
             worker_client.ensure_place(generic_id, country_code, f'{country_code} generic POIs', 'generic')
+            stage = 'generic_classify'
             sql_path = os.path.join(extract.BUILD_DIR, f'load_{country_code}_generic.sql')
             result = classify(generic_id, country_csv, sql_path)
             d1_client.execute_sql_file(result['sql_path'])
@@ -144,6 +164,7 @@ def run_country(country_code):
             traceback.print_exc()
             failed_count += 1
 
+        stage = 'country_audit'
         country_build_id = str(uuid.uuid4())
         audit.update(
             resolved_localities=len(places), unresolved_localities=unresolved_count,
@@ -154,14 +175,47 @@ def run_country(country_code):
         # skipped by the supported-type policy.
         if failed_count or audit.get('rows_loaded', 0) + audit.get('rows_skipped', 0) != audit['source_rows']:
             print(f'[run_job] country {country_code} incomplete: {mapped_count} mapped, {failed_count} failed, {unresolved_count} unresolved localities covered by generic import')
-            worker_client.country_failed(country_code)
-            sys.exit(1)
-        worker_client.country_audit(country_code, country_build_id, audit)
-        worker_client.country_complete(country_code, country_build_id)
+            raise RuntimeError('country run did not satisfy its completion audit')
+        worker_client.country_audit(country_code, run_id, country_build_id, audit)
+        stage = 'country_complete'
+        worker_client.country_complete(country_code, run_id, country_build_id)
         print(f'[run_job] country {country_code} complete: {mapped_count} Places mapped')
-    except Exception:
+    except BaseException as error:
         traceback.print_exc()
-        worker_client.country_failed(country_code)
+        worker_client.country_failed(country_code, run_id, stage, type(error).__name__)
+        sys.exit(1)
+
+def run_country_reconcile(country_code, run_id, source_key):
+    """Finish only the generic/audit tail from an R2 country-source artifact."""
+    stage = 'restore_country_source'
+    try:
+        country_csv = os.path.join(extract.BUILD_DIR, f'recovered_country_{country_code}.csv')
+        r2_client.download_file(source_key, country_csv)
+        audit = extract.country_stats(country_csv)
+        generic_id = f'generic:{country_code}'
+        stage = 'generic_ensure_place'
+        worker_client.ensure_place(generic_id, country_code, f'{country_code} generic POIs', 'generic')
+        stage = 'generic_classify'
+        result = classify(generic_id, country_csv, os.path.join(extract.BUILD_DIR, f'load_{country_code}_generic_recovery.sql'))
+        stage = 'd1_load'
+        d1_client.execute_sql_file(result['sql_path'])
+        stage = 'export_upload'
+        r2_client.upload_file(result['sqlite_path'], result['export_r2_key'])
+        stage = 'build_complete_callback'
+        worker_client.build_complete(generic_id, result['build_id'], result['rows_loaded'], result['rows_skipped'], source_key)
+        audit.update(rows_loaded=result['rows_loaded'], rows_skipped=result['rows_skipped'],
+                     resolved_localities=0, unresolved_localities=0, failed_places=0)
+        if audit['rows_loaded'] + audit['rows_skipped'] != audit['source_rows']:
+            raise RuntimeError('reconciliation source accounting failed')
+        stage = 'country_audit'
+        build_id = str(uuid.uuid4())
+        worker_client.country_audit(country_code, run_id, build_id, audit)
+        stage = 'country_complete'
+        worker_client.country_complete(country_code, run_id, build_id)
+        print(f'[run_job] country {country_code} reconciled from {source_key}')
+    except BaseException as error:
+        traceback.print_exc()
+        worker_client.country_failed(country_code, run_id, stage, type(error).__name__)
         sys.exit(1)
 
 if __name__ == '__main__':
@@ -175,7 +229,21 @@ if __name__ == '__main__':
     if mode == 'place':
         run_place(target)
     elif mode == 'country':
-        run_country(target.upper())
+        run_id = os.environ.get('COUNTRY_RUN_ID')
+        if not run_id:
+            print('COUNTRY_RUN_ID is required for country mode', file=sys.stderr)
+            sys.exit(2)
+        run_country(target.upper(), run_id)
+    elif mode == 'country-reconcile':
+        source_key = os.environ.get('COUNTRY_SOURCE_R2_KEY')
+        if not source_key:
+            print('COUNTRY_SOURCE_R2_KEY is required for country-reconcile', file=sys.stderr)
+            sys.exit(2)
+        run_id = os.environ.get('COUNTRY_RUN_ID')
+        if not run_id:
+            print('COUNTRY_RUN_ID is required for country-reconcile', file=sys.stderr)
+            sys.exit(2)
+        run_country_reconcile(target.upper(), run_id, source_key)
     else:
-        print(f"unknown MODE '{mode}' — expected 'place' or 'country'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', or 'country-reconcile'")
         sys.exit(2)

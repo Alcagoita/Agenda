@@ -13,7 +13,22 @@ CREATE TABLE IF NOT EXISTS country (
   status       TEXT NOT NULL CHECK (status IN ('none', 'mapping', 'mapped')),
   build_id     TEXT,               -- which Foursquare release — they publish monthly, this is what says when to re-run
   mapped_at    TEXT,
-  place_count  INTEGER NOT NULL DEFAULT 0   -- worker progress
+  place_count  INTEGER NOT NULL DEFAULT 0,  -- worker progress
+  last_run_started_at TEXT,
+  last_failure_stage TEXT,
+  last_failure_error TEXT,
+  last_failed_at TEXT,
+  source_raw_extract_r2_key TEXT,
+  active_run_id TEXT
+);
+
+-- A callback delivery is counted once per country run. This prevents an HTTP
+-- retry after a lost response from incrementing visible progress twice.
+CREATE TABLE IF NOT EXISTS country_progress_delivery (
+  country_code TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  place_id TEXT NOT NULL,
+  PRIMARY KEY (country_code, run_id, place_id)
 );
 
 -- KAN-357: one durable reconciliation record for each completed country run.

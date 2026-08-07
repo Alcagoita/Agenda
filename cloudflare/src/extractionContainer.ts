@@ -68,11 +68,11 @@ ExtractionContainer.outboundByHost = {
     }
   },
 
-  // PUT http://r2.internal/<percent-encoded key>  (raw body)  — uploads
-  // one object. GET isn't implemented — nothing in the pipeline needs to
-  // read back from R2, only write extracts/exports to it.
+  // PUT/GET http://r2.internal/<percent-encoded key>. Jobs upload extracts
+  // here; country recovery reads the already-uploaded source back instead of
+  // asking Foursquare to download the country again.
   'r2.internal': async (request: Request, env: Env): Promise<Response> => {
-    if (request.method !== 'PUT') {
+    if (request.method !== 'PUT' && request.method !== 'GET') {
       return new Response('method not allowed', { status: 405 });
     }
     let key: string;
@@ -83,6 +83,11 @@ ExtractionContainer.outboundByHost = {
     }
     if (!key) {
       return new Response('key is required', { status: 400 });
+    }
+    if (request.method === 'GET') {
+      const object = await env.POI_EXPORTS.get(key);
+      if (!object) return new Response('not found', { status: 404 });
+      return new Response(object.body, { headers: { 'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream' } });
     }
     await env.POI_EXPORTS.put(key, request.body);
     return new Response('ok', { status: 200 });

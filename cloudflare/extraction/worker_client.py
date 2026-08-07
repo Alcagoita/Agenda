@@ -5,6 +5,7 @@ the human running it. See cloudflare/README.md's Endpoints section for each
 route's contract.
 """
 import os
+import time
 import requests
 
 def _base_url():
@@ -14,9 +15,22 @@ def _headers():
     return {'X-Build-Secret': os.environ['BUILD_TRIGGER_SECRET'], 'Content-Type': 'application/json'}
 
 def _post(path, body):
-    res = requests.post(f'{_base_url()}{path}', headers=_headers(), json=body, timeout=30)
-    res.raise_for_status()
-    return res.json()
+    """Internal callbacks are the Job's durable state transitions. Retry
+    transient network/5xx failures so a healthy D1 load cannot be stranded
+    merely because one callback raced a short Worker/network failure."""
+    last_error = None
+    for attempt in range(3):
+        try:
+            res = requests.post(f'{_base_url()}{path}', headers=_headers(), json=body, timeout=30)
+            if res.status_code < 500:
+                res.raise_for_status()
+                return res.json()
+            last_error = requests.HTTPError(f'{res.status_code}: {res.text[:500]}')
+        except requests.RequestException as error:
+            last_error = error
+        if attempt < 2:
+            time.sleep(attempt + 1)
+    raise last_error
 
 def build_complete(place_id, build_id, rows_loaded, rows_skipped, r2_key, extent=None):
     """extent, when given: {'min_lat','max_lat','min_lng','max_lng'} — the
@@ -57,15 +71,22 @@ def ensure_place(place_id, country_code, name, place_kind):
         'name': name, 'placeKind': place_kind,
     })
 
-def country_progress(country_code):
-    return _post('/internal/country-progress', {'countryCode': country_code})
+def country_progress(country_code, run_id, place_id):
+    return _post('/internal/country-progress', {
+        'countryCode': country_code, 'runId': run_id, 'placeId': place_id,
+    })
 
-def country_complete(country_code, build_id):
-    return _post('/internal/country-complete', {'countryCode': country_code, 'buildId': build_id})
+def country_source(country_code, run_id, raw_extract_r2_key):
+    return _post('/internal/country-source', {
+        'countryCode': country_code, 'runId': run_id, 'rawExtractR2Key': raw_extract_r2_key,
+    })
 
-def country_audit(country_code, build_id, stats):
+def country_complete(country_code, run_id, build_id):
+    return _post('/internal/country-complete', {'countryCode': country_code, 'runId': run_id, 'buildId': build_id})
+
+def country_audit(country_code, run_id, build_id, stats):
     return _post('/internal/country-audit', {
-        'countryCode': country_code, 'buildId': build_id,
+        'countryCode': country_code, 'runId': run_id, 'buildId': build_id,
         'sourceRows': stats['source_rows'],
         'rowsWithLocality': stats['rows_with_locality'],
         'rowsWithoutLocality': stats['rows_without_locality'],
@@ -75,5 +96,10 @@ def country_audit(country_code, build_id, stats):
         'failedPlaces': stats['failed_places'],
     })
 
-def country_failed(country_code):
-    return _post('/internal/country-failed', {'countryCode': country_code})
+def country_failed(country_code, run_id, stage=None, error=None):
+    body = {'countryCode': country_code, 'runId': run_id}
+    if stage:
+        body['stage'] = stage
+    if error:
+        body['error'] = str(error)[:1_000]
+    return _post('/internal/country-failed', body)

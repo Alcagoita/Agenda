@@ -20,6 +20,7 @@ USER_AGENT = 'BrushPoiExtractionJob/1 (poi-api.brushaway.app)'
 # looped), so a fixed pre-call sleep is sufficient; no token-bucket needed
 # for a call volume this low.
 MIN_INTERVAL_S = 1.0
+LOOKUP_ATTEMPTS = 3
 
 _last_call_at = 0.0
 
@@ -55,13 +56,26 @@ def lookup_bbox(place_id):
         time.sleep(MIN_INTERVAL_S - elapsed)
     _last_call_at = time.monotonic()
 
-    res = requests.get(
-        NOMINATIM_LOOKUP_URL,
-        params={'osm_ids': f'{prefix}{osm_id}', 'format': 'jsonv2'},
-        headers={'User-Agent': USER_AGENT},
-        timeout=10,
-    )
-    res.raise_for_status()
+    last_error = None
+    for attempt in range(LOOKUP_ATTEMPTS):
+        try:
+            res = requests.get(
+                NOMINATIM_LOOKUP_URL,
+                params={'osm_ids': f'{prefix}{osm_id}', 'format': 'jsonv2'},
+                headers={'User-Agent': USER_AGENT},
+                timeout=10,
+            )
+            if res.status_code < 500 and res.status_code != 429:
+                res.raise_for_status()
+                break
+            last_error = requests.HTTPError(f'Nominatim returned {res.status_code}')
+        except requests.RequestException as error:
+            last_error = error
+        if attempt == LOOKUP_ATTEMPTS - 1:
+            raise last_error
+        time.sleep(2 ** attempt)
+    else:  # pragma: no cover - loop either breaks or raises
+        raise last_error
     results = res.json()
     if not results:
         raise PlaceNotResolvable(f"Nominatim /lookup returned nothing for place_id '{place_id}'")
