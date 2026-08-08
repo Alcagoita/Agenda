@@ -1,17 +1,13 @@
 /**
  * KAN-281 — destinationResolver.ts
  *
- * Four branches, first match wins: pinned poiPlaceId > learned brand >
- * habitat cache > pre-fetched live results. No live network call happens
+ * Three branches, first match wins: learned brand > habitat cache >
+ * pre-fetched live results. No live network call happens
  * inside this module — branch 4 only reads whatever liveResults it's given.
  * KAN-304: the learned branch matches a habitat candidate by BRAND NAME.
  */
 
-const mockGetPlaceDetails = jest.fn();
 jest.mock('../../src/services/maps', () => ({
-  getPlaceDetails: (...args: unknown[]) => mockGetPlaceDetails(...args),
-  getDistanceMeters: (lat1: number, lng1: number, lat2: number, lng2: number) =>
-    Math.round(Math.hypot(lat2 - lat1, lng2 - lng1) * 111_000),
 }));
 
 const mockQueryHabitatCache = jest.fn();
@@ -39,26 +35,6 @@ describe('resolveTaskDestination', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockQueryHabitatCache.mockReturnValue({});
-  });
-
-  it('resolves the pinned poiPlaceId first, skipping learned/cache/live', async () => {
-    mockGetPlaceDetails.mockResolvedValue({ lat: 38.71, lng: -9.11, name: 'Farmácia Silva' });
-
-    const result = await resolveTaskDestination(makeTask({ poiPlaceId: 'place-abc' }), COORDS, []);
-
-    expect(result).toEqual(expect.objectContaining({ name: 'Farmácia Silva', source: 'pinned', internalId: 'place-abc' }));
-    expect(mockQueryHabitatCache).not.toHaveBeenCalled();
-  });
-
-  it('falls through to learned/cache when the pinned place fails to resolve', async () => {
-    mockGetPlaceDetails.mockResolvedValue(null);
-    mockQueryHabitatCache.mockReturnValue({
-      pharmacy: [{ placeId: 'cache-1', name: 'Cached Pharmacy', lat: 38.72, lng: -9.12, distanceMeters: 900 }],
-    });
-
-    const result = await resolveTaskDestination(makeTask({ poiPlaceId: 'dead-id' }), COORDS, []);
-
-    expect(result).toEqual({ internalId: 'cache-1', name: 'Cached Pharmacy', lat: 38.72, lng: -9.12, distanceMeters: 900, source: 'cache' });
   });
 
   it('prefers the learned brand over a closer same-type stranger (matched by name)', async () => {
