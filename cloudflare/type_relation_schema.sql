@@ -52,4 +52,12 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('hotel', 'hotel'),
   ('hotel', 'lodging'),
   ('lodging', 'lodging'),
-  ('lodging', 'hotel');
+  ('lodging', 'hotel'),
+  -- bar/pub are one intent to a user ("grab a drink"), especially in PT
+  -- where the line between them is blurry — a search for either returns
+  -- both. Genuine synonyms, so both directions (like supermarket <->
+  -- grocery_store above), not a containment pair.
+  ('bar', 'bar'),
+  ('bar', 'pub'),
+  ('pub', 'pub'),
+  ('pub', 'bar');
