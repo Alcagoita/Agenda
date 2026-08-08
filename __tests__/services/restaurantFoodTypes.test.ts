@@ -96,6 +96,7 @@ describe('restaurantFoodTypes', () => {
     expect(inferRestaurantFoodType('Churrasco no domingo')).toBe('bbq');
     expect(inferRestaurantFoodType('Comida brasileira')).toBe('brazilian');
     expect(inferRestaurantFoodType('Mediterranean lunch')).toBe('mediterranean');
+    expect(inferRestaurantFoodType('Jantar mediterrâneo')).toBe('mediterranean');
   });
 
   it('routes pizza intent to pizza, not italian, after moving the alias', () => {
