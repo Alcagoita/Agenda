@@ -50,7 +50,7 @@
   "italian": {
     "label": "Italian",
     "labelPt": "Italiano",
-    "aliases": ["italian", "italiano", "italiana", "pasta", "pizza"],
+    "aliases": ["italian", "italiano", "italiana", "pasta"],
     "restaurants": [
       "ZeroZero",
       "Mercantina",
@@ -137,6 +137,76 @@
       "Block House",
       "Butchers",
       "K.O.B by Olivier"
+    ]
+  },
+  "pizza": {
+    "label": "Pizza",
+    "labelPt": "Pizza",
+    "aliases": ["pizza", "pizzas", "piza", "pizzaria", "pizzeria"],
+    "restaurants": [
+      "Telepizza",
+      "Pizza Hut",
+      "Domino's Pizza",
+      "Forno d'Oro",
+      "Pizzaria Lisboa",
+      "Casanova",
+      "ZeroZero"
+    ]
+  },
+  "seafood": {
+    "label": "Seafood",
+    "labelPt": "Marisco",
+    "aliases": ["seafood", "marisco", "mariscos", "marisqueira"],
+    "restaurants": [
+      "Cervejaria Ramiro",
+      "Sea Me",
+      "Nunes Real Marisqueira",
+      "Cervejaria O Farol",
+      "Marisqueira Azul"
+    ]
+  },
+  "bbq": {
+    "label": "BBQ",
+    "labelPt": "Churrasco",
+    "aliases": ["bbq", "barbecue", "barbeque", "churrasco", "churrascaria"],
+    "restaurants": [
+      "Bonjardim",
+      "Churrasqueira O Corvo",
+      "Pinóquio",
+      "O Prego da Peixaria"
+    ]
+  },
+  "brazilian": {
+    "label": "Brazilian",
+    "labelPt": "Brasileiro",
+    "aliases": ["brazilian", "brasileiro", "brasileira", "brasil"],
+    "restaurants": [
+      "Fogo de Chão",
+      "Galeto",
+      "Rubro",
+      "Boi-Cavalo"
+    ]
+  },
+  "mediterranean": {
+    "label": "Mediterranean",
+    "labelPt": "Mediterrânico",
+    "aliases": ["mediterranean", "mediterranea", "mediterrânico", "mediterranico", "mediterrânica", "mediterrâneo", "mediterraneo"],
+    "restaurants": [
+      "Mez Cais",
+      "Tapisco",
+      "Prado"
+    ]
+  },
+  "asian": {
+    "label": "Asian",
+    "labelPt": "Asiático",
+    "aliases": ["asian", "asiatico", "asiático", "asiatica", "asiática", "chinese", "chines", "chinês", "chinesa", "china", "korean", "coreano", "vietnamita"],
+    "restaurants": [
+      "Wok to Walk",
+      "Fu Hao",
+      "China Sabor",
+      "B101 Noodle Bar",
+      "Mr. Kimchi"
     ]
   }
 }

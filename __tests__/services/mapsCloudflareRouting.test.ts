@@ -84,6 +84,32 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     expect(mockOsmSearch).not.toHaveBeenCalled();
   });
 
+  it('propagates a group subtype onto both singular and plural fields for a generic-first pizzeria (KAN-344)', async () => {
+    // Pizzeria appears first in the broad bucket with NO classified cuisine,
+    // then again in the pizza subtype bucket (server-matched via raw label).
+    // The merge must set both restaurantFoodTypes and restaurantFoodType.
+    const pizzeria = { fsq_place_id: 'pz', name: 'Tutto Pizza', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: 'Dining and Drinking > Restaurant > Pizzeria', address: null, distanceMeters: 40 };
+    mockPoiAll.mockResolvedValue({
+      results: {
+        restaurant: [pizzeria],
+        'restaurant:food_cuisine:pizza': [pizzeria],
+      },
+    });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['restaurant'], RADIUS, [
+      { key: 'restaurant', type: 'restaurant' },
+      { key: 'restaurant:food_cuisine:pizza', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['pizza'] } },
+    ]);
+
+    expect(result.results.restaurant).toHaveLength(1);
+    expect(result.results.restaurant[0]).toMatchObject({
+      placeId: 'pz',
+      restaurantFoodType: 'pizza',
+      restaurantFoodTypes: ['pizza'],
+    });
+    expect(mockOsmSearch).not.toHaveBeenCalled();
+  });
+
   it('falls through to OSM when the global query is empty', async () => {
     mockPoiAll.mockResolvedValue({ results: { cafe: [] } });
     mockOsmSearch.mockResolvedValue({

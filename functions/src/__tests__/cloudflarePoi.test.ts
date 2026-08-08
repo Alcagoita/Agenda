@@ -134,6 +134,18 @@ describe('nearby-search validation', () => {
       },
     } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
   });
+
+  it('accepts the KAN-344 group cuisine values (pizza, asian, seafood, bbq, brazilian, mediterranean)', async () => {
+    for (const value of ['pizza', 'asian', 'seafood', 'bbq', 'brazilian', 'mediterranean']) {
+      await expect(cloudflarePoiAllProxy.run({
+        auth: AUTH,
+        data: {
+          lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+          requests: [{ key: `restaurant:food_cuisine:${value}`, type: 'restaurant', attribute: { dimension: 'food_cuisine', values: [value] } }],
+        },
+      } as never)).resolves.toBeDefined();
+    }
+  });
 });
 
 describe('enforceUserRateLimit', () => {

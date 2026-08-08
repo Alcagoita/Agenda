@@ -3,6 +3,7 @@ import {
   groupRestaurantPlaceCandidates,
   inferRestaurantFoodType,
   inferRestaurantFoodTypeForPoiInference,
+  listRestaurantFoodTypes,
   restaurantFoodTypeSuggestions,
   restaurantPlaceMatchesFoodType,
   restaurantTaskMatchesAnyPlace,
@@ -37,7 +38,10 @@ describe('restaurantFoodTypes', () => {
 
   it('suggests food types by visible label correspondence, not hidden aliases', () => {
     expect(restaurantFoodTypeSuggestions('Po')).toEqual(['portuguese']);
-    expect(restaurantFoodTypeSuggestions('It')).toEqual(['italian']);
+    // 'It' matches 'Italian' as a prefix (ranked first) and 'Mediterranean'
+    // as a mid-word substring (med-IT-erranean) — both are visible-label
+    // matches, which is exactly what this test guards.
+    expect(restaurantFoodTypeSuggestions('It')).toEqual(['italian', 'mediterranean']);
     expect(restaurantFoodTypeSuggestions('Su')).toEqual(['sushi']);
   });
 
@@ -83,5 +87,34 @@ describe('restaurantFoodTypes', () => {
       { task: { id: 'sushi', title: 'Go out to sushi', poi: 'restaurant' }, places: [places[1]] },
       { task: { id: 'portuguese', title: 'Comer comida portuguesa', poi: 'restaurant' }, places: [places[0]] },
     ]);
+  });
+
+  it('infers the new KAN-344 subtypes from task text (dictionary-driven)', () => {
+    expect(inferRestaurantFoodType('I want pizza')).toBe('pizza');
+    expect(inferRestaurantFoodType('Jantar chinês')).toBe('asian');
+    expect(inferRestaurantFoodType('Comer marisco')).toBe('seafood');
+    expect(inferRestaurantFoodType('Churrasco no domingo')).toBe('bbq');
+    expect(inferRestaurantFoodType('Comida brasileira')).toBe('brazilian');
+    expect(inferRestaurantFoodType('Mediterranean lunch')).toBe('mediterranean');
+    expect(inferRestaurantFoodType('Jantar mediterrâneo')).toBe('mediterranean');
+  });
+
+  it('routes pizza intent to pizza, not italian, after moving the alias', () => {
+    expect(inferRestaurantFoodType('I want pizza')).toBe('pizza');
+    // italian keeps pasta
+    expect(inferRestaurantFoodTypeForPoiInference('go out for pasta')).toBe('italian');
+  });
+
+  it('lists the new subtypes as selectable food types', () => {
+    const types = listRestaurantFoodTypes();
+    for (const t of ['pizza', 'seafood', 'bbq', 'brazilian', 'mediterranean', 'asian']) {
+      expect(types).toContain(t);
+    }
+  });
+
+  it('matches new-subtype places by bundled brand name', () => {
+    expect(restaurantPlaceMatchesFoodType('Telepizza Benfica', 'pizza')).toBe(true);
+    expect(restaurantPlaceMatchesFoodType('Cervejaria Ramiro', 'seafood')).toBe(true);
+    expect(restaurantPlaceMatchesFoodType('Portugália', 'pizza')).toBe(false);
   });
 });
