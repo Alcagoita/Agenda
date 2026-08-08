@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { Alert, Linking, ScrollView, StyleSheet } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -361,12 +361,24 @@ describe('SettingsScreen — KAN-113: IMPORT TASKS section', () => {
 
 describe('SettingsScreen — KAN-362: community place suggestion', () => {
   beforeEach(() => { jest.clearAllMocks(); setupDefaultMocks(); });
+  afterEach(() => { jest.restoreAllMocks(); });
 
   it('opens the public suggestion page', async () => {
     const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
     await renderScreen();
     fireEvent.press(screen.getByLabelText('Suggest a missing place'));
     expect(openUrl).toHaveBeenCalledWith('https://brushaway.app/manual-poi');
+  });
+
+  it('shows the localized error when the suggestion page cannot open', async () => {
+    jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('unavailable'));
+    const alert = jest.spyOn(Alert, 'alert');
+    await renderScreen();
+    fireEvent.press(screen.getByLabelText('Suggest a missing place'));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(
+      'Error',
+      'Could not open the suggestion page. Please try again.',
+    ));
   });
 });
 

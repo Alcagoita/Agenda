@@ -43,4 +43,42 @@ describe('manual community POI input', () => {
     expect(parseManualPoiInput({ ...validSubmission, idempotencyKey: 'short' }))
       .toEqual({ error: 'idempotencyKey is invalid' });
   });
+
+  it.each([
+    [null, 'body must be an object'],
+    [[], 'body must be an object'],
+    ['not an object', 'body must be an object'],
+  ])('rejects a non-object body (%p)', (body, error) => {
+    expect(parseManualPoiInput(body)).toEqual({ error });
+  });
+
+  it.each([
+    ['', 'name must contain text and be at most 160 characters'],
+    ['---', 'name must contain text and be at most 160 characters'],
+    ['x'.repeat(161), 'name must contain text and be at most 160 characters'],
+  ])('rejects an empty-after-normalization or overlong name', (name, error) => {
+    expect(parseManualPoiInput({ ...validSubmission, name })).toEqual({ error });
+  });
+
+  it.each([
+    [{ lat: 91 }, 'lat must be a finite number between -90 and 90'],
+    [{ lat: Number.NaN }, 'lat must be a finite number between -90 and 90'],
+    [{ lng: 181 }, 'lng must be a finite number between -180 and 180'],
+    [{ lng: Number.POSITIVE_INFINITY }, 'lng must be a finite number between -180 and 180'],
+  ])('rejects invalid coordinates', (override, error) => {
+    expect(parseManualPoiInput({ ...validSubmission, ...override })).toEqual({ error });
+  });
+
+  it('rejects unsupported types, too many attributes, and overlong optional text', () => {
+    expect(parseManualPoiInput({ ...validSubmission, poiType: 'not-a-type' }))
+      .toEqual({ error: 'poiType must be a supported POI type' });
+    expect(parseManualPoiInput({
+      ...validSubmission,
+      attributes: Array.from({ length: 9 }, () => ({ dimension: 'food_cuisine', value: 'sushi' })),
+    })).toEqual({ error: 'attributes must contain at most 8 entries' });
+    expect(parseManualPoiInput({ ...validSubmission, address: 'a'.repeat(301) }))
+      .toEqual({ error: 'address must be at most 300 characters' });
+    expect(parseManualPoiInput({ ...validSubmission, contributorNote: 'n'.repeat(601) }))
+      .toEqual({ error: 'contributorNote must be at most 600 characters' });
+  });
 });

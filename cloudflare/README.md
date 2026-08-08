@@ -155,7 +155,9 @@ application (never commit them):
 - `ACCESS_AUD` — the Access application's audience value.
 - `MANUAL_POI_ADMIN_EMAILS` — comma-separated reviewer email allowlist.
 
-The Worker fails closed if any Access value is absent. The public form can be
+The Worker fails closed if any Access value is absent. It also fails closed for
+public submissions when `TURNSTILE_SECRET` is absent: every attempt receives
+HTTP 400 with `verification failed; please try again.` The public form can be
 deployed independently, but it will only become usable after the Worker and
 its D1 migration are live.
 

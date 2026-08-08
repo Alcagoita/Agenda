@@ -35,6 +35,7 @@ function submissionDb() {
         throw new Error(`unhandled all(): ${trimmed}`);
       },
       async run() {
+        if (trimmed.startsWith('DELETE FROM manual_poi_rate_limit')) return { meta: { changes: 0 } };
         if (trimmed.startsWith('INSERT INTO manual_poi_rate_limit')) return { meta: { changes: 1 } };
         if (trimmed.startsWith('INSERT INTO manual_poi_submission')) {
           submissions.set(args[1] as string, { submission_id: args[0] as string, status: 'pending', approved_poi_id: null });

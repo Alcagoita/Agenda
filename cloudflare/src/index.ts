@@ -206,6 +206,11 @@ async function claimManualPoiRateLimit(db: D1Database, ipHash: string): Promise<
   const now = new Date();
   const nowIso = now.toISOString();
   const cutoffIso = new Date(now.getTime() - MANUAL_POI_RATE_LIMIT_WINDOW_MS).toISOString();
+  // The rate-limit table is keyed by a one-hour window. Prune expired rows on
+  // the same low-volume public write path so one-off visitors cannot make it
+  // grow forever; this happens before the claim and does not affect a current
+  // window's count.
+  await db.prepare('DELETE FROM manual_poi_rate_limit WHERE window_started_at < ?').bind(cutoffIso).run();
   const result = await db.prepare(
     `INSERT INTO manual_poi_rate_limit (ip_hash, window_started_at, request_count)
      VALUES (?, ?, 1)
