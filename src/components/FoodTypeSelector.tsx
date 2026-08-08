@@ -76,6 +76,52 @@ function FoodTypeIcon({ type, color, size = 16 }: { type: RestaurantFoodType; co
           <Circle cx="11" cy="13" r="2" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
+    case 'pizza':
+      return (
+        <Svg {...p}>
+          <Path d="M12 3l9 5-8 13-8-13 7-5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="10" cy="9" r="0.9" fill={color} stroke="none" />
+          <Circle cx="13" cy="12" r="0.9" fill={color} stroke="none" />
+        </Svg>
+      );
+    case 'seafood':
+      return (
+        <Svg {...p}>
+          <Path d="M4 12c4-6 12-6 15 0-3 6-11 6-15 0z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M19 12l2-3M19 12l2 3" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="9" cy="11" r="0.9" fill={color} stroke="none" />
+        </Svg>
+      );
+    case 'bbq':
+      return (
+        <Svg {...p}>
+          <Path d="M9 4c0 2-2 3-2 5s2 2 2 4M13 4c0 2-2 3-2 5s2 2 2 4" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M5 15h14a7 7 0 0 1-14 0z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'brazilian':
+      return (
+        <Svg {...p}>
+          <Line x1="5" y1="4" x2="19" y2="18" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="9" cy="9" r="2" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="13" cy="13" r="2" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'mediterranean':
+      return (
+        <Svg {...p}>
+          <Path d="M5 12h14a7 7 0 0 1-14 0z" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="12" cy="8" r="2" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M12 6c2-2 4-1 4-1" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'asian':
+      return (
+        <Svg {...p}>
+          <Path d="M5 11h14l-1 3a6 6 0 0 1-12 0l-1-3z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M9 8l8-3M11 9l7-2" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
     case 'portuguese':
     default:
       return (

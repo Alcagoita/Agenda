@@ -464,6 +464,65 @@ async function typesForSearch(db: D1Database, poiType: string): Promise<string[]
 }
 
 /**
+ * KAN-344: query-time cuisine "groups" for the food_cuisine dimension.
+ *
+ * These cuisines were never added to the classifier's food dictionary
+ * (cloudflare/src/foodSubtypeCategories.json), so no poi_attribute
+ * (dimension='food_cuisine', value='pizza'|'asian'|…) row is ever written
+ * for them. But the raw Foursquare category is preserved verbatim on every
+ * poi row (poi.raw_category_labels — the full taxonomy path), so the
+ * umbrella is derivable at read time with no re-classification and no
+ * rebuild. Each fragment matches a segment of that path, so 'Asian
+ * Restaurant' catches every '… > Asian Restaurant > Chinese/Japanese/Korean
+ * /…' leaf in a single clause. 'pizza' returns Pizzerias plus Italian
+ * restaurants, the asymmetric relationship the product wants (a Pizzeria is
+ * always pizza; an Italian place commonly sells it too).
+ *
+ * Values NOT listed here (sushi, italian, portuguese, …) keep matching the
+ * classified poi_attribute rows exactly as before — this only adds the
+ * umbrella cuisines that classification doesn't produce.
+ */
+const FOOD_CUISINE_LABEL_GROUPS: Record<string, string[]> = {
+  asian: ['Asian Restaurant'],
+  pizza: ['Pizzeria', 'Italian Restaurant'],
+  seafood: ['Seafood Restaurant'],
+  brazilian: ['Brazilian Restaurant'],
+  mediterranean: ['Mediterranean Restaurant'],
+  bbq: ['BBQ Joint'],
+};
+
+/**
+ * Builds the WHERE fragment for an attribute filter. Each requested value is
+ * one OR-branch: a food_cuisine value naming a KAN-344 group matches the raw
+ * Foursquare label path (poi.raw_category_labels LIKE '%fragment%'), every
+ * other value matches a classified poi_attribute row. Exported (pure, no DB)
+ * so the value→SQL routing is unit-testable without a D1. `?` placeholders
+ * and `binds` stay positionally aligned — callers splice binds in clause
+ * order.
+ */
+export function buildAttributeFilterClause(filter: AttributeFilter): { clause: string; binds: unknown[] } {
+  const orBranches: string[] = [];
+  const binds: unknown[] = [];
+  for (const value of filter.values) {
+    const fragments = filter.dimension === 'food_cuisine'
+      ? FOOD_CUISINE_LABEL_GROUPS[value]
+      : undefined;
+    if (fragments) {
+      for (const fragment of fragments) {
+        orBranches.push('poi.raw_category_labels LIKE ?');
+        binds.push(`%${fragment}%`);
+      }
+    } else {
+      orBranches.push(
+        'EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value = ?)',
+      );
+      binds.push(filter.dimension, value);
+    }
+  }
+  return { clause: `(${orBranches.join(' OR ')})`, binds };
+}
+
+/**
  * KAN-335: a place can match more than one type (poi_type table, one row
  * per matched type), so filtering by type is an EXISTS subquery against
  * poi_type, not a column comparison on poi itself — a plain INNER JOIN
@@ -516,11 +575,9 @@ async function queryPoiDb(
   // than one value per dimension (KAN-336), so this is presence, not a
   // plain join that would multiply rows.
   if (attributeFilter) {
-    const valuePlaceholders = attributeFilter.values.map(() => '?').join(',');
-    clauses.push(
-      `EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value IN (${valuePlaceholders}))`,
-    );
-    binds.push(attributeFilter.dimension, ...attributeFilter.values);
+    const attr = buildAttributeFilterClause(attributeFilter);
+    clauses.push(attr.clause);
+    binds.push(...attr.binds);
   }
 
   const sql = `SELECT * FROM poi WHERE ${clauses.join(' AND ')}`;
