@@ -29,16 +29,16 @@
 5. **Opt-in urgency:** the Time field = the user inviting a reminder. One calm notification, never re-fired on rollover, exempt from quiet hours (they asked).
 6. **Fix forward, never claw back:** data-bug migrations never revoke awarded streaks/points/achievements (KAN-264).
 7. **Foreground-only location — permanent** (KAN-231 closed as DECIDED): never request background/always-on location, never native background geofences. "While using the app" is the model.
-8. **API minimalism:** Google is expensive and capped. Cache-first (OSM/SQLite) always; Google is discovery + gap-filler with hard per-computation budgets (see §6). OSM = cacheable source (ODbL); Google Places data must not be cached long-term (ToS) except place IDs / short-term snapshots.
+8. **API minimalism:** Cloudflare/Foursquare is the primary POI source. OSM is the retried fallback for API failure or unavailable coverage and is cacheable under ODbL. Google Maps is used only for native navigation handoff, never POI search.
 9. **Surface ownership:** ContextChip owns presence (real location); Calendar owns plans (dates); "Where we've been" owns memories; Today owns now. Copy must never claim another surface's job.
 10. **Monetization doctrine (revised 2026-07-19): "monetize fulfillment, never placement."** Two categories: (A) sponsored PLACEMENT (partner pays to appear) — contained to the trip's "While you're there" ONLY, labeled, area-fetched, core loop permanently ad-free; (B) monetized FULFILLMENT (affiliate link on an organically-shown action, e.g. "Get tickets" on the KAN-293 leisure line) — allowed wherever the suggestion is organic, with the inviolable line that no commercial relationship may ever influence detection, ranking, wording, or frequency. No prices/discounts/deal language anywhere, ever.
 
 ## 4. Architecture facts (verified in code)
 
 - **Location:** expo-location, foreground `watchPositionAsync`, two-tier accuracy (coarse/fine, KAN-55), 3-min timer + 200 m movement gate (`src/services/proximity.ts`). `getPositionLowAccuracy` falls back to GPS offline. No native geofences in use.
-- **Places online:** Google Places API (New) REST in `src/services/maps.ts` — searchNearby (batches multiple types in ONE call, 20-result cap per request), searchText, autocomplete, `openInMaps`/`openMapsSearch` deep-links. Trust `primaryType`, not `types[0]`.
-- **Places offline:** habitat cache — SQLite (`src/services/habitatCache.ts`), OSM/Overpass source (`osmPlaces.ts`), all POI types prefetched (KAN-238), per-type cap 50, cross-source place identity (Google↔OSM merged). Trip downloads (`tripDownload.ts`: `computeTripExpiresAt`, `shouldPreRefreshTrip`, `refreshTripArea`, `TRIP_RADIUS_PRESETS`) — expiry/pre-refresh are pure derivations, no schedulers.
-- **Data:** Firestore, offline persistence on, unlimited cache (`firebase.ts`). All user data under `/users/{uid}/`. Tasks: `date` mutates on rollover; `originDate` (immutable, KAN-264) is the calendar day; `completedPlaceId/Name` recorded at brush (KAN-226); `poiPlaceId` exists but NO UI sets it (KAN-265 = open decision: build pin UI or remove field).
+- **Places online:** Cloudflare POI API in `src/services/maps.ts`, queried by broad type and requested subtype; OSM/Overpass is the fallback for API failure or unavailable coverage. `openInMaps`/`openMapsSearch` only hand off to the device's map app.
+- **Places offline:** habitat cache — SQLite (`src/services/habitatCache.ts`), OSM/Overpass source (`osmPlaces.ts`), all POI types prefetched (KAN-238), per-type cap 50. Trip downloads (`tripDownload.ts`: `computeTripExpiresAt`, `shouldPreRefreshTrip`, `refreshTripArea`, `TRIP_RADIUS_PRESETS`) — expiry/pre-refresh are pure derivations, no schedulers.
+- **Data:** Firestore, offline persistence on, unlimited cache (`firebase.ts`). All user data under `/users/{uid}/`. Tasks: `date` mutates on rollover; `originDate` (immutable, KAN-264) is the calendar day; `completedPlaceId/Name` recorded at brush (KAN-226). KAN-353 removed the unused Google-specific `poiPlaceId` field after a zero-record audit.
 - **Inference:** `poiInference.ts` (keyword dict EN+pt-PT, self-growing) + `poiLlm.ts` (on-device TFLite ~90 KB) — both offline; wired into import AND quick-add suggestion (suggested-POI chip state, KAN-249: nearTint dashed = app's guess; confirm/ignore/replace feed learn-back).
 - **Learned places:** `learnedPlaces.ts` — N=3 brushes at same internal place id promotes it; "your usual".
 - **Screens of note:** TodayScreen (post-KAN-260 cleanup: no pts in header, no %, brush-stroke-only done state, "N waiting"), CalendarScreen (trip entry row `tripForDate(selectedDate)`, day-driven single row; "Where we've been ›" secondary row), TripPlannerScreen (rendering-only over `useTripPlanner` step hook: destination→dates→radius→downloading), WhereWeveBeenScreen (year timeline), OffGridScreen, PlacesIKnowScreen (owns trip refresh/delete actions), TaskFormScreen (folder: index.tsx, PoiTile, poiSuggestions), MiniTimePicker (custom clock, quiet surface2 12h/24h pill toggle), ContextChip, NearbyCard, ItineraryOptionsScreen (KAN-281/282).
@@ -80,7 +80,6 @@
 
 ## 9. Open questions (ask Olegário, don't decide)
 
-- KAN-265: pin-a-place UI — build or delete `poiPlaceId`?
 - onAccent white-on-amber ~2.5:1 contrast (both modes) — deliberate design decision pending.
 - Calendar discoverability (big-number tap) — tab bar VETOED; moment-based first-complete-day hint proposed but he's "not sold"; unresolved.
 - Landing page repo location — never confirmed.

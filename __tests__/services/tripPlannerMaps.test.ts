@@ -2,8 +2,6 @@
  * tripPlannerMaps.test.ts — KAN-234, KAN-321
  *
  * Unit tests for maps.ts's Trip Planner additions:
- *   - getPlaceDetails: resolves a Places Autocomplete placeId (which carries
- *     no coordinates) to lat/lng + name
  *   - computeTripPreviewZoom: pure zoom-level math (no network) for the trip
  *     radius MapLibre preview — asserts the circle fits with padding and
  *     scales sanely with radius
@@ -12,13 +10,8 @@
  *     (KAN-321, replaced the Google Static Maps URL this used to build)
  */
 
-// maps.ts pulls in placesFunctions -> @react-native-firebase/functions (native,
-// unavailable under Jest) and reverseGeocodeCache -> expo-sqlite. Stub both —
-// same pattern as reverseGeocode.test.ts / nominatimAutocomplete.test.ts.
-const mockGetPlaceDetailsProxy = jest.fn();
-jest.mock('../../src/services/placesFunctions', () => ({
-  getPlaceDetailsProxy: (...args: unknown[]) => mockGetPlaceDetailsProxy(...args),
-}));
+// maps.ts pulls in Cloudflare and reverse-geocode dependencies unavailable in
+// Jest. Stub them while testing the pure map-preview helpers.
 jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
   cloudflareCoverageProxy: jest.fn(),
   cloudflarePoiAllProxy:   jest.fn(),
@@ -28,43 +21,11 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
   putCachedCity: jest.fn(),
 }));
 
-import { getPlaceDetails, computeTripPreviewZoom, buildTripPreviewCircle } from '../../src/services/maps';
+import { computeTripPreviewZoom, buildTripPreviewCircle } from '../../src/services/maps';
 import type { Position } from 'geojson';
 
 beforeEach(() => {
   jest.clearAllMocks();
-});
-
-describe('getPlaceDetails', () => {
-  it('resolves a placeId to lat/lng + name', async () => {
-    mockGetPlaceDetailsProxy.mockResolvedValueOnce({
-      location:    { latitude: 37.0179, longitude: -7.9304 },
-      displayName: { text: 'Faro, Portugal' },
-    });
-
-    const details = await getPlaceDetails('place-abc');
-
-    expect(details).toEqual({ lat: 37.0179, lng: -7.9304, name: 'Faro, Portugal' });
-    expect(mockGetPlaceDetailsProxy).toHaveBeenCalledWith('place-abc');
-  });
-
-  it('falls back to the placeId as the name when displayName is missing', async () => {
-    mockGetPlaceDetailsProxy.mockResolvedValueOnce({ location: { latitude: 1, longitude: 2 } });
-
-    const details = await getPlaceDetails('place-abc');
-
-    expect(details?.name).toBe('place-abc');
-  });
-
-  it('returns null when location is missing from the response', async () => {
-    mockGetPlaceDetailsProxy.mockResolvedValueOnce({});
-    expect(await getPlaceDetails('place-abc')).toBeNull();
-  });
-
-  it('returns null when the proxy call fails', async () => {
-    mockGetPlaceDetailsProxy.mockRejectedValueOnce(new Error('network down'));
-    expect(await getPlaceDetails('place-abc')).toBeNull();
-  });
 });
 
 describe('computeTripPreviewZoom', () => {

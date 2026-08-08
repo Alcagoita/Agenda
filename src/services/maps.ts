@@ -18,10 +18,6 @@
 
 import { Linking, Platform } from 'react-native';
 import type { Feature, Polygon } from 'geojson';
-import {
-  getPlaceDetailsProxy,
-  placesAutocompleteProxy,
-} from './placesFunctions';
 import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy, type CloudflareNearbyRequest } from './cloudflarePoiFunctions';
 import { searchOsmPlacesStrict } from './osmPlaces';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
@@ -36,8 +32,7 @@ export interface NearbyPlace {
    * Source-specific id, raw and unprefixed: a Foursquare `fsq_place_id`
    * when this result came from Cloudflare, an OSM element id when it came
    * from OSM — NOT a Google Places id, and not safe to pass to
-   * getPlaceDetails/getPlaceDetailsProxy (Google-only; would silently
-   * query the wrong place or fail). Which source produced it is on the
+   * historical Google place-details lookup. Which source produced it is on the
    * PoiSearchResult this place came from (see `source` above), not on the
    * place itself — a caller that needs to tell them apart across a mixed
    * batch (e.g. writing cross-source identity, like proximity.ts's
@@ -800,78 +795,16 @@ export function resolveCategoryPlaceType(category: Category): string | null {
   return category.poi ?? null;
 }
 
-// ─── Places Autocomplete (KAN-76) ─────────────────────────────────────────────
-
 /** A single autocomplete suggestion returned by an autocomplete search. */
 export interface PlaceAutocompleteSuggestion {
-  /** Google Places ID (establishment search) or `osm:<place_id>` (Nominatim). */
+  /** OSM Nominatim place id, prefixed so it cannot be mistaken for another source. */
   placeId: string;
   /** Display name of the place (e.g. "Nike Store", "Faro"). */
   name: string;
   /** Formatted secondary address line (e.g. "Oxford Street, London"). */
   address: string;
-  /**
-   * Coordinates, when the search source already returns them (Nominatim —
-   * see searchDestinationAutocomplete/searchAddressAutocomplete). Absent for
-   * Google establishment results, which require a separate getPlaceDetails
-   * call.
-   */
   lat?: number;
   lng?: number;
-}
-
-interface AutocompleteResponse {
-  suggestions?: Array<{
-    placePrediction?: {
-      placeId?: string;
-      structuredFormat?: {
-        mainText?:      { text?: string };
-        secondaryText?: { text?: string };
-      };
-    };
-  }>;
-}
-
-/**
- * Search for establishments matching the user-typed `query` string.
- * Results are optionally biased towards `lat`/`lng` when the device location
- * is available (50 km radius — covers most metro areas).
- *
- * Returns up to 5 establishment suggestions, sorted by relevance.
- * Returns an empty array on API error (search is best-effort).
- *
- * Uses the Places Autocomplete (New) API:
- *   POST https://places.googleapis.com/v1/places:autocomplete
- *
- * Stays on Google (KAN-320 spike, KAN-278) — Nominatim has no equivalent
- * ranked establishment search, only geocoding of named/addressed places.
- */
-export async function searchPlacesAutocomplete(
-  query: string,
-  lat?: number,
-  lng?: number,
-): Promise<PlaceAutocompleteSuggestion[]> {
-  if (!query.trim()) { return []; }
-
-  let data: AutocompleteResponse;
-  try {
-    data = await placesAutocompleteProxy(query, 'establishment', lat, lng) as AutocompleteResponse;
-  } catch {
-    return [];
-  }
-
-  const results: PlaceAutocompleteSuggestion[] = [];
-  for (const s of data.suggestions ?? []) {
-    const pred = s.placePrediction;
-    if (!pred?.placeId) { continue; }
-    results.push({
-      placeId: pred.placeId,
-      name:    pred.structuredFormat?.mainText?.text      ?? pred.placeId,
-      address: pred.structuredFormat?.secondaryText?.text ?? '',
-    });
-    if (results.length >= 5) { break; }
-  }
-  return results;
 }
 
 // ─── Nominatim search — destination / address autocomplete (KAN-320) ─────────
@@ -944,7 +877,7 @@ async function fetchNominatimAutocomplete(
     limit: '8',
   });
   // Soft bias (not a hard restriction) toward the caller's current region,
-  // same intent as the lat/lng bias on searchPlacesAutocomplete.
+  // same intent as a local destination search.
   if (lat != null && lng != null) {
     const delta = 0.5; // ~55 km at the equator — plenty for a soft bias box
     params.set('viewbox', `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`);
@@ -1023,46 +956,6 @@ export async function searchAddressAutocomplete(
 /** Test-only: clears the autocomplete rate-limit clock. */
 export function __resetNominatimAutocompleteForTests(): void {
   lastAutocompleteRequestAt = 0;
-}
-
-// ─── Place Details (KAN-234) ──────────────────────────────────────────────────
-
-/** Resolved coordinates + display name for a Places Autocomplete suggestion. */
-export interface PlaceDetails {
-  lat: number;
-  lng: number;
-  name: string;
-}
-
-/**
- * Resolves a Places Autocomplete `placeId` (which carries no coordinates —
- * see `searchPlacesAutocomplete`) to its lat/lng, for centering a Trip
- * Planner download on the chosen destination.
- *
- * Uses the Places Details (New) API:
- *   GET https://places.googleapis.com/v1/places/{placeId}
- *
- * Returns null on any error/non-200 response — best-effort, same contract
- * as the rest of this file's search functions. Never throws.
- */
-export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
-  interface PlaceDetailsResponse {
-    location?: { latitude?: number; longitude?: number };
-    displayName?: { text?: string };
-  }
-
-  try {
-    const data = await getPlaceDetailsProxy(placeId) as PlaceDetailsResponse;
-    if (data.location?.latitude == null || data.location?.longitude == null) { return null; }
-
-    return {
-      lat:  data.location.latitude,
-      lng:  data.location.longitude,
-      name: data.displayName?.text ?? placeId,
-    };
-  } catch {
-    return null;
-  }
 }
 
 // ─── Trip radius map preview (KAN-321) ────────────────────────────────────────

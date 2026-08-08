@@ -13,12 +13,6 @@ import { searchNearbyPlaces } from '../../src/services/maps';
 import { searchOsmPlacesStrict } from '../../src/services/osmPlaces';
 import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy } from '../../src/services/cloudflarePoiFunctions';
 
-jest.mock('../../src/services/placesFunctions', () => ({
-  searchNearbyPlacesProxy: jest.fn(),
-  placesAutocompleteProxy: jest.fn(),
-  getPlaceDetailsProxy:    jest.fn(),
-}));
-
 jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
   cloudflarePoiAllProxy:         jest.fn(),
   cloudflareRequestCoverageProxy: jest.fn(),
@@ -128,9 +122,8 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     mockOsmSearch.mockRejectedValue(new Error('Overpass: all endpoints failed'));
 
     await expect(searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS)).rejects.toThrow('Overpass: all endpoints failed');
-    // No placesFunctions mock call assertion needed: maps.ts has no import of
-    // placesFunctions/searchNearbyPlacesProxy in this file at all — the mock
-    // above is registered only so unrelated code doesn't crash Jest.
+    // Importing maps without a Google-client mock proves this path cannot
+    // reach Google after a Cloudflare failure.
   });
 
   // KAN-342 review: searchOsmPlacesStrict (not the lenient searchOsmPlaces)

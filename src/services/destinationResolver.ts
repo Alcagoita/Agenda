@@ -7,11 +7,10 @@
  * to order stops and build a multi-stop directions URL.
  *
  * Resolution order per task, first match wins:
- *   1. Pinned `poiPlaceId` (rare — set via Places autocomplete).
- *   2. Learned place for the task's POI type (KAN-230 ranking) — "your"
+ *   1. Learned place for the task's POI type (KAN-230 ranking) — "your"
  *      place wins even if another candidate is closer.
- *   3. Nearest match in the offline habitat cache, within ROUTE_MAX_RADIUS_M.
- *   4. A pre-fetched live-search result for this POI type, if one was
+ *   2. Nearest match in the offline habitat cache, within ROUTE_MAX_RADIUS_M.
+ *   3. A pre-fetched live-search result for this POI type, if one was
  *      provided (the live search itself is NOT called from here — see
  *      resolveTripDestinations, which batches all unresolved types into at
  *      most one Places API call for the whole trip).
@@ -21,7 +20,6 @@
  * it fixture-testable per branch without mocking a live API call inside it.
  */
 
-import { getDistanceMeters, getPlaceDetails } from './maps';
 import { queryHabitatCache } from './habitatCache';
 import { getLearnedPlaceForPoiType, type LearnedBrand } from './learnedPlaces';
 import type { PlacesMap } from './proximity';
@@ -32,7 +30,7 @@ import type { Task } from '../types';
  *  KAN-279's original design intent. Start here, tune later. */
 export const ROUTE_MAX_RADIUS_M = 5_000;
 
-export type DestinationSource = 'pinned' | 'learned' | 'cache' | 'live';
+export type DestinationSource = 'learned' | 'cache' | 'live';
 
 export interface ResolvedPlace {
   /** Google Place ID (pinned/live) or the internal habitat cross-source id (learned/cache). */
@@ -49,26 +47,7 @@ export async function resolveTaskDestination(
   coords: { lat: number; lng: number },
   learnedPlaces: LearnedBrand[],
   liveResults: PlacesMap = {},
-  options: { skipPinned?: boolean } = {},
 ): Promise<ResolvedPlace | null> {
-  // 1. Pinned place wins over everything. `skipPinned` opts out of this
-  // branch's network call — used by TodayScreen's local-only eligibility
-  // check, which must never fire an uninvited Places API request just to
-  // decide whether to show a discovery row.
-  if (task.poiPlaceId && !options.skipPinned) {
-    const pinned = await getPlaceDetails(task.poiPlaceId).catch(() => null);
-    if (pinned) {
-      return {
-        internalId:     task.poiPlaceId,
-        name:           pinned.name,
-        lat:            pinned.lat,
-        lng:            pinned.lng,
-        distanceMeters: getDistanceMeters(coords.lat, coords.lng, pinned.lat, pinned.lng),
-        source:         'pinned',
-      };
-    }
-  }
-
   if (!task.poi) { return null; }
 
   // The offline habitat candidates for this type, nearest first — shared by
@@ -79,7 +58,7 @@ export async function resolveTaskDestination(
     coords.lat, coords.lng, [task.poi], ROUTE_MAX_RADIUS_M, { maxResultsPerType: null },
   )[task.poi] ?? [];
 
-  // 2. Learned brand — the user's preferred brand for this type wins even if a
+  // 1. Learned brand — the user's preferred brand for this type wins even if a
   // same-type stranger is closer (KAN-304: match by brand name, not place id).
   // Falls through if no branch of that brand is currently in range.
   const learned = getLearnedPlaceForPoiType(learnedPlaces, task.poi);
@@ -97,7 +76,7 @@ export async function resolveTaskDestination(
     }
   }
 
-  // 3. Nearest matching place from the offline habitat cache.
+  // 2. Nearest matching place from the offline habitat cache.
   const cached = candidates[0];
   if (cached) {
     return {
@@ -110,7 +89,7 @@ export async function resolveTaskDestination(
     };
   }
 
-  // 4. A pre-fetched live-search result for this type, if the orchestrator
+  // 3. A pre-fetched live-search result for this type, if the orchestrator
   // supplied one (respects the same radius cap).
   const live = liveResults[task.poi]?.[0];
   if (live && live.distanceMeters <= ROUTE_MAX_RADIUS_M) {
@@ -124,6 +103,6 @@ export async function resolveTaskDestination(
     };
   }
 
-  // 5. Nothing resolved anywhere within the cap.
+  // 4. Nothing resolved anywhere within the cap.
   return null;
 }

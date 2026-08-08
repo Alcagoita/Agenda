@@ -97,13 +97,9 @@ export interface FarPinSuggestion {
 
 /**
  * Signal 2 — DORMANT (KAN-245 scope resolution, 2026-07-11). Reads only
- * `Task.poiPlaceId`, which is declared on the type but not written by any
- * UI flow today — no place-pinning UI exists yet, and whether to build one
- * is a separate product decision, not this ticket's. This function is real
- * and fixture-tested so it activates for free the moment a pin UI ships;
- * until then it can never fire in production because no caller ever has a
- * non-null placeId to pass it. No new location fields/semantics were added
- * to Task to support this — none exist here that didn't already.
+ * It remains dormant until a source-independent pinned-place model exists.
+ * KAN-353 removed the unused Google `poiPlaceId` field rather than preserving
+ * a location reference that the app could no longer resolve.
  */
 export function detectFarPinSignal(
   taskId: string,

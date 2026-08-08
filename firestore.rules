@@ -188,6 +188,8 @@ service cloud.firestore {
     }
 
     function validTaskData(data) {
+      // KAN-353 removed the unused Google-specific poiPlaceId field after a
+      // production audit confirmed no persisted tasks carried it.
       return data.keys().hasOnly([
           'id',
           'title',
@@ -199,7 +201,6 @@ service cloud.firestore {
           'poi',
           'storeSubtype',
           'restaurantFoodType',
-          'poiPlaceId',
           'completedPlaceId',
           'completedPlaceName',
           'completedPoiType',
@@ -224,7 +225,6 @@ service cloud.firestore {
         && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
         && (!('restaurantFoodType' in data.keys()) ||
           (data.poi == 'restaurant' && validRestaurantFoodType(data.restaurantFoodType)))
-        && (!('poiPlaceId' in data.keys()) || validString(data.poiPlaceId, 200))
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
         && (!('completedPoiType' in data.keys()) || validPoiType(data.completedPoiType))

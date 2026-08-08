@@ -199,8 +199,6 @@ export interface Task {
   storeSubtype?: StoreSubtype;
   /** Optional cuisine preference selected for restaurant tasks. */
   restaurantFoodType?: RestaurantFoodType;
-  /** Google Places ID if the user pinned a specific place — optional. */
-  poiPlaceId?: string;
   /**
    * Google Places ID of the hero/nearby place the user was next to when this
    * task was brushed away — undefined when no matching place was known at
