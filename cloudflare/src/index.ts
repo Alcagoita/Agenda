@@ -111,7 +111,12 @@ const MAX_NEARBY_LIMIT_PER_TYPE = 50;
 const SUBTYPE_FILTERS: Record<string, { dimension: string; values: readonly string[] }> = {
   restaurant: {
     dimension: 'food_cuisine',
-    values: ['burger', 'healthy', 'indian', 'italian', 'mexican', 'portuguese', 'steak', 'sushi', 'thai', 'vegetarian'],
+    // KAN-344 groups (asian, bbq, brazilian, mediterranean, pizza, seafood)
+    // have no classified poi_attribute row — they resolve at query time
+    // against raw_category_labels (FOOD_CUISINE_LABEL_GROUPS). They must
+    // still be listed here or the structured-request validation rejects them
+    // before the grouping runs.
+    values: ['asian', 'bbq', 'brazilian', 'burger', 'healthy', 'indian', 'italian', 'mediterranean', 'mexican', 'pizza', 'portuguese', 'seafood', 'steak', 'sushi', 'thai', 'vegetarian'],
   },
   store: {
     dimension: 'store_kind',
@@ -608,6 +613,29 @@ interface NearbyQueryResult {
 }
 
 /**
+ * KAN-344: matches one attribute value against a nearby-search candidate.
+ * A food_cuisine value naming a group (pizza/asian/…) is matched against the
+ * candidate's raw Foursquare label path — the same umbrella GET /poi resolves
+ * in SQL via buildAttributeFilterClause — because those cuisines have no
+ * classified poi_attribute row. Every other value matches a classified
+ * poi_attribute value exactly as before.
+ */
+function attributeValueMatches(
+  dimension: string,
+  value: string,
+  candidate: { attributes: Record<string, string[]>; rawCategoryLabels: string | null },
+): boolean {
+  if (dimension === 'food_cuisine') {
+    const fragments = FOOD_CUISINE_LABEL_GROUPS[value];
+    if (fragments) {
+      const labels = candidate.rawCategoryLabels ?? '';
+      return fragments.some(fragment => labels.includes(fragment));
+    }
+  }
+  return candidate.attributes[dimension]?.includes(value) ?? false;
+}
+
+/**
  * KAN-347: global, typed nearby search. POIs are deliberately never joined
  * to Place: the Place that first imported a venue is only coverage metadata.
  * The join is restricted to requested/related types before candidates reach
@@ -630,7 +658,7 @@ async function queryNearbyPoiDb(
   const d1StartedAt = performance.now();
   const { results: rows } = await db.prepare(
     `SELECT poi.fsq_place_id, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
-            poi.brand, poi.category_label, poi.address, poi_type.poi_type AS matched_type
+            poi.brand, poi.category_label, poi.raw_category_labels, poi.address, poi_type.poi_type AS matched_type
             , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value
      FROM poi
      INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
@@ -640,13 +668,14 @@ async function queryNearbyPoiDb(
   ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
     fsq_place_id: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null; category_label: string | null;
+    raw_category_labels: string | null;
     address: string | null; matched_type: string;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
   const d1Ms = performance.now() - d1StartedAt;
 
   const filteringStartedAt = performance.now();
-  const candidates = new Map<string, NearbyPoi & { matchedTypes: Set<string> }>();
+  const candidates = new Map<string, NearbyPoi & { matchedTypes: Set<string>; rawCategoryLabels: string | null }>();
   for (const row of rows) {
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
@@ -666,6 +695,7 @@ async function queryNearbyPoiDb(
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
         matchedTypes: new Set([row.matched_type]),
+        rawCategoryLabels: row.raw_category_labels,
       });
     }
   }
@@ -684,7 +714,7 @@ async function queryNearbyPoiDb(
       if (result[request.key].length >= limitPerRequest) continue;
       const matchesType = relatedTypes[index].some(type => candidate.matchedTypes.has(type));
       const matchesAttribute = request.attributeFilter == null || request.attributeFilter.values
-        .some(value => candidate.attributes[request.attributeFilter!.dimension]?.includes(value));
+        .some(value => attributeValueMatches(request.attributeFilter!.dimension, value, candidate));
       if (matchesType && matchesAttribute) {
         result[request.key].push(poi);
       }

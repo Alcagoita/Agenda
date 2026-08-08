@@ -34,4 +34,22 @@ describe('buildNearbySearchRequests', () => {
       { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
     ]);
   });
+
+  it('produces a structured pizza subtype request inferred from the task title (KAN-344)', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'restaurant', title: 'I want pizza' },
+    ])).toEqual([
+      { key: 'restaurant:food_cuisine:pizza', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['pizza'] } },
+    ]);
+  });
+
+  it('keeps the broad restaurant bucket alongside a pizza subtype request', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'restaurant', title: 'Somewhere for dinner' },
+      { poi: 'restaurant', title: 'I want pizza' },
+    ])).toEqual([
+      { key: 'restaurant', type: 'restaurant' },
+      { key: 'restaurant:food_cuisine:pizza', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['pizza'] } },
+    ]);
+  });
 });

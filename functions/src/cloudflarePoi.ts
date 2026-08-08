@@ -57,8 +57,13 @@ interface RateLimitDoc {
   updatedAt: Date;
 }
 
+// Must stay in sync with the Worker's SUBTYPE_FILTERS (cloudflare/src/index.ts).
+// KAN-344 group values (asian, bbq, brazilian, mediterranean, pizza, seafood)
+// carry no classified poi_attribute row — the Worker resolves them against
+// raw_category_labels — but they must be allowed here or the proxy rejects the
+// request before it reaches the Worker.
 const SUBTYPE_FILTER_VALUES: Record<NearbyAttributeInput['dimension'], readonly string[]> = {
-  food_cuisine: ['burger', 'healthy', 'indian', 'italian', 'mexican', 'portuguese', 'steak', 'sushi', 'thai', 'vegetarian'],
+  food_cuisine: ['asian', 'bbq', 'brazilian', 'burger', 'healthy', 'indian', 'italian', 'mediterranean', 'mexican', 'pizza', 'portuguese', 'seafood', 'steak', 'sushi', 'thai', 'vegetarian'],
   store_kind: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
 };
 

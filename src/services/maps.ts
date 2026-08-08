@@ -377,21 +377,34 @@ async function searchNearbyPlacesCloudflare(
     for (const request of requests) {
       const places = placesByType.get(request.type) ?? new Map<string, NearbyPlace>();
       placesByType.set(request.type, places);
+      // KAN-344: a place returned in a subtype request's bucket matched that
+      // subtype on the server. For group cuisines (pizza/asian/…) that match
+      // is against raw_category_labels, so the place's own classified
+      // food_cuisine can differ (a Pizzeria is often classified 'italian').
+      // Tag the requested value onto the place so the client-side per-task
+      // filter honors the server's decision instead of re-deriving it from
+      // the classified value or the name.
+      const requestFoodValues = (request.attribute?.dimension === 'food_cuisine' ? request.attribute.values : []) as RestaurantFoodType[];
+      const requestStoreValues = (request.attribute?.dimension === 'store_kind' ? request.attribute.values : []) as StoreSubtype[];
       for (const p of data.results[request.key] ?? []) {
         const existing = places.get(p.fsq_place_id);
         if (existing) {
           const restaurantFoodTypes = [...new Set([
             ...(existing.restaurantFoodTypes ?? []),
             ...(p.attributes?.food_cuisine ?? []),
+            ...requestFoodValues,
           ])] as RestaurantFoodType[];
           const storeSubtypes = [...new Set([
             ...(existing.storeSubtypes ?? []),
             ...(p.attributes?.store_kind ?? []),
+            ...requestStoreValues,
           ])] as StoreSubtype[];
           if (restaurantFoodTypes.length > 0) { existing.restaurantFoodTypes = restaurantFoodTypes; }
           if (storeSubtypes.length > 0) { existing.storeSubtypes = storeSubtypes; }
           continue;
         }
+        const restaurantFoodTypes = [...new Set([...(p.attributes?.food_cuisine ?? []), ...requestFoodValues])] as RestaurantFoodType[];
+        const storeSubtypes = [...new Set([...(p.attributes?.store_kind ?? []), ...requestStoreValues])] as StoreSubtype[];
         const place: NearbyPlace = {
           placeId: p.fsq_place_id,
           name: p.name,
@@ -399,10 +412,10 @@ async function searchNearbyPlacesCloudflare(
           lng: p.lng,
           distanceMeters: p.distanceMeters,
           primaryType: p.primary_poi_type,
-          restaurantFoodType: p.attributes?.food_cuisine?.[0] as RestaurantFoodType | undefined,
-          restaurantFoodTypes: p.attributes?.food_cuisine as RestaurantFoodType[] | undefined,
-          storeSubtype: p.attributes?.store_kind?.[0] as StoreSubtype | undefined,
-          storeSubtypes: p.attributes?.store_kind as StoreSubtype[] | undefined,
+          restaurantFoodType: restaurantFoodTypes[0],
+          restaurantFoodTypes: restaurantFoodTypes.length > 0 ? restaurantFoodTypes : undefined,
+          storeSubtype: storeSubtypes[0],
+          storeSubtypes: storeSubtypes.length > 0 ? storeSubtypes : undefined,
         };
         places.set(p.fsq_place_id, place);
         result[request.type].push(place);
