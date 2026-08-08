@@ -6,8 +6,8 @@ type RestaurantFoodDictionary = Record<string, {
   aliases: string[];
   restaurants: string[];
 }>;
-type RestaurantPlaceLike = { name: string; restaurantFoodType?: RestaurantFoodType | null };
-type RestaurantTaskLike = { poi?: string | null; title: string };
+type RestaurantPlaceLike = { name: string; restaurantFoodType?: RestaurantFoodType | null; restaurantFoodTypes?: RestaurantFoodType[] | null };
+type RestaurantTaskLike = { poi?: string | null; title: string; restaurantFoodType?: RestaurantFoodType | null };
 type RestaurantTaskWithId = RestaurantTaskLike & { id: string };
 
 const RESTAURANT_FOOD_DICTIONARY = require('../constants/restaurantFoodDictionary.json') as RestaurantFoodDictionary;
@@ -162,6 +162,9 @@ export function restaurantPlaceMatchesFoodType(
   foodType: RestaurantFoodType | null,
 ): boolean {
   if (!foodType) { return true; }
+  if (typeof place !== 'string' && place.restaurantFoodTypes?.length) {
+    return place.restaurantFoodTypes.includes(foodType);
+  }
   if (typeof place !== 'string' && place.restaurantFoodType) {
     return place.restaurantFoodType === foodType;
   }
@@ -210,7 +213,7 @@ export function inferRestaurantFoodTypeFromPlaceName(placeName: string): Restaur
 }
 
 export function restaurantTaskFoodType(task: RestaurantTaskLike): RestaurantFoodType | null {
-  return task.poi === 'restaurant' ? inferRestaurantFoodType(task.title) : null;
+  return task.poi === 'restaurant' ? task.restaurantFoodType ?? inferRestaurantFoodType(task.title) : null;
 }
 
 export function restaurantTaskMatchesPlaceName(

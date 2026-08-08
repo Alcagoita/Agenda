@@ -93,10 +93,31 @@ interface ParsedCoords { lat: number; lng: number; }
 interface ParsedCoordsAndRadius extends ParsedCoords { radius: number; }
 interface AttributeFilter { dimension: string; values: string[]; }
 interface NearbySearchParams extends ParsedCoordsAndRadius { types: string[]; limitPerType: number; }
+interface NearbySearchRequest {
+  key: string;
+  type: string;
+  attributeFilter: AttributeFilter | null;
+}
+interface NearbySearchBody extends ParsedCoordsAndRadius {
+  requests: NearbySearchRequest[];
+  limitPerRequest: number;
+}
 
 const DEFAULT_NEARBY_LIMIT_PER_TYPE = 20;
 const MAX_NEARBY_TYPES = 10;
+const MAX_NEARBY_REQUESTS = 32;
 const MAX_NEARBY_LIMIT_PER_TYPE = 50;
+
+const SUBTYPE_FILTERS: Record<string, { dimension: string; values: readonly string[] }> = {
+  restaurant: {
+    dimension: 'food_cuisine',
+    values: ['burger', 'healthy', 'indian', 'italian', 'mexican', 'portuguese', 'steak', 'sushi', 'thai', 'vegetarian'],
+  },
+  store: {
+    dimension: 'store_kind',
+    values: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
+  },
+};
 
 /** attribute+value are optional but must appear together — e.g. attribute=food_cuisine&value=sushi, or value=sushi,italian for an OR match. Capped at 2 values (matches the current real use case: a place tagged with two cuisines, not an open-ended list). */
 function parseAttributeFilter(url: URL): AttributeFilter | null | Response {
@@ -166,6 +187,71 @@ function parseNearbySearch(url: URL): NearbySearchParams | Response {
     return json({ error: `limitPerType must be an integer between 1 and ${MAX_NEARBY_LIMIT_PER_TYPE}` }, 400);
   }
   return { ...parsed, types, limitPerType };
+}
+
+/** Validates the structured POST request used by the authenticated Firebase
+ * proxy. A subtype filter is deliberately constrained to the two dimensions
+ * and dictionary values the importer writes; this endpoint is not a general
+ * arbitrary-attribute query surface. */
+function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json({ error: 'body must be an object' }, 400);
+  }
+  const data = body as Record<string, unknown>;
+  const lat = data.lat;
+  const lng = data.lng;
+  const radius = data.radius;
+  if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) {
+    return json({ error: 'lat must be a finite number between -90 and 90' }, 400);
+  }
+  if (typeof lng !== 'number' || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+    return json({ error: 'lng must be a finite number between -180 and 180' }, 400);
+  }
+  if (typeof radius !== 'number' || !Number.isFinite(radius) || radius <= 0 || radius > MAX_RADIUS_METERS) {
+    return json({ error: `radius must be a finite positive number <= ${MAX_RADIUS_METERS}` }, 400);
+  }
+  const { cellsLat, cellsLng } = requiredGridCells(lat, precisionForRadius(radius), radius);
+  if (cellsLat > MAX_GRID_CELLS_PER_AXIS || cellsLng > MAX_GRID_CELLS_PER_AXIS) {
+    return json({ error: `radius ${radius}m at this latitude needs a search grid larger than supported (max ${MAX_GRID_CELLS_PER_AXIS} cells/axis)` }, 400);
+  }
+  if (!Array.isArray(data.requests) || data.requests.length === 0 || data.requests.length > MAX_NEARBY_REQUESTS) {
+    return json({ error: `requests must contain between 1 and ${MAX_NEARBY_REQUESTS} entries` }, 400);
+  }
+  const limitPerRequest = data.limitPerRequest;
+  if (typeof limitPerRequest !== 'number' || !Number.isInteger(limitPerRequest) || limitPerRequest < 1 || limitPerRequest > MAX_NEARBY_LIMIT_PER_TYPE) {
+    return json({ error: `limitPerRequest must be an integer between 1 and ${MAX_NEARBY_LIMIT_PER_TYPE}` }, 400);
+  }
+
+  const keys = new Set<string>();
+  const requests: NearbySearchRequest[] = [];
+  for (const rawRequest of data.requests) {
+    if (!rawRequest || typeof rawRequest !== 'object' || Array.isArray(rawRequest)) {
+      return json({ error: 'each request must be an object' }, 400);
+    }
+    const request = rawRequest as Record<string, unknown>;
+    if (typeof request.key !== 'string' || request.key.trim() === '' || request.key.length > 80 || keys.has(request.key)) {
+      return json({ error: 'each request needs a unique non-empty key of at most 80 characters' }, 400);
+    }
+    if (typeof request.type !== 'string' || request.type.trim() === '') {
+      return json({ error: 'each request needs a non-empty type' }, 400);
+    }
+    keys.add(request.key);
+
+    let attributeFilter: AttributeFilter | null = null;
+    if (request.attribute !== undefined) {
+      if (!request.attribute || typeof request.attribute !== 'object' || Array.isArray(request.attribute)) {
+        return json({ error: 'attribute must be an object when provided' }, 400);
+      }
+      const attribute = request.attribute as Record<string, unknown>;
+      const allowed = SUBTYPE_FILTERS[request.type];
+      if (!allowed || attribute.dimension !== allowed.dimension || !Array.isArray(attribute.values) || attribute.values.length !== 1 || typeof attribute.values[0] !== 'string' || !allowed.values.includes(attribute.values[0])) {
+        return json({ error: 'attribute is not a supported subtype filter for this type' }, 400);
+      }
+      attributeFilter = { dimension: allowed.dimension, values: [attribute.values[0]] };
+    }
+    requests.push({ key: request.key, type: request.type, attributeFilter });
+  }
+  return { lat, lng, radius, requests, limitPerRequest };
 }
 
 /**
@@ -456,6 +542,7 @@ type NearbyPoi = {
   primary_poi_type: string; brand: string | null;
   category_label: string | null; address: string | null;
   distanceMeters: number;
+  attributes: Record<string, string[]>;
 };
 
 interface NearbyQueryResult {
@@ -474,10 +561,10 @@ async function queryNearbyPoiDb(
   lat: number,
   lng: number,
   radiusMeters: number,
-  requestedTypes: string[],
-  limitPerType: number,
+  requestedSearches: NearbySearchRequest[],
+  limitPerRequest: number,
 ): Promise<NearbyQueryResult> {
-  const relatedTypes = await Promise.all(requestedTypes.map(type => typesForSearch(db, type)));
+  const relatedTypes = await Promise.all(requestedSearches.map(request => typesForSearch(db, request.type)));
   const acceptedTypes = [...new Set(relatedTypes.flat())];
   const precision = precisionForRadius(radiusMeters);
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
@@ -487,13 +574,17 @@ async function queryNearbyPoiDb(
   const { results: rows } = await db.prepare(
     `SELECT poi.fsq_place_id, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
             poi.brand, poi.category_label, poi.address, poi_type.poi_type AS matched_type
+            , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value
      FROM poi
      INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
+     LEFT JOIN poi_attribute ON poi_attribute.fsq_place_id = poi.fsq_place_id
+       AND poi_attribute.dimension IN ('food_cuisine', 'store_kind')
      WHERE (${geohashClauses.join(' OR ')}) AND poi_type.poi_type IN (${typePlaceholders})`,
   ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
     fsq_place_id: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null; category_label: string | null;
     address: string | null; matched_type: string;
+    attribute_dimension: string | null; attribute_value: string | null;
   }>();
   const d1Ms = performance.now() - d1StartedAt;
 
@@ -505,30 +596,40 @@ async function queryNearbyPoiDb(
     const existing = candidates.get(row.fsq_place_id);
     if (existing) {
       existing.matchedTypes.add(row.matched_type);
+      if (row.attribute_dimension && row.attribute_value) {
+        const values = existing.attributes[row.attribute_dimension] ??= [];
+        if (!values.includes(row.attribute_value)) values.push(row.attribute_value);
+      }
     } else {
       candidates.set(row.fsq_place_id, {
         fsq_place_id: row.fsq_place_id, name: row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand,
         category_label: row.category_label, address: row.address,
-        distanceMeters, matchedTypes: new Set([row.matched_type]),
+        distanceMeters, attributes: row.attribute_dimension && row.attribute_value
+          ? { [row.attribute_dimension]: [row.attribute_value] }
+          : {},
+        matchedTypes: new Set([row.matched_type]),
       });
     }
   }
 
-  const result = Object.fromEntries(requestedTypes.map(type => [type, [] as NearbyPoi[]])) as Record<string, NearbyPoi[]>;
+  const result = Object.fromEntries(requestedSearches.map(request => [request.key, [] as NearbyPoi[]])) as Record<string, NearbyPoi[]>;
   const nearestCandidates = [...candidates.values()].sort((a, b) => a.distanceMeters - b.distanceMeters);
   for (const candidate of nearestCandidates) {
     const poi: NearbyPoi = {
       fsq_place_id: candidate.fsq_place_id, name: candidate.name, lat: candidate.lat, lng: candidate.lng,
       primary_poi_type: candidate.primary_poi_type, brand: candidate.brand,
       category_label: candidate.category_label, address: candidate.address,
-      distanceMeters: candidate.distanceMeters,
+      distanceMeters: candidate.distanceMeters, attributes: candidate.attributes,
     };
-    for (let index = 0; index < requestedTypes.length; index++) {
-      const requestedType = requestedTypes[index];
-      if (result[requestedType].length >= limitPerType) continue;
-      if (relatedTypes[index].some(type => candidate.matchedTypes.has(type))) {
-        result[requestedType].push(poi);
+    for (let index = 0; index < requestedSearches.length; index++) {
+      const request = requestedSearches[index];
+      if (result[request.key].length >= limitPerRequest) continue;
+      const matchesType = relatedTypes[index].some(type => candidate.matchedTypes.has(type));
+      const matchesAttribute = request.attributeFilter == null || request.attributeFilter.values
+        .some(value => candidate.attributes[request.attributeFilter!.dimension]?.includes(value));
+      if (matchesType && matchesAttribute) {
+        result[request.key].push(poi);
       }
     }
   }
@@ -1046,14 +1147,33 @@ export default {
     if (authError) return authError;
 
     // GET /poi/nearby?lat=&lng=&radius=&types=cafe,pharmacy&limitPerType=20
-    // KAN-347's normal hot path: global POIs only. Coverage/Place resolution
-    // is intentionally absent and happens only after a settled zero result.
+    // Backwards-compatible KAN-347 hot path. Coverage/Place resolution is
+    // intentionally absent and happens only after a settled zero result.
     if (url.pathname === '/poi/nearby' && request.method === 'GET') {
       const parsed = parseNearbySearch(url);
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius, types, limitPerType } = parsed;
       const startedAt = performance.now();
-      const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, types, limitPerType);
+      const searches = types.map(type => ({ key: type, type, attributeFilter: null }));
+      const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, searches, limitPerType);
+      const totalMs = performance.now() - startedAt;
+      logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
+      return jsonWithServerTiming(
+        { results },
+        { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
+      );
+    }
+
+    // POST /poi/nearby — structured, request-keyed subtype search for the
+    // authenticated Firebase proxy. Each request has its own limit, so a
+    // broad restaurant bucket cannot crowd out a requested cuisine.
+    if (url.pathname === '/poi/nearby' && request.method === 'POST') {
+      const body = await request.json().catch(() => null);
+      const parsed = parseNearbySearchBody(body);
+      if (parsed instanceof Response) return parsed;
+      const { lat, lng, radius, requests, limitPerRequest } = parsed;
+      const startedAt = performance.now();
+      const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, requests, limitPerRequest);
       const totalMs = performance.now() - startedAt;
       logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
       return jsonWithServerTiming(
