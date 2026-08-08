@@ -64,6 +64,32 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     expect(result.coverageStatus).toBe('ready');
   });
 
+  it('merges request-keyed subtype buckets into the broad app type with stored attributes', async () => {
+    mockPoiAll.mockResolvedValue({
+      results: {
+        'restaurant:food_cuisine:sushi': [
+          { fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['sushi'] } },
+        ],
+        'restaurant:food_cuisine:vegetarian': [
+          { fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['vegetarian'] } },
+        ],
+      },
+    });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['restaurant'], RADIUS, [
+      { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
+      { key: 'restaurant:food_cuisine:vegetarian', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['vegetarian'] } },
+    ]);
+
+    expect(result.results.restaurant).toHaveLength(1);
+    expect(result.results.restaurant).toMatchObject([{
+      placeId: 'sushi',
+      restaurantFoodType: 'sushi',
+      restaurantFoodTypes: expect.arrayContaining(['sushi', 'vegetarian']),
+    }]);
+    expect(mockOsmSearch).not.toHaveBeenCalled();
+  });
+
   it('falls through to OSM when the global query is empty', async () => {
     mockPoiAll.mockResolvedValue({ results: { cafe: [] } });
     mockOsmSearch.mockResolvedValue({
@@ -72,7 +98,7 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
 
     const result = await searchNearbyPlaces(LAT, LNG, ['cafe'], RADIUS);
 
-    expect(mockPoiAll).toHaveBeenCalledWith(LAT, LNG, RADIUS, ['cafe']);
+    expect(mockPoiAll).toHaveBeenCalledWith(LAT, LNG, RADIUS, [{ key: 'cafe', type: 'cafe' }]);
     expect(mockOsmSearch).toHaveBeenCalledWith(LAT, LNG, ['cafe'], RADIUS);
     expect(result.results.cafe.map(p => p.placeId)).toEqual(['node/1']);
     expect(result.source).toBe('osm');

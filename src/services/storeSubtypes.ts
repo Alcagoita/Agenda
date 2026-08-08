@@ -6,7 +6,7 @@ type StoreSubtypeDictionary = Record<string, {
   aliases: string[];
   stores: string[];
 }>;
-type StorePlaceLike = { name: string; storeSubtype?: StoreSubtype | null };
+type StorePlaceLike = { name: string; storeSubtype?: StoreSubtype | null; storeSubtypes?: StoreSubtype[] | null };
 type StoreTaskLike = { poi?: string | null; title: string; storeSubtype?: StoreSubtype | null };
 type StoreTaskWithId = StoreTaskLike & { id: string };
 type StoreSubtypeMatch = { key: StoreSubtype; alias: string };
@@ -145,6 +145,9 @@ export function storePlaceMatchesSubtype(
 ): boolean {
   if (!subtype) { return true; }
   if (subtype === 'any') { return true; }
+  if (typeof place !== 'string' && place.storeSubtypes?.length) {
+    return place.storeSubtypes.includes(subtype);
+  }
   if (typeof place !== 'string' && place.storeSubtype) {
     return place.storeSubtype === subtype;
   }

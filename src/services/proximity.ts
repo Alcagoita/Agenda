@@ -112,6 +112,7 @@ import {
   storeTaskMatchesPlaceName,
   storeTaskSubtype,
 } from './storeSubtypes';
+import { buildNearbySearchRequests } from './nearbySearchRequests';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -648,6 +649,7 @@ async function runProximitySearch(
 
     const undonePoiTasks = tasks.filter(t => !t.done && t.poi != null);
     const uniquePoiTypes = [...new Set(undonePoiTasks.map(t => t.poi as string))];
+    const nearbyRequests = buildNearbySearchRequests(undonePoiTasks);
     const poiTypesKey = [...uniquePoiTypes].sort().join(',');
 
     if (uniquePoiTypes.length === 0) {
@@ -690,7 +692,7 @@ async function runProximitySearch(
       answeredFromCache = true;
     } else {
       try {
-        const search = await searchNearbyPlaces(coords.lat, coords.lng, uniquePoiTypes, NEARBY_RADIUS);
+        const search = await searchNearbyPlaces(coords.lat, coords.lng, uniquePoiTypes, NEARBY_RADIUS, nearbyRequests);
         results = search.results;
         tickSource = search.source;
         tickCoverageStatus = search.coverageStatus;

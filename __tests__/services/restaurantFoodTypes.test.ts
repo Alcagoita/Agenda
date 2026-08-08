@@ -32,6 +32,7 @@ describe('restaurantFoodTypes', () => {
     expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodType: 'sushi' }, 'sushi')).toBe(true);
     expect(restaurantPlaceMatchesFoodType({ name: 'Portugália', restaurantFoodType: 'sushi' }, 'sushi')).toBe(true);
     expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodType: 'portuguese' }, 'sushi')).toBe(false);
+    expect(restaurantPlaceMatchesFoodType({ name: 'restaurant', restaurantFoodTypes: ['italian', 'vegetarian'] }, 'vegetarian')).toBe(true);
   });
 
   it('suggests food types by visible label correspondence, not hidden aliases', () => {

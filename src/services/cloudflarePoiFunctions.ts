@@ -20,6 +20,16 @@ export interface RequestCoverageResponse {
   retryAfterSeconds?: number;
 }
 
+export interface CloudflareNearbyRequest {
+  /** Stable client key: response buckets are keyed by this, not broad POI type. */
+  key: string;
+  type: string;
+  attribute?: {
+    dimension: 'food_cuisine' | 'store_kind';
+    values: [string];
+  };
+}
+
 interface PoiAllResponse {
   results: Record<string, Array<{
     fsq_place_id: string;
@@ -31,6 +41,7 @@ interface PoiAllResponse {
     category_label: string | null;
     address: string | null;
     distanceMeters: number;
+    attributes: Record<string, string[]>;
   }>>;
 }
 
@@ -45,12 +56,18 @@ export async function cloudflareCoverageProxy(lat: number, lng: number): Promise
 
 /** KAN-347 global typed nearby-search proxy. The callable name is retained
  * for a backwards-compatible Firebase deployment; it now calls /poi/nearby. */
-export async function cloudflarePoiAllProxy(lat: number, lng: number, radiusMeters: number, poiTypes: string[], limitPerType = 20): Promise<PoiAllResponse> {
-  const callable = httpsCallable<{ lat: number; lng: number; radiusMeters: number; poiTypes: string[]; limitPerType: number }, PoiAllResponse>(
+export async function cloudflarePoiAllProxy(
+  lat: number,
+  lng: number,
+  radiusMeters: number,
+  requests: CloudflareNearbyRequest[],
+  limitPerRequest = 20,
+): Promise<PoiAllResponse> {
+  const callable = httpsCallable<{ lat: number; lng: number; radiusMeters: number; requests: CloudflareNearbyRequest[]; limitPerRequest: number }, PoiAllResponse>(
     functionsService,
     'cloudflarePoiAllProxy',
   );
-  const result = await callable({ lat, lng, radiusMeters, poiTypes, limitPerType });
+  const result = await callable({ lat, lng, radiusMeters, requests, limitPerRequest });
   return result.data;
 }
 

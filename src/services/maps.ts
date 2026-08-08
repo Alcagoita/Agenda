@@ -22,7 +22,7 @@ import {
   getPlaceDetailsProxy,
   placesAutocompleteProxy,
 } from './placesFunctions';
-import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy } from './cloudflarePoiFunctions';
+import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy, type CloudflareNearbyRequest } from './cloudflarePoiFunctions';
 import { searchOsmPlacesStrict } from './osmPlaces';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { Category, PoiType, poiCatalogLabel } from '../types';
@@ -85,9 +85,18 @@ export interface NearbyPlace {
   website?: string;
   /** Stored offline subtype for restaurant places, when known from the local dictionary/cache. */
   restaurantFoodType?: RestaurantFoodType;
+  /** All authoritative restaurant cuisines returned by Cloudflare, when known. */
+  restaurantFoodTypes?: RestaurantFoodType[];
   /** Stored offline subtype for store places, when known from the local dictionary/cache. */
   storeSubtype?: StoreSubtype;
+  /** All authoritative store kinds returned by Cloudflare, when known. */
+  storeSubtypes?: StoreSubtype[];
 }
+
+/** A request-specific nearby bucket. Generic requests omit `attribute`; subtype
+ * requests are independently limited by the API so one broad type cannot
+ * crowd out a cuisine or store kind. */
+export type NearbySearchRequest = CloudflareNearbyRequest;
 
 // ─── Haversine distance ────────────────────────────────────────────────────────
 //
@@ -363,20 +372,49 @@ async function searchNearbyPlacesCloudflare(
   lng: number,
   poiTypes: string[],
   radiusMeters: number,
+  requests: NearbySearchRequest[],
 ): Promise<CloudflareAttempt> {
   try {
     const result: Record<string, NearbyPlace[]> = {};
     for (const poiType of poiTypes) { result[poiType] = []; }
-    const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters, poiTypes);
+    const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters, requests);
+    const placesByType = new Map<string, Map<string, NearbyPlace>>();
+    for (const request of requests) {
+      const places = placesByType.get(request.type) ?? new Map<string, NearbyPlace>();
+      placesByType.set(request.type, places);
+      for (const p of data.results[request.key] ?? []) {
+        const existing = places.get(p.fsq_place_id);
+        if (existing) {
+          const restaurantFoodTypes = [...new Set([
+            ...(existing.restaurantFoodTypes ?? []),
+            ...(p.attributes?.food_cuisine ?? []),
+          ])] as RestaurantFoodType[];
+          const storeSubtypes = [...new Set([
+            ...(existing.storeSubtypes ?? []),
+            ...(p.attributes?.store_kind ?? []),
+          ])] as StoreSubtype[];
+          if (restaurantFoodTypes.length > 0) { existing.restaurantFoodTypes = restaurantFoodTypes; }
+          if (storeSubtypes.length > 0) { existing.storeSubtypes = storeSubtypes; }
+          continue;
+        }
+        const place: NearbyPlace = {
+          placeId: p.fsq_place_id,
+          name: p.name,
+          lat: p.lat,
+          lng: p.lng,
+          distanceMeters: p.distanceMeters,
+          primaryType: p.primary_poi_type,
+          restaurantFoodType: p.attributes?.food_cuisine?.[0] as RestaurantFoodType | undefined,
+          restaurantFoodTypes: p.attributes?.food_cuisine as RestaurantFoodType[] | undefined,
+          storeSubtype: p.attributes?.store_kind?.[0] as StoreSubtype | undefined,
+          storeSubtypes: p.attributes?.store_kind as StoreSubtype[] | undefined,
+        };
+        places.set(p.fsq_place_id, place);
+        result[request.type].push(place);
+      }
+    }
     for (const poiType of poiTypes) {
-      result[poiType] = (data.results[poiType] ?? []).map(p => ({
-        placeId: p.fsq_place_id,
-        name: p.name,
-        lat: p.lat,
-        lng: p.lng,
-        distanceMeters: p.distanceMeters,
-        primaryType: p.primary_poi_type,
-      }));
+      result[poiType].sort((a, b) => a.distanceMeters - b.distanceMeters);
     }
     if (poiTypes.every(poiType => result[poiType].length === 0)) {
       return { ok: false, settledEmpty: true };
@@ -427,10 +465,11 @@ export async function searchNearbyPlaces(
   lng: number,
   poiTypes: string[],
   radiusMeters: number,
+  requestedSearches: NearbySearchRequest[] = poiTypes.map(type => ({ key: type, type })),
 ): Promise<PoiSearchResult> {
   if (poiTypes.length === 0) { return { results: {}, source: 'cloudflare' }; }
 
-  const cf = await searchNearbyPlacesCloudflare(lat, lng, poiTypes, radiusMeters);
+  const cf = await searchNearbyPlacesCloudflare(lat, lng, poiTypes, radiusMeters, requestedSearches);
   if (cf.ok && cf.results) {
     return { results: cf.results, source: 'cloudflare', coverageStatus: 'ready' };
   }

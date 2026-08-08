@@ -106,6 +106,34 @@ describe('nearby-search validation', () => {
     await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe'], limitPerType: 1 } } as never)).resolves.toBeDefined();
     await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe'], limitPerType: 50 } } as never)).resolves.toBeDefined();
   });
+
+  it('accepts request-keyed subtype searches and rejects duplicate request keys', async () => {
+    const subtypeRequest = { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } };
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, requests: [subtypeRequest], limitPerRequest: 20 } } as never))
+      .resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, requests: [subtypeRequest, subtypeRequest], limitPerRequest: 20 } } as never))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it('rejects a subtype dimension that does not belong to its POI type', async () => {
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'wrong', type: 'restaurant', attribute: { dimension: 'store_kind', values: ['clothing'] } }],
+      },
+    } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  it('rejects an unsupported subtype value', async () => {
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } }],
+      },
+    } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
 });
 
 describe('enforceUserRateLimit', () => {
@@ -157,11 +185,19 @@ describe('upstream fetch handling', () => {
     await expect(cloudflareCoverageProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1 } } as never)).rejects.toThrow();
   });
 
-  it('passes the typed, bounded query through to /poi/nearby', async () => {
-    await cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, poiTypes: ['cafe', 'pharmacy'], limitPerType: 20 } } as never);
+  it('POSTs request-keyed subtype filters to /poi/nearby', async () => {
+    const requests = [
+      { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
+      { key: 'pharmacy', type: 'pharmacy' },
+    ];
+    await cloudflarePoiAllProxy.run({ auth: AUTH, data: { lat: 38.7, lng: -9.1, radiusMeters: 200, requests, limitPerRequest: 20 } } as never);
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/poi/nearby?lat=38.7&lng=-9.1&radius=200&types=cafe%2Cpharmacy&limitPerType=20'),
-      expect.objectContaining({ headers: expect.objectContaining({ 'X-Api-Key': 'test-api-key' }) }),
+      expect.stringContaining('/poi/nearby'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ lat: 38.7, lng: -9.1, radius: 200, requests, limitPerRequest: 20 }),
+        headers: expect.objectContaining({ 'X-Api-Key': 'test-api-key', 'Content-Type': 'application/json' }),
+      }),
     );
   });
 });

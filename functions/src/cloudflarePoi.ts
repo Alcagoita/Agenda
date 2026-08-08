@@ -29,12 +29,26 @@ interface CoverageInput {
 
 type RequestCoverageInput = CoverageInput;
 
+interface NearbyAttributeInput {
+  dimension: 'food_cuisine' | 'store_kind';
+  values: string[];
+}
+
+interface NearbyRequestInput {
+  key: string;
+  type: string;
+  attribute?: NearbyAttributeInput;
+}
+
 interface PoiAllInput {
   lat: number;
   lng: number;
   radiusMeters: number;
-  poiTypes: string[];
-  limitPerType: number;
+  /** Legacy APK field. New callers send request-keyed searches below. */
+  poiTypes?: string[];
+  limitPerType?: number;
+  requests?: NearbyRequestInput[];
+  limitPerRequest?: number;
 }
 
 interface RateLimitDoc {
@@ -42,6 +56,11 @@ interface RateLimitDoc {
   requestCount: number;
   updatedAt: Date;
 }
+
+const SUBTYPE_FILTER_VALUES: Record<NearbyAttributeInput['dimension'], readonly string[]> = {
+  food_cuisine: ['burger', 'healthy', 'indian', 'italian', 'mexican', 'portuguese', 'steak', 'sushi', 'thai', 'vegetarian'],
+  store_kind: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
+};
 
 function assertAuthenticated(auth: unknown): void {
   if (!auth) {
@@ -68,6 +87,40 @@ function getApiKey(): string {
     throw new HttpsError('failed-precondition', 'Cloudflare POI API key is not configured.');
   }
   return apiKey;
+}
+
+function assertNearbyRequests(data: PoiAllInput): { requests: NearbyRequestInput[]; limitPerRequest: number } {
+  if (data.requests === undefined && (!Array.isArray(data.poiTypes) || data.poiTypes.length === 0 || data.poiTypes.length > 10 || data.poiTypes.some(type => typeof type !== 'string' || type.trim() === ''))) {
+    throw new HttpsError('invalid-argument', '"poiTypes" must contain between 1 and 10 non-empty strings.');
+  }
+  const requests: NearbyRequestInput[] | undefined = data.requests ?? data.poiTypes?.map(type => ({ key: type, type }));
+  const limitPerRequest = data.limitPerRequest ?? data.limitPerType;
+  if (!Array.isArray(requests) || requests.length === 0 || requests.length > 32) {
+    throw new HttpsError('invalid-argument', '"requests" must contain between 1 and 32 entries.');
+  }
+  if (typeof limitPerRequest !== 'number' || !Number.isInteger(limitPerRequest) || limitPerRequest < 1 || limitPerRequest > 50) {
+    throw new HttpsError('invalid-argument', '"limitPerRequest" must be an integer between 1 and 50.');
+  }
+
+  const seenKeys = new Set<string>();
+  for (const request of requests) {
+    if (!request || typeof request.key !== 'string' || request.key.trim() === '' || request.key.length > 80 || seenKeys.has(request.key)) {
+      throw new HttpsError('invalid-argument', 'Each nearby request needs a unique non-empty key.');
+    }
+    if (typeof request.type !== 'string' || request.type.trim() === '') {
+      throw new HttpsError('invalid-argument', 'Each nearby request needs a non-empty type.');
+    }
+    seenKeys.add(request.key);
+    if (request.attribute && (
+      !((request.type === 'restaurant' && request.attribute.dimension === 'food_cuisine') ||
+        (request.type === 'store' && request.attribute.dimension === 'store_kind')) ||
+      !Array.isArray(request.attribute.values) || request.attribute.values.length !== 1 ||
+      request.attribute.values.some(value => typeof value !== 'string' || !SUBTYPE_FILTER_VALUES[request.attribute!.dimension].includes(value))
+    )) {
+      throw new HttpsError('invalid-argument', 'Each nearby attribute filter needs one supported dimension and value.');
+    }
+  }
+  return { requests, limitPerRequest };
 }
 
 async function fetchWithTimeout(url: string): Promise<Response> {
@@ -177,16 +230,18 @@ export const cloudflarePoiAllProxy = onCall(
     if (!Number.isInteger(data?.radiusMeters) || data.radiusMeters <= 0 || data.radiusMeters > 4_500) {
       throw new HttpsError('invalid-argument', '"radiusMeters" must be an integer between 1 and 4500.');
     }
-    if (!Array.isArray(data?.poiTypes) || data.poiTypes.length === 0 || data.poiTypes.length > 10 || data.poiTypes.some(type => typeof type !== 'string' || type.trim() === '')) {
-      throw new HttpsError('invalid-argument', '"poiTypes" must contain between 1 and 10 non-empty strings.');
-    }
-    if (!Number.isInteger(data?.limitPerType) || data.limitPerType < 1 || data.limitPerType > 50) {
-      throw new HttpsError('invalid-argument', '"limitPerType" must be an integer between 1 and 50.');
-    }
+    const { requests, limitPerRequest } = assertNearbyRequests(data ?? ({} as PoiAllInput));
     await enforceUserRateLimit(request.auth!.uid, 'poiAll');
 
-    return requireOkJson(
-      `${CLOUDFLARE_POI_BASE_URL}/poi/nearby?lat=${encodeURIComponent(data.lat)}&lng=${encodeURIComponent(data.lng)}&radius=${encodeURIComponent(data.radiusMeters)}&types=${encodeURIComponent(data.poiTypes.join(','))}&limitPerType=${encodeURIComponent(data.limitPerType)}`,
+    return requireOkJsonFrom(
+      await postWithTimeout(`${CLOUDFLARE_POI_BASE_URL}/poi/nearby`, {
+        lat: data.lat,
+        lng: data.lng,
+        radius: data.radiusMeters,
+        requests,
+        limitPerRequest,
+      }),
+      `${CLOUDFLARE_POI_BASE_URL}/poi/nearby`,
     );
   },
 );

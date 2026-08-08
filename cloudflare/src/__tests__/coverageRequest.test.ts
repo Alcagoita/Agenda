@@ -80,6 +80,7 @@ interface FakePoiRow {
 }
 
 interface FakePoiTypeRow { fsq_place_id: string; poi_type: string; }
+interface FakePoiAttributeRow { fsq_place_id: string; dimension: string; value: string; }
 
 function createFakeDb(
   seed: FakePlaceRow[] = [],
@@ -87,6 +88,7 @@ function createFakeDb(
   buildLogSeed: FakeBuildLogRow[] = [],
   poiSeed: FakePoiRow[] = [],
   poiTypeSeed: FakePoiTypeRow[] = [],
+  poiAttributeSeed: FakePoiAttributeRow[] = [],
 ) {
   const rows = new Map(seed.map(r => [r.place_id, { ...r }]));
   const countryRows = new Map<string, FakeCountryRow>(countrySeed.map(r => [r.country_code, {
@@ -126,10 +128,19 @@ function createFakeDb(
             return { results: [] as T[] };
           }
           if (trimmed.startsWith('SELECT poi.fsq_place_id')) {
-            const results = poiTypeSeed.flatMap(type => {
+            const results: Array<FakePoiRow & { matched_type: string; attribute_dimension: string | null; attribute_value: string | null }> = [];
+            for (const type of poiTypeSeed) {
               const poi = poiSeed.find(row => row.fsq_place_id === type.fsq_place_id);
-              return poi ? [{ ...poi, matched_type: type.poi_type }] : [];
-            });
+              const attributes = poiAttributeSeed.filter(attribute => attribute.fsq_place_id === type.fsq_place_id);
+              if (!poi) continue;
+              if (attributes.length === 0) {
+                results.push({ ...poi, matched_type: type.poi_type, attribute_dimension: null, attribute_value: null });
+              } else {
+                for (const attribute of attributes) {
+                  results.push({ ...poi, matched_type: type.poi_type, attribute_dimension: attribute.dimension, attribute_value: attribute.value });
+                }
+              }
+            }
             return { results: results as T[] };
           }
           if (trimmed.startsWith('SELECT * FROM place WHERE min_lat IS NOT NULL')) {
@@ -347,9 +358,9 @@ function createFakeDb(
 const API_KEY = 'test-key';
 const BUILD_SECRET = 'build-secret';
 
-function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[] } = {}): Env {
+function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[]; poiAttributeSeed?: FakePoiAttributeRow[] } = {}): Env {
   return {
-    REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed, opts.poiSeed, opts.poiTypeSeed),
+    REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed, opts.poiSeed, opts.poiTypeSeed, opts.poiAttributeSeed),
     POI_EXPORTS: {} as R2Bucket,
     API_KEY,
     EXTRACTION_CONTAINER: {} as Env['EXTRACTION_CONTAINER'], // getContainer() itself is mocked — never really touches this
@@ -376,6 +387,14 @@ function internalRequest(path: string, body: unknown, secret: string | null = BU
 
 function apiRequest(path: string) {
   return new Request(`https://poi-api.brushaway.app${path}`, { headers: { 'X-Api-Key': API_KEY } });
+}
+
+function nearbyPost(body: unknown) {
+  return new Request('https://poi-api.brushaway.app/poi/nearby', {
+    method: 'POST',
+    headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 /** Resolves cleanly on the first (finest) zoom candidate — no address.city/town/etc key at all means the resolved feature already IS the settlement (Sertã/Odivelas-shaped response, not Lisboa/Porto's freguesia case — that retry path has its own dedicated test). */
@@ -430,6 +449,58 @@ describe('GET /poi/nearby', () => {
     const env = makeEnv();
     expect((await worker.fetch(apiRequest('/poi/nearby?lat=38.7&lng=-9.1&radius=500'), env)).status).toBe(400);
     expect((await worker.fetch(apiRequest('/poi/nearby?lat=38.7&lng=-9.1&radius=500&types=cafe&limitPerType=0'), env)).status).toBe(400);
+  });
+});
+
+describe('POST /poi/nearby', () => {
+  it('returns independently limited subtype buckets and the stored subtype attribute', async () => {
+    const env = makeEnv([], {
+      poiSeed: [
+        { fsq_place_id: 'sushi-near', name: 'Sushi Near', lat: 38.7223, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'restaurant', brand: null, category_label: null, address: null },
+        { fsq_place_id: 'vegetarian-near', name: 'Veg Near', lat: 38.7224, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'restaurant', brand: null, category_label: null, address: null },
+      ],
+      poiTypeSeed: [
+        { fsq_place_id: 'sushi-near', poi_type: 'restaurant' },
+        { fsq_place_id: 'vegetarian-near', poi_type: 'restaurant' },
+      ],
+      poiAttributeSeed: [
+        { fsq_place_id: 'sushi-near', dimension: 'food_cuisine', value: 'sushi' },
+        { fsq_place_id: 'vegetarian-near', dimension: 'food_cuisine', value: 'vegetarian' },
+      ],
+    });
+
+    const res = await worker.fetch(nearbyPost({
+      lat: 38.7223, lng: -9.1393, radius: 500, limitPerRequest: 1,
+      requests: [
+        { key: 'sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
+        { key: 'vegetarian', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['vegetarian'] } },
+      ],
+    }), env);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ fsq_place_id: string; attributes: Record<string, string[]> }>> };
+    expect(body.results.sushi).toHaveLength(1);
+    expect(body.results.vegetarian).toHaveLength(1);
+    expect(body.results.sushi[0]).toMatchObject({ fsq_place_id: 'sushi-near', attributes: { food_cuisine: ['sushi'] } });
+    expect(body.results.vegetarian[0]).toMatchObject({ fsq_place_id: 'vegetarian-near', attributes: { food_cuisine: ['vegetarian'] } });
+  });
+
+  it('rejects arbitrary attribute dimensions and values', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(nearbyPost({
+      lat: 38.7223, lng: -9.1393, radius: 500, limitPerRequest: 20,
+      requests: [{ key: 'bad', type: 'restaurant', attribute: { dimension: 'store_kind', values: ['clothing'] } }],
+    }), env);
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects unsupported subtype values', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(nearbyPost({
+      lat: 38.7223, lng: -9.1393, radius: 500, limitPerRequest: 20,
+      requests: [{ key: 'ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } }],
+    }), env);
+    expect(res.status).toBe(400);
   });
 });
 
