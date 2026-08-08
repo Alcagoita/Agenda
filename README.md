@@ -18,7 +18,7 @@ When you're near a Point of Interest tied to one of your tasks, the app surfaces
 | Push notifications | Firebase Cloud Messaging + Notifee |
 | Geolocation | expo-location + expo-task-manager |
 | Calendar access | expo-calendar |
-| Maps / Places | Google Maps + Google Places API |
+| Maps / Places | Native map handoff + Cloudflare POI API with OSM fallback |
 | Font | Geist |
 
 ---
@@ -181,11 +181,11 @@ src/
     appCheck.ts                   — App Check abuse controls
     auth.ts                       — email, Google, Apple sign-in
     firestore/                    — Firestore helpers + points
-    proximity.ts                  — Places API search + distance logic
+    proximity.ts                  — Cloudflare/OSM POI search + distance logic
     indoorProximity.ts            — GPS accuracy-based indoor detection
     indoorDetection.ts
     geolocation.ts                — background location via expo-location
-    maps.ts / placesFunctions.ts  — Google Places API calls (client + Cloud Function proxy)
+    maps.ts                       — Cloudflare POI routing, OSM geocoding, map handoff
     osmPlaces.ts                  — OpenStreetMap fallback places source
     mallSnapshots.ts              — indoor mall/venue snapshot caching
     poiTypeCache.ts / poiInference.ts — POI classification + local keyword dictionary

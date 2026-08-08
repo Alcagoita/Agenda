@@ -188,6 +188,8 @@ service cloud.firestore {
     }
 
     function validTaskData(data) {
+      // KAN-353 removed the unused Google-specific poiPlaceId field after a
+      // production audit confirmed no persisted tasks carried it.
       return data.keys().hasOnly([
           'id',
           'title',

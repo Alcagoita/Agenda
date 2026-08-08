@@ -180,6 +180,6 @@ They are one change to one slot. Review size is handled with commit structure in
 
 > Build note: new tokens must go in `theme/tokens.ts`. The KAN-259 ESLint guard rejects hardcoded colours outside `theme/`, and the KAN-258 contrast test guards the palette — both will need entries for the new values.
 
-**KAN-265 (`poiPlaceId` pin UI) — DECIDED: will not be built.** Pinning a *specific store* contradicts the core concept: the app matches POI **types**, not individual places ("we don't care where you solve your task"). Close as a decision record per the `DECIDED:` title convention — do not delete the field, the idea may return later.
+**KAN-265 (`poiPlaceId` pin UI) — DECIDED: will not be built.** Pinning a *specific store* contradicts the core concept: the app matches POI **types**, not individual places ("we don't care where you solve your task"). KAN-353 removed the unused Google-specific field after a zero-record production audit; any future pinning design must use a source-independent destination model.
 
 **Rollover — CLOSED.** Already built and working. Not in scope.
