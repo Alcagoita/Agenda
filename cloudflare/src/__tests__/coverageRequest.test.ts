@@ -493,6 +493,15 @@ describe('POST /poi/nearby', () => {
     }), env);
     expect(res.status).toBe(400);
   });
+
+  it('rejects unsupported subtype values', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(nearbyPost({
+      lat: 38.7223, lng: -9.1393, radius: 500, limitPerRequest: 20,
+      requests: [{ key: 'ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } }],
+    }), env);
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('POST /coverage/request', () => {

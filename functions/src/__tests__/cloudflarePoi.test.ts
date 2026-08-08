@@ -124,6 +124,16 @@ describe('nearby-search validation', () => {
       },
     } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
   });
+
+  it('rejects an unsupported subtype value', async () => {
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } }],
+      },
+    } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
 });
 
 describe('enforceUserRateLimit', () => {

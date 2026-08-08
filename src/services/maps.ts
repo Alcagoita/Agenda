@@ -378,14 +378,26 @@ async function searchNearbyPlacesCloudflare(
     const result: Record<string, NearbyPlace[]> = {};
     for (const poiType of poiTypes) { result[poiType] = []; }
     const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters, requests);
-    const seenByType = new Map<string, Set<string>>();
+    const placesByType = new Map<string, Map<string, NearbyPlace>>();
     for (const request of requests) {
-      const seen = seenByType.get(request.type) ?? new Set<string>();
-      seenByType.set(request.type, seen);
+      const places = placesByType.get(request.type) ?? new Map<string, NearbyPlace>();
+      placesByType.set(request.type, places);
       for (const p of data.results[request.key] ?? []) {
-        if (seen.has(p.fsq_place_id)) continue;
-        seen.add(p.fsq_place_id);
-        result[request.type].push({
+        const existing = places.get(p.fsq_place_id);
+        if (existing) {
+          const restaurantFoodTypes = [...new Set([
+            ...(existing.restaurantFoodTypes ?? []),
+            ...(p.attributes?.food_cuisine ?? []),
+          ])] as RestaurantFoodType[];
+          const storeSubtypes = [...new Set([
+            ...(existing.storeSubtypes ?? []),
+            ...(p.attributes?.store_kind ?? []),
+          ])] as StoreSubtype[];
+          if (restaurantFoodTypes.length > 0) { existing.restaurantFoodTypes = restaurantFoodTypes; }
+          if (storeSubtypes.length > 0) { existing.storeSubtypes = storeSubtypes; }
+          continue;
+        }
+        const place: NearbyPlace = {
           placeId: p.fsq_place_id,
           name: p.name,
           lat: p.lat,
@@ -396,7 +408,9 @@ async function searchNearbyPlacesCloudflare(
           restaurantFoodTypes: p.attributes?.food_cuisine as RestaurantFoodType[] | undefined,
           storeSubtype: p.attributes?.store_kind?.[0] as StoreSubtype | undefined,
           storeSubtypes: p.attributes?.store_kind as StoreSubtype[] | undefined,
-        });
+        };
+        places.set(p.fsq_place_id, place);
+        result[request.type].push(place);
       }
     }
     for (const poiType of poiTypes) {

@@ -70,14 +70,23 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
         'restaurant:food_cuisine:sushi': [
           { fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['sushi'] } },
         ],
+        'restaurant:food_cuisine:vegetarian': [
+          { fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['vegetarian'] } },
+        ],
       },
     });
 
     const result = await searchNearbyPlaces(LAT, LNG, ['restaurant'], RADIUS, [
       { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
+      { key: 'restaurant:food_cuisine:vegetarian', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['vegetarian'] } },
     ]);
 
-    expect(result.results.restaurant).toMatchObject([{ placeId: 'sushi', restaurantFoodType: 'sushi' }]);
+    expect(result.results.restaurant).toHaveLength(1);
+    expect(result.results.restaurant).toMatchObject([{
+      placeId: 'sushi',
+      restaurantFoodType: 'sushi',
+      restaurantFoodTypes: expect.arrayContaining(['sushi', 'vegetarian']),
+    }]);
     expect(mockOsmSearch).not.toHaveBeenCalled();
   });
 

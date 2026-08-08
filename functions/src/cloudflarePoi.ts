@@ -57,6 +57,11 @@ interface RateLimitDoc {
   updatedAt: Date;
 }
 
+const SUBTYPE_FILTER_VALUES: Record<NearbyAttributeInput['dimension'], readonly string[]> = {
+  food_cuisine: ['burger', 'healthy', 'indian', 'italian', 'mexican', 'portuguese', 'steak', 'sushi', 'thai', 'vegetarian'],
+  store_kind: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
+};
+
 function assertAuthenticated(auth: unknown): void {
   if (!auth) {
     throw new HttpsError('unauthenticated', 'Authentication required.');
@@ -110,7 +115,7 @@ function assertNearbyRequests(data: PoiAllInput): { requests: NearbyRequestInput
       !((request.type === 'restaurant' && request.attribute.dimension === 'food_cuisine') ||
         (request.type === 'store' && request.attribute.dimension === 'store_kind')) ||
       !Array.isArray(request.attribute.values) || request.attribute.values.length !== 1 ||
-      request.attribute.values.some(value => typeof value !== 'string' || value.trim() === '')
+      request.attribute.values.some(value => typeof value !== 'string' || !SUBTYPE_FILTER_VALUES[request.attribute!.dimension].includes(value))
     )) {
       throw new HttpsError('invalid-argument', 'Each nearby attribute filter needs one supported dimension and value.');
     }

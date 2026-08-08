@@ -15,11 +15,13 @@ describe('buildNearbySearchRequests', () => {
     expect(buildNearbySearchRequests([
       { poi: 'restaurant', title: 'Somewhere for dinner' },
       { poi: 'restaurant', title: 'Sushi', restaurantFoodType: 'sushi' },
+      { poi: 'store', title: 'Any shop', storeSubtype: 'any' },
       { poi: 'store', title: 'Clothes', storeSubtype: 'clothing' },
       { poi: 'pharmacy', title: 'Pick up prescription' },
     ])).toEqual([
       { key: 'restaurant', type: 'restaurant' },
       { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
+      { key: 'store', type: 'store' },
       { key: 'store:store_kind:clothing', type: 'store', attribute: { dimension: 'store_kind', values: ['clothing'] } },
       { key: 'pharmacy', type: 'pharmacy' },
     ]);
