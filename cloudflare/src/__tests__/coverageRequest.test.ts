@@ -143,6 +143,13 @@ function createFakeDb(
             }
             return { results: results as T[] };
           }
+          // KAN-362 adds a second, curated source to the same radius search.
+          // These existing tests seed only Foursquare rows, so its result is
+          // deliberately empty here rather than making the fixture pretend a
+          // community record exists.
+          if (trimmed.startsWith('SELECT curated_poi.poi_id')) {
+            return { results: [] as T[] };
+          }
           if (trimmed.startsWith('SELECT * FROM place WHERE min_lat IS NOT NULL')) {
             const [lat, lng] = args as [number, number];
             const matches = [...rows.values()].filter(r =>

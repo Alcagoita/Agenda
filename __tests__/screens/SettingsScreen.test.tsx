@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { Alert, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -106,6 +106,7 @@ jest.mock('../../src/components/AppIcon', () => ({
   ListCheckIcon:    () => null,
   LogOutIcon:       () => null,
   MoonIcon:         () => null,
+  PinIcon:          () => null,
   SunIcon:          () => null,
 }));
 
@@ -353,6 +354,19 @@ describe('SettingsScreen — KAN-113: IMPORT TASKS section', () => {
     } finally {
       Object.defineProperty(require('react-native').Platform, 'OS', { value: original, writable: true });
     }
+  });
+});
+
+// ─── COMMUNITY section (KAN-362) ─────────────────────────────────────────────
+
+describe('SettingsScreen — KAN-362: community place suggestion', () => {
+  beforeEach(() => { jest.clearAllMocks(); setupDefaultMocks(); });
+
+  it('opens the public suggestion page', async () => {
+    const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    await renderScreen();
+    fireEvent.press(screen.getByLabelText('Suggest a missing place'));
+    expect(openUrl).toHaveBeenCalledWith('https://brushaway.app/manual-poi');
   });
 });
 

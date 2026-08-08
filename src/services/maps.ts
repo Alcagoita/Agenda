@@ -29,8 +29,8 @@ import type { StoreSubtype } from './storeSubtypes';
 
 export interface NearbyPlace {
   /**
-   * Source-specific id, raw and unprefixed: a Foursquare `fsq_place_id`
-   * when this result came from Cloudflare, an OSM element id when it came
+   * Stable source-specific id: a Foursquare `fsq_place_id`, a `community:`
+   * identifier for an approved community correction, or an OSM element id when it came
    * from OSM — NOT a Google Places id, and not safe to pass to
    * historical Google place-details lookup. Which source produced it is on the
    * PoiSearchResult this place came from (see `source` above), not on the
@@ -387,7 +387,7 @@ async function searchNearbyPlacesCloudflare(
       const requestFoodValues = (request.attribute?.dimension === 'food_cuisine' ? request.attribute.values : []) as RestaurantFoodType[];
       const requestStoreValues = (request.attribute?.dimension === 'store_kind' ? request.attribute.values : []) as StoreSubtype[];
       for (const p of data.results[request.key] ?? []) {
-        const existing = places.get(p.fsq_place_id);
+        const existing = places.get(p.poi_id);
         if (existing) {
           const restaurantFoodTypes = [...new Set([
             ...(existing.restaurantFoodTypes ?? []),
@@ -412,7 +412,7 @@ async function searchNearbyPlacesCloudflare(
         const restaurantFoodTypes = [...new Set([...(p.attributes?.food_cuisine ?? []), ...requestFoodValues])] as RestaurantFoodType[];
         const storeSubtypes = [...new Set([...(p.attributes?.store_kind ?? []), ...requestStoreValues])] as StoreSubtype[];
         const place: NearbyPlace = {
-          placeId: p.fsq_place_id,
+          placeId: p.poi_id,
           name: p.name,
           lat: p.lat,
           lng: p.lng,
@@ -423,7 +423,7 @@ async function searchNearbyPlacesCloudflare(
           storeSubtype: storeSubtypes[0],
           storeSubtypes: storeSubtypes.length > 0 ? storeSubtypes : undefined,
         };
-        places.set(p.fsq_place_id, place);
+        places.set(p.poi_id, place);
         result[request.type].push(place);
       }
     }

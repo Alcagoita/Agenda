@@ -25,10 +25,17 @@ interface FakePoi {
   food_cuisine?: string[];
 }
 
+interface FakeCuratedPoi {
+  poi_id: string;
+  name: string;
+  primary_poi_type: string;
+  food_cuisine?: string[];
+}
+
 const LAT = 38.72;
 const LNG = -9.14;
 
-function fakeDb(pois: FakePoi[]): Env['REGISTRY_DB'] {
+function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGISTRY_DB'] {
   const prepare = (sql: string) => {
     const trimmed = sql.trim();
     const stmt = {
@@ -45,6 +52,24 @@ function fakeDb(pois: FakePoi[]): Env['REGISTRY_DB'] {
               primary_poi_type: 'restaurant', brand: null,
               category_label: p.category_label, raw_category_labels: p.raw_category_labels,
               address: null, matched_type: 'restaurant',
+            };
+            const cuisines = p.food_cuisine ?? [];
+            if (cuisines.length === 0) {
+              results.push({ ...base, attribute_dimension: null, attribute_value: null });
+            } else {
+              for (const value of cuisines) {
+                results.push({ ...base, attribute_dimension: 'food_cuisine', attribute_value: value });
+              }
+            }
+          }
+          return { results };
+        }
+        if (trimmed.startsWith('SELECT curated_poi.poi_id')) {
+          const results: unknown[] = [];
+          for (const p of curatedPois) {
+            const base = {
+              poi_id: p.poi_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
+              primary_poi_type: p.primary_poi_type, address: null,
             };
             const cuisines = p.food_cuisine ?? [];
             if (cuisines.length === 0) {
@@ -82,8 +107,8 @@ function nearbyRequest(requests: unknown[]) {
   });
 }
 
-function env(pois: FakePoi[] = POIS): Env {
-  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois) } as unknown as Env;
+function env(pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = []): Env {
+  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois) } as unknown as Env;
 }
 
 const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
@@ -117,5 +142,13 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
       { key: 'restaurant:food_cuisine:ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } },
     ]), env(), CTX);
     expect(res.status).toBe(400);
+  });
+
+  it('returns an approved community POI with its own identity, never a fabricated Foursquare id', async () => {
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'restaurant:food_cuisine:sushi', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['sushi'] } },
+    ]), env([], [{ poi_id: 'community:123', name: 'The Sushi Soul', primary_poi_type: 'restaurant', food_cuisine: ['sushi'] }]), CTX);
+    const body = await res.json() as { results: Record<string, Array<{ poi_id: string; fsq_place_id: string | null; source: string }>> };
+    expect(body.results['restaurant:food_cuisine:sushi']).toEqual([expect.objectContaining({ poi_id: 'community:123', fsq_place_id: null, source: 'community' })]);
   });
 });
