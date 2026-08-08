@@ -399,8 +399,14 @@ async function searchNearbyPlacesCloudflare(
             ...(p.attributes?.store_kind ?? []),
             ...requestStoreValues,
           ])] as StoreSubtype[];
-          if (restaurantFoodTypes.length > 0) { existing.restaurantFoodTypes = restaurantFoodTypes; }
-          if (storeSubtypes.length > 0) { existing.storeSubtypes = storeSubtypes; }
+          if (restaurantFoodTypes.length > 0) {
+            existing.restaurantFoodTypes = restaurantFoodTypes;
+            existing.restaurantFoodType = restaurantFoodTypes[0];
+          }
+          if (storeSubtypes.length > 0) {
+            existing.storeSubtypes = storeSubtypes;
+            existing.storeSubtype = storeSubtypes[0];
+          }
           continue;
         }
         const restaurantFoodTypes = [...new Set([...(p.attributes?.food_cuisine ?? []), ...requestFoodValues])] as RestaurantFoodType[];
