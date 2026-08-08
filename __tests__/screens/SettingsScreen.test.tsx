@@ -13,8 +13,8 @@
  */
 
 import React from 'react';
-import { Alert, ScrollView, StyleSheet } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Alert, Linking, ScrollView, StyleSheet } from 'react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +106,7 @@ jest.mock('../../src/components/AppIcon', () => ({
   ListCheckIcon:    () => null,
   LogOutIcon:       () => null,
   MoonIcon:         () => null,
+  PinIcon:          () => null,
   SunIcon:          () => null,
 }));
 
@@ -353,6 +354,31 @@ describe('SettingsScreen — KAN-113: IMPORT TASKS section', () => {
     } finally {
       Object.defineProperty(require('react-native').Platform, 'OS', { value: original, writable: true });
     }
+  });
+});
+
+// ─── COMMUNITY section (KAN-362) ─────────────────────────────────────────────
+
+describe('SettingsScreen — KAN-362: community place suggestion', () => {
+  beforeEach(() => { jest.clearAllMocks(); setupDefaultMocks(); });
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('opens the public suggestion page', async () => {
+    const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    await renderScreen();
+    fireEvent.press(screen.getByLabelText('Suggest a missing place'));
+    expect(openUrl).toHaveBeenCalledWith('https://brushaway.app/manual-poi');
+  });
+
+  it('shows the localized error when the suggestion page cannot open', async () => {
+    jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('unavailable'));
+    const alert = jest.spyOn(Alert, 'alert');
+    await renderScreen();
+    fireEvent.press(screen.getByLabelText('Suggest a missing place'));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(
+      'Error',
+      'Could not open the suggestion page. Please try again.',
+    ));
   });
 });
 

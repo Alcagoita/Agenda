@@ -45,8 +45,8 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
   it('uses globally returned, pre-bucketed Cloudflare results without an OSM request', async () => {
     mockPoiAll.mockResolvedValue({
       results: { cafe: [
-        { fsq_place_id: 'near', name: 'Near Cafe', lat: LAT, lng: LNG, primary_poi_type: 'cafe', brand: null, category_label: null, address: null, distanceMeters: 50 },
-        { fsq_place_id: 'far', name: 'Far Cafe', lat: LAT, lng: LNG, primary_poi_type: 'cafe', brand: null, category_label: null, address: null, distanceMeters: 400 },
+        { poi_id: 'near', fsq_place_id: 'near', name: 'Near Cafe', lat: LAT, lng: LNG, primary_poi_type: 'cafe', brand: null, category_label: null, address: null, distanceMeters: 50 },
+        { poi_id: 'far', fsq_place_id: 'far', name: 'Far Cafe', lat: LAT, lng: LNG, primary_poi_type: 'cafe', brand: null, category_label: null, address: null, distanceMeters: 400 },
       ] },
     });
 
@@ -58,14 +58,27 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     expect(result.coverageStatus).toBe('ready');
   });
 
+  it('uses the explicit community POI identity when a moderated record has no Foursquare id', async () => {
+    mockPoiAll.mockResolvedValue({
+      results: { restaurant: [
+        { poi_id: 'community:the-sushi-soul', fsq_place_id: null, name: 'The Sushi Soul', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 50, attributes: { food_cuisine: ['sushi'] } },
+      ] },
+    });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['restaurant'], RADIUS);
+
+    expect(result.results.restaurant).toMatchObject([{ placeId: 'community:the-sushi-soul', name: 'The Sushi Soul' }]);
+    expect(mockOsmSearch).not.toHaveBeenCalled();
+  });
+
   it('merges request-keyed subtype buckets into the broad app type with stored attributes', async () => {
     mockPoiAll.mockResolvedValue({
       results: {
         'restaurant:food_cuisine:sushi': [
-          { fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['sushi'] } },
+          { poi_id: 'sushi', fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['sushi'] } },
         ],
         'restaurant:food_cuisine:vegetarian': [
-          { fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['vegetarian'] } },
+          { poi_id: 'sushi', fsq_place_id: 'sushi', name: 'Sushi Near', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: null, address: null, distanceMeters: 40, attributes: { food_cuisine: ['vegetarian'] } },
         ],
       },
     });
@@ -88,7 +101,7 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     // Pizzeria appears first in the broad bucket with NO classified cuisine,
     // then again in the pizza subtype bucket (server-matched via raw label).
     // The merge must set both restaurantFoodTypes and restaurantFoodType.
-    const pizzeria = { fsq_place_id: 'pz', name: 'Tutto Pizza', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: 'Dining and Drinking > Restaurant > Pizzeria', address: null, distanceMeters: 40 };
+    const pizzeria = { poi_id: 'pz', fsq_place_id: 'pz', name: 'Tutto Pizza', lat: LAT, lng: LNG, primary_poi_type: 'restaurant', brand: null, category_label: 'Dining and Drinking > Restaurant > Pizzeria', address: null, distanceMeters: 40 };
     mockPoiAll.mockResolvedValue({
       results: {
         restaurant: [pizzeria],
@@ -275,7 +288,7 @@ describe('searchNearbyPlaces — KAN-355 zero check / coverage demand recording'
   });
 
   it('does not fire a coverage-request when the global query found a POI', async () => {
-    mockPoiAll.mockResolvedValue({ results: { cafe: [{ fsq_place_id: 'global-1', name: 'Global Cafe', lat: 12, lng: 12, primary_poi_type: 'cafe', brand: null, category_label: null, address: null, distanceMeters: 10 }] } });
+    mockPoiAll.mockResolvedValue({ results: { cafe: [{ poi_id: 'global-1', fsq_place_id: 'global-1', name: 'Global Cafe', lat: 12, lng: 12, primary_poi_type: 'cafe', brand: null, category_label: null, address: null, distanceMeters: 10 }] } });
 
     await searchNearbyPlaces(12.0, 12.0, ['cafe'], RADIUS);
     await flushZeroCheck();

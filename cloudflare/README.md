@@ -49,7 +49,8 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
 ## Endpoints
 
 All require `X-Api-Key: <API_KEY>` header except `/internal/*`, which uses a
-separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
+separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead, and the
+deliberately narrow community-contribution routes listed below.
 
 - `GET /poi?lat=&lng=&radius=&type=&attribute=&value=` — POIs of one type
   within a radius, optionally narrowed to 1-2 `poi_attribute` values (e.g.
@@ -85,6 +86,17 @@ separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead.
   is normally short-lived now (promoted in the same request), so this
   mostly guards the case where `BUILD_TRIGGER_URL` isn't configured at all
   (local dev) and rows can't move past `none`.
+- `GET /manual-poi/meta`, `GET /manual-poi/duplicates`, and `POST
+  /manual-poi/submissions` — browser-only community-contribution surface,
+  CORS-limited to `https://brushaway.app`. Submission requires the managed
+  Turnstile action `manual_poi_submit`, is rate-limited by a hashed source IP,
+  and creates only a `pending` row; it can never write a live POI directly.
+- `GET /manual-poi/admin/submissions` and `PATCH
+  /manual-poi/admin/submissions/:id` — reviewer-only moderation. These must
+  be protected by a Cloudflare Access application and also verify its signed
+  assertion in the Worker. Approval either creates a separate
+  `community:<uuid>` curated POI or links the submission to an already-known
+  nearby POI with the same normalized name; it never invents a Foursquare id.
 - `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?, status?, r2Key?}`
   — called by the extraction Job once a Place's rows are loaded (or failed);
   `cityId` targets `place.place_id` — kept as the field name for this
@@ -126,6 +138,28 @@ Secrets (`API_KEY`, `BUILD_TRIGGER_SECRET`) are already set on the deployed
 Worker via `wrangler secret put` — not in `wrangler.jsonc`. Local copies live
 in `.dev.vars` (gitignored, never committed) for testing against the live
 API from a shell: `source .dev.vars`.
+
+### Community POI moderation setup (KAN-362)
+
+Before deploying the website pages, apply
+`migrations/0008_moderated_manual_pois.sql` to `brush-poi-registry`, deploy
+this Worker, and create two Cloudflare Access applications with the same
+reviewer policy: one for `https://brushaway.app/manual-poi/review*` (the
+review page) and one for `https://poi-api.brushaway.app/manual-poi/admin/*`
+(the API). Set the following Worker secrets/variables from the **API** Access
+application (never commit them):
+
+- `TURNSTILE_SECRET` — already bound to the **Brush Manual POI submissions**
+  widget; the corresponding public sitekey belongs only in the website.
+- `ACCESS_TEAM_DOMAIN` — the Access team domain, without `https://`.
+- `ACCESS_AUD` — the Access application's audience value.
+- `MANUAL_POI_ADMIN_EMAILS` — comma-separated reviewer email allowlist.
+
+The Worker fails closed if any Access value is absent. It also fails closed for
+public submissions when `TURNSTILE_SECRET` is absent: every attempt receives
+HTTP 400 with `verification failed; please try again.` The public form can be
+deployed independently, but it will only become usable after the Worker and
+its D1 migration are live.
 
 ### Known gaps in this token's permissions
 

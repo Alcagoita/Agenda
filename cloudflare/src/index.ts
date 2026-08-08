@@ -1,6 +1,7 @@
-import { haversineMeters, neighborPrefixes, precisionForRadius, requiredGridCells, MAX_GRID_CELLS_PER_AXIS, MAX_RADIUS_METERS } from './geohash';
+import { encodeGeohash, haversineMeters, neighborPrefixes, precisionForRadius, requiredGridCells, MAX_GRID_CELLS_PER_AXIS, MAX_RADIUS_METERS } from './geohash';
 import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
+import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManualPoiInput, isManualPoiInput, type ManualPoiAttribute } from './manualPoi';
 
 // Re-exported (not just imported) — the Workers runtime resolves the
 // `durable_objects` binding's `class_name` against this module's exports,
@@ -26,6 +27,12 @@ export interface Env {
   // cloudflare/README.md's Extraction pipeline section). Passed to the
   // Container as an env var; the Worker itself never calls Foursquare.
   FOURSQUARE_JWT?: string;
+  /** KAN-362: server-side only; verifies the public community submission widget. */
+  TURNSTILE_SECRET?: string;
+  /** Cloudflare Access configuration for moderation-only API routes. */
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
+  MANUAL_POI_ADMIN_EMAILS?: string;
 }
 
 /**
@@ -73,6 +80,247 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+// KAN-362's public form is intentionally a narrow CORS surface.  The POI
+// API itself remains Firebase-authenticated and must not become browser-open.
+const MANUAL_POI_PUBLIC_ORIGIN = 'https://brushaway.app';
+const MANUAL_POI_DUPLICATE_DISTANCE_METERS = 20;
+const MANUAL_POI_RATE_LIMIT_MAX = 5;
+const MANUAL_POI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1_000;
+
+function manualPoiCorsHeaders(request: Request): Record<string, string> {
+  return request.headers.get('Origin') === MANUAL_POI_PUBLIC_ORIGIN
+    ? {
+      'Access-Control-Allow-Origin': MANUAL_POI_PUBLIC_ORIGIN,
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Vary': 'Origin',
+    }
+    : {};
+}
+
+function manualPoiJson(request: Request, data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...manualPoiCorsHeaders(request) },
+  });
+}
+
+const MAX_MANUAL_POI_BODY_BYTES = 32 * 1_024;
+
+async function parseManualPoiJsonBody(request: Request): Promise<unknown | Response> {
+  const declaredLength = Number(request.headers.get('Content-Length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_MANUAL_POI_BODY_BYTES) {
+    return manualPoiJson(request, { error: 'request body is too large' }, 413);
+  }
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > MAX_MANUAL_POI_BODY_BYTES) {
+    return manualPoiJson(request, { error: 'request body is too large' }, 413);
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return manualPoiJson(request, { error: 'body must be valid JSON' }, 400);
+  }
+}
+
+interface ManualPoiSubmissionRow {
+  submission_id: string;
+  name: string;
+  dedupe_name: string;
+  lat: number;
+  lng: number;
+  poi_type: string;
+  attributes_json: string;
+  address: string | null;
+  contributor_note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  rejection_reason: string | null;
+  approved_poi_id: string | null;
+}
+
+interface ManualPoiDuplicate {
+  poiId: string;
+  source: 'foursquare' | 'community';
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+function storedManualPoiAttributes(value: string): ManualPoiAttribute[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry): ManualPoiAttribute[] => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+      const attribute = entry as Record<string, unknown>;
+      if ((attribute.dimension !== 'food_cuisine' && attribute.dimension !== 'store_kind') || typeof attribute.value !== 'string') return [];
+      return [{ dimension: attribute.dimension, value: attribute.value }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function findManualPoiDuplicate(
+  db: D1Database,
+  dedupeName: string,
+  lat: number,
+  lng: number,
+): Promise<ManualPoiDuplicate | null> {
+  const [{ results: foursquareRows }, { results: curatedRows }] = await Promise.all([
+    db.prepare('SELECT fsq_place_id AS poi_id, name, lat, lng FROM poi WHERE dedupe_name = ?').bind(dedupeName).all<{ poi_id: string; name: string; lat: number; lng: number }>(),
+    db.prepare("SELECT poi_id, name, lat, lng FROM curated_poi WHERE dedupe_name = ? AND status = 'active'").bind(dedupeName).all<{ poi_id: string; name: string; lat: number; lng: number }>(),
+  ]);
+  const candidates: ManualPoiDuplicate[] = [
+    ...foursquareRows.map(row => ({ poiId: row.poi_id, source: 'foursquare' as const, name: row.name, lat: row.lat, lng: row.lng })),
+    ...curatedRows.map(row => ({ poiId: row.poi_id, source: 'community' as const, name: row.name, lat: row.lat, lng: row.lng })),
+  ];
+  return candidates.find(candidate => haversineMeters(lat, lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS) ?? null;
+}
+
+function manualPoiSubmissionResponse(row: Pick<ManualPoiSubmissionRow, 'submission_id' | 'status' | 'approved_poi_id'>) {
+  return {
+    submissionId: row.submission_id,
+    status: row.status,
+    ...(row.approved_poi_id ? { approvedPoiId: row.approved_poi_id } : {}),
+  };
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256(value: string): Promise<string> {
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))));
+}
+
+function requestIpHash(request: Request): Promise<string> {
+  const forwarded = request.headers.get('CF-Connecting-IP') ?? request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'unknown';
+  return sha256(forwarded);
+}
+
+async function claimManualPoiRateLimit(db: D1Database, ipHash: string): Promise<boolean> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const cutoffIso = new Date(now.getTime() - MANUAL_POI_RATE_LIMIT_WINDOW_MS).toISOString();
+  // The rate-limit table is keyed by a one-hour window. Prune expired rows on
+  // the same low-volume public write path so one-off visitors cannot make it
+  // grow forever; this happens before the claim and does not affect a current
+  // window's count.
+  await db.prepare('DELETE FROM manual_poi_rate_limit WHERE window_started_at < ?').bind(cutoffIso).run();
+  const result = await db.prepare(
+    `INSERT INTO manual_poi_rate_limit (ip_hash, window_started_at, request_count)
+     VALUES (?, ?, 1)
+     ON CONFLICT(ip_hash) DO UPDATE SET
+       window_started_at = CASE WHEN manual_poi_rate_limit.window_started_at < ? THEN excluded.window_started_at ELSE manual_poi_rate_limit.window_started_at END,
+       request_count = CASE WHEN manual_poi_rate_limit.window_started_at < ? THEN 1 ELSE manual_poi_rate_limit.request_count + 1 END
+     WHERE manual_poi_rate_limit.window_started_at < ? OR manual_poi_rate_limit.request_count < ?`,
+  ).bind(ipHash, nowIso, cutoffIso, cutoffIso, cutoffIso, MANUAL_POI_RATE_LIMIT_MAX).run();
+  return result.meta.changes === 1;
+}
+
+interface TurnstileResult {
+  success?: unknown;
+  action?: unknown;
+  hostname?: unknown;
+}
+
+/** Fail closed: a valid Turnstile token is single-use and must belong to the
+ * public form's exact action and production hostname. */
+async function verifyManualPoiTurnstile(request: Request, env: Env, token: string): Promise<boolean> {
+  if (!env.TURNSTILE_SECRET) return false;
+  const remoteIp = request.headers.get('CF-Connecting-IP') ?? undefined;
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      signal: AbortSignal.timeout(10_000),
+      body: new URLSearchParams({ secret: env.TURNSTILE_SECRET, response: token, ...(remoteIp ? { remoteip: remoteIp } : {}) }),
+    });
+    if (!response.ok) return false;
+    const result = await response.json() as TurnstileResult;
+    return result.success === true && result.action === 'manual_poi_submit' && result.hostname === 'brushaway.app';
+  } catch {
+    return false;
+  }
+}
+
+function base64UrlBytes(value: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4);
+    const raw = atob(padded);
+    return Uint8Array.from(raw, char => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+interface AccessJwtHeader { alg?: unknown; kid?: unknown; }
+interface AccessJwtClaims { aud?: unknown; exp?: unknown; nbf?: unknown; email?: unknown; }
+interface AccessJwk { kid?: string; kty?: string; n?: string; e?: string; alg?: string; }
+
+let accessJwkCache: { expiresAt: number; keys: AccessJwk[] } | null = null;
+
+async function accessJwks(teamDomain: string): Promise<AccessJwk[] | null> {
+  if (accessJwkCache && accessJwkCache.expiresAt > Date.now()) return accessJwkCache.keys;
+  try {
+    const response = await fetch(`https://${teamDomain}/cdn-cgi/access/certs`, { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return null;
+    const data = await response.json() as { keys?: unknown };
+    if (!Array.isArray(data.keys)) return null;
+    const keys = data.keys.filter((key): key is AccessJwk => !!key && typeof key === 'object');
+    accessJwkCache = { keys, expiresAt: Date.now() + 5 * 60 * 1_000 };
+    return keys;
+  } catch {
+    return null;
+  }
+}
+
+/** Verifies the Access assertion itself rather than trusting spoofable email
+ * headers. The Access application still protects the route at Cloudflare's
+ * edge; this is defense in depth for the Worker handler. */
+async function verifyManualPoiAdmin(request: Request, env: Env): Promise<string | null> {
+  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.MANUAL_POI_ADMIN_EMAILS) return null;
+  const token = request.headers.get('Cf-Access-Jwt-Assertion');
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [encodedHeader, encodedClaims, encodedSignature] = parts;
+  const headerBytes = base64UrlBytes(encodedHeader);
+  const claimBytes = base64UrlBytes(encodedClaims);
+  const signature = base64UrlBytes(encodedSignature);
+  if (!headerBytes || !claimBytes || !signature) return null;
+  let header: AccessJwtHeader;
+  let claims: AccessJwtClaims;
+  try {
+    header = JSON.parse(new TextDecoder().decode(headerBytes)) as AccessJwtHeader;
+    claims = JSON.parse(new TextDecoder().decode(claimBytes)) as AccessJwtClaims;
+  } catch {
+    return null;
+  }
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string') return null;
+  const keys = await accessJwks(env.ACCESS_TEAM_DOMAIN);
+  const jwk = keys?.find(key => key.kid === header.kid && key.kty === 'RSA' && key.alg === 'RS256');
+  if (!jwk) return null;
+  try {
+    const key = await crypto.subtle.importKey('jwk', jwk as JsonWebKey, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+    const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, new TextEncoder().encode(`${encodedHeader}.${encodedClaims}`));
+    if (!valid) return null;
+  } catch {
+    return null;
+  }
+  const now = Math.floor(Date.now() / 1_000);
+  if (typeof claims.exp !== 'number' || claims.exp <= now || (typeof claims.nbf === 'number' && claims.nbf > now)) return null;
+  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!audiences.includes(env.ACCESS_AUD) || typeof claims.email !== 'string') return null;
+  const allowedEmails = new Set(env.MANUAL_POI_ADMIN_EMAILS.split(',').map(email => email.trim().toLowerCase()).filter(Boolean));
+  return allowedEmails.has(claims.email.toLowerCase()) ? claims.email.toLowerCase() : null;
+}
+
 function authenticate(request: Request, env: Env): Response | null {
   const key = request.headers.get('X-Api-Key');
   if (key !== env.API_KEY) {
@@ -108,21 +356,9 @@ const MAX_NEARBY_TYPES = 10;
 const MAX_NEARBY_REQUESTS = 32;
 const MAX_NEARBY_LIMIT_PER_TYPE = 50;
 
-const SUBTYPE_FILTERS: Record<string, { dimension: string; values: readonly string[] }> = {
-  restaurant: {
-    dimension: 'food_cuisine',
-    // KAN-344 groups (asian, bbq, brazilian, mediterranean, pizza, seafood)
-    // have no classified poi_attribute row — they resolve at query time
-    // against raw_category_labels (FOOD_CUISINE_LABEL_GROUPS). They must
-    // still be listed here or the structured-request validation rejects them
-    // before the grouping runs.
-    values: ['asian', 'bbq', 'brazilian', 'burger', 'healthy', 'indian', 'italian', 'mediterranean', 'mexican', 'pizza', 'portuguese', 'seafood', 'steak', 'sushi', 'thai', 'vegetarian'],
-  },
-  store: {
-    dimension: 'store_kind',
-    values: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
-  },
-};
+// KAN-344 groups (pizza/asian/…) resolve from raw category labels at query
+// time. KAN-362 reuses this exact allowlist for community submissions.
+const SUBTYPE_FILTERS = MANUAL_SUBTYPE_FILTERS;
 
 /** attribute+value are optional but must appear together — e.g. attribute=food_cuisine&value=sushi, or value=sushi,italian for an OR match. Capped at 2 values (matches the current real use case: a place tagged with two cuisines, not an open-ended list). */
 function parseAttributeFilter(url: URL): AttributeFilter | null | Response {
@@ -600,9 +836,14 @@ async function queryPoiDb(
 }
 
 type NearbyPoi = {
-  fsq_place_id: string; name: string; lat: number; lng: number;
+  /** Stable API identity. Foursquare rows use their real fsq_place_id; curated rows use community:<uuid>. */
+  poi_id: string;
+  /** Present only when Foursquare supplied this POI. Never contains a generated id. */
+  fsq_place_id: string | null;
+  name: string; lat: number; lng: number;
   primary_poi_type: string; brand: string | null;
   category_label: string | null; address: string | null;
+  source?: 'foursquare' | 'community' | 'manual';
   distanceMeters: number;
   attributes: Record<string, string[]>;
 };
@@ -654,10 +895,11 @@ async function queryNearbyPoiDb(
   const precision = precisionForRadius(radiusMeters);
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
   const geohashClauses = prefixes.map(() => '(poi.geohash >= ? AND poi.geohash < ?)');
+  const curatedGeohashClauses = prefixes.map(() => '(curated_poi.geohash >= ? AND curated_poi.geohash < ?)');
   const typePlaceholders = acceptedTypes.map(() => '?').join(',');
   const d1StartedAt = performance.now();
   const { results: rows } = await db.prepare(
-    `SELECT poi.fsq_place_id, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
+    `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
             poi.brand, poi.category_label, poi.raw_category_labels, poi.address, poi_type.poi_type AS matched_type
             , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value
      FROM poi
@@ -666,20 +908,35 @@ async function queryNearbyPoiDb(
        AND poi_attribute.dimension IN ('food_cuisine', 'store_kind')
      WHERE (${geohashClauses.join(' OR ')}) AND poi_type.poi_type IN (${typePlaceholders})`,
   ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
-    fsq_place_id: string; name: string; lat: number; lng: number;
+    fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null; category_label: string | null;
     raw_category_labels: string | null;
     address: string | null; matched_type: string;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
+  const { results: curatedRows } = await db.prepare(
+    `SELECT curated_poi.poi_id, curated_poi.dedupe_name, curated_poi.name, curated_poi.lat, curated_poi.lng,
+            curated_poi.primary_poi_type, curated_poi.address,
+            curated_poi_attribute.dimension AS attribute_dimension, curated_poi_attribute.value AS attribute_value
+     FROM curated_poi
+     LEFT JOIN curated_poi_attribute ON curated_poi_attribute.poi_id = curated_poi.poi_id
+     WHERE curated_poi.status = 'active'
+       AND (${curatedGeohashClauses.join(' OR ')})
+       AND curated_poi.primary_poi_type IN (${typePlaceholders})`,
+  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
+    poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+    primary_poi_type: string; address: string | null;
+    attribute_dimension: string | null; attribute_value: string | null;
+  }>();
   const d1Ms = performance.now() - d1StartedAt;
 
   const filteringStartedAt = performance.now();
-  const candidates = new Map<string, NearbyPoi & { matchedTypes: Set<string>; rawCategoryLabels: string | null }>();
+  const candidates = new Map<string, NearbyPoi & { dedupeName: string; matchedTypes: Set<string>; rawCategoryLabels: string | null }>();
   for (const row of rows) {
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
-    const existing = candidates.get(row.fsq_place_id);
+    const candidateKey = `foursquare:${row.fsq_place_id}`;
+    const existing = candidates.get(candidateKey);
     if (existing) {
       existing.matchedTypes.add(row.matched_type);
       if (row.attribute_dimension && row.attribute_value) {
@@ -687,10 +944,11 @@ async function queryNearbyPoiDb(
         if (!values.includes(row.attribute_value)) values.push(row.attribute_value);
       }
     } else {
-      candidates.set(row.fsq_place_id, {
-        fsq_place_id: row.fsq_place_id, name: row.name, lat: row.lat, lng: row.lng,
+      candidates.set(candidateKey, {
+        poi_id: row.fsq_place_id, fsq_place_id: row.fsq_place_id, name: row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand,
         category_label: row.category_label, address: row.address,
+        source: 'foursquare', dedupeName: row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
@@ -700,13 +958,50 @@ async function queryNearbyPoiDb(
     }
   }
 
+  for (const row of curatedRows) {
+    const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
+    if (distanceMeters > radiusMeters) continue;
+    const candidateKey = `curated:${row.poi_id}`;
+    const existing = candidates.get(candidateKey);
+    if (existing) {
+      if (row.attribute_dimension && row.attribute_value) {
+        const values = existing.attributes[row.attribute_dimension] ??= [];
+        if (!values.includes(row.attribute_value)) values.push(row.attribute_value);
+      }
+    } else {
+      candidates.set(candidateKey, {
+        poi_id: row.poi_id, fsq_place_id: null, name: row.name, lat: row.lat, lng: row.lng,
+        primary_poi_type: row.primary_poi_type, brand: null, category_label: null,
+        address: row.address, source: 'community', dedupeName: row.dedupe_name,
+        distanceMeters, attributes: row.attribute_dimension && row.attribute_value
+          ? { [row.attribute_dimension]: [row.attribute_value] }
+          : {},
+        matchedTypes: new Set([row.primary_poi_type]), rawCategoryLabels: null,
+      });
+    }
+  }
+
+  // A later Foursquare import may use coordinates a few metres away from the
+  // approved community correction. Suppress the curated twin at read time so
+  // the user never gets duplicate nearby results; Foursquare wins as the
+  // primary data source while the curated audit history stays intact.
+  const foursquareCandidates = [...candidates.values()].filter(candidate => candidate.source === 'foursquare');
+  for (const [key, candidate] of candidates) {
+    if (candidate.source === 'foursquare') continue;
+    if (foursquareCandidates.some(foursquare => foursquare.dedupeName === candidate.dedupeName && haversineMeters(foursquare.lat, foursquare.lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS)) {
+      candidates.delete(key);
+    }
+  }
+
   const result = Object.fromEntries(requestedSearches.map(request => [request.key, [] as NearbyPoi[]])) as Record<string, NearbyPoi[]>;
   const nearestCandidates = [...candidates.values()].sort((a, b) => a.distanceMeters - b.distanceMeters);
   for (const candidate of nearestCandidates) {
     const poi: NearbyPoi = {
-      fsq_place_id: candidate.fsq_place_id, name: candidate.name, lat: candidate.lat, lng: candidate.lng,
+      poi_id: candidate.poi_id, fsq_place_id: candidate.fsq_place_id,
+      name: candidate.name, lat: candidate.lat, lng: candidate.lng,
       primary_poi_type: candidate.primary_poi_type, brand: candidate.brand,
       category_label: candidate.category_label, address: candidate.address,
+      source: candidate.source,
       distanceMeters: candidate.distanceMeters, attributes: candidate.attributes,
     };
     for (let index = 0; index < requestedSearches.length; index++) {
@@ -858,6 +1153,170 @@ async function startPlaceMapping(env: Env, ctx: ExecutionContext | undefined, pl
 export default {
   async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // KAN-362: the public contribution form is the only browser-open surface
+    // on this Worker. Keep it ahead of the API-key gate and narrowly CORSed to
+    // brushaway.app; every existing POI endpoint remains authenticated below.
+    if (url.pathname.startsWith('/manual-poi/') && request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: manualPoiCorsHeaders(request) });
+    }
+
+    if (url.pathname === '/manual-poi/meta' && request.method === 'GET') {
+      return manualPoiJson(request, {
+        poiTypes: MANUAL_POI_TYPES,
+        subtypeFilters: MANUAL_SUBTYPE_FILTERS,
+      });
+    }
+
+    if (url.pathname === '/manual-poi/duplicates' && request.method === 'GET') {
+      const name = url.searchParams.get('name') ?? '';
+      const lat = Number(url.searchParams.get('lat'));
+      const lng = Number(url.searchParams.get('lng'));
+      const dedupeName = normalizePoiName(name);
+      if (!dedupeName || !Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+        return manualPoiJson(request, { error: 'name, lat, and lng are required' }, 400);
+      }
+      const duplicate = await findManualPoiDuplicate(env.REGISTRY_DB, dedupeName, lat, lng);
+      // This is only a form warning. It exposes no IDs or addresses and does
+      // not stop a contributor from submitting a correction for review.
+      return manualPoiJson(request, { duplicate: duplicate ? { name: duplicate.name, source: duplicate.source } : null });
+    }
+
+    if (url.pathname === '/manual-poi/submissions' && request.method === 'POST') {
+      const rawBody = await parseManualPoiJsonBody(request);
+      if (rawBody instanceof Response) return rawBody;
+      const parsed = parseManualPoiInput(rawBody);
+      if (!isManualPoiInput(parsed)) return manualPoiJson(request, { error: parsed.error }, 400);
+
+      // Check idempotency before consuming a single-use Turnstile token or a
+      // rate-limit slot. This makes a lost HTTP response safe to retry.
+      const existing = await env.REGISTRY_DB.prepare(
+        'SELECT submission_id, status, approved_poi_id FROM manual_poi_submission WHERE idempotency_key = ?',
+      ).bind(parsed.idempotencyKey).first<Pick<ManualPoiSubmissionRow, 'submission_id' | 'status' | 'approved_poi_id'>>();
+      if (existing) return manualPoiJson(request, { ...manualPoiSubmissionResponse(existing), idempotent: true });
+
+      const ipHash = await requestIpHash(request);
+      if (!await claimManualPoiRateLimit(env.REGISTRY_DB, ipHash)) {
+        return manualPoiJson(request, { error: 'too many submissions, try again later' }, 429);
+      }
+      if (!await verifyManualPoiTurnstile(request, env, parsed.turnstileToken)) {
+        return manualPoiJson(request, { error: 'verification failed; please try again' }, 400);
+      }
+
+      const submittedAt = new Date().toISOString();
+      const submissionId = crypto.randomUUID();
+      await env.REGISTRY_DB.batch([
+        env.REGISTRY_DB.prepare(
+          `INSERT INTO manual_poi_submission
+             (submission_id, idempotency_key, name, dedupe_name, lat, lng, poi_type, attributes_json, address, contributor_note, ip_hash, status, submitted_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+        ).bind(
+          submissionId, parsed.idempotencyKey, parsed.name, normalizePoiName(parsed.name), parsed.lat, parsed.lng,
+          parsed.poiType, JSON.stringify(parsed.attributes), parsed.address, parsed.contributorNote, ipHash, submittedAt,
+        ),
+        env.REGISTRY_DB.prepare(
+          'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).bind(crypto.randomUUID(), 'submission', submissionId, 'submitted', 'public', JSON.stringify({ poiType: parsed.poiType }), submittedAt),
+      ]);
+      return manualPoiJson(request, { submissionId, status: 'pending' }, 202);
+    }
+
+    if (url.pathname === '/manual-poi/admin/submissions' && request.method === 'GET') {
+      const reviewer = await verifyManualPoiAdmin(request, env);
+      if (!reviewer) return manualPoiJson(request, { error: 'forbidden' }, 403);
+      const status = url.searchParams.get('status') ?? 'pending';
+      if (status !== 'pending' && status !== 'approved' && status !== 'rejected') {
+        return manualPoiJson(request, { error: 'status must be pending, approved, or rejected' }, 400);
+      }
+      const { results } = await env.REGISTRY_DB.prepare(
+        `SELECT submission_id, name, dedupe_name, lat, lng, poi_type, attributes_json, address, contributor_note,
+                status, submitted_at, reviewed_at, reviewed_by, rejection_reason, approved_poi_id
+         FROM manual_poi_submission WHERE status = ? ORDER BY submitted_at ASC LIMIT 100`,
+      ).bind(status).all<ManualPoiSubmissionRow>();
+      return manualPoiJson(request, {
+        submissions: results.map(row => ({
+          ...manualPoiSubmissionResponse(row), name: row.name, lat: row.lat, lng: row.lng, poiType: row.poi_type,
+          attributes: storedManualPoiAttributes(row.attributes_json), address: row.address, contributorNote: row.contributor_note,
+          submittedAt: row.submitted_at, reviewedAt: row.reviewed_at, reviewedBy: row.reviewed_by, rejectionReason: row.rejection_reason,
+        })),
+      });
+    }
+
+    const manualAdminMatch = url.pathname.match(/^\/manual-poi\/admin\/submissions\/([^/]+)$/);
+    if (manualAdminMatch && request.method === 'PATCH') {
+      const reviewer = await verifyManualPoiAdmin(request, env);
+      if (!reviewer) return manualPoiJson(request, { error: 'forbidden' }, 403);
+      let submissionId: string;
+      try {
+        submissionId = decodeURIComponent(manualAdminMatch[1]);
+      } catch {
+        return manualPoiJson(request, { error: 'submission id is invalid' }, 400);
+      }
+      if (!submissionId) return manualPoiJson(request, { error: 'submission id is required' }, 400);
+      const rawBody = await parseManualPoiJsonBody(request);
+      if (rawBody instanceof Response) return rawBody;
+      if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) return manualPoiJson(request, { error: 'body must be an object' }, 400);
+      const body = rawBody as Record<string, unknown>;
+      if (body.action !== 'approve' && body.action !== 'reject') return manualPoiJson(request, { error: 'action must be approve or reject' }, 400);
+      const reason = body.reason === undefined || body.reason === null ? null : typeof body.reason === 'string' ? body.reason.trim() : null;
+      if (body.reason !== undefined && body.reason !== null && (reason === null || reason.length > 600)) {
+        return manualPoiJson(request, { error: 'reason must be a string of at most 600 characters' }, 400);
+      }
+      const submission = await env.REGISTRY_DB.prepare('SELECT * FROM manual_poi_submission WHERE submission_id = ?')
+        .bind(submissionId).first<ManualPoiSubmissionRow>();
+      if (!submission) return manualPoiJson(request, { error: 'submission not found' }, 404);
+      if (submission.status !== 'pending') return manualPoiJson(request, { error: 'submission has already been reviewed' }, 409);
+
+      const reviewedAt = new Date().toISOString();
+      if (body.action === 'reject') {
+        await env.REGISTRY_DB.batch([
+          env.REGISTRY_DB.prepare(
+            "UPDATE manual_poi_submission SET status = 'rejected', reviewed_at = ?, reviewed_by = ?, rejection_reason = ? WHERE submission_id = ? AND status = 'pending'",
+          ).bind(reviewedAt, reviewer, reason, submissionId),
+          env.REGISTRY_DB.prepare(
+            'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ).bind(crypto.randomUUID(), 'submission', submissionId, 'rejected', reviewer, JSON.stringify({ reason }), reviewedAt),
+        ]);
+        return manualPoiJson(request, { submissionId, status: 'rejected' });
+      }
+
+      const duplicate = await findManualPoiDuplicate(env.REGISTRY_DB, submission.dedupe_name, submission.lat, submission.lng);
+      if (duplicate) {
+        await env.REGISTRY_DB.batch([
+          env.REGISTRY_DB.prepare(
+            "UPDATE manual_poi_submission SET status = 'approved', reviewed_at = ?, reviewed_by = ?, approved_poi_id = ? WHERE submission_id = ? AND status = 'pending'",
+          ).bind(reviewedAt, reviewer, duplicate.poiId, submissionId),
+          env.REGISTRY_DB.prepare(
+            'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ).bind(crypto.randomUUID(), 'submission', submissionId, 'merged_duplicate', reviewer, JSON.stringify({ poiId: duplicate.poiId, source: duplicate.source }), reviewedAt),
+        ]);
+        return manualPoiJson(request, { submissionId, status: 'approved', approvedPoiId: duplicate.poiId, mergedDuplicate: true });
+      }
+
+      const poiId = `community:${crypto.randomUUID()}`;
+      const attributes = storedManualPoiAttributes(submission.attributes_json);
+      const statements = [
+        env.REGISTRY_DB.prepare(
+          `INSERT INTO curated_poi
+             (poi_id, source, source_submission_id, name, dedupe_name, lat, lng, geohash, primary_poi_type, address, status, created_at, created_by, updated_at, updated_by)
+           VALUES (?, 'community', ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+        ).bind(poiId, submissionId, submission.name, submission.dedupe_name, submission.lat, submission.lng, encodeGeohash(submission.lat, submission.lng, 7), submission.poi_type, submission.address, reviewedAt, reviewer, reviewedAt, reviewer),
+        ...attributes.map(attribute => env.REGISTRY_DB.prepare(
+          'INSERT INTO curated_poi_attribute (poi_id, dimension, value) VALUES (?, ?, ?)',
+        ).bind(poiId, attribute.dimension, attribute.value)),
+        env.REGISTRY_DB.prepare(
+          "UPDATE manual_poi_submission SET status = 'approved', reviewed_at = ?, reviewed_by = ?, approved_poi_id = ? WHERE submission_id = ? AND status = 'pending'",
+        ).bind(reviewedAt, reviewer, poiId, submissionId),
+        env.REGISTRY_DB.prepare(
+          'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).bind(crypto.randomUUID(), 'submission', submissionId, 'approved', reviewer, JSON.stringify({ poiId }), reviewedAt),
+        env.REGISTRY_DB.prepare(
+          'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).bind(crypto.randomUUID(), 'curated_poi', poiId, 'created', reviewer, JSON.stringify({ submissionId }), reviewedAt),
+      ];
+      await env.REGISTRY_DB.batch(statements);
+      return manualPoiJson(request, { submissionId, status: 'approved', approvedPoiId: poiId });
+    }
 
     // Internal, server-to-server only — its own stronger secret, not the
     // public X-Api-Key gate below.

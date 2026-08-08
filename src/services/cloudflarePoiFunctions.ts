@@ -32,7 +32,10 @@ export interface CloudflareNearbyRequest {
 
 interface PoiAllResponse {
   results: Record<string, Array<{
-    fsq_place_id: string;
+    /** Stable API identity: Foursquare id or an explicitly community-scoped id. */
+    poi_id: string;
+    /** Null for moderated community records; never a generated stand-in. */
+    fsq_place_id: string | null;
     name: string;
     lat: number;
     lng: number;
