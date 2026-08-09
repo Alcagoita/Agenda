@@ -95,3 +95,33 @@ describe('POST /manual-poi/submissions', () => {
     await expect(response.json()).resolves.toEqual({ error: 'verification failed; please try again' });
   });
 });
+
+describe('same-origin reviewer API route', () => {
+  it('routes both moderation aliases before the regular API-key gate', async () => {
+    const env = {
+      API_KEY: 'not-used',
+      ACCESS_TEAM_DOMAIN: 'brushaway.cloudflareaccess.com',
+      ACCESS_REVIEW_AUD: 'review-audience',
+      MANUAL_POI_ADMIN_EMAILS: 'reviewer@brushaway.app',
+      REGISTRY_DB: submissionDb(),
+    } as unknown as Env;
+
+    const requests = [
+      new Request('https://brushaway.app/manual-poi/review/api/submissions'),
+      new Request('https://brushaway.app/manual-poi/review/api/submissions/submission-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      }),
+    ];
+
+    for (const request of requests) {
+      const response = await worker.fetch(request, env, CTX);
+
+      // Each request has no Access assertion, so the moderation handler denies
+      // it. A 401 here would mean the alias missed and fell into the normal API.
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+    }
+  });
+});

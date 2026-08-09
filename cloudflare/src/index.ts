@@ -32,6 +32,8 @@ export interface Env {
   /** Cloudflare Access configuration for moderation-only API routes. */
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
+  /** Access audience for the same-origin reviewer route on brushaway.app. */
+  ACCESS_REVIEW_AUD?: string;
   MANUAL_POI_ADMIN_EMAILS?: string;
 }
 
@@ -284,7 +286,9 @@ async function accessJwks(teamDomain: string): Promise<AccessJwk[] | null> {
  * headers. The Access application still protects the route at Cloudflare's
  * edge; this is defense in depth for the Worker handler. */
 async function verifyManualPoiAdmin(request: Request, env: Env): Promise<string | null> {
-  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.MANUAL_POI_ADMIN_EMAILS) return null;
+  const expectedAudiences = [env.ACCESS_AUD, env.ACCESS_REVIEW_AUD]
+    .filter((audience): audience is string => typeof audience === 'string' && audience.trim() !== '');
+  if (!env.ACCESS_TEAM_DOMAIN || expectedAudiences.length === 0 || !env.MANUAL_POI_ADMIN_EMAILS) return null;
   const token = request.headers.get('Cf-Access-Jwt-Assertion');
   if (!token) return null;
   const parts = token.split('.');
@@ -316,9 +320,21 @@ async function verifyManualPoiAdmin(request: Request, env: Env): Promise<string 
   const now = Math.floor(Date.now() / 1_000);
   if (typeof claims.exp !== 'number' || claims.exp <= now || (typeof claims.nbf === 'number' && claims.nbf > now)) return null;
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!audiences.includes(env.ACCESS_AUD) || typeof claims.email !== 'string') return null;
+  if (!audiences.some(audience => expectedAudiences.includes(audience)) || typeof claims.email !== 'string') return null;
   const allowedEmails = new Set(env.MANUAL_POI_ADMIN_EMAILS.split(',').map(email => email.trim().toLowerCase()).filter(Boolean));
   return allowedEmails.has(claims.email.toLowerCase()) ? claims.email.toLowerCase() : null;
+}
+
+/**
+ * The review page and its API share a hostname so the browser uses the same
+ * Cloudflare Access session. The Worker keeps its existing API route too, but
+ * treats this local route as the identical moderation endpoint.
+ */
+function manualPoiAdminPathname(pathname: string): string {
+  const reviewApiPrefix = '/manual-poi/review/api';
+  return pathname.startsWith(`${reviewApiPrefix}/`)
+    ? `/manual-poi/admin/${pathname.slice(reviewApiPrefix.length + 1)}`
+    : pathname;
 }
 
 function authenticate(request: Request, env: Env): Response | null {
@@ -1153,6 +1169,7 @@ async function startPlaceMapping(env: Env, ctx: ExecutionContext | undefined, pl
 export default {
   async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const manualAdminPath = manualPoiAdminPathname(url.pathname);
 
     // KAN-362: the public contribution form is the only browser-open surface
     // on this Worker. Keep it ahead of the API-key gate and narrowly CORSed to
@@ -1221,7 +1238,7 @@ export default {
       return manualPoiJson(request, { submissionId, status: 'pending' }, 202);
     }
 
-    if (url.pathname === '/manual-poi/admin/submissions' && request.method === 'GET') {
+    if (manualAdminPath === '/manual-poi/admin/submissions' && request.method === 'GET') {
       const reviewer = await verifyManualPoiAdmin(request, env);
       if (!reviewer) return manualPoiJson(request, { error: 'forbidden' }, 403);
       const status = url.searchParams.get('status') ?? 'pending';
@@ -1242,7 +1259,7 @@ export default {
       });
     }
 
-    const manualAdminMatch = url.pathname.match(/^\/manual-poi\/admin\/submissions\/([^/]+)$/);
+    const manualAdminMatch = manualAdminPath.match(/^\/manual-poi\/admin\/submissions\/([^/]+)$/);
     if (manualAdminMatch && request.method === 'PATCH') {
       const reviewer = await verifyManualPoiAdmin(request, env);
       if (!reviewer) return manualPoiJson(request, { error: 'forbidden' }, 403);
