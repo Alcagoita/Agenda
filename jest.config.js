@@ -10,6 +10,18 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/e2e/',
+    // KAN-294: abandoned git worktrees live under .claude/worktrees/. They're
+    // git-ignored via .git/info/exclude, which keeps them out of `git status`
+    // but has no effect on Jest's file crawl — without this, Jest discovers
+    // and runs a duplicate copy of every suite from each stale worktree.
+    '/\\.claude/worktrees/',
+  ],
+  // KAN-294: also exclude the worktrees from the Haste module map. Ignoring
+  // them for test discovery alone is not enough — the haste map still crawls
+  // them for modules and emits duplicate-name collision warnings ('brush',
+  // 'brush-functions', src/services/__mocks__/*) on every run.
+  modulePathIgnorePatterns: [
+    '/\\.claude/worktrees/',
   ],
   moduleNameMapper: {
     // Binary model asset — stub so Jest doesn't try to parse it as a module.
