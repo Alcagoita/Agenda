@@ -163,11 +163,13 @@ application (never commit them):
 `poi-api.brushaway.app/manual-poi/admin/*` Access application; when set, the
 Worker accepts either audience.
 
-The Worker fails closed if any Access value is absent. It also fails closed for
-public submissions when `TURNSTILE_SECRET` is absent: every attempt receives
-HTTP 400 with `verification failed; please try again.` The public form can be
-deployed independently, but it will only become usable after the Worker and
-its D1 migration are live.
+The Worker fails closed when `ACCESS_TEAM_DOMAIN` or
+`MANUAL_POI_ADMIN_EMAILS` is absent, or when both `ACCESS_AUD` and
+`ACCESS_REVIEW_AUD` are absent. It also fails closed for public submissions
+when `TURNSTILE_SECRET` is absent: every attempt receives HTTP 400 with
+`verification failed; please try again.` The public form can be deployed
+independently, but it will only become usable after the Worker and its D1
+migration are live.
 
 ### Known gaps in this token's permissions
 
