@@ -142,18 +142,26 @@ API from a shell: `source .dev.vars`.
 ### Community POI moderation setup (KAN-362)
 
 Before deploying the website pages, apply
-`migrations/0008_moderated_manual_pois.sql` to `brush-poi-registry`, deploy
-this Worker, and create two Cloudflare Access applications with the same
-reviewer policy: one for `https://brushaway.app/manual-poi/review*` (the
-review page) and one for `https://poi-api.brushaway.app/manual-poi/admin/*`
-(the API). Set the following Worker secrets/variables from the **API** Access
+`migrations/0008_moderated_manual_pois.sql` to `brush-poi-registry` and deploy
+this Worker. Create one Cloudflare Access application for
+`https://brushaway.app/manual-poi/review*`, then add a Worker route for
+`brushaway.app/manual-poi/review/api/*` that targets this Worker. The review
+page calls that same-origin route, so one Access login protects both the page
+and its moderation requests — the browser never has to authenticate to a
+second hostname.
+
+Set the following Worker secrets/variables from the **review** Access
 application (never commit them):
 
 - `TURNSTILE_SECRET` — already bound to the **Brush Manual POI submissions**
   widget; the corresponding public sitekey belongs only in the website.
 - `ACCESS_TEAM_DOMAIN` — the Access team domain, without `https://`.
-- `ACCESS_AUD` — the Access application's audience value.
+- `ACCESS_REVIEW_AUD` — the review Access application's audience value.
 - `MANUAL_POI_ADMIN_EMAILS` — comma-separated reviewer email allowlist.
+
+`ACCESS_AUD` is optional and only needed when retaining the older direct
+`poi-api.brushaway.app/manual-poi/admin/*` Access application; when set, the
+Worker accepts either audience.
 
 The Worker fails closed if any Access value is absent. It also fails closed for
 public submissions when `TURNSTILE_SECRET` is absent: every attempt receives
