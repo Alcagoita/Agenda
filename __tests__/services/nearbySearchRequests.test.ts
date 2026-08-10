@@ -63,4 +63,21 @@ describe('buildNearbySearchRequests', () => {
       { key: 'bank:brand:Caixa Geral de Depósitos', type: 'bank', brand: 'Caixa Geral de Depósitos' },
     ]);
   });
+
+  it('deduplicates canonical brands, keeps distinct brands, and omits unbranded Gym/Bank tasks', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'gym', title: 'Solinca one', poiBrand: 'Solinca' },
+      { poi: 'gym', title: 'Solinca two', poiBrand: 'Solinca' },
+      { poi: 'gym', title: 'Fitness Hut', poiBrand: 'Fitness Hut' },
+      { poi: 'bank', title: 'Legacy bank' },
+      { poi: 'gym', title: 'Legacy gym' },
+    ])).toEqual([
+      { key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' },
+      { key: 'gym:brand:Fitness Hut', type: 'gym', brand: 'Fitness Hut' },
+    ]);
+    expect(buildNearbySearchRequests([
+      { poi: 'gym', title: 'Legacy gym' },
+      { poi: 'bank', title: 'Legacy bank' },
+    ])).toEqual([]);
+  });
 });

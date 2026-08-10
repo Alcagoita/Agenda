@@ -74,6 +74,14 @@ export function getCanonicalBrand(
   )?.name ?? null;
 }
 
+/** True only for a canonical value valid for this exact POI type. */
+export function isCanonicalBrandForType(
+  poiType: string | null | undefined,
+  value: string | null | undefined,
+): boolean {
+  return typeof value === 'string' && definitionsForType(poiType).some(brand => brand.name === value);
+}
+
 /**
  * Resolves a canonical brand when one of its explicit aliases occurs as a
  * whole word/phrase in human text. Longest match wins so a full legal bank

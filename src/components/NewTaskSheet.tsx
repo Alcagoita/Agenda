@@ -62,7 +62,7 @@ import {
   inferStoreSubtype,
   type StoreSubtype,
 } from '../services/storeSubtypes';
-import { findBrandInText, poiTypeRequiresBrand } from '../services/brandDictionary';
+import { findBrandInText, isCanonicalBrandForType, poiTypeRequiresBrand } from '../services/brandDictionary';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -228,6 +228,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(false);
     const [poiBrand, setPoiBrand] = useState<string | null>(null);
     const [poiBrandTouched, setPoiBrandTouched] = useState(false);
+    const previousBrandPoiRef = useRef<string | null>(poi);
     // KAN-249 — the raw inference result, frozen the moment the user touches
     // the carousel. Compared against `poi` at submit time to tell a Confirm
     // (poi === suggestedPoi) from a Replace (poi !== suggestedPoi); null means
@@ -416,7 +417,9 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
 
-    const canSubmit = title.trim().length > 0 && poi !== null && (!poiTypeRequiresBrand(poi) || poiBrand !== null);
+    const canSubmit = title.trim().length > 0 && poi !== null && (
+      !poiTypeRequiresBrand(poi) || isCanonicalBrandForType(poi, poiBrand)
+    );
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
@@ -424,10 +427,11 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         setStoreSubtype(null);
         setStoreSubtypeTouched(false);
       }
-      if (!poiTypeRequiresBrand(poi)) {
+      if (previousBrandPoiRef.current !== poi || !poiTypeRequiresBrand(poi)) {
         setPoiBrand(null);
         setPoiBrandTouched(false);
       }
+      previousBrandPoiRef.current = poi;
     }, [poi]);
 
     useEffect(() => {
@@ -458,7 +462,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     const handleSubmit = useCallback(async () => {
       const trimmed = title.trim();
-      if (!trimmed || !poi || !uid || submitting || (poiTypeRequiresBrand(poi) && !poiBrand)) { return; }
+      if (!trimmed || !poi || !uid || submitting || (poiTypeRequiresBrand(poi) && !isCanonicalBrandForType(poi, poiBrand))) { return; }
 
       setSubmitting(true);
       try {
@@ -469,7 +473,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           poi,
           ...(poi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
           ...(poi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
-          ...(poiTypeRequiresBrand(poi) && poiBrand ? { poiBrand } : {}),
+          ...(poiTypeRequiresBrand(poi) && isCanonicalBrandForType(poi, poiBrand) ? { poiBrand } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
         // fired for THIS title. Inference is skipped once the carousel is

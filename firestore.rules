@@ -229,6 +229,36 @@ service cloud.firestore {
       ]);
     }
 
+    function validTaskBrand(data) {
+      return ((('poi' in data.keys()) && data.poi in ['gym', 'bank'])
+        ? ('poiBrand' in data.keys() && validRequiredPoiBrand(data.poi, data.poiBrand))
+        : !('poiBrand' in data.keys()));
+    }
+
+    // KAN-364: old generic Gym/Bank records remain usable. A status-only
+    // lifecycle write must not force a user to choose a brand first, but any
+    // POI/brand edit still has to satisfy validTaskBrand above.
+    function validLegacyRequiredBrandLifecycleUpdate(data, previous) {
+      return ('poi' in previous.keys())
+        && previous.poi in ['gym', 'bank']
+        && !('poiBrand' in previous.keys())
+        && ('poi' in data.keys())
+        && data.poi == previous.poi
+        && !('poiBrand' in data.keys())
+        && data.diff(previous).affectedKeys().hasOnly([
+          'done',
+          'completedAt',
+          'completedPlaceId',
+          'completedPlaceName',
+          'completedPoiType',
+          'completedTripId',
+          'poiAlertSeenDate',
+          'exitPromptSeenDate',
+          'pendingSync',
+          'dateHandoff',
+        ]);
+    }
+
     function validTaskData(data) {
       // KAN-353 removed the unused Google-specific poiPlaceId field after a
       // production audit confirmed no persisted tasks carried it.
@@ -271,9 +301,6 @@ service cloud.firestore {
         && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
         && (!('restaurantFoodType' in data.keys()) ||
           (data.poi == 'restaurant' && validRestaurantFoodType(data.restaurantFoodType)))
-        && ((('poi' in data.keys()) && data.poi in ['gym', 'bank'])
-          ? ('poiBrand' in data.keys() && validRequiredPoiBrand(data.poi, data.poiBrand))
-          : !('poiBrand' in data.keys()))
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
         && (!('completedPoiType' in data.keys()) || validPoiType(data.completedPoiType))
@@ -523,6 +550,9 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && validTaskData(request.resource.data)
+          && (validTaskBrand(request.resource.data)
+            || (request.method == 'update'
+              && validLegacyRequiredBrandLifecycleUpdate(request.resource.data, resource.data)))
           && (request.method == 'create'
             || validDatedTaskHandoffUpdate(request.resource.data, resource.data));
       }

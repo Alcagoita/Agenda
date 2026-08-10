@@ -4,6 +4,9 @@ import {
   getCanonicalBrand,
   findBrandInText,
   findRequiredBrandInText,
+  brandTaskMatchesPlace,
+  filterBrandPlacesForTasks,
+  isCanonicalBrandForType,
 } from '../../src/services/brandDictionary';
 
 describe('brandDictionary', () => {
@@ -40,5 +43,22 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('bank', 'CGD')).toBe('Caixa Geral de Depósitos');
     expect(findBrandInText('bank', 'Visit Caixa Geral de Depositos Alcobaça')).toBe('Caixa Geral de Depósitos');
     expect(findRequiredBrandInText('Go to Solinca after work')).toEqual({ poiType: 'gym', brand: 'Solinca' });
+  });
+
+  it('matches required-brand tasks only with the Worker-provided canonical brand', () => {
+    expect(brandTaskMatchesPlace({ poi: 'gym', poiBrand: 'Solinca' }, { brand: 'Solinca' })).toBe(true);
+    expect(brandTaskMatchesPlace({ poi: 'gym', poiBrand: 'Solinca' }, { brand: 'Fitness Hut' })).toBe(false);
+    expect(brandTaskMatchesPlace({ poi: 'gym' }, { brand: 'Solinca' })).toBe(false);
+    expect(isCanonicalBrandForType('gym', 'Solinca')).toBe(true);
+    expect(isCanonicalBrandForType('bank', 'Solinca')).toBe(false);
+  });
+
+  it('preserves generic types and combines results for distinct required brands', () => {
+    const places = [{ brand: 'Solinca' }, { brand: 'Fitness Hut' }, { brand: 'Holmes Place' }];
+    expect(filterBrandPlacesForTasks('pharmacy', places, [{ poi: 'pharmacy' }])).toEqual(places);
+    expect(filterBrandPlacesForTasks('gym', places, [
+      { poi: 'gym', poiBrand: 'Solinca' },
+      { poi: 'gym', poiBrand: 'Fitness Hut' },
+    ])).toEqual([{ brand: 'Solinca' }, { brand: 'Fitness Hut' }]);
   });
 });

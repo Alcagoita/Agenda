@@ -57,7 +57,7 @@ import {
   inferStoreSubtype,
   type StoreSubtype,
 } from '../../services/storeSubtypes';
-import { findBrandInText, poiTypeRequiresBrand } from '../../services/brandDictionary';
+import { findBrandInText, isCanonicalBrandForType, poiTypeRequiresBrand } from '../../services/brandDictionary';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,6 +189,7 @@ export default function TaskFormScreen() {
       : poiTypeRequiresBrand(initialPoi) ? initialPoiBrand ?? null : null,
   );
   const [poiBrandTouched, setPoiBrandTouched] = useState(Boolean(existingTask?.poiBrand || initialPoiBrand));
+  const previousBrandPoiRef = useRef<string | null>(poiKey ?? customPoiType);
   const [focused,       setFocused]       = useState(false);
   const [suggestedPoi, setSuggestedPoi] = useState<string | null>(
     existingTask?.poi ?? (hasExplicitInitialPoi ? null : initialPoi ?? null),
@@ -324,10 +325,11 @@ export default function TaskFormScreen() {
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
     }
-    if (!poiTypeRequiresBrand(effectivePoi)) {
+    if (previousBrandPoiRef.current !== effectivePoi || !poiTypeRequiresBrand(effectivePoi)) {
       setPoiBrand(null);
       setPoiBrandTouched(false);
     }
+    previousBrandPoiRef.current = effectivePoi;
   }, [effectivePoi]);
 
   useEffect(() => {
@@ -345,7 +347,7 @@ export default function TaskFormScreen() {
   const suggestions = !customPoiType && query.trim() ? getTypeSuggestions(query) : [];
   // Birthday tasks are exempt from the POI requirement (KAN-248) — date-shaped, not place-shaped.
   const canSubmit = title.trim().length > 0 && (isBirthday || (
-    effectivePoi !== null && (!poiTypeRequiresBrand(effectivePoi) || poiBrand !== null)
+    effectivePoi !== null && (!poiTypeRequiresBrand(effectivePoi) || isCanonicalBrandForType(effectivePoi, poiBrand))
   ));
   const suggestionType = suggestedTitle === title.trim() ? suggestedPoi : null;
   const suggestionLabel = suggestionType
@@ -365,7 +367,7 @@ export default function TaskFormScreen() {
 
   const handleSave = useCallback(async () => {
     const trimmed = title.trim();
-    if (!trimmed || (!isBirthday && (!effectivePoi || (poiTypeRequiresBrand(effectivePoi) && !poiBrand)))) { return; }
+    if (!trimmed || (!isBirthday && (!effectivePoi || (poiTypeRequiresBrand(effectivePoi) && !isCanonicalBrandForType(effectivePoi, poiBrand))))) { return; }
 
     setSubmitting(true);
     try {
@@ -381,7 +383,7 @@ export default function TaskFormScreen() {
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
         ...(!isBirthday && effectivePoi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
         ...(!isBirthday && effectivePoi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
-        ...(!isBirthday && poiTypeRequiresBrand(effectivePoi) && poiBrand ? { poiBrand } : {}),
+        ...(!isBirthday && poiTypeRequiresBrand(effectivePoi) && isCanonicalBrandForType(effectivePoi, poiBrand) ? { poiBrand } : {}),
       };
 
       if (notes.trim()) {

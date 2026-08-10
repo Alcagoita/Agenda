@@ -13,6 +13,9 @@ to rerun after the catalogue grows.
 """
 import json
 import os
+import string
+
+from classify_and_load import normalize_text
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DICTIONARY_PATH = os.path.join(ROOT, 'src', 'constants', 'brandDictionary.json')
@@ -22,20 +25,72 @@ def sql_string(value):
     return "'" + value.replace("'", "''") + "'"
 
 
-def brand_case(entries):
+SQL_ACCENT_REPLACEMENTS = {
+    'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
+    'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+    'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+    'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+    'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ç': 'c', 'ñ': 'n',
+}
+SQL_PUNCTUATION = string.punctuation + '–—“”‘’…\t\n\r'
+
+
+def normalized_name_sql(column):
+    """D1 expression matching classify_and_load.normalize_text's contract.
+
+    SQLite has no Unicode-normalize/regexp replacement primitive, so the
+    generated expression explicitly folds the Latin accents present in the
+    curated aliases, turns punctuation into spaces, then collapses runs before
+    the padded phrase comparison below.
+    """
+    expression = column
+    for source, target in SQL_ACCENT_REPLACEMENTS.items():
+        expression = f"replace({expression}, {sql_string(source.upper())}, {sql_string(target)})"
+        expression = f"replace({expression}, {sql_string(source)}, {sql_string(target)})"
+    expression = f"lower({expression})"
+    for character in SQL_PUNCTUATION:
+        expression = f"replace({expression}, {sql_string(character)}, ' ')"
+    for _ in range(8):
+        expression = f"replace({expression}, '  ', ' ')"
+    return f"trim({expression})"
+
+
+def brand_case(entries, normalized_column='normalized_name'):
     clauses = []
     for entry in entries:
         for alias in [entry['name'], *entry.get('aliases', [])]:
-            clauses.append(f"WHEN name LIKE {sql_string('%' + alias + '%')} THEN {sql_string(entry['name'])}")
+            normalized_alias = normalize_text(alias)
+            if not normalized_alias:
+                continue
+            # Same padded word/phrase boundary used by find_brand: "BPI" must
+            # not match inside a longer unrelated name, while "Banco BPI"
+            # remains a valid phrase match after punctuation/accent folding.
+            clauses.append(
+                f"WHEN (' ' || {normalized_column} || ' ') LIKE "
+                f"{sql_string('% ' + normalized_alias + ' %')} THEN {sql_string(entry['name'])}",
+            )
     return '\n      '.join(clauses)
 
 
 def emit_for_foursquare(poi_type, entries):
-    print(f"""UPDATE poi
-SET brand = CASE
+    print(f"""WITH normalized_poi AS (
+  SELECT poi.fsq_place_id, {normalized_name_sql('poi.name')} AS normalized_name
+  FROM poi
+  WHERE EXISTS (
+    SELECT 1 FROM poi_type
+    WHERE poi_type.fsq_place_id = poi.fsq_place_id
+      AND poi_type.poi_type = {sql_string(poi_type)}
+  )
+)
+UPDATE poi
+SET brand = (
+  SELECT CASE
       {brand_case(entries)}
       ELSE NULL
     END
+  FROM normalized_poi
+  WHERE normalized_poi.fsq_place_id = poi.fsq_place_id
+)
 WHERE EXISTS (
   SELECT 1 FROM poi_type
   WHERE poi_type.fsq_place_id = poi.fsq_place_id
@@ -44,11 +99,20 @@ WHERE EXISTS (
 
 
 def emit_for_curated(poi_type, entries):
-    print(f"""UPDATE curated_poi
-SET brand = CASE
+    print(f"""WITH normalized_poi AS (
+  SELECT poi_id, {normalized_name_sql('name')} AS normalized_name
+  FROM curated_poi
+  WHERE primary_poi_type = {sql_string(poi_type)}
+)
+UPDATE curated_poi
+SET brand = (
+  SELECT CASE
       {brand_case(entries)}
       ELSE NULL
     END
+  FROM normalized_poi
+  WHERE normalized_poi.poi_id = curated_poi.poi_id
+)
 WHERE primary_poi_type = {sql_string(poi_type)};""")
 
 

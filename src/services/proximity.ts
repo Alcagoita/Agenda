@@ -232,7 +232,7 @@ export function getLastPoiSearchState(): { source: PoiSearchSource | null; cover
   };
 }
 
-/** Sorted, comma-joined POI types the last search covered (KAN-285) — the
+/** Sorted nearby-request identities the last search covered (KAN-285) — the
  *  "did the POI list change" half of the snapshot-reuse gate. */
 let _lastSearchPoiTypesKey: string | null = null;
 
@@ -654,7 +654,7 @@ async function runProximitySearch(
     // A legacy Gym/Bank task without its now-required brand stays readable,
     // but must not silently fall back to a generic nearby result.
     const uniquePoiTypes = [...new Set(nearbyRequests.map(request => request.type))];
-    const poiTypesKey = [...uniquePoiTypes].sort().join(',');
+    const poiTypesKey = nearbyRequests.map(request => request.key).sort().join(',');
 
     if (uniquePoiTypes.length === 0) {
       _locationTap?.(coords.lat, coords.lng, coords.accuracy);
@@ -1123,7 +1123,8 @@ export async function runProximitySearchOrReuseSnapshot(
   onUpdate: ProximityCallback,
 ): Promise<void> {
   const undonePoiTasks = tasks.filter(t => !t.done && t.poi != null);
-  const uniquePoiTypes = [...new Set(undonePoiTasks.map(t => t.poi as string))];
+  const nearbyRequests = buildNearbySearchRequests(undonePoiTasks);
+  const uniquePoiTypes = [...new Set(nearbyRequests.map(request => request.type))];
 
   if (uniquePoiTypes.length === 0) {
     // Nothing to search for — settle immediately without even a position
@@ -1135,7 +1136,7 @@ export async function runProximitySearchOrReuseSnapshot(
     return;
   }
 
-  const poiTypesKey = [...uniquePoiTypes].sort().join(',');
+  const poiTypesKey = nearbyRequests.map(request => request.key).sort().join(',');
 
   let coords: Coordinates;
   try {
