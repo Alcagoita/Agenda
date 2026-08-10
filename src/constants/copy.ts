@@ -115,7 +115,9 @@ const en = {
     poiSearchPlaceholder: 'A café, a pharmacy, a gym…',
     timeQuestion:         'Around when?',
     timeOptional:         ' (optional)',
+    datePlaceholder:      'No date',
     timePlaceholder:      'Anytime is fine',
+    clearDateA11y:        'Clear date',
     clearTimeA11y:        'Clear time',
     footerHint:           'Just the what and the where',
     /** Fires after a successful add from either surface — never on edit. */
@@ -1157,6 +1159,15 @@ const en = {
     body: (taskTitle: string) => taskTitle,
   },
 
+  datedTaskHandoff: {
+    title: 'Brush',
+    sheetTitle: 'What would you like to do?',
+    body: (taskTitle: string) => `You wanted this today — ${taskTitle}`,
+    multipleBody: 'You wanted these today',
+    forget: 'Forget it',
+    tomorrow: 'Tomorrow instead',
+  },
+
   dailyCheckin: {
     /** KAN-303: the morning "Daily" notification. Intention, not a verdict — no count, no "left"/"overdue"/"unfinished". Echoes the app's own question. */
     title: 'Morning',
@@ -1304,7 +1315,9 @@ const ptPT: typeof en = {
     poiSearchPlaceholder: 'Um café, uma farmácia, um ginásio…',
     timeQuestion:         'Para quando, mais ou menos?',
     timeOptional:         ' (opcional)',
+    datePlaceholder:      'Sem data',
     timePlaceholder:      'Qualquer altura serve',
+    clearDateA11y:        'Limpar data',
     clearTimeA11y:        'Limpar hora',
     footerHint:           'Só o quê e o onde',
     confirmToast:         'Entendido — vou estar atento.',
@@ -2241,6 +2254,15 @@ const ptPT: typeof en = {
   taskReminder: {
     title: (time: string) => `Querias isto às ${time}`,
     body: (taskTitle: string) => taskTitle,
+  },
+
+  datedTaskHandoff: {
+    title: 'Brush',
+    sheetTitle: 'O que gostavas de fazer?',
+    body: (taskTitle: string) => `Querias isto hoje — ${taskTitle}`,
+    multipleBody: 'Querias estas coisas hoje',
+    forget: 'Esquecer',
+    tomorrow: 'Amanhã em vez disso',
   },
 
   dailyCheckin: {

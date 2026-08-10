@@ -160,6 +160,14 @@ service cloud.firestore {
       ];
     }
 
+    function validDateHandoff(value) {
+      return value is map
+        && value.keys().hasOnly(['date', 'outcome', 'resolvedAt'])
+        && validDateString(value.date)
+        && value.outcome in ['forgotten', 'tomorrow']
+        && value.resolvedAt is timestamp;
+    }
+
     function validPointsReason(reason) {
       return reason in [
         'task_completed',
@@ -210,6 +218,9 @@ service cloud.firestore {
           'createdAt',
           'completedAt',
           'date',
+          'scheduledDate',
+          'originalScheduledDate',
+          'dateHandoff',
           'originDate',
           'pendingSync',
           'kind',
@@ -233,7 +244,10 @@ service cloud.firestore {
         && (!('exitPromptSeenDate' in data.keys()) || validDateString(data.exitPromptSeenDate))
         && data.createdAt is timestamp
         && (!('completedAt' in data.keys()) || data.completedAt is timestamp)
-        && validDateString(data.date)
+        && (!('date' in data.keys()) || validDateString(data.date))
+        && (!('scheduledDate' in data.keys()) || validDateString(data.scheduledDate))
+        && (!('originalScheduledDate' in data.keys()) || validDateString(data.originalScheduledDate))
+        && (!('dateHandoff' in data.keys()) || validDateHandoff(data.dateHandoff))
         && (!('originDate' in data.keys()) || validDateString(data.originDate))
         && (!('pendingSync' in data.keys()) || data.pendingSync is bool)
         && (!('kind' in data.keys()) || data.kind == 'birthday');

@@ -1,11 +1,6 @@
 /**
- * KAN-264 review fix — getTasksForMonth must also fetch tasks whose
- * originDate falls in the requested month, not just tasks whose current
- * `date` does. A task that rolled across a month boundary (due June 30,
- * still undone into July) has `date` pointing at July but `originDate`
- * still pointing at June — CalendarScreen attributes it to `originDate ??
- * date`, so it needs to be fetched when browsing June too, or it silently
- * vanishes from its origin month.
+ * KAN-363 — Calendar compatibility includes the new scheduledDate plus the
+ * two retained legacy date fields without rewriting existing documents.
  */
 
 const mockGetDocs = jest.fn();
@@ -36,11 +31,13 @@ describe('getTasksForMonth', () => {
     jest.clearAllMocks();
   });
 
-  it('queries both date range and originDate range for the month', async () => {
+  it('queries scheduledDate plus the two legacy date ranges for the month', async () => {
     mockGetDocs.mockResolvedValue(makeSnap([]));
 
     await getTasksForMonth('uid-1', YM);
 
+    expect(mockWhere).toHaveBeenCalledWith('scheduledDate', '>=', '2026-06-01');
+    expect(mockWhere).toHaveBeenCalledWith('scheduledDate', '<', '2026-07-01');
     expect(mockWhere).toHaveBeenCalledWith('date', '>=', '2026-06-01');
     expect(mockWhere).toHaveBeenCalledWith('date', '<', '2026-07-01');
     expect(mockWhere).toHaveBeenCalledWith('originDate', '>=', '2026-06-01');
@@ -49,6 +46,7 @@ describe('getTasksForMonth', () => {
 
   it('includes a task whose date fell in the month but originDate did not (never rolled)', async () => {
     mockGetDocs
+      .mockResolvedValueOnce(makeSnap([]))
       .mockResolvedValueOnce(makeSnap([{ id: 't1', data: { title: 'June task', date: '2026-06-10' } }]))
       .mockResolvedValueOnce(makeSnap([]));
 
@@ -58,7 +56,8 @@ describe('getTasksForMonth', () => {
 
   it('includes a task that rolled out of the month — date now in July, originDate still in June', async () => {
     mockGetDocs
-      .mockResolvedValueOnce(makeSnap([])) // date range: nothing in June anymore
+      .mockResolvedValueOnce(makeSnap([])) // scheduled date range
+      .mockResolvedValueOnce(makeSnap([])) // legacy date range: nothing in June anymore
       .mockResolvedValueOnce(makeSnap([{ id: 't2', data: { title: 'Rolled out', date: '2026-07-02', originDate: '2026-06-30' } }]));
 
     const tasks = await getTasksForMonth('uid-1', YM);
@@ -68,10 +67,21 @@ describe('getTasksForMonth', () => {
   it('deduplicates a task matched by both queries (rolled within the same month)', async () => {
     const doc = { id: 't3', data: { title: 'Rolled within June', date: '2026-06-15', originDate: '2026-06-10' } };
     mockGetDocs
+      .mockResolvedValueOnce(makeSnap([]))
       .mockResolvedValueOnce(makeSnap([doc]))
       .mockResolvedValueOnce(makeSnap([doc]));
 
     const tasks = await getTasksForMonth('uid-1', YM);
     expect(tasks.map(t => t.id)).toEqual(['t3']);
+  });
+
+  it('includes a newly scheduled task even though it has no legacy date', async () => {
+    mockGetDocs
+      .mockResolvedValueOnce(makeSnap([{ id: 't4', data: { title: 'Scheduled', scheduledDate: '2026-06-12' } }]))
+      .mockResolvedValueOnce(makeSnap([]))
+      .mockResolvedValueOnce(makeSnap([]));
+
+    const tasks = await getTasksForMonth('uid-1', YM);
+    expect(tasks.map(t => t.id)).toEqual(['t4']);
   });
 });

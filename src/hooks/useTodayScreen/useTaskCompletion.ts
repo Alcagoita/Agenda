@@ -13,6 +13,7 @@ import { getActivePlaceContext } from '../../services/proximity';
 import { completedTripIdFor } from '../../services/tripStamp';
 import { getActiveChallengesForUser, incrementCompletedCount } from '../../services/challenges';
 import { cancelTaskReminder } from '../../services/notifications';
+import { refreshDatedTaskHandoff } from '../../services/datedTaskHandoff';
 import type { NearbyPlace } from '../../services/maps';
 import type { Task } from '../../types';
 import { DEBUG_DISABLE_BACKGROUND } from './debugFlags';
@@ -30,6 +31,11 @@ export function useTaskCompletion(
     if (!uid) { return; }
 
     Vibration.vibrate(Platform.OS === 'android' ? 18 : 1);
+
+    // Capture this before the optimistic update. The dated handoff is shared
+    // by every unfinished task on that day, so brushing one must rebuild its
+    // single 20:00 notification without affecting the other tasks.
+    const taskBeforeToggle = latestTasksRef.current.find(t => t.id === taskId);
 
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done, pendingSync: true } : t));
 
@@ -52,6 +58,9 @@ export function useTaskCompletion(
       // Best-effort — never let a notifee failure surface as a toggle failure.
       if (done) {
         cancelTaskReminder(taskId).catch(() => {});
+        if (taskBeforeToggle?.scheduledDate) {
+          refreshDatedTaskHandoff(uid, taskBeforeToggle.scheduledDate).catch(() => {});
+        }
       }
       // Only clear pendingSync if the row still reflects this write (same
       // optimistic done value) — a newer toggle that landed while this write

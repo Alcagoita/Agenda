@@ -12,6 +12,22 @@
       "collectionGroup": "tasks",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "scheduledDate", "order": "ASCENDING" },
+        { "fieldPath": "createdAt",     "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "done",      "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "done", "order": "ASCENDING" },
         { "fieldPath": "poi",  "order": "ASCENDING" }
       ]

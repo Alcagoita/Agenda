@@ -76,8 +76,8 @@ const ENTRANCE_DUR_MS   = 650;
 const MAX_WAIT_AFTER_READY_MS = 4_000;
 
 /**
- * Absolute upper bound on boot. The KAN-146 rollover + Firestore fetch run
- * before `markReady`; if either stalls (offline, large batch write) the splash
+ * Absolute upper bound on boot. The Firestore fetch runs before `markReady`;
+ * if it stalls (offline, slow network) the splash
  * would otherwise cycle forever. After this deadline we mark ready regardless —
  * the Today screen does its own fetch and shows an error/retry if needed.
  */
@@ -288,7 +288,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
     // commits through the ShadowTree (Yoga + RawProps), so a perpetually looping
     // splash animation pegs the JS thread. While pegged, the boot promises and
     // `markReady`/`doNavigate` timers can't run — so the splash would loop
-    // forever and the app would never appear (the KAN-146 rollover made boot slow
+    // forever and the app would never appear (a slow data fetch can otherwise
     // enough to fall into this deadlock). With a single cycle the thread frees
     // after ~3s; boot callbacks then run and exit is driven by `restTimerRef`
     // (fast path) or `markReady`'s abort timer (slow path). KAN-157 lesson:
@@ -436,7 +436,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         // Trip areas (KAN-234): app is foreground-only (KAN-231), so the
         // day-before-departure refresh has no native scheduler to run on —
         // piggyback on this boot path instead, same "non-fatal, best effort,
-        // once per boot" shape as rolloverIncompleteTasks above.
+        // once-per-boot shape as the other prefetches above.
         checkAndRunTripPreRefresh(uid, trips)
           .catch(err => console.warn('[SplashScreen] checkAndRunTripPreRefresh failed (non-critical)', err));
         try { deleteExpiredTripPlaces(); } catch (err) { console.warn('[SplashScreen] deleteExpiredTripPlaces failed (non-critical)', err); }
@@ -461,7 +461,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
   }, [authLoading, user, markReady]);
 
   // ── Boot safety net ────────────────────────────────────────────────────────
-  // Guarantee the splash exits even if rollover/fetch never resolves.
+  // Guarantee the splash exits even if the data fetch never resolves.
   useEffect(() => {
     const t = setTimeout(markReady, BOOT_HARD_TIMEOUT_MS);
     return () => clearTimeout(t);

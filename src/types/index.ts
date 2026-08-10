@@ -228,27 +228,44 @@ export interface Task {
   exitPromptSeenDate?: string;
   createdAt: FirebaseFirestoreTypes.Timestamp;
   completedAt?: FirebaseFirestoreTypes.Timestamp;
-  /** Calendar date this task belongs to, formatted as "YYYY-MM-DD". */
-  date: string;
   /**
-   * KAN-264 — the day this task was FIRST due, stamped once by rollover the
-   * first time it rolls forward and never overwritten again. `date` keeps
-   * moving forward each rollover (so Today always shows it); `originDate`
-   * stays put, so the Calendar can attribute an undone rolled task to the
-   * day it was actually meant for — a task rolling Mon→Wed was never a
-   * Tuesday intention, so Tuesday's ring is untouched, and Monday's ring
-   * correctly stays open instead of vanishing. Undefined for a task that
-   * has never rolled — treat `originDate ?? date` as its calendar day.
+   * Legacy daily-list date. New code must not use this field to decide whether
+   * a task is active: every pre-KAN-363 task has one, even when the user never
+   * chose a date. It is retained so existing documents are not destructively
+   * migrated and a future history view can still read their original data.
+   */
+  date?: string;
+  /**
+   * An explicit, optional local calendar date chosen by the user. A task with
+   * no scheduledDate remains active until it is brushed or deleted. Once this
+   * date has passed, the task simply leaves the active list; it is never
+   * deleted or moved automatically.
+   */
+  scheduledDate?: string;
+  /** The first explicitly selected date, retained when “Tomorrow instead” moves a task. */
+  originalScheduledDate?: string;
+  /**
+   * The latest explicit end-of-day decision. Its date identifies the handoff
+   * it belongs to, so absence for a passed scheduled date truthfully means the
+   * user did not answer rather than chose "Forget it".
+   */
+  dateHandoff?: {
+    date: string;
+    outcome: 'forgotten' | 'tomorrow';
+    resolvedAt: FirebaseFirestoreTypes.Timestamp;
+  };
+  /**
+   * Legacy original date retained from the former rollover model. New code
+   * does not write it; Calendar compatibility may read it for old documents.
    */
   originDate?: string;
   /** True when this task has a local write not yet confirmed by the server (KAN-198). */
   pendingSync?: boolean;
   /**
-   * KAN-248 — marks a date-bound, unscored, auto-expiring task imported from a
-   * calendar birthday event (or retroactively flagged via the edit-screen
-   * toggle). A deliberate, narrow exception to "no POI required" and "no
-   * auto-expiry" — never generalize beyond this one kind. undefined for
-   * every other task.
+   * KAN-248 — marks a date-bound, unscored task imported from a calendar
+   * birthday event (or retroactively flagged via the edit-screen toggle).
+   * It is a semantic task kind, not a POI type; birthdays have no place and
+   * never earn points. Undefined for every other task.
    */
   kind?: 'birthday';
 }

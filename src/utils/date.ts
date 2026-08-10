@@ -17,6 +17,14 @@ export function todayISO(): string {
   return localDateISO(new Date());
 }
 
+/** Advance a YYYY-MM-DD value by whole local calendar days without UTC drift. */
+export function addLocalDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateISO(date);
+}
+
 /** "18:00" — 24h local time, no seconds. Not COPY (numeric, not language-dependent). */
 export function formatLocalTime(ms: number): string {
   const d = new Date(ms);

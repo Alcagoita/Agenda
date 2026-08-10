@@ -433,7 +433,7 @@ export default function CalendarScreen() {
       })
       .catch(err => {
         if (cancelled) { return; }
-        console.warn('[CalendarScreen] tasks fetch error', err);
+        console.warn(`[CalendarScreen] tasks fetch error${retryKey > 0 ? ' after retry' : ''}`, err);
         setMonthTasksState({ status: 'error', message: COPY.calendar.loadError });
       });
     return () => { cancelled = true; };
@@ -507,7 +507,8 @@ export default function CalendarScreen() {
   const dayStats = useMemo<Record<string, { done: number; total: number }>>(() => {
     const map: Record<string, { done: number; total: number }> = {};
     for (const t of monthTasks) {
-      const day = t.originDate ?? t.date;
+      const day = t.scheduledDate ?? t.originDate ?? t.date;
+      if (!day) { continue; }
       if (!map[day]) { map[day] = { done: 0, total: 0 }; }
       map[day].total += 1;
       if (t.done) { map[day].done += 1; }
@@ -587,7 +588,7 @@ export default function CalendarScreen() {
   // up in its origin day's list (to tell the redemption story), not
   // wherever it currently lives.
   const selectedTasks = useMemo(
-    () => monthTasks.filter(t => (t.originDate ?? t.date) === selectedDate).sort((a, b) => {
+    () => monthTasks.filter(t => (t.scheduledDate ?? t.originDate ?? t.date) === selectedDate).sort((a, b) => {
       const ta = a.time ?? '';
       const tb = b.time ?? '';
       return ta.localeCompare(tb);

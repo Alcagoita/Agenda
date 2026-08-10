@@ -25,11 +25,10 @@ import { useTheme } from '../theme';
 import { spacing, radius as radii } from '../theme/tokens';
 import { ChevronLeftIcon } from '../components/AppIcon';
 import FriendPickerSheet from '../components/FriendPickerSheet';
-import { getTasksForDate, getUser } from '../services/firestore';
+import { ensureCurrentDay, getUser } from '../services/firestore';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { Task } from '../types';
 import { COPY } from '../constants/copy';
-import { todayISO } from '../utils/date';
 
 type Nav   = NativeStackNavigationProp<RootStackParamList, 'ShareToDo'>;
 type Route = RouteProp<RootStackParamList, 'ShareToDo'>;
@@ -57,11 +56,12 @@ export default function ShareToDoScreen() {
     getUser(uid).then(u => setSenderUsername(u?.username ?? ''));
   }, [uid]);
 
-  // Load today's undone tasks
+  // Load every task that is currently active. An undated task stays active;
+  // an explicitly dated task leaves only after its selected day passes.
   useEffect(() => {
     if (!uid) { return; }
-    getTasksForDate(uid, todayISO())
-      .then(ts => setTasks(ts.filter(t => !t.done)))
+    ensureCurrentDay(uid)
+      .then(({ tasks: activeTasks }) => setTasks(activeTasks))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [uid]);

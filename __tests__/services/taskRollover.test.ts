@@ -1,208 +1,92 @@
-/**
- * KAN-146 — client-side rolloverIncompleteTasks tests.
- *
- * Tasks persist until brushed away — there is no end-of-day cleanup. Any
- * task still undone when a new day starts is rolled forward: `date` and
- * `createdAt` bump to today, so it's treated as a brand-new task for the
- * new day (matches today's Today list and scores against today's ring).
- */
+/** KAN-363 — active tasks are filtered, never rolled or deleted by time. */
 
-const mockGetDocs     = jest.fn();
-const mockBatchUpdate = jest.fn();
-const mockBatchDelete = jest.fn();
-const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
-const mockWhere       = jest.fn((...a: unknown[]) => a);
-const mockQuery       = jest.fn((...a: unknown[]) => a);
-
-const NOW_TIMESTAMP = { _isNow: true };
+const mockGetDocs = jest.fn();
+const mockUpdateDoc = jest.fn().mockResolvedValue(undefined);
+const mockWhere = jest.fn((...args: unknown[]) => args);
+const mockQuery = jest.fn((...args: unknown[]) => args);
 
 jest.mock('@react-native-firebase/firestore', () => ({
-  getFirestore:    jest.fn(),
-  collection:      jest.fn(() => ({ _type: 'collection' })),
-  doc:             jest.fn(() => ({ _type: 'doc' })),
-  addDoc:          jest.fn(),
-  getDoc:          jest.fn(),
-  getDocs:         (...args: unknown[]) => mockGetDocs(...args),
-  updateDoc:       jest.fn(),
-  deleteDoc:       jest.fn(),
-  setDoc:          jest.fn(),
-  writeBatch:      jest.fn(() => ({ update: mockBatchUpdate, delete: mockBatchDelete, commit: mockBatchCommit })),
-  query:           (...args: unknown[]) => mockQuery(...args),
-  where:           (...args: unknown[]) => mockWhere(...args),
-  orderBy:         jest.fn(),
-  onSnapshot:      jest.fn(),
-  serverTimestamp: jest.fn(() => ({ _serverTimestamp: true })),
-  increment:       jest.fn(),
-  Timestamp:       { now: jest.fn(() => NOW_TIMESTAMP) },
-  runTransaction:  jest.fn(),
+  getFirestore: jest.fn(),
+  collection: jest.fn(() => ({ _type: 'collection' })),
+  doc: jest.fn(() => ({ _type: 'doc' })),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  getDoc: jest.fn(),
+  addDoc: jest.fn(),
+  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  deleteDoc: jest.fn(),
+  deleteField: jest.fn(),
+  setDoc: jest.fn(),
+  writeBatch: jest.fn(),
+  query: (...args: unknown[]) => mockQuery(...args),
+  where: (...args: unknown[]) => mockWhere(...args),
+  orderBy: jest.fn(),
+  Timestamp: { now: jest.fn(() => ({ _isNow: true })) },
+  runTransaction: jest.fn(),
 }));
 
-/** Non-birthday doc fixture — data() must exist since rolloverIncompleteTasks reads d.data().kind (KAN-248). */
-function makeDoc(id: string, data: Record<string, unknown> = {}) {
-  return { id, ref: { id }, data: () => data };
+import { ensureCurrentDay, resolveDatedTaskHandoff, rolloverIncompleteTasks } from '../../src/services/firestore';
+
+function doc(id: string, data: Record<string, unknown>) {
+  return { id, data: () => data };
 }
 
-import { ensureCurrentDay, rolloverIncompleteTasks } from '../../src/services/firestore';
-
-describe('rolloverIncompleteTasks', () => {
+describe('KAN-363 active-list date behavior', () => {
   const TODAY = '2026-06-16';
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockBatchCommit.mockResolvedValue(undefined);
-  });
+  beforeEach(() => jest.clearAllMocks());
 
-  it('queries done == false and date < today', async () => {
-    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockWhere).toHaveBeenCalledWith('done', '==', false);
-    expect(mockWhere).toHaveBeenCalledWith('date', '<', TODAY);
-  });
-
-  it('does nothing when there are no stale undone tasks', async () => {
-    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchUpdate).not.toHaveBeenCalled();
-    expect(mockBatchCommit).not.toHaveBeenCalled();
-  });
-
-  it('bumps date and createdAt to today for every stale task, then commits once', async () => {
-    const docs = [makeDoc('t1'), makeDoc('t2')];
-    mockGetDocs.mockResolvedValue({ empty: false, docs });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
-    expect(mockBatchUpdate).toHaveBeenCalledWith(
-      docs[0].ref,
-      { date: TODAY, createdAt: NOW_TIMESTAMP },
-    );
-    expect(mockBatchUpdate).toHaveBeenCalledWith(
-      docs[1].ref,
-      { date: TODAY, createdAt: NOW_TIMESTAMP },
-    );
-    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
-  });
-
-  it('splits writes into multiple batches when over the 500 limit', async () => {
-    const docs = Array.from({ length: 501 }, (_, i) => makeDoc(`t${i}`));
-    mockGetDocs.mockResolvedValue({ empty: false, docs });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchUpdate).toHaveBeenCalledTimes(501);
-    expect(mockBatchCommit).toHaveBeenCalledTimes(2); // 500 + 1
-  });
-
-  // ─── Birthday auto-expiry (KAN-248) ───────────────────────────────────────
-
-  it('deletes an unbrushed birthday task instead of rolling it forward', async () => {
-    const docs = [makeDoc('t1', { kind: 'birthday' })];
-    mockGetDocs.mockResolvedValue({ empty: false, docs });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchDelete).toHaveBeenCalledWith(docs[0].ref);
-    expect(mockBatchUpdate).not.toHaveBeenCalled();
-  });
-
-  it('rolls forward a non-birthday task while deleting a birthday task in the same batch', async () => {
-    const docs = [makeDoc('t1'), makeDoc('t2', { kind: 'birthday' })];
-    mockGetDocs.mockResolvedValue({ empty: false, docs });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchUpdate).toHaveBeenCalledWith(docs[0].ref, { date: TODAY, createdAt: NOW_TIMESTAMP });
-    expect(mockBatchDelete).toHaveBeenCalledWith(docs[1].ref);
-    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
-  });
-
-  // ─── originDate stamping (KAN-264) ────────────────────────────────────────
-
-  it('stamps originDate with the task\'s current date the first time it rolls', async () => {
-    const docs = [makeDoc('t1', { date: '2026-06-10' })];
-    mockGetDocs.mockResolvedValue({ empty: false, docs });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchUpdate).toHaveBeenCalledWith(
-      docs[0].ref,
-      { date: TODAY, createdAt: NOW_TIMESTAMP, originDate: '2026-06-10' },
-    );
-  });
-
-  it('never overwrites an existing originDate on a second (or later) roll', async () => {
-    const docs = [makeDoc('t1', { date: '2026-06-12', originDate: '2026-06-10' })];
-    mockGetDocs.mockResolvedValue({ empty: false, docs });
-
-    await rolloverIncompleteTasks('uid-1', TODAY);
-
-    expect(mockBatchUpdate).toHaveBeenCalledWith(
-      docs[0].ref,
-      { date: TODAY, createdAt: NOW_TIMESTAMP, originDate: '2026-06-10' },
-    );
-  });
-
-  it('defaults `today` to the device-local date when not passed', async () => {
-    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
-
-    await rolloverIncompleteTasks('uid-1');
-
-    // Whatever todayISO() resolves to right now must appear in the where clause.
-    const dateArgs = mockWhere.mock.calls.find(call => call[0] === 'date');
-    expect(dateArgs).toBeDefined();
-    expect(typeof dateArgs?.[2]).toBe('string');
-    expect(dateArgs?.[2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  });
-});
-
-describe('ensureCurrentDay', () => {
-  const TODAY = '2026-06-16';
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockBatchCommit.mockResolvedValue(undefined);
-  });
-
-  it('returns stale unfinished tasks as today before their write is confirmed', async () => {
-    const stale = makeDoc('stale-1', {
+  it('keeps a legacy task active even when its old required date has passed', async () => {
+    mockGetDocs.mockResolvedValue({ docs: [doc('legacy', {
       title: 'Buy milk', category: 'errands', done: false,
-      date: '2026-06-14', createdAt: { toMillis: () => 1 },
-    });
-    mockGetDocs
-      .mockResolvedValueOnce({ docs: [] })
-      .mockResolvedValueOnce({ empty: false, docs: [stale] });
-    let finishCommit: (() => void) | undefined;
-    mockBatchCommit.mockImplementation(() => new Promise<void>(resolve => { finishCommit = resolve; }));
+      date: '2026-06-01', createdAt: { toMillis: () => 1 },
+    })] });
 
     const result = await ensureCurrentDay('uid-1', TODAY);
 
-    expect(result.tasks).toEqual([expect.objectContaining({
-      id: 'stale-1', date: TODAY, originDate: '2026-06-14',
-    })]);
-    expect(mockBatchUpdate).toHaveBeenCalledWith(stale.ref, expect.objectContaining({ date: TODAY }));
-
-    finishCommit?.();
+    expect(result.tasks.map(task => task.id)).toEqual(['legacy']);
     await expect(result.persistence).resolves.toBeUndefined();
   });
 
-  it('excludes expired birthday tasks from the immediate Today list', async () => {
-    const birthday = makeDoc('birthday-1', {
+  it('shows a task on its selected day and hides it only after that day passes', async () => {
+    mockGetDocs.mockResolvedValue({ docs: [
+      doc('today', { title: 'Today', category: 'errands', done: false, scheduledDate: TODAY, createdAt: { toMillis: () => 1 } }),
+      doc('future', { title: 'Future', category: 'errands', done: false, scheduledDate: '2026-06-17', createdAt: { toMillis: () => 2 } }),
+      doc('past', { title: 'Past', category: 'errands', done: false, scheduledDate: '2026-06-15', createdAt: { toMillis: () => 3 } }),
+    ] });
+
+    const result = await ensureCurrentDay('uid-1', TODAY);
+
+    expect(result.tasks.map(task => task.id)).toEqual(['today', 'future']);
+    expect(mockWhere).toHaveBeenCalledWith('done', '==', false);
+  });
+
+  it('does not delete a task merely because time passed, including birthdays', async () => {
+    mockGetDocs.mockResolvedValue({ docs: [doc('birthday', {
       title: 'Happy birthday', category: 'personal', done: false,
-      kind: 'birthday', date: '2026-06-14', createdAt: { toMillis: () => 1 },
-    });
-    mockGetDocs
-      .mockResolvedValueOnce({ docs: [] })
-      .mockResolvedValueOnce({ empty: false, docs: [birthday] });
+      kind: 'birthday', scheduledDate: '2026-06-15', createdAt: { toMillis: () => 1 },
+    })] });
 
     const result = await ensureCurrentDay('uid-1', TODAY);
 
     expect(result.tasks).toEqual([]);
-    expect(mockBatchDelete).toHaveBeenCalledWith(birthday.ref);
     await expect(result.persistence).resolves.toBeUndefined();
+  });
+
+  it('keeps the retired rollover export as a no-op for legacy callers', async () => {
+    await rolloverIncompleteTasks('uid-1', TODAY);
+    expect(mockGetDocs).not.toHaveBeenCalled();
+  });
+
+  it('uses a normal queued write for an end-of-day action instead of a transaction', async () => {
+    await resolveDatedTaskHandoff('uid-1', 'task-1', TODAY, 'tomorrow', '2026-06-17', TODAY);
+
+    expect(mockUpdateDoc).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        scheduledDate: '2026-06-17',
+        originalScheduledDate: TODAY,
+        dateHandoff: expect.objectContaining({ date: TODAY, outcome: 'tomorrow' }),
+      }),
+    );
   });
 });

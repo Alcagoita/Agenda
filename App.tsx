@@ -30,7 +30,14 @@ import SplashScreen from './src/screens/SplashScreen';
 import { useAppStore } from './src/store/appStore';
 import { migratePointsToAchievementDerived } from './src/services/achievements';
 import { subscribeToSharedTaskNotifications } from './src/services/sharing';
-import { EXIT_ACTION_MARK_DONE, registerExitPromptCategory, cancelRetiredNotifications } from './src/services/notifications';
+import {
+  DATED_TASK_ACTION_FORGET,
+  DATED_TASK_ACTION_TOMORROW,
+  EXIT_ACTION_MARK_DONE,
+  registerExitPromptCategory,
+  cancelRetiredNotifications,
+} from './src/services/notifications';
+import { forgetDatedTask, moveDatedTaskToTomorrow } from './src/services/datedTaskHandoff';
 import { updateExitPromptPref } from './src/services/proximity';
 import { updateIndoorExitPromptPref } from './src/services/indoorProximity';
 import notifeeApp, { AndroidImportance as AppAndroidImportance } from '@notifee/react-native';
@@ -58,6 +65,41 @@ const SOCIAL_NOTIF_SCREENS = new Set<keyof RootStackParamList>([
 ]);
 
 const TRANSITION_MS = 220;
+
+function notificationTaskIds(data: Record<string, unknown>): string[] {
+  try {
+    const parsed = JSON.parse(String(data.taskIds ?? '[]'));
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+async function handleDatedTaskAction(
+  actionId: string | undefined,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const uid = typeof data.uid === 'string' ? data.uid : null;
+  const date = typeof data.scheduledDate === 'string' ? data.scheduledDate : null;
+  const [taskId] = notificationTaskIds(data);
+  if (!uid || !date || !taskId) { return; }
+  if (actionId === DATED_TASK_ACTION_FORGET) {
+    await forgetDatedTask(uid, taskId, date);
+  } else if (actionId === DATED_TASK_ACTION_TOMORROW) {
+    await moveDatedTaskToTomorrow(uid, taskId, date);
+  }
+}
+
+// Notifee invokes this outside React when the app is backgrounded or killed.
+// The Firestore write helpers use normal writes rather than transactions, so
+// the SDK persists the user action locally and applies it after reconnecting.
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  if (type !== EventType.ACTION_PRESS) { return; }
+  await handleDatedTaskAction(
+    detail.pressAction?.id,
+    (detail.notification?.data ?? {}) as Record<string, unknown>,
+  );
+});
 
 function AppShell() {
   const [splashDone, setSplashDone] = useState(false);
@@ -93,7 +135,7 @@ function AppShell() {
         setDisplayUser(user);
         Animated.timing(fadeAnim, { toValue: 1, duration: TRANSITION_MS, useNativeDriver: true }).start();
       });
-  }, [user, loading, displayUser]);
+  }, [user, loading, displayUser, fadeAnim]);
 
   // ── Username + onboarding check (KAN-97 / KAN-140) ──────────────────────
   // null = still loading, false = needs setup, true = ready
@@ -200,11 +242,27 @@ function AppShell() {
             console.warn('[App] exit action: failed to mark task done', err),
           );
         }
+        if (
+          displayUser &&
+          data.uid === displayUser.uid &&
+          (detail.pressAction?.id === DATED_TASK_ACTION_FORGET || detail.pressAction?.id === DATED_TASK_ACTION_TOMORROW)
+        ) {
+          handleDatedTaskAction(
+            detail.pressAction?.id,
+            data as Record<string, unknown>,
+          ).catch(err => console.warn('[App] dated task action failed', err));
+        }
         return;
       }
       if (type === EventType.PRESS) {
         const screen = (data.screen as keyof RootStackParamList) ?? 'Today';
-        const params = data.challengeId
+        const params = screen === 'EndOfDayHandoff'
+          ? {
+            uid: data.uid as string,
+            date: data.scheduledDate as string,
+            taskIds: notificationTaskIds(data as Record<string, unknown>),
+          }
+          : data.challengeId
           ? { challengeId: data.challengeId as string }
           : data.achievementId
             ? { achievementId: data.achievementId as string }
@@ -251,7 +309,13 @@ function AppShell() {
       if (initial?.notification?.data?.screen) {
         const data   = initial.notification.data;
         const screen = data.screen as keyof RootStackParamList;
-        const params = data.challengeId
+        const params = screen === 'EndOfDayHandoff'
+          ? {
+            uid: data.uid as string,
+            date: data.scheduledDate as string,
+            taskIds: notificationTaskIds(data as Record<string, unknown>),
+          }
+          : data.challengeId
           ? { challengeId: data.challengeId as string }
           : data.achievementId
             ? { achievementId: data.achievementId as string }

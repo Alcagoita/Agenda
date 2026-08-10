@@ -50,7 +50,6 @@ import { addTask } from '../services/firestore';
 import { inferPoiForQuickAdd, learnFromClassification, learnFromUserEdit } from '../services/poiLlm';
 import { CloseIcon, PoiIcon } from './AppIcon';
 import { navigateTo } from '../navigation/navigationRef';
-import { todayISO } from '../utils/date';
 import { COPY } from '../constants/copy';
 import { useToastStore } from '../store/toastStore';
 import RotatingTitlePlaceholder from './RotatingTitlePlaceholder';
@@ -451,7 +450,6 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           title:    trimmed,
           category: category ?? 'personal',
           done:     false,
-          date:     todayISO(),
           poi,
           ...(poi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
           ...(poi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),

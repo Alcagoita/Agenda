@@ -38,7 +38,6 @@ import { parseMessageToTask } from '../services/functions';
 import { getCurrentUser } from '../services/auth';
 import { PoiIcon } from '../components/AppIcon';
 import type { PoiType } from '../types';
-import { todayISO } from '../utils/date';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { COPY } from '../constants/copy';
 
@@ -204,9 +203,9 @@ export default function ShareReceiveScreen() {
 
     setSubmitting(true);
     try {
-      const dateStr = dueDate
+      const scheduledDate = dueDate
         ? `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`
-        : todayISO();
+        : undefined;
 
       await addTask(uid, {
         title:    trimmed,
@@ -214,7 +213,7 @@ export default function ShareReceiveScreen() {
         done:     false,
         poi:      poi ?? undefined,
         time:     time ?? undefined,
-        date:     dateStr,
+        ...(scheduledDate ? { scheduledDate, originalScheduledDate: scheduledDate } : {}),
       });
 
       // Navigate to Today; this also works as "close" if launched fresh from a share.

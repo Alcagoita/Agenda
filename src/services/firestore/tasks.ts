@@ -150,24 +150,63 @@ export async function addTask(
   return ref.id;
 }
 
-/** Fetch all tasks for a specific date (YYYY-MM-DD), ordered by creation time. */
-export async function getTasksForDate(uid: string, date: string): Promise<Task[]> {
+/** Fetch tasks explicitly scheduled for a specific date (YYYY-MM-DD). */
+export async function getScheduledTasksForDate(uid: string, date: string): Promise<Task[]> {
   const q = query(
     tasksRef(uid),
-    where('date', '==', date),
+    where('scheduledDate', '==', date),
     orderBy('createdAt', 'asc'),
   );
   const snap = await getDocs(q);
   return mapSnapshotDocs<Task>(snap);
 }
 
+/**
+ * @deprecated Use getScheduledTasksForDate for date-specific work, or
+ * ensureCurrentDay for the active task list. Kept for source compatibility.
+ */
+export const getTasksForDate = getScheduledTasksForDate;
+
+/** Read one task, including locally cached data when the device is offline. */
+export async function getTask(uid: string, taskId: string): Promise<Task | null> {
+  const snap = await getDoc(taskRef(uid, taskId));
+  return snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Task, 'id'>) }) : null;
+}
+
+/**
+ * Persist a deliberate response to a dated-task handoff. updateDoc is used
+ * intentionally: normal Firestore writes are queued by the SDK while offline,
+ * unlike a transaction that may reject before it can be queued.
+ */
+export async function resolveDatedTaskHandoff(
+  uid: string,
+  taskId: string,
+  scheduledDate: string,
+  outcome: 'forgotten' | 'tomorrow',
+  nextScheduledDate?: string,
+  originalScheduledDate?: string,
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    dateHandoff: {
+      date: scheduledDate,
+      outcome,
+      resolvedAt: Timestamp.now(),
+    },
+  };
+  if (nextScheduledDate) {
+    patch.scheduledDate = nextScheduledDate;
+  }
+  if (originalScheduledDate) {
+    patch.originalScheduledDate = originalScheduledDate;
+  }
+  await updateDoc(taskRef(uid, taskId), patch);
+  markTasksDirty();
+}
+
 export interface CurrentDayTasks {
-  /** Today's stored tasks plus unfinished tasks carried forward in memory. */
+  /** Incomplete tasks that are still active on the device's local day. */
   tasks: Task[];
-  /**
-   * The carry-forward write runs after `tasks` has been returned. Callers must
-   * observe failures, but must not delay rendering the useful task list for it.
-   */
+  /** Kept for callers during the KAN-363 transition; no rollover write occurs. */
   persistence: Promise<void>;
 }
 
@@ -180,87 +219,34 @@ function sortTasksByCreatedAt(tasks: Task[]): Task[] {
 }
 
 /**
- * Resolves the usable Today list for the device's current local calendar day.
+ * Resolves the active task list for the device's current local calendar day.
  *
- * Unlike the legacy rollover-only call, this deliberately returns stale
- * unfinished tasks immediately and persists their new date in the background.
- * That keeps the Today screen useful across midnight even when a Firestore
- * write is slow or temporarily offline. The query is idempotent: once the
- * write lands, those documents no longer match `date < today`.
+ * KAN-363 deliberately does no date mutation here. Legacy `date` fields are
+ * ignored, so pre-existing tasks remain active. Only an explicit
+ * `scheduledDate` hides an incomplete task after its selected day has passed.
  */
 export async function ensureCurrentDay(
   uid: string,
   today: string = todayISO(),
 ): Promise<CurrentDayTasks> {
-  const staleQuery = query(
+  const activeQuery = query(
     tasksRef(uid),
     where('done', '==', false),
-    where('date', '<', today),
+    orderBy('createdAt', 'asc'),
   );
-  const [todayTasks, staleSnap] = await Promise.all([
-    getTasksForDate(uid, today),
-    getDocs(staleQuery),
-  ]);
+  const snap = await getDocs(activeQuery);
+  const tasks = sortTasksByCreatedAt(mapSnapshotDocs<Task>(snap)
+    .filter(task => !task.scheduledDate || task.scheduledDate >= today));
 
-  const staleTasks = mapSnapshotDocs<Task>(staleSnap)
-    .filter(task => task.kind !== 'birthday')
-    .map(task => ({
-      ...task,
-      date: today,
-      createdAt: Timestamp.now(),
-      originDate: task.originDate ?? task.date,
-    }));
-
-  const tasks = sortTasksByCreatedAt([...todayTasks, ...staleTasks]);
-  const persistence = staleSnap.empty
-    ? Promise.resolve()
-    : commitInChunks(staleSnap.docs, (batch, d) => {
-      const existing = d.data() as Task;
-      if (existing.kind === 'birthday') {
-        batch.delete(d.ref);
-      } else {
-        batch.update(d.ref, {
-          date:       today,
-          createdAt:  Timestamp.now(),
-          originDate: existing.originDate ?? existing.date,
-        });
-      }
-    });
-
-  return { tasks, persistence };
+  return { tasks, persistence: Promise.resolve() };
 }
 
 /**
- * Roll forward any undone task still dated before `today` so it becomes
- * today's task (KAN-146 — tasks persist until brushed away; an unfinished
- * task is never cleared, it simply becomes "new" the next day).
- *
- * Bumps both `date` and `createdAt` to now — the task is treated as freshly
- * created today, matching how it will appear and score on the Today screen.
- *
- * KAN-264 — also stamps `originDate` the FIRST time a task rolls (never
- * overwritten on subsequent rolls): `existing.originDate ?? existing.date`,
- * i.e. the day it was due before this roll. This lets the Calendar attribute
- * an undone rolled task to the day it was actually meant for, instead of it
- * vanishing from that day once `date` moves forward — see dayStats in
- * CalendarScreen.tsx. `date` itself keeps moving every rollover so Today
- * still shows it; only `originDate` is set-once.
- *
- * Exception (KAN-248): an unbrushed `kind: 'birthday'` task is deleted
- * instead of rolled forward — the only auto-expiry exception in the app,
- * gated strictly on `kind === 'birthday'`. A birthday wish three days late
- * is meaningless, so persistence has no value for this one kind.
- *
- * `today` is computed in the device's local timezone. Calling this is safe
- * repeatedly — after a successful write there is nothing left to roll over.
- *
- * Compatibility wrapper for callers that only need persistence. New UI paths
- * should use `ensureCurrentDay` so the task list is available before a slow
- * write completes.
+ * @deprecated KAN-363 removed rollover. Kept as a no-op compatibility export
+ * while callers move to ensureCurrentDay's active-list query.
  */
-export async function rolloverIncompleteTasks(uid: string, today: string = todayISO()): Promise<void> {
-  const { persistence } = await ensureCurrentDay(uid, today);
-  await persistence;
+export async function rolloverIncompleteTasks(_uid: string, _today: string = todayISO()): Promise<void> {
+  return Promise.resolve();
 }
 
 /**
@@ -275,18 +261,17 @@ export async function getTasksForMonth(uid: string, yearMonth: string): Promise<
   // First day of next month as exclusive upper bound (ISO string comparison works)
   const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
-  // KAN-264 review fix — a task that rolled across a month boundary (e.g. due
-  // June 30, still undone into July) has `date` pointing at the new month but
-  // `originDate` still pointing at this one. CalendarScreen attributes it to
-  // `originDate ?? date`, so it needs to be fetched here too, or it silently
-  // vanishes from its origin month. Two separate range queries (rather than
-  // a single `or()` composite) to avoid requiring a new composite index.
-  const [byDate, byOriginDate] = await Promise.all([
+  // New tasks use scheduledDate. The two legacy fields remain queried solely
+  // so existing documents continue to appear without a destructive migration.
+  // Separate range queries avoid a broad `or()` composite index.
+  const [byScheduledDate, byDate, byOriginDate] = await Promise.all([
+    getDocs(query(tasksRef(uid), where('scheduledDate', '>=', start), where('scheduledDate', '<', nextMonth))),
     getDocs(query(tasksRef(uid), where('date', '>=', start), where('date', '<', nextMonth))),
     getDocs(query(tasksRef(uid), where('originDate', '>=', start), where('originDate', '<', nextMonth))),
   ]);
 
   const byId = new Map<string, Task>();
+  for (const t of mapSnapshotDocs<Task>(byScheduledDate)) { byId.set(t.id, t); }
   for (const t of mapSnapshotDocs<Task>(byDate))       { byId.set(t.id, t); }
   for (const t of mapSnapshotDocs<Task>(byOriginDate)) { byId.set(t.id, t); }
   return [...byId.values()];
