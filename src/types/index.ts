@@ -364,7 +364,12 @@ export const SUPPLEMENTARY_OSM_TAGS: Record<string, { key: string; value: string
  * Monetization, if it ever arrives, attaches to the fulfilment action (the
  * ticket link) and never to detection, ranking or copy. See KAN-239.
  */
-export const CLUSTER_LEISURE_TYPES = ['park', 'museum', 'attraction', 'aquarium'] as const;
+// Notable leisure / cultural places worth naming as you pass them on a trip
+// (clusterLeisure). historical_landmark + tourist_attraction added so heritage
+// sites — monasteries, castles, monuments — can surface too; they were a blind
+// spot (e.g. Mosteiro de Alcobaça sits metres from a stop but is typed
+// historical_landmark). Both are already prefetched into the habitat cache.
+export const CLUSTER_LEISURE_TYPES = ['park', 'museum', 'attraction', 'aquarium', 'historical_landmark', 'tourist_attraction'] as const;
 
 export type ClusterLeisureType = typeof CLUSTER_LEISURE_TYPES[number];
 
