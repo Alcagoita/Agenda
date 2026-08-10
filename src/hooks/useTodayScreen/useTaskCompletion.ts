@@ -11,7 +11,6 @@ import { Platform, Vibration, InteractionManager } from 'react-native';
 import { setTaskDone } from '../../services/firestore';
 import { getActivePlaceContext } from '../../services/proximity';
 import { completedTripIdFor } from '../../services/tripStamp';
-import { checkAndFireAchievementNudge } from '../../services/achievements';
 import { getActiveChallengesForUser, incrementCompletedCount } from '../../services/challenges';
 import { cancelTaskReminder } from '../../services/notifications';
 import type { NearbyPlace } from '../../services/maps';
@@ -83,10 +82,9 @@ export function useTaskCompletion(
           // total for the header badge.
           InteractionManager.runAfterInteractions(() => {
             processTaskCompletionRewards(taskId, new Date().getHours())
-              .then(({ nudgeCandidate, totalPoints }) => {
-                if (nudgeCandidate) {
-                  checkAndFireAchievementNudge(uid, nudgeCandidate).catch(() => {});
-                }
+              .then(({ totalPoints }) => {
+                // KAN-303: the achievement nudge was cut — only the points
+                // header total is refreshed here now.
                 setTotalPoints(totalPoints);
               })
               .catch(() => {});

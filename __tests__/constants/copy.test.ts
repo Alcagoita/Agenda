@@ -37,25 +37,18 @@ describe('COPY — notification preferences', () => {
       'screenTitle',
       'backA11y',
       'loadingA11y',
+      'sectionWhenOut',
       'sectionDaily',
-      'sectionStreaks',
-      'sectionSummary',
-      'sectionEngagement',
-      'sectionLocation',
-      'sectionAchievements',
-      'eodLabel',
-      'eodSublabel',
-      'streakLabel',
-      'streakSublabel',
-      'weeklyLabel',
-      'weeklySublabel',
-      'reengageLabel',
-      'reengageSublabel',
+      'sectionFromPeople',
+      'proximityLabel',
+      'proximitySublabel',
       'exitPromptLabel',
       'exitPromptSublabel',
-      'achievementNudgesLabel',
-      'achievementNudgesSublabel',
+      'eodLabel',
+      'eodSublabel',
       'reminderTimeLabel',
+      'sharedTasksLabel',
+      'sharedTasksSublabel',
     ] as const;
 
     setCopyLanguage('en');
@@ -67,6 +60,20 @@ describe('COPY — notification preferences', () => {
       expect(englishValues[index]).not.toBe(COPY.notificationPreferences[key]);
     });
     expect(englishReminderTime).not.toBe(COPY.notificationPreferences.reminderTimeA11y('20:00'));
+  });
+
+  it('renders section labels in sentence case, not ALL CAPS (KAN-303, AC8)', () => {
+    for (const lang of ['en', 'pt-PT'] as const) {
+      setCopyLanguage(lang);
+      for (const label of [
+        COPY.notificationPreferences.sectionWhenOut,
+        COPY.notificationPreferences.sectionDaily,
+        COPY.notificationPreferences.sectionFromPeople,
+      ]) {
+        expect(label).toMatch(/[a-z]/);
+        expect(label).not.toBe(label.toUpperCase());
+      }
+    }
   });
 });
 

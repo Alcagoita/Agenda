@@ -12,8 +12,6 @@ if (getApps().length === 0) {
   initializeApp();
 }
 
-export { onUserInactive } from './onUserInactive';
-export { onUserLapsed } from './onUserLapsed';
 export { onFriendActivity } from './onFriendActivity';
 export { sweepPoiInferenceMisses } from './sweepPoiInferenceMisses';
 export { onFollowRequest } from './onFollowRequest';

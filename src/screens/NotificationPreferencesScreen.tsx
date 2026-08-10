@@ -1,18 +1,18 @@
 /**
- * NotificationPreferencesScreen — KAN-80
+ * NotificationPreferencesScreen — KAN-80, restructured in KAN-303.
  *
- * Settings hub for all notification toggles introduced in Sprint 8 Track B.
+ * Three channels, each mapping to one of the only honest reasons to interrupt
+ * someone — a place, a time they chose, or a person:
+ *
+ *   When I'm out — proximity alerts (notif_nearby_enabled) + the exit prompt
+ *   Daily        — the morning check-in, with its user-set reminder time
+ *   From people  — shared tasks from friends (sharedTasks)
+ *
+ * The old Streaks / Summary / Engagement / Achievements sections were cut
+ * entirely (KAN-303) — they were performance nagging, against the app's
+ * no-guilt contract.
+ *
  * Each row reads from / writes to users/{uid}/userPreferences/prefs.
- *
- * Sections:
- *   DAILY      — End-of-day check-in (KAN-120): toggle + time picker
- *   STREAKS    — Streak at risk (KAN-121): toggle
- *   SUMMARY    — Weekly recap (KAN-123): toggle
- *   ENGAGEMENT — Re-engagement reminders (KAN-124): toggle
- *   LOCATION     — Exit prompt (KAN-119): toggle
- *   ACHIEVEMENTS — Achievement nudges (KAN-122): toggle
- *
- * Row for KAN-125 (friend activity) is added by that ticket.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -36,16 +36,7 @@ import {
   getUserPreferences,
   updateUserPreferences,
 } from '../services/firestore';
-import {
-  scheduleEodReminder,
-  scheduleStreakReminder,
-  scheduleWeeklyRecap,
-} from '../services/notifications';
-import {
-  getTasksForDate,
-  getCurrentStreak,
-  getWeeklyCompletedCount,
-} from '../services/firestore';
+import { scheduleEodReminder } from '../services/notifications';
 import {
   BellIcon,
   CalendarIcon,
@@ -54,17 +45,20 @@ import {
 } from '../components/AppIcon';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { UserPreferences, DEFAULT_USER_PREFERENCES } from '../types';
-import { isThisWeek, toDateSafe, todayISO } from '../utils/date';
 import { COPY } from '../constants/copy';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// ─── Time options for the EOD picker (30-min increments, 6 PM – midnight) ─────
+// ─── Time options for the Daily check-in (30-min increments, morning) ─────────
+// KAN-303: the Daily channel is a morning intention, so the picker offers
+// morning slots. The default (DEFAULT_USER_PREFERENCES.eodReminder.time) is one
+// of these; a legacy evening time saved before this change is still respected
+// and scheduled — it just isn't one of the options offered here.
 
 const EOD_TIMES = [
-  '18:00', '18:30', '19:00', '19:30',
-  '20:00', '20:30', '21:00', '21:30',
-  '22:00', '22:30', '23:00', '23:30',
+  '06:00', '06:30', '07:00', '07:30',
+  '08:00', '08:30', '09:00', '09:30',
+  '10:00', '10:30', '11:00', '11:30',
 ];
 
 function formatTime(time: string): string {
@@ -208,80 +202,40 @@ export default function NotificationPreferencesScreen() {
   }, [uid]);
 
   // ── Derived preference values with defaults ────────────────────────────────
-  const eodEnabled  = prefs.eodReminder?.enabled  ?? DEFAULT_USER_PREFERENCES.eodReminder.enabled;
-  const eodTime     = prefs.eodReminder?.time      ?? DEFAULT_USER_PREFERENCES.eodReminder.time;
-  const streakOn    = prefs.streakReminder         ?? DEFAULT_USER_PREFERENCES.streakReminder;
-  const weeklyOn    = prefs.weeklyRecap            ?? DEFAULT_USER_PREFERENCES.weeklyRecap;
-  const reengageOn  = prefs.reengagementReminders  ?? DEFAULT_USER_PREFERENCES.reengagementReminders;
-  const exitPromptOn      = prefs.exitPrompt           ?? DEFAULT_USER_PREFERENCES.exitPrompt;
-  const achievementNudgesOn = prefs.achievementNudges  ?? DEFAULT_USER_PREFERENCES.achievementNudges;
+  const proximityOn   = prefs.notif_nearby_enabled ?? DEFAULT_USER_PREFERENCES.notif_nearby_enabled;
+  const exitPromptOn  = prefs.exitPrompt            ?? DEFAULT_USER_PREFERENCES.exitPrompt;
+  const eodEnabled    = prefs.eodReminder?.enabled  ?? DEFAULT_USER_PREFERENCES.eodReminder.enabled;
+  const eodTime       = prefs.eodReminder?.time     ?? DEFAULT_USER_PREFERENCES.eodReminder.time;
+  const sharedTasksOn = prefs.sharedTasks           ?? DEFAULT_USER_PREFERENCES.sharedTasks;
 
-  // ── Task counts — drive EOD + streak + weekly scheduling ─────────────────
-  const [incompletePoiCount,    setIncompletePoiCount]    = useState(0);
-  const [tasksCompletedToday,   setTasksCompletedToday]   = useState(0);
-  const [currentStreak,         setCurrentStreak]         = useState(0);
-  const [weeklyCount,           setWeeklyCount]           = useState(0);
-
-  useEffect(() => {
-    if (!uid) { return; }
-    const today = todayISO();
-    getTasksForDate(uid, today)
-      .then(tasks => {
-        setIncompletePoiCount(tasks.filter(t => !t.done && t.poi).length);
-        setTasksCompletedToday(tasks.filter(t => t.done).length);
-      })
-      .catch(err => console.warn('[NotifPrefs] tasksForDate error', err));
-  }, [uid]);
-
-  useEffect(() => {
-    if (!uid) { return; }
-    getCurrentStreak(uid).then(setCurrentStreak).catch(err => console.warn('[NotifPrefs] currentStreak error', err));
-  }, [uid]);
-
-  // Fetch weekly count once on mount (one-time read is sufficient — the
-  // notification fires on Sunday so daily precision is acceptable).
-  useEffect(() => {
-    if (!uid) { return; }
-    getWeeklyCompletedCount(uid)
-      .then(setWeeklyCount)
-      .catch(err => console.warn('[NotifPrefs] weeklyCount error', err));
-  }, [uid]);
-
-  // ── Re-schedule EOD whenever relevant prefs or task count changes ──────────
+  // ── Re-schedule the Daily check-in whenever its prefs change ──────────────
+  // No task count is involved any more (KAN-303) — it's a morning intention,
+  // not a tally, so it fires at the set time regardless of what's outstanding.
   useEffect(() => {
     if (loading) { return; }
-    scheduleEodReminder({
-      enabled:         eodEnabled,
-      time:            eodTime,
-      incompleteCount: incompletePoiCount,
-    }).catch(err => console.warn('[NotifPrefs] scheduleEod error', err));
-  }, [eodEnabled, eodTime, incompletePoiCount, loading]);
-
-  // ── Re-schedule streak reminder whenever relevant state changes ────────────
-  useEffect(() => {
-    if (loading) { return; }
-    scheduleStreakReminder({
-      enabled:             streakOn,
-      streakDays:          currentStreak,
-      tasksCompletedToday,
-    }).catch(err => console.warn('[NotifPrefs] scheduleStreak error', err));
-  }, [streakOn, currentStreak, tasksCompletedToday, loading]);
-
-  // ── Re-schedule weekly recap whenever prefs or counts change ──────────────
-  useEffect(() => {
-    if (loading) { return; }
-    // "app opened this week" — lastOpenedAt is written on every foreground
-    const lastOpened = toDateSafe(prefs.lastOpenedAt);
-    const appOpenedThisWeek = lastOpened !== null && isThisWeek(lastOpened);
-    scheduleWeeklyRecap({
-      enabled: weeklyOn,
-      weeklyCount,
-      streakDays: currentStreak,
-      appOpenedThisWeek,
-    }).catch(err => console.warn('[NotifPrefs] scheduleWeekly error', err));
-  }, [weeklyOn, weeklyCount, currentStreak, prefs.lastOpenedAt, loading]);
+    scheduleEodReminder({ enabled: eodEnabled, time: eodTime })
+      .catch(err => console.warn('[NotifPrefs] scheduleEod error', err));
+  }, [eodEnabled, eodTime, loading]);
 
   // ── Toggle handlers ────────────────────────────────────────────────────────
+
+  const handleProximityToggle = useCallback(async (value: boolean) => {
+    setPrefs(p => ({ ...p, notif_nearby_enabled: value }));
+    try {
+      await updateUserPreferences(uid, { notif_nearby_enabled: value });
+    } catch {
+      setPrefs(p => ({ ...p, notif_nearby_enabled: !value }));
+    }
+  }, [uid]);
+
+  const handleExitPromptToggle = useCallback(async (value: boolean) => {
+    setPrefs(p => ({ ...p, exitPrompt: value }));
+    try {
+      await updateUserPreferences(uid, { exitPrompt: value });
+    } catch {
+      setPrefs(p => ({ ...p, exitPrompt: !value }));
+    }
+  }, [uid]);
 
   const handleEodToggle = useCallback(async (value: boolean) => {
     setPrefs(p => ({ ...p, eodReminder: { enabled: value, time: p.eodReminder?.time ?? eodTime } }));
@@ -303,48 +257,12 @@ export default function NotificationPreferencesScreen() {
     }
   }, [uid, eodEnabled, eodTime]);
 
-  const handleStreakToggle = useCallback(async (value: boolean) => {
-    setPrefs(p => ({ ...p, streakReminder: value }));
+  const handleSharedTasksToggle = useCallback(async (value: boolean) => {
+    setPrefs(p => ({ ...p, sharedTasks: value }));
     try {
-      await updateUserPreferences(uid, { streakReminder: value });
+      await updateUserPreferences(uid, { sharedTasks: value });
     } catch {
-      setPrefs(p => ({ ...p, streakReminder: !value }));
-    }
-  }, [uid]);
-
-  const handleWeeklyToggle = useCallback(async (value: boolean) => {
-    setPrefs(p => ({ ...p, weeklyRecap: value }));
-    try {
-      await updateUserPreferences(uid, { weeklyRecap: value });
-    } catch {
-      setPrefs(p => ({ ...p, weeklyRecap: !value }));
-    }
-  }, [uid]);
-
-  const handleReengageToggle = useCallback(async (value: boolean) => {
-    setPrefs(p => ({ ...p, reengagementReminders: value }));
-    try {
-      await updateUserPreferences(uid, { reengagementReminders: value });
-    } catch {
-      setPrefs(p => ({ ...p, reengagementReminders: !value }));
-    }
-  }, [uid]);
-
-  const handleExitPromptToggle = useCallback(async (value: boolean) => {
-    setPrefs(p => ({ ...p, exitPrompt: value }));
-    try {
-      await updateUserPreferences(uid, { exitPrompt: value });
-    } catch {
-      setPrefs(p => ({ ...p, exitPrompt: !value }));
-    }
-  }, [uid]);
-
-  const handleAchievementNudgesToggle = useCallback(async (value: boolean) => {
-    setPrefs(p => ({ ...p, achievementNudges: value }));
-    try {
-      await updateUserPreferences(uid, { achievementNudges: value });
-    } catch {
-      setPrefs(p => ({ ...p, achievementNudges: !value }));
+      setPrefs(p => ({ ...p, sharedTasks: !value }));
     }
   }, [uid]);
 
@@ -377,10 +295,29 @@ export default function NotificationPreferencesScreen() {
         contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}>
 
-        {/* DAILY */}
-        <Section title={COPY.notificationPreferences.sectionDaily}>
+        {/* When I'm out — a place */}
+        <Section title={COPY.notificationPreferences.sectionWhenOut}>
           <PrefRow
             Icon={BellIcon}
+            label={COPY.notificationPreferences.proximityLabel}
+            sublabel={COPY.notificationPreferences.proximitySublabel}
+            value={proximityOn}
+            onToggle={handleProximityToggle}
+          />
+          <PrefRow
+            Icon={BellIcon}
+            label={COPY.notificationPreferences.exitPromptLabel}
+            sublabel={COPY.notificationPreferences.exitPromptSublabel}
+            value={exitPromptOn}
+            onToggle={handleExitPromptToggle}
+            isLast
+          />
+        </Section>
+
+        {/* Daily — a time they chose */}
+        <Section title={COPY.notificationPreferences.sectionDaily}>
+          <PrefRow
+            Icon={CalendarIcon}
             label={COPY.notificationPreferences.eodLabel}
             sublabel={COPY.notificationPreferences.eodSublabel}
             value={eodEnabled}
@@ -393,62 +330,14 @@ export default function NotificationPreferencesScreen() {
           />
         </Section>
 
-        {/* STREAKS */}
-        <Section title={COPY.notificationPreferences.sectionStreaks}>
+        {/* From people — a person */}
+        <Section title={COPY.notificationPreferences.sectionFromPeople}>
           <PrefRow
             Icon={BellIcon}
-            label={COPY.notificationPreferences.streakLabel}
-            sublabel={COPY.notificationPreferences.streakSublabel}
-            value={streakOn}
-            onToggle={handleStreakToggle}
-            isLast
-          />
-        </Section>
-
-        {/* SUMMARY */}
-        <Section title={COPY.notificationPreferences.sectionSummary}>
-          <PrefRow
-            Icon={CalendarIcon}
-            label={COPY.notificationPreferences.weeklyLabel}
-            sublabel={COPY.notificationPreferences.weeklySublabel}
-            value={weeklyOn}
-            onToggle={handleWeeklyToggle}
-            isLast
-          />
-        </Section>
-
-        {/* ENGAGEMENT */}
-        <Section title={COPY.notificationPreferences.sectionEngagement}>
-          <PrefRow
-            Icon={BellIcon}
-            label={COPY.notificationPreferences.reengageLabel}
-            sublabel={COPY.notificationPreferences.reengageSublabel}
-            value={reengageOn}
-            onToggle={handleReengageToggle}
-            isLast
-          />
-        </Section>
-
-        {/* LOCATION */}
-        <Section title={COPY.notificationPreferences.sectionLocation}>
-          <PrefRow
-            Icon={BellIcon}
-            label={COPY.notificationPreferences.exitPromptLabel}
-            sublabel={COPY.notificationPreferences.exitPromptSublabel}
-            value={exitPromptOn}
-            onToggle={handleExitPromptToggle}
-            isLast
-          />
-        </Section>
-
-        {/* ACHIEVEMENTS */}
-        <Section title={COPY.notificationPreferences.sectionAchievements}>
-          <PrefRow
-            Icon={BellIcon}
-            label={COPY.notificationPreferences.achievementNudgesLabel}
-            sublabel={COPY.notificationPreferences.achievementNudgesSublabel}
-            value={achievementNudgesOn}
-            onToggle={handleAchievementNudgesToggle}
+            label={COPY.notificationPreferences.sharedTasksLabel}
+            sublabel={COPY.notificationPreferences.sharedTasksSublabel}
+            value={sharedTasksOn}
+            onToggle={handleSharedTasksToggle}
             isLast
           />
         </Section>
@@ -496,12 +385,12 @@ const s = StyleSheet.create({
   sectionWrapper: {
     gap: 8,
   },
+  // KAN-303: sentence case, per the voice rule — no textTransform.
   sectionLabel: {
-    fontSize:      11,
+    fontSize:      12,
     fontFamily:    'Geist-Medium',
     fontWeight:    '500',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     paddingLeft:   4,
   },
   card: {

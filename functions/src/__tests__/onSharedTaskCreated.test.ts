@@ -6,7 +6,21 @@
  * in integration tests.
  */
 
-import { buildSharedTaskNotification } from '../onSharedTaskCreated';
+import { buildSharedTaskNotification, shouldNotifyRecipient } from '../onSharedTaskCreated';
+
+describe('shouldNotifyRecipient (KAN-303 From people gate)', () => {
+  it('defaults on when the sharedTasks preference is unset', () => {
+    expect(shouldNotifyRecipient({})).toBe(true);
+  });
+
+  it('stays on when sharedTasks is explicitly true', () => {
+    expect(shouldNotifyRecipient({ sharedTasks: true })).toBe(true);
+  });
+
+  it('mutes shared-task notifications only on an explicit false', () => {
+    expect(shouldNotifyRecipient({ sharedTasks: false })).toBe(false);
+  });
+});
 
 describe('buildSharedTaskNotification', () => {
   it('uses @username as the handle when available', () => {
