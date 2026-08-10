@@ -23,11 +23,9 @@ import {
   serverTimestamp,
   increment,
 } from '@react-native-firebase/firestore';
-import { awardAchievement, hasAchievement, awardPointsAchievementBonus, getUserPreferences, updateUserPreferences } from './firestore';
+import { awardAchievement, hasAchievement, awardPointsAchievementBonus } from './firestore';
 import type { Task, AchievementType, AchievementEntry, AchievementsMap, User } from '../types';
-import { DEFAULT_USER_PREFERENCES } from '../types';
 import { COPY } from '../constants/copy';
-import { fireAchievementNudge } from './notifications';
 
 // ─── V1 achievement definitions ───────────────────────────────────────────────
 
@@ -263,8 +261,7 @@ export async function evaluateAchievements(
     // day_complete: 1 task left today (context-based, target=1 repeatable).
     // NOTE: ctx.remainingTaskCount comes from the caller's optimistic UI state —
     // it is not transactional. A concurrent completion could produce a stale
-    // count. This is best-effort; the daily stamp in checkAndFireAchievementNudge
-    // prevents duplicate nudges from reaching the user.
+    // count — best-effort only (KAN-303 removed the nudge that consumed this).
     if (!ctx.allTasksDone && (ctx.remainingTaskCount ?? 0) === 1) {
       candidates.push({ achievementId: 'day_complete', remaining: 1 });
     }
@@ -314,35 +311,10 @@ export async function evaluateAchievements(
   return { nudgeCandidate: nudgeCandidate ?? null };
 }
 
-/**
- * Read the user's notification preferences and, if the daily limit hasn't been
- * hit and the `achievementNudges` toggle is on, fire the nudge notification
- * and stamp `lastAchievementNudgeDate` to prevent a second nudge today.
- *
- * Call this fire-and-forget after `evaluateAchievements` returns a candidate.
- */
-export async function checkAndFireAchievementNudge(
-  uid:       string,
-  candidate: AchievementNudgeCandidate,
-): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
-
-  const prefs = await getUserPreferences(uid);
-
-  // Respect the "achievementNudges" toggle (default true).
-  if (!(prefs.achievementNudges ?? DEFAULT_USER_PREFERENCES.achievementNudges)) { return; }
-
-  // Max 1 nudge per day.
-  if (prefs.lastAchievementNudgeDate === today) { return; }
-
-  // Stamp FIRST so that if the notification call fails the daily limit is
-  // already consumed — preventing a second nudge on the next task completion.
-  await updateUserPreferences(uid, { lastAchievementNudgeDate: today });
-  await fireAchievementNudge({
-    achievementId: candidate.achievementId,
-    remaining:     candidate.remaining,
-  });
-}
+// KAN-303: the achievement-nudge notification ("1 away from a badge") was cut
+// — it was performance nagging, against the app's no-guilt contract. The
+// badge/achievement system itself is unchanged; only the push is gone, so
+// checkAndFireAchievementNudge and fireAchievementNudge no longer exist.
 
 // ─── Tin-tier non-completion triggers (KAN-150) ──────────────────────────────
 

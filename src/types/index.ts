@@ -494,26 +494,21 @@ export interface PointsHistoryEntry {
  * metadata. Merged-write safe — use `setDoc(..., { merge: true })`.
  */
 export interface UserPreferences {
+  // ── Three notification channels (KAN-303) ──
+  // "When I'm out": proximity alerts (notif_nearby_enabled) + the exit prompt.
   exitPrompt:               boolean;                             // KAN-119
-  eodReminder:              { enabled: boolean; time: string };  // KAN-120 — "21:00"
-  streakReminder:           boolean;                             // KAN-121
-  achievementNudges:        boolean;                             // KAN-122
-  weeklyRecap:              boolean;                             // KAN-123
-  reengagementReminders:    boolean;                             // KAN-124
-  friendActivity:           boolean;                             // KAN-125
   /** Whether to fire local proximity alerts when near a POI type with pending tasks. KAN-142. */
   notif_nearby_enabled:     boolean;
-  /** Updated on every app foreground — used by re-engagement logic (KAN-124). */
+  // "Daily": the morning check-in, with its user-set reminder time.
+  eodReminder:              { enabled: boolean; time: string };  // KAN-120 — morning
+  // "From people": shared tasks from friends. KAN-303 — default on.
+  sharedTasks:              boolean;
+
+  // Friend-activity pushes — gated server-side (onFriendActivity), not on the
+  // notifications screen. KAN-125.
+  friendActivity:           boolean;
+  /** Updated on every app foreground. */
   lastOpenedAt?:            FirebaseFirestoreTypes.Timestamp;
-  /** Set after the 3-day re-engagement nudge fires (KAN-124) — prevents duplicate sends. */
-  lastReengagementNudge?:   FirebaseFirestoreTypes.Timestamp;
-  /**
-   * Timestamp when the 7-day lapse nudge fired (KAN-127).
-   * Prevents further re-engagement nudges for this lapse episode.
-   */
-  reengagementChurned?:     FirebaseFirestoreTypes.Timestamp;
-  /** "YYYY-MM-DD" — prevents more than one achievement nudge per day (KAN-122). */
-  lastAchievementNudgeDate?: string;
   /**
    * Per-actor last-nudge timestamps for friend activity (KAN-125).
    * Key = actor UID; value = last time a friend-activity nudge was sent from that actor.
@@ -526,19 +521,13 @@ export interface UserPreferences {
 export const DEFAULT_USER_PREFERENCES: Omit<
   UserPreferences,
   | 'lastOpenedAt'
-  | 'lastReengagementNudge'
-  | 'lastAchievementNudgeDate'
   | 'lastFriendNudgeFrom'
-  | 'reengagementChurned'
 > = {
   exitPrompt:            true,
-  eodReminder:           { enabled: true, time: '21:00' },
-  streakReminder:        true,
-  achievementNudges:     true,
-  weeklyRecap:           true,
-  reengagementReminders: true,
-  friendActivity:        true,
   notif_nearby_enabled:  true,
+  eodReminder:           { enabled: true, time: '08:00' },
+  sharedTasks:           true,
+  friendActivity:        true,
 };
 
 export interface Achievement {

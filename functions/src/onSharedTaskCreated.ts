@@ -24,6 +24,16 @@ export interface SharedTaskData {
   sentByUsername?: string;
 }
 
+/**
+ * "From people" channel gate (KAN-303). Shared-task notifications used to fire
+ * unconditionally; now they respect the recipient's `sharedTasks` preference.
+ * Defaults on — only an explicit `false` mutes them, so users who never touched
+ * the setting keep getting them.
+ */
+export function shouldNotifyRecipient(prefs: { sharedTasks?: boolean }): boolean {
+  return prefs.sharedTasks !== false;
+}
+
 /** Builds the pendingNotification payload for a new incoming shared task. */
 export function buildSharedTaskNotification(
   recipientUid: string,
@@ -55,6 +65,13 @@ export const onSharedTaskCreated = onDocumentCreated(
     const recipientUid = event.params.recipientUid;
     const sharedTaskId = event.params.docId;
     const db = admin.firestore();
+
+    // KAN-303 "From people": respect the recipient's sharedTasks preference.
+    const prefsSnap = await db
+      .collection('users').doc(recipientUid)
+      .collection('userPreferences').doc('prefs')
+      .get();
+    if (!shouldNotifyRecipient(prefsSnap.data() ?? {})) { return; }
 
     // Reuse the incoming doc's ID for the notification doc — deterministic,
     // avoids duplicates on retry, and keeps the two records correlated.

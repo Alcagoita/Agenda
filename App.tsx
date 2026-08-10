@@ -30,7 +30,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import { useAppStore } from './src/store/appStore';
 import { migratePointsToAchievementDerived } from './src/services/achievements';
 import { subscribeToSharedTaskNotifications } from './src/services/sharing';
-import { EXIT_ACTION_MARK_DONE, registerExitPromptCategory } from './src/services/notifications';
+import { EXIT_ACTION_MARK_DONE, registerExitPromptCategory, cancelRetiredNotifications } from './src/services/notifications';
 import { updateExitPromptPref } from './src/services/proximity';
 import { updateIndoorExitPromptPref } from './src/services/indoorProximity';
 import notifeeApp, { AndroidImportance as AppAndroidImportance } from '@notifee/react-native';
@@ -233,6 +233,15 @@ function AppShell() {
   useEffect(() => {
     registerExitPromptCategory().catch(err =>
       console.warn('[App] registerExitPromptCategory failed', err),
+    );
+  }, []);
+
+  // KAN-303: cancel any streak / weekly recap notifications still scheduled
+  // on-device for users who had those (now-removed) types enabled, so nothing
+  // keeps firing after the channels were cut. Idempotent, best-effort.
+  useEffect(() => {
+    cancelRetiredNotifications().catch(err =>
+      console.warn('[App] cancelRetiredNotifications failed', err),
     );
   }, []);
 

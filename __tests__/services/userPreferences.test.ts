@@ -62,7 +62,7 @@ describe('getUserPreferences', () => {
 
 describe('updateUserPreferences', () => {
   it('calls setDoc with merge:true', async () => {
-    const prefs = { streakReminder: false };
+    const prefs = { sharedTasks: false };
     await updateUserPreferences('uid-1', prefs);
     expect(mockSetDoc).toHaveBeenCalledWith(
       expect.anything(),
