@@ -122,10 +122,10 @@ export type PoiType =
 export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'supermarket' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
   { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
-  { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' },
+  { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' }, { type: 'bank' },
   // Retained for existing documents and free-text lookup, but intentionally
   // outside the curated quick-actionable list below.
-  { type: 'gas' }, { type: 'bank' }, { type: 'post' }, { type: 'clinic' },
+  { type: 'gas' }, { type: 'post' }, { type: 'clinic' },
   { type: 'salon' }, { type: 'bus' }, { type: 'school' },
 ];
 
@@ -135,7 +135,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
  */
 export const QUICK_ACTIONABLE_POI_TYPES: readonly PoiType[] = [
   'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
-  'florist', 'bakery', 'park', 'gym', 'bar', 'library',
+  'florist', 'bakery', 'park', 'gym', 'bar', 'library', 'bank',
 ];
 
 export function isQuickActionablePoiType(value: string | null | undefined): value is PoiType {

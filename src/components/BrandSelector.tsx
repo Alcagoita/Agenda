@@ -35,8 +35,8 @@ export default function BrandSelector({ poiType, selected, suggested, onSelect }
             borderColor: highlighted ? palette.nearBorder : palette.line,
           },
         ]}>
-        <View style={[styles.iconPill, { backgroundColor: palette.surface2 }]}>
-          <PoiIcon type={poiType} color={palette.muted} size={20} />
+        <View style={[styles.iconPill, { backgroundColor: highlighted ? palette.nearTint : palette.surface2 }]}>
+          <PoiIcon type={poiType} color={highlighted ? palette.nearText : palette.muted} size={15} />
         </View>
         <Text style={[styles.label, { color: highlighted ? palette.nearText : palette.text }]} numberOfLines={1}>
           {brand}
@@ -74,9 +74,9 @@ const styles = StyleSheet.create({
   },
   pillSuggested: { borderStyle: 'dashed' },
   iconPill: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.listIcon,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
