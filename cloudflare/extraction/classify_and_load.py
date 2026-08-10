@@ -14,6 +14,9 @@ radius queries silently miss rows.
 """
 import csv, json, sqlite3, sys, datetime, os, re, unicodedata, uuid
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from opening_hours import hours_for_category_label  # KAN-318: default open/close per category
+
 BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz'
 CLOUDFLARE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(CLOUDFLARE_DIR)
@@ -437,11 +440,13 @@ def classify(place_id, csv_path, out_sql_path):
             if brand is not None:
                 brand_matches += 1
 
+            open_min, close_min = hours_for_category_label(category_label)  # KAN-318
             poi_rows.append((
                 row['fsq_place_id'], place_id, build_id, row['name'], lat, lng, geohash,
                 primary_poi_type, brand, category_label,
                 raw_category_ids or None, raw_category_labels or None,
                 row['address'] or None, started_at, dedupe_name,
+                open_min, close_min,
             ))
             for rank, t in enumerate(ranked_types):
                 poi_type_rows.append((row['fsq_place_id'], place_id, build_id, t, rank, dedupe_name, lat, lng))
@@ -463,6 +468,7 @@ def classify(place_id, csv_path, out_sql_path):
             sql_escape(r[0]), sql_escape(r[3]), str(r[4]), str(r[5]), sql_escape(r[6]),
             sql_escape(r[7]), sql_escape(r[8]), sql_escape(r[9]), sql_escape(r[10]),
             sql_escape(r[11]), sql_escape(r[12]), sql_escape(r[13]), sql_escape(r[14]),
+            ('NULL' if r[15] is None else str(r[15])), ('NULL' if r[16] is None else str(r[16])),
         ]) + ')'
 
     def poi_type_row_select(r):
@@ -482,7 +488,8 @@ def classify(place_id, csv_path, out_sql_path):
     poi_insert_prefix = (
         'INSERT OR IGNORE INTO poi '
         '(fsq_place_id, name, lat, lng, geohash, primary_poi_type, brand, '
-        'category_label, raw_category_ids, raw_category_labels, address, date_refreshed, dedupe_name) '
+        'category_label, raw_category_ids, raw_category_labels, address, date_refreshed, dedupe_name, '
+        'open_min, close_min) '
         'VALUES '
     )
     poi_insert_suffix = (
@@ -491,7 +498,8 @@ def classify(place_id, csv_path, out_sql_path):
         'primary_poi_type = excluded.primary_poi_type, brand = excluded.brand, '
         'category_label = excluded.category_label, raw_category_ids = excluded.raw_category_ids, '
         'raw_category_labels = excluded.raw_category_labels, address = excluded.address, '
-        'date_refreshed = excluded.date_refreshed, dedupe_name = excluded.dedupe_name'
+        'date_refreshed = excluded.date_refreshed, dedupe_name = excluded.dedupe_name, '
+        'open_min = excluded.open_min, close_min = excluded.close_min'
     )
 
     with open(out_sql_path, 'w') as f:

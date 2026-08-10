@@ -843,6 +843,7 @@ async function queryPoiDb(
     fsq_place_id: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null;
     category_label: string | null; address: string | null;
+    open_min: number | null; close_min: number | null;
   }>();
 
   return results
@@ -859,6 +860,8 @@ type NearbyPoi = {
   name: string; lat: number; lng: number;
   primary_poi_type: string; brand: string | null;
   category_label: string | null; address: string | null;
+  /** KAN-318: default opening window, minutes from local midnight; null = always open. */
+  open_min: number | null; close_min: number | null;
   source?: 'foursquare' | 'community' | 'manual';
   distanceMeters: number;
   attributes: Record<string, string[]>;
@@ -916,7 +919,8 @@ async function queryNearbyPoiDb(
   const d1StartedAt = performance.now();
   const { results: rows } = await db.prepare(
     `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
-            poi.brand, poi.category_label, poi.raw_category_labels, poi.address, poi_type.poi_type AS matched_type
+            poi.brand, poi.category_label, poi.raw_category_labels, poi.address,
+            poi.open_min, poi.close_min, poi_type.poi_type AS matched_type
             , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value
      FROM poi
      INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
@@ -927,7 +931,7 @@ async function queryNearbyPoiDb(
     fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null; category_label: string | null;
     raw_category_labels: string | null;
-    address: string | null; matched_type: string;
+    address: string | null; open_min: number | null; close_min: number | null; matched_type: string;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
   const { results: curatedRows } = await db.prepare(
@@ -964,6 +968,7 @@ async function queryNearbyPoiDb(
         poi_id: row.fsq_place_id, fsq_place_id: row.fsq_place_id, name: row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand,
         category_label: row.category_label, address: row.address,
+        open_min: row.open_min, close_min: row.close_min,
         source: 'foursquare', dedupeName: row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
@@ -988,7 +993,7 @@ async function queryNearbyPoiDb(
       candidates.set(candidateKey, {
         poi_id: row.poi_id, fsq_place_id: null, name: row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: null, category_label: null,
-        address: row.address, source: 'community', dedupeName: row.dedupe_name,
+        address: row.address, open_min: null, close_min: null, source: 'community', dedupeName: row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
@@ -1017,6 +1022,7 @@ async function queryNearbyPoiDb(
       name: candidate.name, lat: candidate.lat, lng: candidate.lng,
       primary_poi_type: candidate.primary_poi_type, brand: candidate.brand,
       category_label: candidate.category_label, address: candidate.address,
+      open_min: candidate.open_min, close_min: candidate.close_min,
       source: candidate.source,
       distanceMeters: candidate.distanceMeters, attributes: candidate.attributes,
     };

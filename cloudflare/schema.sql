@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS poi (
   raw_category_labels TEXT,                   -- '|'-joined fsq category labels, verbatim — populated during CSV loading; NULL only when a row's raw category string was itself empty
   address             TEXT,
   date_refreshed      TEXT NOT NULL,
+  open_min            INTEGER,                -- KAN-318: opening time in minutes from local midnight; NULL = always open (also stands in for 24h and "unknown" — all "never hide" for Nearby)
+  close_min           INTEGER,                -- KAN-318: closing time, minutes from local midnight; paired with open_min
   PRIMARY KEY (fsq_place_id)
 );
 

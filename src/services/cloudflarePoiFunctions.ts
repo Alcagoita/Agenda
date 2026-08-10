@@ -43,6 +43,9 @@ interface PoiAllResponse {
     brand: string | null;
     category_label: string | null;
     address: string | null;
+    /** KAN-318: default opening window, minutes from local midnight; null = always open. */
+    open_min: number | null;
+    close_min: number | null;
     distanceMeters: number;
     attributes: Record<string, string[]>;
   }>>;
