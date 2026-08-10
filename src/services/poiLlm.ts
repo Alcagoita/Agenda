@@ -26,7 +26,10 @@
 
 import { loadTensorflowModel, type TensorflowModel } from 'react-native-fast-tflite';
 import type { PoiType } from '../types';
-import { isCatalogPoiType, POI_CATALOG, POI_GOOGLE_TYPES } from '../types';
+import {
+  isCatalogPoiType, isQuickActionablePoiType, POI_CATALOG,
+  POI_GOOGLE_TYPES, QUICK_ACTIONABLE_POI_TYPES,
+} from '../types';
 import {
   inferPoiFromRules,
   listSeedPoiTargets,
@@ -198,17 +201,20 @@ export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution 
   if (inferRestaurantFoodTypeForPoiInference(title)) { return 'restaurant'; }
 
   const localSuggestion = searchPlaceTypesLocal(title)[0]?.type ?? null;
-  if (localSuggestion) { return localSuggestion; }
+  if (localSuggestion) {
+    return isQuickActionablePoiType(localSuggestion) ? localSuggestion : null;
+  }
 
   if (inferStoreSubtypeForPoiInference(title)) { return 'store'; }
 
   const en = inferPoiFromRules(title, 'en');
-  if (en) { return en; }
+  if (en) { return isQuickActionablePoiType(en) ? en : null; }
 
   const pt = inferPoiFromRules(title, 'pt-PT');
-  if (pt) { return pt; }
+  if (pt) { return isQuickActionablePoiType(pt) ? pt : null; }
 
-  return classifyPoi(title, 'en');
+  const classification = await classifyPoi(title, 'en');
+  return isQuickActionablePoiType(classification) ? classification : null;
 }
 
 /**
@@ -218,11 +224,12 @@ export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution 
  */
 export function getUnsuggestedPoiInferenceTypes(): string[] {
   const inferredTypes = new Set<string>([
-    ...POI_CATALOG.map(item => item.type),
+    ...QUICK_ACTIONABLE_POI_TYPES,
     ...listSeedPoiTargets(),
   ]);
 
   return Array.from(inferredTypes)
+    .filter(isQuickActionablePoiType)
     .map(type => isCatalogPoiType(type) ? POI_GOOGLE_TYPES[type] : type)
     .filter(type => !isSuggestedPoiType(type))
     .sort();

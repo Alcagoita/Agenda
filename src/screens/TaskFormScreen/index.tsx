@@ -34,7 +34,7 @@ import { inferPoiForQuickAdd, learnFromUserEdit } from '../../services/poiLlm';
 import { CakeIcon, CalendarIcon, ClockIcon, CloseIcon, NavigateIcon, PoiIcon } from '../../components/AppIcon';
 import type { Category, PoiType, Task } from '../../types';
 import { logTap } from '../../services/analytics';
-import { POI_CATALOG, isCatalogPoiType, poiCatalogLabel } from '../../types';
+import { QUICK_ACTIONABLE_POI_TYPES, isCatalogPoiType, poiCatalogLabel } from '../../types';
 import { todayISO, formatDateShort } from '../../utils/date';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 import { COPY } from '../../constants/copy';
@@ -760,7 +760,7 @@ export default function TaskFormScreen() {
               snapToInterval={POI_TILE_WIDTH + 10}
               decelerationRate="fast"
               style={styles.poiCarouselMask}>
-              {POI_CATALOG.map(({ type }) => (
+              {QUICK_ACTIONABLE_POI_TYPES.map(type => (
                 <PoiTile
                   key={type}
                   type={type}

@@ -2,31 +2,50 @@
  * Unit tests for POI_CATALOG and PoiType — KAN-143
  *
  * Covers:
- *   - All 16 types are present in POI_CATALOG
+ *   - The quick-actionable list drives new-task choices
  *   - Each catalog entry has a non-empty label
- *   - POI_GEOFENCE_RADIUS covers all 16 types
- *   - POI_GOOGLE_TYPES covers all 16 types
+ *   - POI_GEOFENCE_RADIUS and POI_GOOGLE_TYPES preserve all built-in types
  *   - No duplicate types in catalog
  */
 
-import { POI_CATALOG, POI_GEOFENCE_RADIUS, POI_GOOGLE_TYPES, PoiType, poiCatalogLabel } from '../../src/types';
+import {
+  POI_CATALOG, POI_GEOFENCE_RADIUS, POI_GOOGLE_TYPES, PoiType,
+  QUICK_ACTIONABLE_POI_TYPES, isQuickActionablePoiType, poiCatalogLabel,
+} from '../../src/types';
 
-const EXPECTED_TYPES: PoiType[] = [
+const ALL_BUILT_IN_TYPES: PoiType[] = [
   'atm', 'cafe', 'supermarket', 'pharmacy',
-  'gas', 'gym', 'bank', 'restaurant', 'park',
-  'library', 'post', 'store', 'clinic', 'salon',
-  'bus', 'school',
+  'gas', 'gym', 'bank', 'restaurant', 'park', 'library', 'post', 'store',
+  'clinic', 'salon', 'bus', 'school', 'bakery', 'florist', 'bar',
+];
+
+const QUICK_ACTIONABLE_TYPES: PoiType[] = [
+  'atm', 'cafe', 'bakery', 'supermarket', 'pharmacy', 'gas', 'gym',
+  'restaurant', 'bar', 'park', 'library', 'store', 'florist', 'salon',
 ];
 
 describe('POI_CATALOG', () => {
-  it('contains exactly 16 entries', () => {
-    expect(POI_CATALOG).toHaveLength(16);
+  it('keeps all built-in types available for legacy task support', () => {
+    expect(POI_CATALOG).toHaveLength(19);
   });
 
-  it('contains all expected POI types', () => {
+  it('contains all built-in POI types', () => {
     const catalogTypes = POI_CATALOG.map(e => e.type);
-    for (const type of EXPECTED_TYPES) {
+    for (const type of ALL_BUILT_IN_TYPES) {
       expect(catalogTypes).toContain(type);
+    }
+  });
+
+  it('uses one actionable list for quick selections', () => {
+    expect(QUICK_ACTIONABLE_POI_TYPES).toEqual(QUICK_ACTIONABLE_TYPES);
+  });
+
+  it('only marks entries from the quick list as quick-actionable', () => {
+    for (const type of QUICK_ACTIONABLE_TYPES) {
+      expect(isQuickActionablePoiType(type)).toBe(true);
+    }
+    for (const type of ['post', 'bank', 'clinic', 'bus', 'school']) {
+      expect(isQuickActionablePoiType(type)).toBe(false);
     }
   });
 
@@ -46,7 +65,7 @@ describe('POI_CATALOG', () => {
 
 describe('POI_GEOFENCE_RADIUS', () => {
   it('has a radius for every POI type', () => {
-    for (const type of EXPECTED_TYPES) {
+    for (const type of ALL_BUILT_IN_TYPES) {
       expect(POI_GEOFENCE_RADIUS[type]).toBeGreaterThan(0);
     }
   });
@@ -54,7 +73,7 @@ describe('POI_GEOFENCE_RADIUS', () => {
 
 describe('POI_GOOGLE_TYPES', () => {
   it('has a Google Places type string for every POI type', () => {
-    for (const type of EXPECTED_TYPES) {
+    for (const type of ALL_BUILT_IN_TYPES) {
       expect(typeof POI_GOOGLE_TYPES[type]).toBe('string');
       expect(POI_GOOGLE_TYPES[type].length).toBeGreaterThan(0);
     }
