@@ -14,16 +14,28 @@ import type { NearbyPlace } from './maps';
 
 type WithWindow = Pick<NearbyPlace, 'openMin' | 'closeMin'>;
 
+/**
+ * POI types whose search results are treated as open 24h regardless of the
+ * row's stored window. An ATM search also returns bank branches
+ * (type_relation atm -> [atm, bank], KAN-337): the branch itself closes around
+ * 15:00, but the ATM it houses runs 24h — so any place surfaced *as an ATM*
+ * must never be hidden on the bank's hours. The window still applies when the
+ * same bank is surfaced for a `bank` search.
+ */
+export const ALWAYS_OPEN_WHEN_SEARCHED: ReadonlySet<string> = new Set(['atm']);
+
 /** Minutes since local midnight for `now`. */
 function minutesOfDay(now: Date): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
 /**
- * True when the place is open at `now` (default: current time). Always true
- * when no valid window is known — closed is only ever asserted on real data.
+ * True when the place is open at `now` (default: current time) for a search of
+ * `searchType`. Always true when the search type is 24h-by-nature (ATM) or when
+ * no valid window is known — closed is only ever asserted on real data.
  */
-export function isOpenNow(place: WithWindow, now: Date = new Date()): boolean {
+export function isOpenNow(place: WithWindow, now: Date = new Date(), searchType?: string): boolean {
+  if (searchType != null && ALWAYS_OPEN_WHEN_SEARCHED.has(searchType)) { return true; }
   const { openMin, closeMin } = place;
   if (openMin == null || closeMin == null) { return true; }
   if (!Number.isFinite(openMin) || !Number.isFinite(closeMin) || closeMin <= openMin) { return true; }

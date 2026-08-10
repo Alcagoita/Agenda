@@ -37,4 +37,12 @@ describe('isOpenNow (KAN-318)', () => {
   it('treats a malformed window (close <= open) as always open, never hiding on bad data', () => {
     expect(isOpenNow({ openMin: 1200, closeMin: 600 }, at(3))).toBe(true);
   });
+
+  it('keeps a bank open under an ATM search (its ATM is 24h), but honours bank hours under a bank search', () => {
+    const bank = { openMin: 510, closeMin: 900 }; // 08:30–15:00
+    // 20:00 — the branch is closed, but an ATM search must not hide it.
+    expect(isOpenNow(bank, at(20), 'atm')).toBe(true);
+    // The same place surfaced as a bank is correctly closed at 20:00.
+    expect(isOpenNow(bank, at(20), 'bank')).toBe(false);
+  });
 });

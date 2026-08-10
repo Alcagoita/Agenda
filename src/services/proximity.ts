@@ -872,8 +872,11 @@ function processProximityTick(
         : filterStorePlacesForTasks(poiType, filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks), undonePoiTasks);
     // KAN-318: never surface a place that is closed right now. A place with no
     // known hours (OSM/cache rows, 24h, unknown) is always kept — closed is
-    // only ever asserted on a real window from the POI backend.
-    const places = candidatePlaces.filter(place => isOpenNow(place));
+    // only ever asserted on a real window from the POI backend. `poiType` is
+    // the searched type: an ATM search also returns bank branches, whose 24h
+    // ATMs must not be hidden on the bank's closing time.
+    const now = new Date();
+    const places = candidatePlaces.filter(place => isOpenNow(place, now, poiType));
 
     // Reconcile live results against the cache's cross-source identity
     // (KAN-229): a place already known to both Google and the OSM cache
