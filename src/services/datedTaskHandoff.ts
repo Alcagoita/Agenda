@@ -49,6 +49,7 @@ export async function moveDatedTaskToTomorrow(
   const task = await getTask(uid, taskId);
   if (!task || task.done || task.scheduledDate !== date) { return; }
   const tomorrow = addLocalDays(date, 1);
+  if (!tomorrow) { return; }
   await resolveDatedTaskHandoff(
     uid, taskId, date, 'tomorrow', tomorrow, task.originalScheduledDate ?? date,
   );

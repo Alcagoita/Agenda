@@ -20,22 +20,31 @@ export default function EndOfDayHandoffScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'EndOfDayHandoff'>>();
   const { uid, date, taskIds } = route.params;
+  const taskIdsKey = JSON.stringify(taskIds);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [actingId, setActingId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    Promise.all(taskIds.map(id => getTask(uid, id)))
+    const taskIdsForLoad: string[] = JSON.parse(taskIdsKey);
+    setLoading(true);
+    setLoadError(false);
+    Promise.all(taskIdsForLoad.map(id => getTask(uid, id)))
       .then(found => {
         if (!mounted) { return; }
         setTasks(found.filter((task): task is Task =>
           !!task && !task.done && task.scheduledDate === date,
         ));
       })
+      .catch(() => {
+        if (mounted) { setLoadError(true); }
+      })
       .finally(() => { if (mounted) { setLoading(false); } });
     return () => { mounted = false; };
-  }, [uid, date, taskIds]);
+  }, [uid, date, taskIdsKey, retryKey]);
 
   const act = async (taskId: string, action: 'forget' | 'tomorrow') => {
     setActingId(taskId);
@@ -52,8 +61,8 @@ export default function EndOfDayHandoffScreen() {
   };
 
   useEffect(() => {
-    if (!loading && tasks.length === 0) { navigation.goBack(); }
-  }, [loading, tasks.length, navigation]);
+    if (!loading && !loadError && tasks.length === 0) { navigation.goBack(); }
+  }, [loading, loadError, tasks.length, navigation]);
 
   return (
     <View style={[styles.root, { backgroundColor: palette.bg, paddingTop: insets.top + 20 }]}>
@@ -63,6 +72,17 @@ export default function EndOfDayHandoffScreen() {
       </View>
       {loading ? (
         <ActivityIndicator color={palette.muted} />
+      ) : loadError ? (
+        <View style={styles.errorState}>
+          <Text style={[styles.errorText, { color: palette.muted }]}>{COPY.datedTaskHandoff.loadError}</Text>
+          <Pressable
+            onPress={() => setRetryKey(key => key + 1)}
+            style={[styles.retryButton, { borderColor: palette.line }]}
+            accessibilityRole="button"
+            accessibilityLabel={COPY.datedTaskHandoff.tryAgain}>
+            <Text style={[styles.buttonLabel, { color: palette.text }]}>{COPY.datedTaskHandoff.tryAgain}</Text>
+          </Pressable>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 28 }]}>
           {tasks.map(task => (
@@ -103,6 +123,9 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: radius.card, padding: 16, gap: 16 },
   taskTitle: { fontFamily: 'Geist-Medium', fontSize: 16 },
   actions: { flexDirection: 'row', gap: 8 },
-  button: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: radius.ctaBtn, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  button: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: radius.ctaBtn, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   buttonLabel: { fontFamily: 'Geist-Medium', fontSize: 13, textAlign: 'center' },
+  errorState: { paddingHorizontal: spacing.page, gap: 16, alignItems: 'flex-start' },
+  errorText: { fontFamily: 'Geist-Regular', fontSize: 16 },
+  retryButton: { minHeight: 44, borderWidth: 1, borderRadius: radius.ctaBtn, justifyContent: 'center', paddingHorizontal: 16 },
 });

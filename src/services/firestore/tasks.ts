@@ -178,7 +178,7 @@ export async function getTask(uid: string, taskId: string): Promise<Task | null>
  * intentionally: normal Firestore writes are queued by the SDK while offline,
  * unlike a transaction that may reject before it can be queued.
  */
-export async function resolveDatedTaskHandoff(
+export function resolveDatedTaskHandoff(
   uid: string,
   taskId: string,
   scheduledDate: string,
@@ -199,8 +199,14 @@ export async function resolveDatedTaskHandoff(
   if (originalScheduledDate) {
     patch.originalScheduledDate = originalScheduledDate;
   }
-  await updateDoc(taskRef(uid, taskId), patch);
+  // A normal write is persisted locally immediately and queues while offline.
+  // Do not hold a notification action open waiting for a remote acknowledgement;
+  // Firestore will roll the local mutation back if the server later rejects it.
+  updateDoc(taskRef(uid, taskId), patch).catch(error =>
+    console.warn('[tasks] dated handoff sync failed', error),
+  );
   markTasksDirty();
+  return Promise.resolve();
 }
 
 export interface CurrentDayTasks {
@@ -216,6 +222,11 @@ function sortTasksByCreatedAt(tasks: Task[]): Task[] {
     const bMillis = b.createdAt?.toMillis?.() ?? 0;
     return aMillis - bMillis;
   });
+}
+
+/** Filter an already-fetched task list using the active-list date rule. */
+export function filterActiveTasksForDate(tasks: Task[], today: string): Task[] {
+  return tasks.filter(task => !task.done && (!task.scheduledDate || task.scheduledDate >= today));
 }
 
 /**
@@ -235,8 +246,7 @@ export async function ensureCurrentDay(
     orderBy('createdAt', 'asc'),
   );
   const snap = await getDocs(activeQuery);
-  const tasks = sortTasksByCreatedAt(mapSnapshotDocs<Task>(snap)
-    .filter(task => !task.scheduledDate || task.scheduledDate >= today));
+  const tasks = sortTasksByCreatedAt(filterActiveTasksForDate(mapSnapshotDocs<Task>(snap), today));
 
   return { tasks, persistence: Promise.resolve() };
 }

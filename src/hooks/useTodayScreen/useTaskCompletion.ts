@@ -58,9 +58,11 @@ export function useTaskCompletion(
       // Best-effort — never let a notifee failure surface as a toggle failure.
       if (done) {
         cancelTaskReminder(taskId).catch(() => {});
-        if (taskBeforeToggle?.scheduledDate) {
-          refreshDatedTaskHandoff(uid, taskBeforeToggle.scheduledDate).catch(() => {});
-        }
+      }
+      // Completion and reopening both change which tasks are eligible for a
+      // shared date handoff notification.
+      if (taskBeforeToggle?.scheduledDate) {
+        refreshDatedTaskHandoff(uid, taskBeforeToggle.scheduledDate).catch(() => {});
       }
       // Only clear pendingSync if the row still reflects this write (same
       // optimistic done value) — a newer toggle that landed while this write

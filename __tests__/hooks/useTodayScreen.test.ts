@@ -32,10 +32,15 @@ const mockSetCustomCategoryPoiTypes  = jest.fn();
 const mockSetActiveTrips             = jest.fn();
 const mockSetMallSnapshot            = jest.fn();
 const mockSetHomeLocation            = jest.fn();
+const mockClearBootData = jest.fn();
+let mockBootData: any = null;
 
 jest.mock('../../src/services/firestore', () => ({
   getTasksForDate:      (...args: unknown[]) => mockGetTasksForDate(...args),
   ensureCurrentDay:     (...args: unknown[]) => mockEnsureCurrentDay(...args),
+  filterActiveTasksForDate: (tasks: any[], today: string) => tasks.filter(task =>
+    !task.done && (!task.scheduledDate || task.scheduledDate >= today),
+  ),
   getCategories:        (...args: unknown[]) => mockGetCategories(...args),
   getUser:              (...args: unknown[]) => mockGetUser(...args),
   upsertUser:           jest.fn().mockResolvedValue(undefined),
@@ -98,7 +103,7 @@ jest.mock('../../src/utils/date', () => ({
 
 jest.mock('../../src/store/appStore', () => ({
   useAppStore: {
-    getState: () => ({ bootData: null, clearBootData: jest.fn() }),
+    getState: () => ({ bootData: mockBootData, clearBootData: mockClearBootData }),
   },
 }));
 
@@ -132,8 +137,12 @@ jest.mock('../../src/services/challenges', () => ({
 
 // KAN-280 — useTaskCompletion cancels a task's reminder on brush.
 const mockCancelTaskReminder = jest.fn().mockResolvedValue(undefined);
+const mockRefreshDatedTaskHandoff = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../src/services/notifications', () => ({
   cancelTaskReminder: (...args: unknown[]) => mockCancelTaskReminder(...args),
+}));
+jest.mock('../../src/services/datedTaskHandoff', () => ({
+  refreshDatedTaskHandoff: (...args: unknown[]) => mockRefreshDatedTaskHandoff(...args),
 }));
 
 jest.mock('../../src/services/geolocation', () => ({
@@ -248,6 +257,7 @@ function setupDefaults() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockBootData = null;
   setupDefaults();
 });
 
@@ -339,6 +349,24 @@ describe('useTodayScreen — one-shot fetch', () => {
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeNull();
     expect(result.current.tasks).toHaveLength(0);
+  });
+
+  it('revalidates splash boot tasks against a fresh local day before rendering', async () => {
+    mockBootData = {
+      ownerUid: UID,
+      tasks: [
+        { ...TASK, id: 'undated' },
+        { ...TASK, id: 'past', scheduledDate: '2026-06-14' },
+        { ...TASK, id: 'today', scheduledDate: '2026-06-15' },
+      ],
+      customCategories: [], totalPoints: 0, inboxCount: 0, socialUnreadCount: 0,
+      trips: [], mallSnapshot: null, userData: null, userPrefs: {}, poiPrefsMap: {},
+    };
+
+    const { result } = renderHook(() => useTodayScreen(UID));
+    await act(async () => {});
+
+    expect(result.current.tasks.map(task => task.id)).toEqual(['undated', 'today']);
   });
 });
 
@@ -605,6 +633,20 @@ describe('useTodayScreen — optimistic toggle', () => {
     });
 
     expect(mockCancelTaskReminder).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds a dated handoff after both brushing and reopening its task', async () => {
+    const datedTask = { ...TASK, scheduledDate: '2026-06-15' };
+    mockGetTasksForDate.mockResolvedValue([datedTask]);
+
+    const { result } = renderHook(() => useTodayScreen(UID));
+    await act(async () => {});
+
+    await act(async () => { await result.current.handleToggle('task-1', true); });
+    await act(async () => { await result.current.handleToggle('task-1', false); });
+
+    expect(mockRefreshDatedTaskHandoff).toHaveBeenCalledTimes(2);
+    expect(mockRefreshDatedTaskHandoff).toHaveBeenLastCalledWith(UID, '2026-06-15');
   });
 
   it('refreshes the learned-place ranking after both a done:true and a done:false toggle (KAN-230)', async () => {

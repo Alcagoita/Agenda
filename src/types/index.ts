@@ -236,16 +236,17 @@ export interface Task {
    */
   date?: string;
   /**
-   * An explicit, optional local calendar date chosen by the user. A task with
+   * An explicit, optional local calendar date chosen by the user, in canonical
+   * YYYY-MM-DD form. A task with
    * no scheduledDate remains active until it is brushed or deleted. Once this
    * date has passed, the task simply leaves the active list; it is never
    * deleted or moved automatically.
    */
   scheduledDate?: string;
-  /** The first explicitly selected date, retained when “Tomorrow instead” moves a task. */
+  /** The first explicitly selected YYYY-MM-DD date, retained when “Tomorrow instead” moves a task. */
   originalScheduledDate?: string;
   /**
-   * The latest explicit end-of-day decision. Its date identifies the handoff
+   * The latest explicit end-of-day decision. Its YYYY-MM-DD date identifies the handoff
    * it belongs to, so absence for a passed scheduled date truthfully means the
    * user did not answer rather than chose "Forget it".
    */

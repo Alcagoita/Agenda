@@ -1166,6 +1166,8 @@ const en = {
     multipleBody: 'You wanted these today',
     forget: 'Forget it',
     tomorrow: 'Tomorrow instead',
+    loadError: 'Could not load these tasks. Please try again.',
+    tryAgain: 'Try again',
   },
 
   dailyCheckin: {
@@ -2263,6 +2265,8 @@ const ptPT: typeof en = {
     multipleBody: 'Querias estas coisas hoje',
     forget: 'Esquecer',
     tomorrow: 'Amanhã em vez disso',
+    loadError: 'Não foi possível carregar estas tarefas. Tenta novamente.',
+    tryAgain: 'Tentar novamente',
   },
 
   dailyCheckin: {

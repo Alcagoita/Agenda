@@ -22,6 +22,7 @@ import {
   getTotalPoints,
   getInboxUnreadCount,
   getTrips,
+  filterActiveTasksForDate,
 } from '../../services/firestore';
 import { getMallSnapshot } from '../../services/mallSnapshots';
 import { getIncomingSharedTasksCount } from '../../services/sharing';
@@ -176,7 +177,11 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
         clearBootData();
       } else if (bootData) {
         if (!isStale()) {
-          setTasks(bootData.tasks);
+          // Splash data may have been fetched before midnight. Revalidate it
+          // against a fresh local day before showing it as the active list.
+          const bootToday = todayISO();
+          currentDayRef.current = bootToday;
+          setTasks(filterActiveTasksForDate(bootData.tasks, bootToday));
           setCustomCategories(bootData.customCategories.filter(c => !c.isBuiltIn));
           setTotalPoints(bootData.totalPoints);
           setInboxCount(bootData.inboxCount);

@@ -1,4 +1,4 @@
-import { toDateSafe, relativeTime, localDateISO } from '../../src/utils/date';
+import { addLocalDays, toDateSafe, relativeTime, localDateISO } from '../../src/utils/date';
 
 describe('localDateISO', () => {
   it('formats a plain local date as YYYY-MM-DD', () => {
@@ -35,6 +35,22 @@ describe('localDateISO', () => {
 
     expect(localDateISO(utcEarly)).toBe('2026-07-16');
     expect(utcEarly.toISOString().slice(0, 10)).toBe('2026-07-15'); // the bug this guards against
+  });
+});
+
+describe('addLocalDays', () => {
+  it.each([
+    ['2026-01-31', '2026-02-01'],
+    ['2026-02-28', '2026-03-01'],
+    ['2024-02-28', '2024-02-29'],
+    ['2024-02-29', '2024-03-01'],
+    ['2026-12-31', '2027-01-01'],
+  ])('moves %s forward one local calendar day to %s', (input, expected) => {
+    expect(addLocalDays(input, 1)).toBe(expected);
+  });
+
+  it.each(['2026-02-29', '2026-13-01', '2026-04-31', 'not-a-date'])('returns null for an invalid calendar date: %s', input => {
+    expect(addLocalDays(input, 1)).toBeNull();
   });
 });
 

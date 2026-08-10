@@ -54,4 +54,12 @@ describe('EndOfDayHandoffScreen', () => {
 
     await waitFor(() => expect(mockMoveDatedTaskToTomorrow).toHaveBeenCalledWith('uid-1', 't1', '2026-08-10'));
   });
+
+  it('shows a recoverable error when a task read fails', async () => {
+    mockGetTask.mockRejectedValueOnce(new Error('offline'));
+    render(<EndOfDayHandoffScreen />);
+
+    await waitFor(() => expect(screen.getByText('Could not load these tasks. Please try again.')).toBeTruthy());
+    expect(screen.getByLabelText('Try again')).toBeTruthy();
+  });
 });

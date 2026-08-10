@@ -288,7 +288,7 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
     // commits through the ShadowTree (Yoga + RawProps), so a perpetually looping
     // splash animation pegs the JS thread. While pegged, the boot promises and
     // `markReady`/`doNavigate` timers can't run — so the splash would loop
-    // forever and the app would never appear (a slow data fetch can otherwise
+    // forever and the app would never appear (a slow data fetch can otherwise be
     // enough to fall into this deadlock). With a single cycle the thread frees
     // after ~3s; boot callbacks then run and exit is driven by `restTimerRef`
     // (fast path) or `markReady`'s abort timer (slow path). KAN-157 lesson:

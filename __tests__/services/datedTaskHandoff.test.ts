@@ -79,4 +79,14 @@ describe('datedTaskHandoff', () => {
     expect(mockResolveDatedTaskHandoff).not.toHaveBeenCalled();
     expect(mockCancelDatedTaskHandoff).not.toHaveBeenCalled();
   });
+
+  it('ignores a stale notification after an incomplete task was moved to another date', async () => {
+    mockGetTask.mockResolvedValue({ id: 't1', done: false, scheduledDate: '2026-08-11' });
+
+    await forgetDatedTask('uid-1', 't1', DATE);
+    await moveDatedTaskToTomorrow('uid-1', 't1', DATE);
+
+    expect(mockResolveDatedTaskHandoff).not.toHaveBeenCalled();
+    expect(mockCancelDatedTaskHandoff).not.toHaveBeenCalled();
+  });
 });

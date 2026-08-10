@@ -168,6 +168,25 @@ service cloud.firestore {
         && value.resolvedAt is timestamp;
     }
 
+    // A delayed local notification may arrive after the task was edited or
+    // brushed elsewhere. Keep normal client writes (and offline queuing), but
+    // have the server reject a handoff unless it still targets this exact
+    // unfinished scheduled date.
+    function validDatedTaskHandoffUpdate(next, current) {
+      return !next.diff(current).affectedKeys().hasAny(['dateHandoff'])
+        || (
+          current.get('done', false) == false
+          && next.done == false
+          && current.get('scheduledDate', '') == next.dateHandoff.date
+          && (
+            (next.dateHandoff.outcome == 'forgotten'
+              && next.get('scheduledDate', '') == current.get('scheduledDate', ''))
+            || (next.dateHandoff.outcome == 'tomorrow'
+              && next.get('scheduledDate', '') != current.get('scheduledDate', ''))
+          )
+        );
+    }
+
     function validPointsReason(reason) {
       return reason in [
         'task_completed',
@@ -484,7 +503,9 @@ service cloud.firestore {
       match /tasks/{taskId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
-          && validTaskData(request.resource.data);
+          && validTaskData(request.resource.data)
+          && (request.method == 'create'
+            || validDatedTaskHandoffUpdate(request.resource.data, resource.data));
       }
 
       // ─── Custom categories ───────────────────────────────────────────────────
