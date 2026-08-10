@@ -118,13 +118,25 @@ export type PoiType =
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
   | 'bus' | 'school';
 
-/** The 16 built-in POI types, in catalog display order. */
+/**
+ * Actionable built-in POI types offered by the task-creation catalog, in
+ * display order. Legacy types remain in `PoiType` so existing tasks continue
+ * to work, but are no longer offered as new quick selections.
+ */
 export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'atm' }, { type: 'cafe' }, { type: 'supermarket' }, { type: 'pharmacy' },
-  { type: 'gas' }, { type: 'gym' }, { type: 'bank' }, { type: 'restaurant' },
-  { type: 'park' }, { type: 'library' }, { type: 'post' }, { type: 'store' },
-  { type: 'clinic' }, { type: 'salon' }, { type: 'bus' }, { type: 'school' },
+  { type: 'gas' }, { type: 'gym' }, { type: 'restaurant' }, { type: 'park' },
+  { type: 'library' }, { type: 'store' }, { type: 'salon' },
 ];
+
+/** Legacy task types that must not be suggested for newly created tasks. */
+export const RETIRED_QUICK_POI_TYPES: readonly PoiType[] = [
+  'bank', 'post', 'clinic', 'bus', 'school',
+];
+
+export function isRetiredQuickPoiType(value: string | null | undefined): boolean {
+  return value != null && RETIRED_QUICK_POI_TYPES.includes(value as PoiType);
+}
 
 /**
  * Display label for a built-in POI type — reads live from COPY (KAN-252)
@@ -134,13 +146,13 @@ export function poiCatalogLabel(type: PoiType): string {
   return COPY.poiCatalog[type];
 }
 
-/** Is `value` one of the 16 built-in catalog types (vs. a custom category's free-text POI)? */
+/** Is `value` one of the actionable catalog types (vs. a free-text POI)? */
 export function isCatalogPoiType(value: string | null | undefined): value is PoiType {
   return value != null && POI_CATALOG.some(item => item.type === value);
 }
 
 /**
- * All 16 built-in POI types, derived from POI_CATALOG. Used by the habitat
+ * All actionable catalog POI types, derived from POI_CATALOG. Used by the habitat
  * cache's prefetch (KAN-238) to warm the cache for every type regardless of
  * open tasks — a task created after caching (e.g. "buy aspirin" while
  * offline) must still find pharmacy candidates even though no pharmacy task

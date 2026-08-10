@@ -26,7 +26,7 @@
 
 import { loadTensorflowModel, type TensorflowModel } from 'react-native-fast-tflite';
 import type { PoiType } from '../types';
-import { isCatalogPoiType, POI_CATALOG, POI_GOOGLE_TYPES } from '../types';
+import { isCatalogPoiType, isRetiredQuickPoiType, POI_CATALOG, POI_GOOGLE_TYPES } from '../types';
 import {
   inferPoiFromRules,
   listSeedPoiTargets,
@@ -198,15 +198,15 @@ export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution 
   if (inferRestaurantFoodTypeForPoiInference(title)) { return 'restaurant'; }
 
   const localSuggestion = searchPlaceTypesLocal(title)[0]?.type ?? null;
-  if (localSuggestion) { return localSuggestion; }
+  if (localSuggestion && !isRetiredQuickPoiType(localSuggestion)) { return localSuggestion; }
 
   if (inferStoreSubtypeForPoiInference(title)) { return 'store'; }
 
   const en = inferPoiFromRules(title, 'en');
-  if (en) { return en; }
+  if (en && !isRetiredQuickPoiType(en)) { return en; }
 
   const pt = inferPoiFromRules(title, 'pt-PT');
-  if (pt) { return pt; }
+  if (pt && !isRetiredQuickPoiType(pt)) { return pt; }
 
   return classifyPoi(title, 'en');
 }
@@ -223,6 +223,7 @@ export function getUnsuggestedPoiInferenceTypes(): string[] {
   ]);
 
   return Array.from(inferredTypes)
+    .filter(type => !isRetiredQuickPoiType(type))
     .map(type => isCatalogPoiType(type) ? POI_GOOGLE_TYPES[type] : type)
     .filter(type => !isSuggestedPoiType(type))
     .sort();

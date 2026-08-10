@@ -59,6 +59,7 @@ import {
   __resetModelForTests,
 } from '../../src/services/poiLlm';
 import { inferPoiFromRules, registerLearnedKeyword, clearLearnedKeywords } from '../../src/services/poiInference';
+import { RETIRED_QUICK_POI_TYPES } from '../../src/types';
 import labels from '../../assets/poi-model/labels.json';
 
 const LABELS = labels as string[];
@@ -185,6 +186,14 @@ describe('inferPoiForQuickAdd', () => {
   it('keeps static POI inference targets covered by the suggestion dictionary', () => {
     expect(getUnsuggestedPoiInferenceTypes()).toEqual([]);
   });
+
+  it.each(['bank', 'post office', 'clinic', 'bus stop', 'school run'])(
+    'does not suggest retired quick type for %s',
+    async title => {
+      const result = await inferPoiForQuickAdd(title);
+      expect(RETIRED_QUICK_POI_TYPES).not.toContain(result);
+    },
+  );
 
   it('returns the rule match without calling the LLM classifier', async () => {
     expect(await inferPoiForQuickAdd('pick up prescription')).toBe('pharmacy');
