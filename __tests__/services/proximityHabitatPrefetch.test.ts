@@ -185,7 +185,7 @@ describe('habitat cache prefetch covers all POI types', () => {
     expect(new Set(prefetchedTypes)).toEqual(
       new Set([...ALL_POI_TYPES, ...SUPPORTED_GOOGLE_PLACE_TYPES, 'shopping_mall', ...CLUSTER_LEISURE_TYPES]),
     );
-    expect(ALL_POI_TYPES).toHaveLength(16);
+    expect(ALL_POI_TYPES).toHaveLength(19);
     // Not an exact target count — SUPPORTED_GOOGLE_PLACE_TYPES is a curated
     // list ("~100 entries" per its own doc comment), free to grow/shrink as
     // the taxonomy is tuned. Pinned to today's actual length so a future

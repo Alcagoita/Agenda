@@ -774,6 +774,19 @@ describe('TaskFormScreen — save (create)', () => {
       poi: 'restaurant', restaurantFoodType: 'vegetarian',
     })));
   });
+
+  it('requires and saves a canonical Gym brand in create mode', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'gym', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Training tonight');
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+    fireEvent.press(screen.getByLabelText('Solinca'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'gym', poiBrand: 'Solinca',
+    })));
+  });
 });
 
 // ── Save — edit ───────────────────────────────────────────────────────────────

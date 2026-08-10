@@ -57,10 +57,12 @@ import { localPoiLabel } from '../services/poiTypeCache';
 import FoodTypeSelector from './FoodTypeSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 import StoreSubtypeSelector from './StoreSubtypeSelector';
+import BrandSelector from './BrandSelector';
 import {
   inferStoreSubtype,
   type StoreSubtype,
 } from '../services/storeSubtypes';
+import { findBrandInText, poiTypeRequiresBrand } from '../services/brandDictionary';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -224,6 +226,8 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
     const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
     const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(false);
+    const [poiBrand, setPoiBrand] = useState<string | null>(null);
+    const [poiBrandTouched, setPoiBrandTouched] = useState(false);
     // KAN-249 — the raw inference result, frozen the moment the user touches
     // the carousel. Compared against `poi` at submit time to tell a Confirm
     // (poi === suggestedPoi) from a Replace (poi !== suggestedPoi); null means
@@ -296,6 +300,8 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setRestaurantFoodType(null);
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
+      setPoiBrand(null);
+      setPoiBrandTouched(false);
       setSuggestedPoi(null);
       setSuggestedTitle(null);
       setPoiTouched(false);
@@ -410,7 +416,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
 
-    const canSubmit = title.trim().length > 0 && poi !== null;
+    const canSubmit = title.trim().length > 0 && poi !== null && (!poiTypeRequiresBrand(poi) || poiBrand !== null);
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
@@ -418,12 +424,22 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         setStoreSubtype(null);
         setStoreSubtypeTouched(false);
       }
+      if (!poiTypeRequiresBrand(poi)) {
+        setPoiBrand(null);
+        setPoiBrandTouched(false);
+      }
     }, [poi]);
 
     useEffect(() => {
       if (poi !== 'store' || storeSubtypeTouched) { return; }
       setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
     }, [poi, storeSubtypeTouched, title]);
+
+    const suggestedBrand = poiTypeRequiresBrand(poi) ? findBrandInText(poi, title) : null;
+    useEffect(() => {
+      if (!poiTypeRequiresBrand(poi) || poiBrandTouched) { return; }
+      setPoiBrand(suggestedBrand);
+    }, [poi, poiBrandTouched, suggestedBrand]);
 
     // KAN-249 — the leading suggestion tile's content. `suggestionType` is
     // sticky once inference lands on something: replacing it with a
@@ -442,7 +458,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     const handleSubmit = useCallback(async () => {
       const trimmed = title.trim();
-      if (!trimmed || !poi || !uid || submitting) { return; }
+      if (!trimmed || !poi || !uid || submitting || (poiTypeRequiresBrand(poi) && !poiBrand)) { return; }
 
       setSubmitting(true);
       try {
@@ -453,6 +469,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           poi,
           ...(poi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
           ...(poi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
+          ...(poiTypeRequiresBrand(poi) && poiBrand ? { poiBrand } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
         // fired for THIS title. Inference is skipped once the carousel is
@@ -478,7 +495,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         console.warn('[NewTaskSheet] addTask failed', err);
         setSubmitting(false);
       }
-    }, [title, category, poi, storeSubtype, restaurantFoodType, suggestedPoi, suggestedTitle, uid, submitting]);
+    }, [title, category, poi, storeSubtype, restaurantFoodType, poiBrand, suggestedPoi, suggestedTitle, uid, submitting]);
 
     const handleMoreDetails = useCallback(() => {
       handleClose();
@@ -493,9 +510,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         ...(poi === 'restaurant' && restaurantFoodType ? {
           initialRestaurantFoodType: restaurantFoodType,
         } : {}),
+        ...(poiTypeRequiresBrand(poi) && poiBrand ? { initialPoiBrand: poiBrand } : {}),
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, poiTouched]);
+    }, [handleClose, uid, title, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, poiBrand, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.
@@ -672,6 +690,27 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                       onSelect={subtype => {
                         setStoreSubtypeTouched(true);
                         setStoreSubtype(subtype ?? 'any');
+                      }}
+                    />
+                  </View>
+                </View>
+              )}
+
+              {poiTypeRequiresBrand(poi) && (
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.brandQuestion}
+                    </Text>
+                  </View>
+                  <View style={styles.foodTypePad}>
+                    <BrandSelector
+                      poiType={poi}
+                      selected={poiBrand}
+                      suggested={poiBrandTouched ? null : suggestedBrand}
+                      onSelect={brand => {
+                        setPoiBrandTouched(true);
+                        setPoiBrand(brand);
                       }}
                     />
                   </View>

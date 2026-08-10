@@ -16,6 +16,17 @@ import classify_and_load
 
 
 class ClassifyDeduplicationTest(unittest.TestCase):
+    def test_brand_aliases_resolve_to_the_canonical_persisted_value(self):
+        dictionary = classify_and_load.load_brand_dictionary()
+        self.assertEqual(
+            classify_and_load.find_brand('CGD - Alcobaça', ['bank'], dictionary),
+            'Caixa Geral de Depósitos',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Viva Fit Leiria', ['gym'], dictionary),
+            'Vivafit',
+        )
+
     def test_child_batches_stay_below_compound_select_cap(self):
         output = io.StringIO()
         select = "SELECT fsq_place_id, 'cafe' AS poi_type, 0 AS rank FROM poi WHERE fsq_place_id = 'fsq-1'"

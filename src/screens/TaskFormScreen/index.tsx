@@ -52,10 +52,12 @@ import { POI_TILE_WIDTH, styles } from './styles';
 import { localPoiLabel } from '../../services/poiTypeCache';
 import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
 import StoreSubtypeSelector from '../../components/StoreSubtypeSelector';
+import BrandSelector from '../../components/BrandSelector';
 import {
   inferStoreSubtype,
   type StoreSubtype,
 } from '../../services/storeSubtypes';
+import { findBrandInText, poiTypeRequiresBrand } from '../../services/brandDictionary';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,7 @@ export interface TaskFormParams {
   initialPoi?: string;
   initialRestaurantFoodType?: RestaurantFoodType;
   initialStoreSubtype?: StoreSubtype;
+  initialPoiBrand?: string;
   initialStoreSubtypeExplicitlySelected?: boolean;
   initialPoiExplicitlySelected?: boolean;
 }
@@ -79,7 +82,7 @@ export default function TaskFormScreen() {
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
 
-  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialRestaurantFoodType, initialStoreSubtype, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
+  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialRestaurantFoodType, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
   const isEdit = !!existingTask;
   const hasExplicitInitialPoi = Boolean(existingTask?.poi || initialPoiExplicitlySelected);
 
@@ -181,6 +184,11 @@ export default function TaskFormScreen() {
   const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(
     Boolean(existingTask?.storeSubtype || initialStoreSubtypeExplicitlySelected),
   );
+  const [poiBrand, setPoiBrand] = useState<string | null>(() =>
+    poiTypeRequiresBrand(existingTask?.poi) ? existingTask?.poiBrand ?? null
+      : poiTypeRequiresBrand(initialPoi) ? initialPoiBrand ?? null : null,
+  );
+  const [poiBrandTouched, setPoiBrandTouched] = useState(Boolean(existingTask?.poiBrand || initialPoiBrand));
   const [focused,       setFocused]       = useState(false);
   const [suggestedPoi, setSuggestedPoi] = useState<string | null>(
     existingTask?.poi ?? (hasExplicitInitialPoi ? null : initialPoi ?? null),
@@ -316,6 +324,10 @@ export default function TaskFormScreen() {
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
     }
+    if (!poiTypeRequiresBrand(effectivePoi)) {
+      setPoiBrand(null);
+      setPoiBrandTouched(false);
+    }
   }, [effectivePoi]);
 
   useEffect(() => {
@@ -323,10 +335,18 @@ export default function TaskFormScreen() {
     setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
   }, [effectivePoi, storeSubtypeTouched, title]);
 
+  const suggestedBrand = poiTypeRequiresBrand(effectivePoi) ? findBrandInText(effectivePoi, title) : null;
+  useEffect(() => {
+    if (!poiTypeRequiresBrand(effectivePoi) || poiBrandTouched) { return; }
+    setPoiBrand(suggestedBrand);
+  }, [effectivePoi, poiBrandTouched, suggestedBrand]);
+
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
   const suggestions = !customPoiType && query.trim() ? getTypeSuggestions(query) : [];
   // Birthday tasks are exempt from the POI requirement (KAN-248) — date-shaped, not place-shaped.
-  const canSubmit = title.trim().length > 0 && (isBirthday || effectivePoi !== null);
+  const canSubmit = title.trim().length > 0 && (isBirthday || (
+    effectivePoi !== null && (!poiTypeRequiresBrand(effectivePoi) || poiBrand !== null)
+  ));
   const suggestionType = suggestedTitle === title.trim() ? suggestedPoi : null;
   const suggestionLabel = suggestionType
     ? (isCatalogPoiType(suggestionType) ? poiCatalogLabel(suggestionType) : localPoiLabel(suggestionType))
@@ -345,7 +365,7 @@ export default function TaskFormScreen() {
 
   const handleSave = useCallback(async () => {
     const trimmed = title.trim();
-    if (!trimmed || (!isBirthday && !effectivePoi)) { return; }
+    if (!trimmed || (!isBirthday && (!effectivePoi || (poiTypeRequiresBrand(effectivePoi) && !poiBrand)))) { return; }
 
     setSubmitting(true);
     try {
@@ -361,6 +381,7 @@ export default function TaskFormScreen() {
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
         ...(!isBirthday && effectivePoi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
         ...(!isBirthday && effectivePoi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
+        ...(!isBirthday && poiTypeRequiresBrand(effectivePoi) && poiBrand ? { poiBrand } : {}),
       };
 
       if (notes.trim()) {
@@ -377,6 +398,7 @@ export default function TaskFormScreen() {
           updateData.poi = deleteField();
           updateData.storeSubtype = deleteField();
           updateData.restaurantFoodType = deleteField();
+          updateData.poiBrand = deleteField();
         } else if (existingTask.kind === 'birthday') {
           updateData.kind = deleteField();
         }
@@ -385,6 +407,9 @@ export default function TaskFormScreen() {
         }
         if (!isBirthday && (effectivePoi !== 'restaurant' || !restaurantFoodType)) {
           updateData.restaurantFoodType = deleteField();
+        }
+        if (!isBirthday && !poiTypeRequiresBrand(effectivePoi)) {
+          updateData.poiBrand = deleteField();
         }
         if (!date) {
           updateData.scheduledDate = deleteField();
@@ -445,7 +470,7 @@ export default function TaskFormScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [title, category, effectivePoi, storeSubtype, restaurantFoodType, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
+  }, [title, category, effectivePoi, storeSubtype, restaurantFoodType, poiBrand, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
 
   // ── Delete (edit mode only) ─────────────────────────────────────────────────
 
@@ -814,6 +839,25 @@ export default function TaskFormScreen() {
                 onSelect={subtype => {
                   setStoreSubtypeTouched(true);
                   setStoreSubtype(subtype ?? 'any');
+                }}
+              />
+            </View>
+          )}
+
+          {poiTypeRequiresBrand(effectivePoi) && (
+            <View style={styles.subtypeSection}>
+              <View style={styles.questionRow}>
+                <Text style={[styles.questionLabel, { color: palette.text }]}>
+                  {COPY.newTaskSheet.brandQuestion}
+                </Text>
+              </View>
+              <BrandSelector
+                poiType={effectivePoi}
+                selected={poiBrand}
+                suggested={poiBrandTouched ? null : suggestedBrand}
+                onSelect={brand => {
+                  setPoiBrandTouched(true);
+                  setPoiBrand(brand);
                 }}
               />
             </View>

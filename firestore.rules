@@ -214,6 +214,21 @@ service cloud.firestore {
       ];
     }
 
+    // KAN-364 — canonical values from src/constants/brandDictionary.json.
+    // Firestore Rules cannot import JSON; keep this allowlist narrow so a
+    // direct client write cannot invent an unqueryable Gym/Bank brand.
+    function validRequiredPoiBrand(poi, brand) {
+      return (poi == 'gym' && brand in [
+        'Fitness Hut', 'Solinca', 'Holmes Place', 'Go Fit', 'Element',
+        'Pump Fitness Spirit', 'Time to Fitness', 'Urban Sports Club',
+        'Fitness Factory', 'Vivafit'
+      ]) || (poi == 'bank' && brand in [
+        'Caixa Geral de Depósitos', 'Millennium bcp', 'Santander', 'Novo Banco',
+        'Crédito Agrícola', 'Banco BPI', 'Banco CTT', 'Montepio', 'Bankinter',
+        'ActivoBank', 'EuroBic', 'ABANCA'
+      ]);
+    }
+
     function validTaskData(data) {
       // KAN-353 removed the unused Google-specific poiPlaceId field after a
       // production audit confirmed no persisted tasks carried it.
@@ -228,6 +243,7 @@ service cloud.firestore {
           'poi',
           'storeSubtype',
           'restaurantFoodType',
+          'poiBrand',
           'completedPlaceId',
           'completedPlaceName',
           'completedPoiType',
@@ -255,6 +271,9 @@ service cloud.firestore {
         && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
         && (!('restaurantFoodType' in data.keys()) ||
           (data.poi == 'restaurant' && validRestaurantFoodType(data.restaurantFoodType)))
+        && ((('poi' in data.keys()) && data.poi in ['gym', 'bank'])
+          ? ('poiBrand' in data.keys() && validRequiredPoiBrand(data.poi, data.poiBrand))
+          : !('poiBrand' in data.keys()))
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
         && (!('completedPoiType' in data.keys()) || validPoiType(data.completedPoiType))

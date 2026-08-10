@@ -36,8 +36,8 @@ def normalize_text(s):
     return re.sub(r'\s+', ' ', s).strip()
 
 def load_brand_dictionary():
-    # Reuses the app's existing taught-places brand list (KAN-304) rather
-    # than building a second, parallel one — see src/services/brandDictionary.ts.
+    # One canonical app/import/API catalogue. Every item has a persisted
+    # `name` and source/title aliases that must resolve to that same value.
     return load_mapping(os.path.join(REPO_ROOT, 'src', 'constants', 'brandDictionary.json'))
 
 def find_brand(name, ranked_types, brand_dictionary):
@@ -52,9 +52,11 @@ def find_brand(name, ranked_types, brand_dictionary):
     padded_name = f' {normalized_name} '
     for t in ranked_types:
         for brand in brand_dictionary.get(t, []):
-            normalized_brand = normalize_text(brand)
-            if normalized_brand and f' {normalized_brand} ' in padded_name:
-                return brand
+            canonical_name = brand['name']
+            for candidate in [canonical_name, *brand.get('aliases', [])]:
+                normalized_brand = normalize_text(candidate)
+                if normalized_brand and f' {normalized_brand} ' in padded_name:
+                    return canonical_name
     return None
 
 def load_keyword_dictionary(filename):

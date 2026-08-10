@@ -23,6 +23,8 @@ interface FakePoi {
   raw_category_labels: string;
   category_label: string;
   food_cuisine?: string[];
+  primary_poi_type?: string;
+  brand?: string | null;
 }
 
 interface FakeCuratedPoi {
@@ -49,9 +51,9 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGIS
           for (const p of pois) {
             const base = {
               fsq_place_id: p.fsq_place_id, name: p.name, lat: LAT, lng: LNG,
-              primary_poi_type: 'restaurant', brand: null,
+              primary_poi_type: p.primary_poi_type ?? 'restaurant', brand: p.brand ?? null,
               category_label: p.category_label, raw_category_labels: p.raw_category_labels,
-              address: null, matched_type: 'restaurant',
+              address: null, matched_type: p.primary_poi_type ?? 'restaurant',
             };
             const cuisines = p.food_cuisine ?? [];
             if (cuisines.length === 0) {
@@ -142,6 +144,32 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
       { key: 'restaurant:food_cuisine:ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } },
     ]), env(), CTX);
     expect(res.status).toBe(400);
+  });
+
+  it('accepts only the requested canonical Gym brand', async () => {
+    const gyms: FakePoi[] = [
+      { fsq_place_id: 'solinca', name: 'Solinca Coimbra', raw_category_labels: '', category_label: '', primary_poi_type: 'gym', brand: 'Solinca' },
+      { fsq_place_id: 'fitness-hut', name: 'Fitness Hut Coimbra', raw_category_labels: '', category_label: '', primary_poi_type: 'gym', brand: 'Fitness Hut' },
+    ];
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' },
+    ]), env(gyms), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ name: string; brand: string | null }>> };
+    expect(body.results['gym:brand:Solinca']).toEqual([
+      expect.objectContaining({ name: 'Solinca Coimbra', brand: 'Solinca' }),
+    ]);
+  });
+
+  it('rejects an unknown brand and a brand on an unsupported POI type', async () => {
+    const unknown = await worker.fetch(nearbyRequest([
+      { key: 'gym:brand:nope', type: 'gym', brand: 'Nope Gym' },
+    ]), env(), CTX);
+    expect(unknown.status).toBe(400);
+    const wrongType = await worker.fetch(nearbyRequest([
+      { key: 'cafe:brand:Solinca', type: 'cafe', brand: 'Solinca' },
+    ]), env(), CTX);
+    expect(wrongType.status).toBe(400);
   });
 
   it('returns an approved community POI with its own identity, never a fabricated Foursquare id', async () => {

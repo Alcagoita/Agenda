@@ -120,10 +120,12 @@ export type PoiType =
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
-  { type: 'atm' }, { type: 'cafe' }, { type: 'bakery' }, { type: 'supermarket' },
-  { type: 'pharmacy' }, { type: 'gas' }, { type: 'gym' }, { type: 'bank' },
-  { type: 'restaurant' }, { type: 'bar' }, { type: 'park' }, { type: 'library' },
-  { type: 'post' }, { type: 'store' }, { type: 'florist' }, { type: 'clinic' },
+  { type: 'supermarket' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
+  { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
+  { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' },
+  // Retained for existing documents and free-text lookup, but intentionally
+  // outside the curated quick-actionable list below.
+  { type: 'gas' }, { type: 'bank' }, { type: 'post' }, { type: 'clinic' },
   { type: 'salon' }, { type: 'bus' }, { type: 'school' },
 ];
 
@@ -132,8 +134,8 @@ export const POI_CATALOG: { type: PoiType }[] = [
  * carousels and their automatic quick suggestion use this single list.
  */
 export const QUICK_ACTIONABLE_POI_TYPES: readonly PoiType[] = [
-  'atm', 'cafe', 'bakery', 'supermarket', 'pharmacy', 'gas', 'gym',
-  'restaurant', 'bar', 'park', 'library', 'store', 'florist', 'salon',
+  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
+  'florist', 'bakery', 'park', 'gym', 'bar', 'library',
 ];
 
 export function isQuickActionablePoiType(value: string | null | undefined): value is PoiType {
@@ -213,6 +215,8 @@ export interface Task {
   storeSubtype?: StoreSubtype;
   /** Optional cuisine preference selected for restaurant tasks. */
   restaurantFoodType?: RestaurantFoodType;
+  /** Canonical Gym/Bank brand required for actionable nearby matching (KAN-364). */
+  poiBrand?: string;
   /**
    * Google Places ID of the hero/nearby place the user was next to when this
    * task was brushed away — undefined when no matching place was known at

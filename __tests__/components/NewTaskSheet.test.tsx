@@ -160,6 +160,20 @@ describe('canSubmit: requires title AND POI', () => {
     const addBtn = screen.getByLabelText('Add it');
     expect(addBtn.props.accessibilityState?.disabled).toBe(false);
   });
+
+  it('requires a curated brand before a Gym task can be added', async () => {
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Training tonight');
+    fireEvent.press(screen.getByLabelText('Gym'));
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.press(screen.getByLabelText('Solinca'));
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(false);
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    expect(mockAddTask).toHaveBeenCalledWith('test-uid', expect.objectContaining({
+      poi: 'gym', poiBrand: 'Solinca',
+    }));
+  });
 });
 
 describe('POI carousel toggle', () => {
@@ -496,6 +510,7 @@ describe('addTask submission', () => {
       'Morning run',
     );
     fireEvent.press(screen.getByLabelText('Gym'));
+    fireEvent.press(screen.getByLabelText('Solinca'));
     fireEvent.press(screen.getByLabelText('Health'));
 
     await act(async () => {
@@ -504,7 +519,7 @@ describe('addTask submission', () => {
 
     expect(mockAddTask).toHaveBeenCalledWith(
       'test-uid',
-      expect.objectContaining({ category: 'health' }),
+      expect.objectContaining({ category: 'health', poiBrand: 'Solinca' }),
     );
   });
 

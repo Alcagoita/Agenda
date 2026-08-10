@@ -20,8 +20,8 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
-  'atm', 'cafe', 'bakery', 'supermarket', 'pharmacy', 'gas', 'gym',
-  'restaurant', 'bar', 'park', 'library', 'store', 'florist', 'salon',
+  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
+  'florist', 'bakery', 'park', 'gym', 'bar', 'library',
 ];
 
 describe('POI_CATALOG', () => {

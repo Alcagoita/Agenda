@@ -114,6 +114,7 @@ import {
 } from './storeSubtypes';
 import { buildNearbySearchRequests } from './nearbySearchRequests';
 import { isOpenNow } from './openingHours';
+import { brandTaskMatchesPlace, filterBrandPlacesForTasks } from './brandDictionary';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -649,8 +650,10 @@ async function runProximitySearch(
     const coords = presetCoords ?? await getPositionLowAccuracy();
 
     const undonePoiTasks = tasks.filter(t => !t.done && t.poi != null);
-    const uniquePoiTypes = [...new Set(undonePoiTasks.map(t => t.poi as string))];
     const nearbyRequests = buildNearbySearchRequests(undonePoiTasks);
+    // A legacy Gym/Bank task without its now-required brand stays readable,
+    // but must not silently fall back to a generic nearby result.
+    const uniquePoiTypes = [...new Set(nearbyRequests.map(request => request.type))];
     const poiTypesKey = [...uniquePoiTypes].sort().join(',');
 
     if (uniquePoiTypes.length === 0) {
@@ -865,7 +868,7 @@ function processProximityTick(
     const rawPlaces = results[poiType] ?? [];
     const restaurantGroups = groupRestaurantPlaceCandidates(poiType, rawPlaces, undonePoiTasks);
     const storeGroups = groupStorePlaceCandidates(poiType, rawPlaces, undonePoiTasks);
-    const candidatePlaces = poiType === 'restaurant'
+    const typedPlaces = poiType === 'restaurant'
       ? mergeRestaurantPlaceCandidates(restaurantGroups)
       : poiType === 'store'
         ? mergeStorePlaceCandidates(storeGroups)
@@ -876,7 +879,8 @@ function processProximityTick(
     // the searched type: an ATM search also returns bank branches, whose 24h
     // ATMs must not be hidden on the bank's closing time.
     const now = new Date();
-    const places = candidatePlaces.filter(place => isOpenNow(place, now, poiType));
+    const brandMatchedPlaces = filterBrandPlacesForTasks(poiType, typedPlaces, undonePoiTasks);
+    const places = brandMatchedPlaces.filter(place => isOpenNow(place, now, poiType));
 
     // Reconcile live results against the cache's cross-source identity
     // (KAN-229): a place already known to both Google and the OSM cache
@@ -1010,7 +1014,8 @@ function processProximityTick(
         t.poiAlertSeenDate !== today &&
         (!heroPlace || (
           restaurantTaskMatchesPlaceName(t, heroPlace) &&
-          storeTaskMatchesPlaceName(t, heroPlace)
+          storeTaskMatchesPlaceName(t, heroPlace) &&
+          brandTaskMatchesPlace(t, heroPlace)
         )),
     );
     if (

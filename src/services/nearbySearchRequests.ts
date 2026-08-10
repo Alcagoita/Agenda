@@ -2,13 +2,14 @@ import type { Task } from '../types';
 import type { NearbySearchRequest } from './maps';
 import { restaurantTaskFoodType } from './restaurantFoodTypes';
 import { storeTaskSubtype } from './storeSubtypes';
+import { poiTypeRequiresBrand } from './brandDictionary';
 
 /**
  * Converts open tasks into the smallest useful set of API nearby requests.
  * A broad restaurant/store request is only needed for a genuinely generic
  * task; subtype requests have independent result limits on the server.
  */
-export function buildNearbySearchRequests(tasks: readonly Pick<Task, 'poi' | 'title' | 'restaurantFoodType' | 'storeSubtype'>[]): NearbySearchRequest[] {
+export function buildNearbySearchRequests(tasks: readonly Pick<Task, 'poi' | 'title' | 'restaurantFoodType' | 'storeSubtype' | 'poiBrand'>[]): NearbySearchRequest[] {
   const byType = new Map<string, typeof tasks>();
   for (const task of tasks) {
     if (!task.poi) continue;
@@ -35,6 +36,16 @@ export function buildNearbySearchRequests(tasks: readonly Pick<Task, 'poi' | 'ti
       if (hasGenericTask) requests.push({ key: type, type });
       for (const value of subtypes) {
         requests.push({ key: `${type}:store_kind:${value}`, type, attribute: { dimension: 'store_kind', values: [value] } });
+      }
+      continue;
+    }
+    if (poiTypeRequiresBrand(type)) {
+      // Legacy generic Gym/Bank tasks remain readable, but cannot receive a
+      // generic nearby recommendation. They become actionable once edited
+      // with one of the curated canonical brands.
+      const brands = new Set(typeTasks.map(task => task.poiBrand).filter((brand): brand is string => typeof brand === 'string' && brand.length > 0));
+      for (const brand of brands) {
+        requests.push({ key: `${type}:brand:${brand}`, type, brand });
       }
       continue;
     }

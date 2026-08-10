@@ -52,4 +52,15 @@ describe('buildNearbySearchRequests', () => {
       { key: 'restaurant:food_cuisine:pizza', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['pizza'] } },
     ]);
   });
+
+  it('creates separate canonical Gym/Bank brand requests and skips legacy generic tasks', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'gym', title: 'Train at Solinca', poiBrand: 'Solinca' },
+      { poi: 'gym', title: 'Old generic gym task' },
+      { poi: 'bank', title: 'Go to Caixa', poiBrand: 'Caixa Geral de Depósitos' },
+    ])).toEqual([
+      { key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' },
+      { key: 'bank:brand:Caixa Geral de Depósitos', type: 'bank', brand: 'Caixa Geral de Depósitos' },
+    ]);
+  });
 });

@@ -2,6 +2,8 @@ import {
   BRAND_SUGGESTION_LIMIT,
   getBrandSuggestions,
   getCanonicalBrand,
+  findBrandInText,
+  findRequiredBrandInText,
 } from '../../src/services/brandDictionary';
 
 describe('brandDictionary', () => {
@@ -32,5 +34,11 @@ describe('brandDictionary', () => {
   it('does not match brands from another POI type', () => {
     expect(getBrandSuggestions('gym', 'pingo')).toEqual([]);
     expect(getCanonicalBrand('gym', 'Pingo Doce')).toBeNull();
+  });
+
+  it('resolves Portuguese Bank aliases and title text to one canonical value', () => {
+    expect(getCanonicalBrand('bank', 'CGD')).toBe('Caixa Geral de Depósitos');
+    expect(findBrandInText('bank', 'Visit Caixa Geral de Depositos Alcobaça')).toBe('Caixa Geral de Depósitos');
+    expect(findRequiredBrandInText('Go to Solinca after work')).toEqual({ poiType: 'gym', brand: 'Solinca' });
   });
 });
