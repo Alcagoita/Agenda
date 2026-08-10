@@ -59,7 +59,7 @@ import {
   __resetModelForTests,
 } from '../../src/services/poiLlm';
 import { inferPoiFromRules, registerLearnedKeyword, clearLearnedKeywords } from '../../src/services/poiInference';
-import { RETIRED_QUICK_POI_TYPES } from '../../src/types';
+import { isQuickActionablePoiType } from '../../src/types';
 import labels from '../../assets/poi-model/labels.json';
 
 const LABELS = labels as string[];
@@ -188,10 +188,10 @@ describe('inferPoiForQuickAdd', () => {
   });
 
   it.each(['bank', 'post office', 'clinic', 'bus stop', 'school run'])(
-    'does not suggest retired quick type for %s',
+    'only returns a quick-actionable type for %s',
     async title => {
       const result = await inferPoiForQuickAdd(title);
-      expect(RETIRED_QUICK_POI_TYPES).not.toContain(result);
+      expect(result === null || isQuickActionablePoiType(result)).toBe(true);
     },
   );
 
@@ -215,8 +215,8 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
-  it('uses the local dictionary for police phrasing without calling the LLM classifier', async () => {
-    expect(await inferPoiForQuickAdd('visit police')).toBe('police');
+  it('does not use non-quick local suggestions', async () => {
+    expect(await inferPoiForQuickAdd('visit police')).toBeNull();
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
@@ -260,11 +260,11 @@ describe('inferPoiForQuickAdd', () => {
     expect(await inferPoiForQuickAdd('call mom')).toBeNull();
   });
 
-  it('returns a non-catalog learned type when the local dictionary misses', async () => {
+  it('does not use a learned type outside the quick-actionable list', async () => {
     registerLearnedKeyword('foobar', 'bakery', 'en');
     registerLearnedKeyword('foobar', 'pharmacy', 'pt-PT');
 
-    expect(await inferPoiForQuickAdd('foobar')).toBe('bakery');
+    expect(await inferPoiForQuickAdd('foobar')).toBeNull();
     expect(mockLoad).not.toHaveBeenCalled();
   });
 });

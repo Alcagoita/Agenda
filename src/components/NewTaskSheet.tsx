@@ -45,7 +45,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { categories, fonts } from '../theme/tokens';
-import { PoiType, CategoryKey, Category, POI_CATALOG, poiCatalogLabel } from '../types';
+import { PoiType, CategoryKey, Category, QUICK_ACTIONABLE_POI_TYPES, POI_CATALOG, poiCatalogLabel } from '../types';
 import { addTask } from '../services/firestore';
 import { inferPoiForQuickAdd, learnFromClassification, learnFromUserEdit } from '../services/poiLlm';
 import { CloseIcon, PoiIcon } from './AppIcon';
@@ -622,7 +622,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                 snapToInterval={POI_TILE_WIDTH + 10}
                 decelerationRate="fast"
                 style={styles.carouselMask}>
-                {POI_CATALOG.map(({ type }) => (
+                {QUICK_ACTIONABLE_POI_TYPES.map(type => (
                   <PoiTile
                     key={type}
                     type={type}
