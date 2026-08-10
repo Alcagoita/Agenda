@@ -260,11 +260,11 @@ describe('inferPoiForQuickAdd', () => {
     expect(await inferPoiForQuickAdd('call mom')).toBeNull();
   });
 
-  it('does not use a learned type outside the quick-actionable list', async () => {
+  it('uses a learned type when it is in the quick-actionable list', async () => {
     registerLearnedKeyword('foobar', 'bakery', 'en');
     registerLearnedKeyword('foobar', 'pharmacy', 'pt-PT');
 
-    expect(await inferPoiForQuickAdd('foobar')).toBeNull();
+    expect(await inferPoiForQuickAdd('foobar')).toBe('bakery');
     expect(mockLoad).not.toHaveBeenCalled();
   });
 });

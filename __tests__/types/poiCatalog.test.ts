@@ -16,17 +16,17 @@ import {
 const ALL_BUILT_IN_TYPES: PoiType[] = [
   'atm', 'cafe', 'supermarket', 'pharmacy',
   'gas', 'gym', 'bank', 'restaurant', 'park', 'library', 'post', 'store',
-  'clinic', 'salon', 'bus', 'school',
+  'clinic', 'salon', 'bus', 'school', 'bakery', 'florist', 'bar',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
-  'atm', 'cafe', 'supermarket', 'pharmacy', 'gas', 'gym', 'restaurant',
-  'park', 'library', 'store', 'salon',
+  'atm', 'cafe', 'bakery', 'supermarket', 'pharmacy', 'gas', 'gym',
+  'restaurant', 'bar', 'park', 'library', 'store', 'florist', 'salon',
 ];
 
 describe('POI_CATALOG', () => {
   it('keeps all built-in types available for legacy task support', () => {
-    expect(POI_CATALOG).toHaveLength(16);
+    expect(POI_CATALOG).toHaveLength(19);
   });
 
   it('contains all built-in POI types', () => {
@@ -44,7 +44,9 @@ describe('POI_CATALOG', () => {
     for (const type of QUICK_ACTIONABLE_TYPES) {
       expect(isQuickActionablePoiType(type)).toBe(true);
     }
-    expect(isQuickActionablePoiType('bank')).toBe(false);
+    for (const type of ['post', 'bank', 'clinic', 'bus', 'school']) {
+      expect(isQuickActionablePoiType(type)).toBe(false);
+    }
   });
 
   it('has no duplicate types', () => {

@@ -116,14 +116,15 @@ export type PoiType =
   | 'atm' | 'cafe' | 'supermarket' | 'pharmacy'
   | 'gas' | 'gym' | 'bank' | 'restaurant' | 'park'
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
-  | 'bus' | 'school';
+  | 'bus' | 'school' | 'bakery' | 'florist' | 'bar';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
-  { type: 'atm' }, { type: 'cafe' }, { type: 'supermarket' }, { type: 'pharmacy' },
-  { type: 'gas' }, { type: 'gym' }, { type: 'bank' }, { type: 'restaurant' },
-  { type: 'park' }, { type: 'library' }, { type: 'post' }, { type: 'store' },
-  { type: 'clinic' }, { type: 'salon' }, { type: 'bus' }, { type: 'school' },
+  { type: 'atm' }, { type: 'cafe' }, { type: 'bakery' }, { type: 'supermarket' },
+  { type: 'pharmacy' }, { type: 'gas' }, { type: 'gym' }, { type: 'bank' },
+  { type: 'restaurant' }, { type: 'bar' }, { type: 'park' }, { type: 'library' },
+  { type: 'post' }, { type: 'store' }, { type: 'florist' }, { type: 'clinic' },
+  { type: 'salon' }, { type: 'bus' }, { type: 'school' },
 ];
 
 /**
@@ -131,8 +132,8 @@ export const POI_CATALOG: { type: PoiType }[] = [
  * carousels and their automatic quick suggestion use this single list.
  */
 export const QUICK_ACTIONABLE_POI_TYPES: readonly PoiType[] = [
-  'atm', 'cafe', 'supermarket', 'pharmacy', 'gas', 'gym', 'restaurant',
-  'park', 'library', 'store', 'salon',
+  'atm', 'cafe', 'bakery', 'supermarket', 'pharmacy', 'gas', 'gym',
+  'restaurant', 'bar', 'park', 'library', 'store', 'florist', 'salon',
 ];
 
 export function isQuickActionablePoiType(value: string | null | undefined): value is PoiType {
@@ -314,9 +315,9 @@ export interface Category {
 
 /** Which POI types can appear on tasks of each category. */
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
-  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'post', 'store'],
+  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'post', 'store', 'bakery', 'florist'],
   health:   ['pharmacy', 'clinic', 'gym'],
-  personal: ['cafe', 'restaurant', 'park', 'salon'],
+  personal: ['cafe', 'restaurant', 'bar', 'park', 'salon'],
   work:     ['library', 'school'],
 };
 
@@ -338,6 +339,9 @@ export const POI_GOOGLE_TYPES: Record<PoiType, string> = {
   salon:        'hair_care',
   bus:          'bus_station',
   school:       'school',
+  bakery:       'bakery',
+  florist:      'florist',
+  bar:          'bar',
 };
 
 /**
@@ -364,6 +368,9 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   salon:       { key: 'shop',    value: 'hairdresser' },
   bus:         { key: 'highway', value: 'bus_stop' },
   school:      { key: 'amenity', value: 'school' },
+  bakery:      { key: 'shop',    value: 'bakery' },
+  florist:     { key: 'shop',    value: 'florist' },
+  bar:         { key: 'amenity', value: 'bar' },
 };
 
 /**
@@ -422,6 +429,9 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   salon:       50,
   bus:         100,
   school:      100,
+  bakery:      75,
+  florist:     75,
+  bar:         75,
 };
 
 // ─── Points & Achievements ────────────────────────────────────────────────────
