@@ -72,6 +72,10 @@ export async function scheduleEodReminder(options: {
 }): Promise<void> {
   const { enabled, time } = options;
 
+  // Reject a malformed time up front — an invalid "HH:MM" would otherwise
+  // produce a NaN timestamp and a broken trigger. No cancel, no schedule.
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) { return; }
+
   // Always cancel first so stale notifications are cleared.
   await cancelEodReminder();
 

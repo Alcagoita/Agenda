@@ -104,6 +104,24 @@ describe('scheduleEodReminder', () => {
     await scheduleEodReminder({ enabled: true, time: pastTime() });
     expect(mockCreateTriggerNotification).toHaveBeenCalledTimes(1);
   });
+
+  it('no-ops (no cancel, no schedule) for a malformed time string', async () => {
+    await scheduleEodReminder({ enabled: true, time: '8am' });
+    expect(mockCancelNotification).not.toHaveBeenCalled();
+    expect(mockCreateTriggerNotification).not.toHaveBeenCalled();
+  });
+
+  it('no-ops for an out-of-range hour', async () => {
+    await scheduleEodReminder({ enabled: true, time: '24:00' });
+    expect(mockCancelNotification).not.toHaveBeenCalled();
+    expect(mockCreateTriggerNotification).not.toHaveBeenCalled();
+  });
+
+  it('no-ops for out-of-range minutes', async () => {
+    await scheduleEodReminder({ enabled: true, time: '08:60' });
+    expect(mockCancelNotification).not.toHaveBeenCalled();
+    expect(mockCreateTriggerNotification).not.toHaveBeenCalled();
+  });
 });
 
 describe('cancelEodReminder', () => {
