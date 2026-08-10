@@ -172,7 +172,8 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                           dedupe_name TEXT NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL,
                           geohash TEXT NOT NULL, primary_poi_type TEXT NOT NULL,
                           brand TEXT, category_label TEXT, raw_category_ids TEXT,
-                          raw_category_labels TEXT, address TEXT, date_refreshed TEXT NOT NULL
+                          raw_category_labels TEXT, address TEXT, date_refreshed TEXT NOT NULL,
+                          open_min INTEGER, close_min INTEGER
                         );
                         CREATE UNIQUE INDEX idx_poi_canonical_identity
                           ON poi (dedupe_name, lat, lng);
