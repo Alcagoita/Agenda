@@ -86,6 +86,9 @@ export interface NearbyPlace {
   storeSubtype?: StoreSubtype;
   /** All authoritative store kinds returned by Cloudflare, when known. */
   storeSubtypes?: StoreSubtype[];
+  /** KAN-318: default opening window, minutes from local midnight. null/undefined = always open (also 24h / unknown). */
+  openMin?: number | null;
+  closeMin?: number | null;
 }
 
 /** A request-specific nearby bucket. Generic requests omit `attribute`; subtype
@@ -422,6 +425,8 @@ async function searchNearbyPlacesCloudflare(
           restaurantFoodTypes: restaurantFoodTypes.length > 0 ? restaurantFoodTypes : undefined,
           storeSubtype: storeSubtypes[0],
           storeSubtypes: storeSubtypes.length > 0 ? storeSubtypes : undefined,
+          openMin: p.open_min,
+          closeMin: p.close_min,
         };
         places.set(p.poi_id, place);
         result[request.type].push(place);
