@@ -26,7 +26,7 @@ export const GOOGLE_TYPE_ICON: Record<string, string> = {
   // Food & drink
   acai_shop:            'cafe',
   bagel_shop:           'cafe',
-  bakery:               'store',
+  bakery:               'bakery',
   bar:                  'cafe',
   bar_and_grill:        'restaurant',
   beer_garden:          'cafe',
@@ -355,6 +355,18 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
           <Path d="M17 3v5" stroke={color} strokeWidth={1.6} {...S} />
           <Path d="M17 12a4 4 0 0 1-4-4V3h8v5a4 4 0 0 1-4 4z" stroke={color} strokeWidth={1.6} {...S} />
           <Line x1="17" y1="12" x2="17" y2="21" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'bakery':
+      return (
+        <Svg {...p}>
+          <Path
+            d="M4 20v-8a8 8 0 0 1 16 0v8H4z"
+            stroke={color} strokeWidth={1.6} {...S}
+          />
+          <Path d="M8 10.5 10.5 13M12 8.5 14.5 11M16 10.5 18 12.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="4" y1="20" x2="20" y2="20" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
 

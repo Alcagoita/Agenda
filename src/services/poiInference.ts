@@ -9,7 +9,7 @@
  * Output is a `PoiResolution` (a built-in `PoiType` or, for custom categories,
  * any Google Places type string) or `null`. `null` is a valid, expected result:
  * when no keyword matches we do NOT guess, and the caller simply leaves
- * `task.poi` unset. The seed covers all 16 built-in `PoiType`s in EN + pt-PT.
+ * `task.poi` unset. The seed covers all 19 built-in `PoiType`s in EN + pt-PT.
  *
  * ── Self-growing dictionary ───────────────────────────────────────────────
  * The dictionary has two layers:
@@ -42,7 +42,7 @@ export function isSupportedLang(value: unknown): value is SupportedLang {
 }
 
 /**
- * What a keyword can resolve to: one of the 16 built-in `PoiType`s, or — for
+ * What a keyword can resolve to: one of the built-in `PoiType`s, or — for
  * dynamically registered custom categories — any Google Places type string
  * (e.g. "bakery", "stadium"). The `string & {}` keeps `PoiType` autocomplete
  * while still accepting arbitrary place types.
@@ -72,6 +72,9 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     bread: 'supermarket', milk: 'supermarket', eggs: 'supermarket',
     butter: 'supermarket', vegetables: 'supermarket', veggies: 'supermarket',
     fruit: 'supermarket',
+    // ── bakery ──
+    bakery: 'bakery', 'buy bread': 'bakery', 'pick up bread': 'bakery',
+    'bread shop': 'bakery', pastry: 'bakery', croissant: 'bakery',
     // ── pharmacy ──
     pharmacy: 'pharmacy', drugstore: 'pharmacy', prescription: 'pharmacy',
     meds: 'pharmacy', medicine: 'pharmacy', medication: 'pharmacy',
@@ -87,6 +90,8 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── restaurant ──
     restaurant: 'restaurant', lunch: 'restaurant', dinner: 'restaurant',
     'eat out': 'restaurant', 'dine out': 'restaurant', reservation: 'restaurant',
+    // ── bar ──
+    bar: 'bar', pub: 'bar', drinks: 'bar', cocktail: 'bar', cocktails: 'bar',
     // ── park ──
     park: 'park', walk: 'park', playground: 'park', picnic: 'park',
     // ── library ──
@@ -99,6 +104,9 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     store: 'store', shop: 'store', mall: 'store', 'shopping mall': 'store',
     'book store': 'store', bookstore: 'store', bookshop: 'store',
     'buy book': 'store', 'buy a book': 'store', 'purchase a book': 'store',
+    // ── florist ──
+    florist: 'florist', flower: 'florist', flowers: 'florist', bouquet: 'florist',
+    'buy flowers': 'florist',
     // ── clinic ──
     clinic: 'clinic', doctor: 'clinic', 'doctor appointment': 'clinic',
     checkup: 'clinic', dentist: 'clinic', 'medical appointment': 'clinic',
@@ -121,6 +129,9 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     compras: 'supermarket', supermercado: 'supermarket', mercearia: 'supermarket',
     mercado: 'supermarket', 'pão': 'supermarket', leite: 'supermarket',
     ovos: 'supermarket', fruta: 'supermarket', legumes: 'supermarket',
+    // ── bakery ──
+    padaria: 'bakery', 'comprar pão': 'bakery', 'ir buscar pão': 'bakery',
+    pastelaria: 'bakery', croissant: 'bakery',
     // ── pharmacy ──
     'farmácia': 'pharmacy', receita: 'pharmacy', medicamentos: 'pharmacy',
     'remédios': 'pharmacy', comprimidos: 'pharmacy',
@@ -134,6 +145,8 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── restaurant ──
     restaurante: 'restaurant', 'almoço': 'restaurant', jantar: 'restaurant',
     reserva: 'restaurant', 'refeição': 'restaurant',
+    // ── bar ──
+    bar: 'bar', pub: 'bar', bebidas: 'bar', cocktail: 'bar', cocktails: 'bar',
     // ── park ──
     parque: 'park', passear: 'park', jardim: 'park', piquenique: 'park',
     // ── library ──
@@ -144,6 +157,9 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── store ──
     loja: 'store', 'centro comercial': 'store', shopping: 'store',
     livraria: 'store', 'comprar livro': 'store', 'comprar um livro': 'store',
+    // ── florist ──
+    florista: 'florist', flor: 'florist', flores: 'florist', ramo: 'florist',
+    'comprar flores': 'florist',
     // ── clinic ──
     'clínica': 'clinic', 'médico': 'clinic', consulta: 'clinic',
     dentista: 'clinic', exame: 'clinic',

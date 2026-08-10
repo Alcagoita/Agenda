@@ -70,8 +70,8 @@ describe('normalize', () => {
 // ─── inferPoiFromRules: English ────────────────────────────────────────────────
 
 describe('inferPoiFromRules (en)', () => {
-  it('maps "buy bread" to supermarket', () => {
-    expect(inferPoiFromRules('buy bread')).toBe('supermarket');
+  it('maps "buy bread" to bakery', () => {
+    expect(inferPoiFromRules('buy bread')).toBe('bakery');
   });
 
   it('maps a coffee task to cafe', () => {
@@ -102,8 +102,8 @@ describe('inferPoiFromRules (en)', () => {
 // ─── inferPoiFromRules: Português de Portugal ──────────────────────────────────
 
 describe('inferPoiFromRules (pt-PT)', () => {
-  it('maps "comprar pão" to supermarket', () => {
-    expect(inferPoiFromRules('comprar pão', 'pt-PT')).toBe('supermarket');
+  it('maps "comprar pão" to bakery', () => {
+    expect(inferPoiFromRules('comprar pão', 'pt-PT')).toBe('bakery');
   });
 
   it('maps a café task to cafe', () => {
@@ -131,22 +131,24 @@ describe('inferPoiFromRules (pt-PT)', () => {
   });
 });
 
-// ─── All 16 built-in POI types ─────────────────────────────────────────────────
+// ─── All built-in POI types ────────────────────────────────────────────────────
 
-describe('inferPoiFromRules: all 16 built-in types (en)', () => {
+describe('inferPoiFromRules: all built-in types (en)', () => {
   const cases: [string, string][] = [
     ['withdraw cash',            'atm'],
     ['grab a coffee',           'cafe'],
-    ['buy bread',               'supermarket'],
+    ['buy bread',               'bakery'],
     ['pick up prescription',    'pharmacy'],
     ['fill up on petrol',       'gas'],
     ['morning workout',         'gym'],
     ['deposit cheque at bank',  'bank'],
     ['dinner reservation',      'restaurant'],
+    ['meet for cocktails',      'bar'],
     ['walk in the park',        'park'],
     ['return book to library',  'library'],
     ['mail a parcel',           'post'],
     ['shop at the mall',        'store'],
+    ['buy flowers',             'florist'],
     ['dentist checkup',         'clinic'],
     ['book a haircut',          'salon'],
     ['catch the bus',           'bus'],
@@ -163,11 +165,14 @@ describe('inferPoiFromRules: extended types (pt-PT)', () => {
     ['meter gasolina',           'gas'],
     ['ir ao ginásio',            'gym'],
     ['ir ao banco',              'bank'],
+    ['comprar pão',              'bakery'],
     ['reserva no restaurante',   'restaurant'],
+    ['beber cocktails',          'bar'],
     ['passear no parque',        'park'],
     ['devolver livro',           'library'],
     ['enviar encomenda',         'post'],
     ['comprar no centro comercial', 'store'],
+    ['comprar flores',           'florist'],
     ['consulta no médico',       'clinic'],
     ['corte de cabelo',          'salon'],
     ['apanhar o autocarro',      'bus'],
@@ -305,14 +310,14 @@ describe('registerCategoryKeywords (user adds a new POI)', () => {
 
   it('replaceCategoryKeywords prunes categories no longer in the list', () => {
     syncCategoryKeywords([
-      { name: 'Florist', poi: 'florist' },
+      { name: 'Petal delivery', poi: 'florist' },
       { name: 'Hardware store', poi: 'hardware_store' },
     ]);
-    expect(inferPoiFromRules('order from florist')).toBe('florist');
+    expect(inferPoiFromRules('order from petal delivery')).toBe('florist');
 
-    // Re-sync with the florist removed (e.g. user deleted that category).
+    // Re-sync with the custom florist category removed (e.g. user deleted it).
     syncCategoryKeywords([{ name: 'Hardware store', poi: 'hardware_store' }]);
-    expect(inferPoiFromRules('order from florist')).toBeNull();
+    expect(inferPoiFromRules('order from petal delivery')).toBeNull();
     expect(inferPoiFromRules('go to the hardware store')).toBe('hardware_store');
   });
 
