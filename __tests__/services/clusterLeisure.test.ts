@@ -118,6 +118,16 @@ describe('findClusterLeisure — when it speaks', () => {
 
     expect(findClusterLeisure(makeBundle())?.place.website).toBe('https://aquarium.example');
   });
+
+  it('mentions a historical landmark right beside a stop (heritage sites were a blind spot)', () => {
+    cacheReturns({
+      historical_landmark: [makePlace({ placeId: 'hl-1', name: 'Mosteiro de Alcobaça', lat: latOffset(250), lng: 0 })],
+    });
+
+    const found = findClusterLeisure(makeBundle());
+    expect(found?.place.name).toBe('Mosteiro de Alcobaça');
+    expect(found?.type).toBe('historical_landmark');
+  });
 });
 
 describe('findClusterLeisure — when it stays quiet', () => {
@@ -240,7 +250,7 @@ describe('findClusterLeisure — cost', () => {
   it('asks the cache only for the fixed leisure type set', () => {
     findClusterLeisure(makeBundle());
     const requestedTypes = mockQueryHabitatCache.mock.calls[0][2];
-    expect([...requestedTypes].sort()).toEqual(['aquarium', 'attraction', 'museum', 'park']);
+    expect([...requestedTypes].sort()).toEqual(['aquarium', 'attraction', 'historical_landmark', 'museum', 'park', 'tourist_attraction']);
   });
 
   it('asks the cache not to cap leisure candidates before ranking sees them', () => {
