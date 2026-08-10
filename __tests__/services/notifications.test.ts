@@ -20,6 +20,10 @@ import {
   registerExitPromptCategory,
   EXIT_ACTION_MARK_DONE,
   scheduleTaskReminder,
+  scheduleDatedTaskHandoff,
+  cancelDatedTaskHandoff,
+  DATED_TASK_ACTION_FORGET,
+  DATED_TASK_ACTION_TOMORROW,
 } from '../../src/services/notifications';
 import * as notifications from '../../src/services/notifications';
 import { COPY } from '../../src/constants/copy';
@@ -181,6 +185,63 @@ describe('scheduleTaskReminder', () => {
     const { date, time } = futureDateTime();
     await scheduleTaskReminder({ taskId: 't1', taskTitle: 'Buy milk', date, time });
     expect(mockCancelNotification).toHaveBeenCalledWith('task-reminder-t1');
+  });
+});
+
+describe('scheduleDatedTaskHandoff', () => {
+  const date = '2099-06-16';
+
+  it('uses one stable notification id per selected date', async () => {
+    await scheduleDatedTaskHandoff({
+      uid: 'uid-1', date, tasks: [{ id: 't1', title: 'Buy milk' }],
+    });
+
+    expect(mockCancelNotification).toHaveBeenCalledWith(`dated-task-handoff-${date}`);
+    expect(mockCreateTriggerNotification).toHaveBeenCalledTimes(1);
+    const [notification] = mockCreateTriggerNotification.mock.calls[0];
+    expect(notification.body).toBe(COPY.datedTaskHandoff.body('Buy milk'));
+    expect(notification.android.actions).toEqual([
+      expect.objectContaining({ pressAction: { id: DATED_TASK_ACTION_FORGET } }),
+      expect.objectContaining({ pressAction: { id: DATED_TASK_ACTION_TOMORROW } }),
+    ]);
+  });
+
+  it('creates no ambiguous actions when more than one task shares the date', async () => {
+    await scheduleDatedTaskHandoff({
+      uid: 'uid-1', date, tasks: [{ id: 't1', title: 'One' }, { id: 't2', title: 'Two' }],
+    });
+
+    const [notification] = mockCreateTriggerNotification.mock.calls[0];
+    expect(notification.body).toBe(COPY.datedTaskHandoff.multipleBody);
+    expect(notification.android.actions).toBeUndefined();
+    expect(notification.data.screen).toBe('EndOfDayHandoff');
+  });
+
+  it('cancels the stable notification without scheduling when the date has no tasks', async () => {
+    await scheduleDatedTaskHandoff({ uid: 'uid-1', date, tasks: [] });
+
+    expect(mockCancelNotification).toHaveBeenCalledWith(`dated-task-handoff-${date}`);
+    expect(mockCreateChannel).not.toHaveBeenCalled();
+    expect(mockCreateTriggerNotification).not.toHaveBeenCalled();
+  });
+
+  it('cancels the stable notification without scheduling after the local 20:00 cutoff', async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const pastDate = ymd(yesterday);
+
+    await scheduleDatedTaskHandoff({
+      uid: 'uid-1', date: pastDate, tasks: [{ id: 't1', title: 'Buy milk' }],
+    });
+
+    expect(mockCancelNotification).toHaveBeenCalledWith(`dated-task-handoff-${pastDate}`);
+    expect(mockCreateChannel).not.toHaveBeenCalled();
+    expect(mockCreateTriggerNotification).not.toHaveBeenCalled();
+  });
+
+  it('cancels the date-specific handoff', async () => {
+    await cancelDatedTaskHandoff(date);
+    expect(mockCancelNotification).toHaveBeenCalledWith(`dated-task-handoff-${date}`);
   });
 });
 

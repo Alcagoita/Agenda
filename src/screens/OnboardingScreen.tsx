@@ -39,7 +39,6 @@ import ScrRotatingNudge, { NudgeMessage } from '../components/ScrRotatingNudge';
 import BrushStroke from '../components/BrushStroke';
 import { addTask, ONBOARDING_BONUS_POINTS, upsertUser } from '../services/firestore';
 import { awardOnboardingBonus } from '../services/rewardFunctions';
-import { todayISO } from '../utils/date';
 import { PoiIcon } from '../components/AppIcon';
 import PoiChip from '../components/PoiChip';
 import { categories, lightPalette, onboardingScrim } from '../theme/tokens';
@@ -347,7 +346,6 @@ export default function OnboardingScreen({ uid, onComplete }: Props) {
         title:    taskTitle.trim(),
         category: chip?.category ?? 'errands',
         poi:      chip?.poi ?? 'supermarket',
-        date:     todayISO(),
       });
 
       setCreatedTaskId(id);
@@ -356,7 +354,7 @@ export default function OnboardingScreen({ uid, onComplete }: Props) {
     }
 
     setTimeout(() => setStage('post'), 350);
-  }, [taskTitle, uid, closeSheet]);
+  }, [taskTitle, uid, closeSheet, suggestionChips]);
 
   const completeOnboardingTask = useCallback(() => {
     if (createdTaskId) {

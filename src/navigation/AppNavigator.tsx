@@ -36,6 +36,7 @@ import HomeAddressScreen from '../screens/HomeAddressScreen';
 import WhereWeveBeenScreen from '../screens/WhereWeveBeenScreen';
 import ItineraryOptionsScreen from '../screens/ItineraryOptionsScreen';
 import PlacesScreen from '../screens/PlacesScreen';
+import EndOfDayHandoffScreen from '../screens/EndOfDayHandoffScreen';
 
 export type RootStackParamList = {
   Today: undefined;
@@ -94,6 +95,8 @@ export type RootStackParamList = {
   /** "One trip for all of these" — resolves + orders open POI tasks into a
    *  multi-stop route into a single suggestion card (KAN-281). */
   ItineraryOptions: undefined;
+  /** Per-task resolver opened from a multi-task dated-task notification. */
+  EndOfDayHandoff: { uid: string; date: string; taskIds: string[] };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -134,6 +137,11 @@ export default function AppNavigator() {
       <Stack.Screen name="HomeAddress"                component={HomeAddressScreen} />
       <Stack.Screen name="WhereWeveBeen"              component={WhereWeveBeenScreen} />
       <Stack.Screen name="ItineraryOptions"           component={ItineraryOptionsScreen} />
+      <Stack.Screen
+        name="EndOfDayHandoff"
+        component={EndOfDayHandoffScreen}
+        options={{ presentation: 'modal' }}
+      />
     </Stack.Navigator>
   );
 }

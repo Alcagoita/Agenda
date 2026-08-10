@@ -23,8 +23,7 @@ import { spacing, radius as radii } from '../theme/tokens';
 import { ChevronLeftIcon, PoiIcon, ShoppingBagIcon } from '../components/AppIcon';
 import LoadingDots from '../components/LoadingDots';
 import { COPY } from '../constants/copy';
-import { todayISO } from '../utils/date';
-import { getTasksForDate } from '../services/firestore';
+import { ensureCurrentDay } from '../services/firestore';
 import { getMallSnapshot } from '../services/mallSnapshots';
 import { getPositionLowAccuracy } from '../services/geolocation';
 import { getLastSearchCoords } from '../services/proximity';
@@ -76,7 +75,7 @@ export default function ItineraryOptionsScreen() {
           coords = cached;
         }
 
-        const tasks = await getTasksForDate(uid, todayISO());
+        const { tasks } = await ensureCurrentDay(uid);
         const { resolved, excludedCount } = await resolveTripDestinations(tasks, coords, uid);
         const tripPlan = planTrip(coords, resolved, excludedCount);
         // KAN-282 — opportunistic only: reads the user's mall snapshot and the

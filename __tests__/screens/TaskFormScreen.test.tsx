@@ -72,9 +72,13 @@ jest.mock('expo-sqlite', () => ({
 // matching this suite's existing mocking style (see achievements.ts above).
 const mockScheduleTaskReminder = jest.fn().mockResolvedValue(undefined);
 const mockCancelTaskReminder   = jest.fn().mockResolvedValue(undefined);
+const mockRefreshDatedTaskHandoff = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../src/services/notifications', () => ({
   scheduleTaskReminder: (...args: unknown[]) => mockScheduleTaskReminder(...args),
   cancelTaskReminder:   (...args: unknown[]) => mockCancelTaskReminder(...args),
+}));
+jest.mock('../../src/services/datedTaskHandoff', () => ({
+  refreshDatedTaskHandoff: (...args: unknown[]) => mockRefreshDatedTaskHandoff(...args),
 }));
 
 // KAN-279 — mocked at the service boundary (same style as notifications/
@@ -149,6 +153,8 @@ jest.mock('../../src/components/AppIcon', () => {
   return {
     CakeIcon:     stub,
     CalendarIcon: stub,
+    ChevronLeftIcon: stub,
+    ChevronRightIcon: stub,
     ClockIcon:    stub,
     CloseIcon:    stub,
     NavigateIcon: stub,
@@ -184,7 +190,8 @@ function makeTask(overrides: Partial<any> = {}) {
     category:  'errands',
     done:      false,
     poi:       'supermarket',
-    date:      '2026-06-03',
+    date:      '2026-06-03', // legacy date: intentionally not treated as scheduled
+    scheduledDate: '2026-06-03',
     createdAt: { seconds: 0, nanoseconds: 0 },
     ...overrides,
   };
@@ -757,7 +764,7 @@ describe('TaskFormScreen — save (create)', () => {
   });
 
   it('hydrates and saves a restaurant food type passed from quick create', async () => {
-    setRouteParams({ uid: 'user-123', initialPoi: 'restaurant', initialRestaurantFoodType: 'vegetarian' });
+    setRouteParams({ uid: 'user-123', initialPoi: 'restaurant', initialPoiExplicitlySelected: true, initialRestaurantFoodType: 'vegetarian' });
     mockAddTask.mockResolvedValueOnce('new-id');
     render(<TaskFormScreen />);
     expect(screen.getByLabelText('Vegetarian').props.accessibilityState?.selected).toBe(true);
@@ -836,6 +843,12 @@ describe('TaskFormScreen — reminder scheduling', () => {
     render(<TaskFormScreen />);
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Walk the dog');
     fireEvent.press(screen.getByText('Park'));
+
+    fireEvent.press(screen.getAllByLabelText('Around when?')[0]);
+    const today = new Date();
+    fireEvent.press(screen.getByLabelText(
+      `${COPY.calendar.monthNamesFull[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`,
+    ));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Add it'));
     });
@@ -855,6 +868,12 @@ describe('TaskFormScreen — reminder scheduling', () => {
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Walk the dog');
     fireEvent.press(screen.getByText('Park'));
 
+    // A time can only be set after the user explicitly chooses a date.
+    fireEvent.press(screen.getAllByLabelText('Around when?')[0]);
+    const today = new Date();
+    fireEvent.press(screen.getByLabelText(
+      `${COPY.calendar.monthNamesFull[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`,
+    ));
     // Both the date and time fields share the "Around when?" label — the
     // time field is the second one.
     fireEvent.press(screen.getAllByLabelText('Around when?')[1]);
@@ -902,9 +921,7 @@ describe('TaskFormScreen — reminder scheduling', () => {
       fireEvent.press(screen.getByLabelText('Save changes'));
     });
     await waitFor(() => {
-      expect(mockScheduleTaskReminder).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-1', time: '' }),
-      );
+      expect(mockCancelTaskReminder).toHaveBeenCalledWith('task-1');
     });
   });
 
@@ -1015,10 +1032,10 @@ describe('TaskFormScreen — KAN-149 copy', () => {
     expect(screen.getByText('Which part of your life?')).toBeTruthy();
   });
 
-  it('time question reads "Around when?" with "Anytime is fine" placeholder text (KAN-280 — now a pressable field, not free text)', () => {
+  it('time question starts without a date, so the task remains active until the user explicitly dates it', () => {
     render(<TaskFormScreen />);
     expect(screen.getByText('Around when?')).toBeTruthy();
-    expect(screen.getByText('Anytime is fine')).toBeTruthy();
+    expect(screen.getAllByText('No date')).toHaveLength(2);
   });
 
   it('renders a rotating example as the title input\'s faux placeholder in create mode', () => {

@@ -29,7 +29,6 @@ import {
   doc,
   addDoc,
   deleteDoc,
-  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -90,7 +89,7 @@ export interface SendSharedTaskParams {
  * Returns the ID of the created incoming record.
  */
 export async function sendSharedTask(params: SendSharedTaskParams): Promise<string> {
-  const { senderUid, senderName, senderUsername, recipientUid, recipientName, task } = params;
+  const { senderUid, senderName, senderUsername, recipientUid, task } = params;
 
   if (senderUid === recipientUid) {
     throw new Error('CANNOT_SEND_TO_SELF');
@@ -189,9 +188,6 @@ export async function acceptSharedTask(
   shared: SharedTask,
 ): Promise<void> {
   const db  = getFirestore();
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
   await addDoc(
     collection(db, 'users', recipientUid, 'tasks'),
     {
@@ -199,7 +195,6 @@ export async function acceptSharedTask(
       category:  shared.category,
       ...(shared.poi ? { poi: shared.poi } : {}),
       done:      false,
-      date:      dateStr,
       createdAt: serverTimestamp(),
     },
   );

@@ -45,9 +45,9 @@ jest.mock('@react-native-firebase/auth/lib/modular', () => ({
   getAuth: () => mockGetAuth(),
 }));
 
-const mockGetTasksForDate = jest.fn().mockResolvedValue([]);
+const mockEnsureCurrentDay = jest.fn().mockResolvedValue({ tasks: [] });
 jest.mock('../../src/services/firestore', () => ({
-  getTasksForDate: (...args: unknown[]) => mockGetTasksForDate(...args),
+  ensureCurrentDay: (...args: unknown[]) => mockEnsureCurrentDay(...args),
 }));
 
 const mockGetPositionLowAccuracy = jest.fn().mockResolvedValue({ lat: 38.7, lng: -9.1, accuracy: 10, timestamp: 0 });
@@ -103,7 +103,7 @@ function makeStop(id: string, name: string, source: 'learned' | 'cache' = 'cache
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetAuth.mockReturnValue({ currentUser: { uid: 'user-123' } });
-  mockGetTasksForDate.mockResolvedValue([]);
+  mockEnsureCurrentDay.mockResolvedValue({ tasks: [] });
   mockGetPositionLowAccuracy.mockResolvedValue({ lat: 38.7, lng: -9.1, accuracy: 10, timestamp: 0 });
   mockGetLastSearchCoords.mockReturnValue({ lat: 38.7, lng: -9.1 });
   mockResolveTripDestinations.mockResolvedValue({ resolved: [], excludedCount: 0 });

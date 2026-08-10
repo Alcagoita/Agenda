@@ -22,6 +22,7 @@ import {
   getTotalPoints,
   getInboxUnreadCount,
   getTrips,
+  filterActiveTasksForDate,
 } from '../../services/firestore';
 import { getMallSnapshot } from '../../services/mallSnapshots';
 import { getIncomingSharedTasksCount } from '../../services/sharing';
@@ -37,7 +38,6 @@ import { DEBUG_DISABLE_BACKGROUND } from './debugFlags';
 
 const DATA_FETCH_TIMEOUT_MS = 5_000;
 const TASKS_LOAD_ERROR = 'Could not load tasks. Check your connection.';
-const ROLLOVER_RETRY_DELAYS_MS = [1_000, 3_000, 10_000];
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return Promise.race([
@@ -64,7 +64,7 @@ export interface TodayScreenData {
    *  need to know when the data has actually landed can await it — firing and
    *  forgetting made a refresh look instantaneous. */
   refresh:           () => Promise<void>;
-  /** Runs the current-day rollover only when the local calendar day changed. */
+  /** Refreshes the active list only when the local calendar day changes. */
   ensureCurrentDay:  () => Promise<void>;
   customCategories:  Category[];
   totalPoints:       number;
@@ -104,9 +104,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
 
   const latestTasksRef = useRef<Task[]>([]);
   const currentDayRef = useRef(todayISO());
-  const rolloverRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rolloverRetryAttemptRef = useRef(0);
-  const scheduleRolloverRetryRef = useRef<() => void>(() => undefined);
   useEffect(() => { latestTasksRef.current = tasks; }, [tasks]);
 
   const latestDataRef = useRef({
@@ -180,7 +177,11 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
         clearBootData();
       } else if (bootData) {
         if (!isStale()) {
-          setTasks(bootData.tasks);
+          // Splash data may have been fetched before midnight. Revalidate it
+          // against a fresh local day before showing it as the active list.
+          const bootToday = todayISO();
+          currentDayRef.current = bootToday;
+          setTasks(filterActiveTasksForDate(bootData.tasks, bootToday));
           setCustomCategories(bootData.customCategories.filter(c => !c.isBuiltIn));
           setTotalPoints(bootData.totalPoints);
           setInboxCount(bootData.inboxCount);
@@ -258,17 +259,8 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
       const cachedTasks = latestTasksRef.current;
       if (fetchedTasksResult.status === 'fulfilled') {
         setTasks(fetchedTasksResult.value.tasks);
-        // The useful list is already rendered. Persist the date move in the
-        // background so a slow/offline write never blocks Today.
-        fetchedTasksResult.value.persistence
-          .then(() => { rolloverRetryAttemptRef.current = 0; })
-          .catch(err => {
-            console.warn('[useTodayScreenData] current-day persistence failed', err);
-            scheduleRolloverRetryRef.current();
-          });
       } else {
         setTasks(cachedTasks);
-        scheduleRolloverRetryRef.current();
       }
       if (fetchedTasksResult.status === 'rejected' && cachedTasks.length === 0) {
         setError(TASKS_LOAD_ERROR);
@@ -343,29 +335,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
 
   const refresh = useCallback(() => loadData(true), [loadData]);
 
-  const scheduleRolloverRetry = useCallback(() => {
-    if (AppState.currentState !== 'active') { return; }
-    const attempt = rolloverRetryAttemptRef.current;
-    const delay = ROLLOVER_RETRY_DELAYS_MS[attempt];
-    if (delay === undefined || rolloverRetryTimerRef.current) { return; }
-    rolloverRetryAttemptRef.current += 1;
-    rolloverRetryTimerRef.current = setTimeout(() => {
-      rolloverRetryTimerRef.current = null;
-      void loadData(true);
-    }, delay);
-  }, [loadData]);
-
-  useEffect(() => {
-    scheduleRolloverRetryRef.current = scheduleRolloverRetry;
-    return () => {
-      scheduleRolloverRetryRef.current = () => undefined;
-      if (rolloverRetryTimerRef.current) {
-        clearTimeout(rolloverRetryTimerRef.current);
-        rolloverRetryTimerRef.current = null;
-      }
-    };
-  }, [scheduleRolloverRetry]);
-
   const ensureCurrentDayForLifecycle = useCallback(async () => {
     const currentDay = todayISO();
     if (currentDay === currentDayRef.current) { return; }
@@ -373,8 +342,8 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
     await loadData(true);
   }, [loadData]);
 
-  // A foreground session can cross midnight without navigating away. Wake just
-  // after the local boundary; resume and focus use the same idempotent guard.
+  // A foreground session can cross midnight without navigating away. Refresh
+  // just after the local boundary so selected-date tasks leave the active list.
   useEffect(() => {
     if (!uid) { return; }
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -395,7 +364,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
     const subscription = AppState.addEventListener('change', nextState => {
       if (nextState === 'active') {
         void ensureCurrentDayForLifecycle();
-        scheduleRolloverRetryRef.current();
       }
     });
     return () => subscription.remove();

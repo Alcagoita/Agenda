@@ -44,6 +44,7 @@ import MiniCalendar from '../../components/MiniCalendar';
 import MiniTimePicker from '../../components/MiniTimePicker';
 import FoodTypeSelector from '../../components/FoodTypeSelector';
 import { scheduleTaskReminder, cancelTaskReminder } from '../../services/notifications';
+import { refreshDatedTaskHandoff } from '../../services/datedTaskHandoff';
 import { isTaskPoiFarAway, openTakeMeThereMaps, getTakeMeThereA11yLabel } from '../../services/takeMeThere';
 import { getTypeSuggestions } from './poiSuggestions';
 import { PoiTile } from './PoiTile';
@@ -91,10 +92,10 @@ export default function TaskFormScreen() {
   const [titleFocused, setTitleFocused] = useState(false);
 
   // Due date
-  const [date, setDate] = useState<string>(() => {
-    if (existingTask?.date) { return existingTask.date; }
+  const [date, setDate] = useState<string | null>(() => {
+    if (existingTask?.scheduledDate) { return existingTask.scheduledDate; }
     if (initialDate)        { return initialDate; }
-    return todayISO();
+    return null;
   });
 
   const [dateFieldOpen, setDateFieldOpen] = useState(false);
@@ -352,7 +353,10 @@ export default function TaskFormScreen() {
         title:    trimmed,
         category: isBirthday ? 'personal' : (category ?? 'personal'),
         done:     existingTask?.done ?? false,
-        date,
+        ...(date ? {
+          scheduledDate: date,
+          originalScheduledDate: existingTask?.originalScheduledDate ?? existingTask?.scheduledDate ?? date,
+        } : {}),
         ...(time.trim() ? { time: time.trim() } : {}),
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
         ...(!isBirthday && effectivePoi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
@@ -382,28 +386,49 @@ export default function TaskFormScreen() {
         if (!isBirthday && (effectivePoi !== 'restaurant' || !restaurantFoodType)) {
           updateData.restaurantFoodType = deleteField();
         }
+        if (!date) {
+          updateData.scheduledDate = deleteField();
+          updateData.originalScheduledDate = deleteField();
+        }
+        if (!time.trim()) {
+          updateData.time = deleteField();
+        }
         await updateTask(uid, existingTask.id, updateData as Partial<Task>);
         logTap('task_edit', { category: payload.category });
-        // Time/date edit reschedules; time cleared cancels (KAN-280).
-        // scheduleTaskReminder cancels any existing reminder first, so this
-        // is safe to call unconditionally — it no-ops when time is empty.
-        await scheduleTaskReminder({
-          taskId:    existingTask.id,
-          taskTitle: trimmed,
-          date,
-          time:      time.trim(),
-        }).catch(() => {});
+        // A time reminder is valid only when both a date and a time remain.
+        // Clearing either one must cancel the prior trigger explicitly.
+        if (date && time.trim()) {
+          await scheduleTaskReminder({
+            taskId:    existingTask.id,
+            taskTitle: trimmed,
+            date,
+            time:      time.trim(),
+          }).catch(() => {});
+        } else {
+          cancelTaskReminder(existingTask.id).catch(() => {});
+        }
+        await Promise.all([
+          existingTask.scheduledDate
+            ? refreshDatedTaskHandoff(uid, existingTask.scheduledDate)
+            : Promise.resolve(),
+          date && date !== existingTask.scheduledDate
+            ? refreshDatedTaskHandoff(uid, date)
+            : Promise.resolve(),
+        ]).catch(() => {});
       } else {
         const newTaskId = await addTask(uid, payload);
         logTap('task_create', { category: payload.category });
         useToastStore.getState().showToast(COPY.newTaskSheet.confirmToast);
-        if (time.trim()) {
+        if (date && time.trim()) {
           await scheduleTaskReminder({
             taskId:    newTaskId,
             taskTitle: trimmed,
             date,
             time:      time.trim(),
           }).catch(() => {});
+        }
+        if (date) {
+          await refreshDatedTaskHandoff(uid, date).catch(() => {});
         }
       }
 
@@ -443,6 +468,9 @@ export default function TaskFormScreen() {
               // Best-effort — a notifee failure here must never block
               // navigation or be reported as a delete failure.
               cancelTaskReminder(existingTask.id).catch(() => {});
+              if (existingTask.scheduledDate) {
+                refreshDatedTaskHandoff(uid, existingTask.scheduledDate).catch(() => {});
+              }
               logTap('task_delete', { category: existingTask.category });
               navigation.goBack();
             } catch (err) {
@@ -920,9 +948,21 @@ export default function TaskFormScreen() {
               accessibilityRole="button"
               accessibilityLabel={COPY.newTaskSheet.timeQuestion}>
               <CalendarIcon color={palette.faint} size={16} />
-              <Text style={[styles.scheduleInput, { color: palette.text, fontVariant: ['tabular-nums'] }]}>
-                {date === todayISO() ? `Today · ${formatDateShort(date)}` : formatDateShort(date)}
+              <Text style={[styles.scheduleInput, { color: date ? palette.text : palette.muted, fontVariant: ['tabular-nums'] }]}>
+                {date
+                  ? (date === todayISO() ? `Today · ${formatDateShort(date)}` : formatDateShort(date))
+                  : COPY.newTaskSheet.datePlaceholder}
               </Text>
+              {date && (
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); setDate(null); setDateFieldOpen(false); setTime(''); }}
+                  style={styles.clearTimeBtn}
+                  hitSlop={15}
+                  accessibilityRole="button"
+                  accessibilityLabel={COPY.newTaskSheet.clearDateA11y}>
+                  <CloseIcon color={palette.faint} size={14} />
+                </Pressable>
+              )}
             </Pressable>
             {/* Time */}
             <Pressable
@@ -930,7 +970,8 @@ export default function TaskFormScreen() {
                 styles.scheduleField,
                 { backgroundColor: palette.surface, borderColor: timeFieldOpen ? palette.text : palette.line },
               ]}
-              onPress={() => setTimeFieldOpen(o => !o)}
+              onPress={() => { if (date) { setTimeFieldOpen(o => !o); } }}
+              disabled={!date}
               accessibilityRole="button"
               accessibilityLabel={COPY.newTaskSheet.timeQuestion}>
               <ClockIcon color={palette.faint} size={16} />
@@ -938,7 +979,7 @@ export default function TaskFormScreen() {
                 styles.scheduleInput,
                 { color: time ? palette.text : palette.muted, fontVariant: ['tabular-nums'] },
               ]}>
-                {time || COPY.newTaskSheet.timePlaceholder}
+                {date ? (time || COPY.newTaskSheet.timePlaceholder) : COPY.newTaskSheet.datePlaceholder}
               </Text>
               {time.length > 0 && (
                 <Pressable
@@ -954,7 +995,7 @@ export default function TaskFormScreen() {
           </View>
           {dateFieldOpen && (
             <MiniCalendar
-              value={date}
+              value={date ?? todayISO()}
               minimumDate={todayISO()}
               onChange={iso => { setDate(iso); setDateFieldOpen(false); }}
             />

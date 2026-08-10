@@ -214,8 +214,8 @@ export default function TodayScreen() {
   const isEmpty = !isBusy && !error && tasks.length === 0;
 
   // ── Virtualized task list (KAN-157 follow-up) ─────────────────────────────────
-  // Post-rollover (KAN-146) the Today list can hold every undone task carried
-  // forward from past days — potentially dozens. Rendering them all eagerly in a
+  // The active list can hold every undated task plus dated tasks whose selected
+  // day has not passed — potentially dozens. Rendering them all eagerly in a
   // .map() inside a ScrollView meant every proximity tick re-rendered the whole
   // animation-heavy list, saturating the JS thread (buttons dead). FlatList
   // virtualizes: only on-screen rows mount, and stable props keep React.memo

@@ -22,6 +22,7 @@ import { COPY } from '../constants/copy';
 
 export const CHANNEL_EOD         = 'eod-checkin';
 export const CHANNEL_EXIT        = 'exit-prompt';
+export const CHANNEL_DATED_TASK  = 'dated-task-handoff';
 
 // ─── Notification IDs ─────────────────────────────────────────────────────────
 
@@ -127,6 +128,82 @@ export async function cancelEodReminder(): Promise<void> {
 
 /** Stable action ID for the "Yes, brushed ✓" quick-action. */
 export const EXIT_ACTION_MARK_DONE = 'exit_mark_done';
+export const DATED_TASK_ACTION_FORGET = 'dated_task_forget';
+export const DATED_TASK_ACTION_TOMORROW = 'dated_task_tomorrow';
+
+export interface DatedTaskHandoffTask {
+  id: string;
+  title: string;
+}
+
+function datedTaskHandoffNotifId(date: string): string {
+  return `dated-task-handoff-${date}`;
+}
+
+/** Cancel the one end-of-day handoff notification for a local calendar day. */
+export async function cancelDatedTaskHandoff(date: string): Promise<void> {
+  await notifee.cancelNotification(datedTaskHandoffNotifId(date));
+}
+
+/**
+ * Schedules one local 20:00 handoff per selected date. Replacing the stable
+ * date-based id means adding, editing, or deleting a task cannot create a
+ * second notification. A single task offers unambiguous actions; several open
+ * the in-app selector on tap instead.
+ */
+export async function scheduleDatedTaskHandoff(options: {
+  uid: string;
+  date: string;
+  tasks: DatedTaskHandoffTask[];
+}): Promise<void> {
+  const { uid, date, tasks } = options;
+  await cancelDatedTaskHandoff(date);
+  if (tasks.length === 0) { return; }
+
+  const [year, month, day] = date.split('-').map(Number);
+  const fireAt = new Date(year, month - 1, day, 20, 0, 0, 0);
+  if (fireAt.getTime() <= Date.now()) { return; }
+
+  await notifee.createChannel({
+    id:         CHANNEL_DATED_TASK,
+    name:       'Dated task handoffs',
+    importance: AndroidImportance.DEFAULT,
+    vibration:  false,
+    visibility: AndroidVisibility.PUBLIC,
+  });
+
+  const singleTask = tasks.length === 1 ? tasks[0] : null;
+  const data = {
+    screen: singleTask ? 'Today' : 'EndOfDayHandoff',
+    uid,
+    scheduledDate: date,
+    taskIds: JSON.stringify(tasks.map(task => task.id)),
+  };
+  const trigger: TimestampTrigger = { type: TriggerType.TIMESTAMP, timestamp: fireAt.getTime() };
+
+  await notifee.createTriggerNotification({
+    id:    datedTaskHandoffNotifId(date),
+    title: COPY.datedTaskHandoff.title,
+    body:  singleTask
+      ? COPY.datedTaskHandoff.body(singleTask.title)
+      : COPY.datedTaskHandoff.multipleBody,
+    android: {
+      channelId:   CHANNEL_DATED_TASK,
+      importance:  AndroidImportance.DEFAULT,
+      pressAction: { id: 'default', launchActivity: 'default' },
+      visibility:  AndroidVisibility.PUBLIC,
+      smallIcon:   'ic_notification',
+      ...(singleTask ? {
+        actions: [
+          { title: COPY.datedTaskHandoff.forget, pressAction: { id: DATED_TASK_ACTION_FORGET } },
+          { title: COPY.datedTaskHandoff.tomorrow, pressAction: { id: DATED_TASK_ACTION_TOMORROW } },
+        ],
+      } : {}),
+    },
+    ios: singleTask ? { categoryId: 'dated_task_handoff_single' } : undefined,
+    data,
+  }, trigger);
+}
 
 /**
  * Returns the notification body for the exit prompt.
@@ -166,6 +243,13 @@ export async function registerExitPromptCategory(): Promise<void> {
           id:    EXIT_ACTION_MARK_DONE,
           title: 'Yes, brushed ✓',
         },
+      ],
+    },
+    {
+      id: 'dated_task_handoff_single',
+      actions: [
+        { id: DATED_TASK_ACTION_FORGET, title: COPY.datedTaskHandoff.forget },
+        { id: DATED_TASK_ACTION_TOMORROW, title: COPY.datedTaskHandoff.tomorrow },
       ],
     },
   ]);
