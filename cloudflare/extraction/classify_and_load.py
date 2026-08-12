@@ -59,6 +59,19 @@ def find_brand(name, ranked_types, brand_dictionary):
                     return canonical_name
     return None
 
+
+def is_explicit_atm_name(name):
+    """True only when the source title identifies the POI itself as an ATM.
+
+    Foursquare often tags a real bank branch with both Bank and ATM because it
+    has a cash machine on-site. That category overlap must remain searchable
+    as a Bank. This rule deliberately relies on the POI's own title instead:
+    e.g. "Multibanco CGD" and "ATM - Montepio" are ATM-only locations.
+    """
+    normalized_name = normalize_text(name)
+    padded_name = f' {normalized_name} '
+    return ' atm ' in padded_name or ' multibanco ' in padded_name
+
 def load_keyword_dictionary(filename):
     # KAN-340: reuses the app's existing keyword-inference dictionaries
     # (used elsewhere for task-title inference) rather than building a
@@ -388,6 +401,13 @@ def classify(place_id, csv_path, out_sql_path):
                 if cid in food_reverse:
                     matched_types.add('restaurant')
                     food_cuisines.add(food_reverse[cid])
+
+            # A named ATM is not a Bank search result. Keep genuine branches
+            # that merely carry both Foursquare categories intact; only the
+            # explicit title markers override Foursquare's Bank-only tagging.
+            if is_explicit_atm_name(row['name']):
+                matched_types.discard('bank')
+                matched_types.add('atm')
 
             # KAN-340 keyword fallback — only for dimensions category-tag
             # matching left empty, and only for rows already classified as

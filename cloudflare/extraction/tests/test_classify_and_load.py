@@ -57,6 +57,46 @@ class ClassifyDeduplicationTest(unittest.TestCase):
             'Vivafit',
         )
 
+    def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
+        self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio'))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Caixa Agrícola - Multibanco'))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Multibanco CGD - ATM'))
+        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco Montepio'))
+        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco BPI'))
+
+    def test_named_atm_is_loaded_as_atm_only_even_when_foursquare_says_bank(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = os.path.join(temp_dir, 'source.csv')
+            sql_path = os.path.join(temp_dir, 'load.sql')
+            previous_build_dir = classify_and_load.BUILD_DIR
+            classify_and_load.BUILD_DIR = temp_dir
+            try:
+                with open(csv_path, 'w', newline='') as source:
+                    writer = csv.DictWriter(source, fieldnames=[
+                        'fsq_place_id', 'name', 'latitude', 'longitude',
+                        'category_ids', 'category_labels', 'address',
+                    ])
+                    writer.writeheader()
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-atm', 'name': 'ATM - Montepio',
+                        'latitude': '38.000000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735',
+                        'category_labels': 'Bank', 'address': '1 Main Street',
+                    })
+
+                result = classify_and_load.classify('test-place', csv_path, sql_path)
+                with sqlite3.connect(result['sqlite_path']) as export:
+                    self.assertEqual(
+                        export.execute('SELECT primary_poi_type FROM poi').fetchall(),
+                        [('atm',)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT poi_type FROM poi_type').fetchall(),
+                        [('atm',)],
+                    )
+            finally:
+                classify_and_load.BUILD_DIR = previous_build_dir
+
     def test_child_batches_stay_below_compound_select_cap(self):
         output = io.StringIO()
         select = "SELECT fsq_place_id, 'cafe' AS poi_type, 0 AS rank FROM poi WHERE fsq_place_id = 'fsq-1'"
