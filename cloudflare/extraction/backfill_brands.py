@@ -35,24 +35,50 @@ SQL_ACCENT_REPLACEMENTS = {
 SQL_PUNCTUATION = string.punctuation + '–—“”‘’…\t\n\r'
 
 
-def normalized_name_sql(column):
-    """D1 expression matching classify_and_load.normalize_text's contract.
-
-    SQLite has no Unicode-normalize/regexp replacement primitive, so the
-    generated expression explicitly folds the Latin accents present in the
-    curated aliases, turns punctuation into spaces, then collapses runs before
-    the padded phrase comparison below.
-    """
-    expression = column
+def normalization_steps():
+    """Return the importer-equivalent SQL transformations in shallow layers."""
+    steps = [lambda expression: f"lower({expression})"]
     for source, target in SQL_ACCENT_REPLACEMENTS.items():
-        expression = f"replace({expression}, {sql_string(source.upper())}, {sql_string(target)})"
-        expression = f"replace({expression}, {sql_string(source)}, {sql_string(target)})"
-    expression = f"lower({expression})"
+        steps.append(lambda expression, source=source, target=target: (
+            f"replace({expression}, {sql_string(source.upper())}, {sql_string(target)})"
+        ))
+        steps.append(lambda expression, source=source, target=target: (
+            f"replace({expression}, {sql_string(source)}, {sql_string(target)})"
+        ))
     for character in SQL_PUNCTUATION:
-        expression = f"replace({expression}, {sql_string(character)}, ' ')"
+        steps.append(lambda expression, character=character: (
+            f"replace({expression}, {sql_string(character)}, ' ')"
+        ))
     for _ in range(8):
-        expression = f"replace({expression}, '  ', ' ')"
-    return f"trim({expression})"
+        steps.append(lambda expression: f"replace({expression}, '  ', ' ')")
+    steps.append(lambda expression: f"trim({expression})")
+    return steps
+
+
+def normalized_poi_ctes(identifier_column, identifier_name, name_column, source_table, where_clause):
+    """Build shallow D1-compatible CTEs for the complete normalization rule.
+
+    D1 rejects one expression with every replacement nested inside it, and its
+    remote authorizer rejects TEMP tables. Each CTE therefore performs at most
+    eight transformations while retaining the exact same value flow.
+    """
+    ctes = [
+        f"normalized_0 AS (SELECT {identifier_column} AS {identifier_name}, coalesce({name_column}, '') AS normalized_name "
+        f"FROM {source_table} WHERE {where_clause})",
+    ]
+    previous = 'normalized_0'
+    steps = normalization_steps()
+    for index, group_start in enumerate(range(0, len(steps), 8), start=1):
+        expression = 'normalized_name'
+        for step in steps[group_start:group_start + 8]:
+            expression = step(expression)
+        current = f'normalized_{index}'
+        ctes.append(
+            f"{current} AS (SELECT {identifier_name}, {expression} AS normalized_name FROM {previous})",
+        )
+        previous = current
+    ctes.append(f"normalized_poi AS (SELECT {identifier_name}, normalized_name FROM {previous})")
+    return ',\n'.join(ctes)
 
 
 def brand_case(entries, normalized_column='normalized_name'):
@@ -73,47 +99,41 @@ def brand_case(entries, normalized_column='normalized_name'):
 
 
 def emit_for_foursquare(poi_type, entries):
-    print(f"""WITH normalized_poi AS (
-  SELECT poi.fsq_place_id, {normalized_name_sql('poi.name')} AS normalized_name
-  FROM poi
-  WHERE EXISTS (
+    where_clause = f"""EXISTS (
     SELECT 1 FROM poi_type
-    WHERE poi_type.fsq_place_id = poi.fsq_place_id
+    WHERE poi_type.fsq_place_id = source.fsq_place_id
       AND poi_type.poi_type = {sql_string(poi_type)}
-  )
-)
-UPDATE poi
+)"""
+    print(f"""WITH {normalized_poi_ctes('source.fsq_place_id', 'fsq_place_id', 'source.name', 'poi AS source', where_clause)}
+UPDATE poi AS target
 SET brand = (
   SELECT CASE
       {brand_case(entries)}
       ELSE NULL
     END
   FROM normalized_poi
-  WHERE normalized_poi.fsq_place_id = poi.fsq_place_id
+  WHERE normalized_poi.fsq_place_id = target.fsq_place_id
 )
 WHERE EXISTS (
   SELECT 1 FROM poi_type
-  WHERE poi_type.fsq_place_id = poi.fsq_place_id
+  WHERE poi_type.fsq_place_id = target.fsq_place_id
     AND poi_type.poi_type = {sql_string(poi_type)}
 );""")
 
 
 def emit_for_curated(poi_type, entries):
-    print(f"""WITH normalized_poi AS (
-  SELECT poi_id, {normalized_name_sql('name')} AS normalized_name
-  FROM curated_poi
-  WHERE primary_poi_type = {sql_string(poi_type)}
-)
-UPDATE curated_poi
+    where_clause = f"source.primary_poi_type = {sql_string(poi_type)}"
+    print(f"""WITH {normalized_poi_ctes('source.poi_id', 'poi_id', 'source.name', 'curated_poi AS source', where_clause)}
+UPDATE curated_poi AS target
 SET brand = (
   SELECT CASE
       {brand_case(entries)}
       ELSE NULL
     END
   FROM normalized_poi
-  WHERE normalized_poi.poi_id = curated_poi.poi_id
+  WHERE normalized_poi.poi_id = target.poi_id
 )
-WHERE primary_poi_type = {sql_string(poi_type)};""")
+WHERE target.primary_poi_type = {sql_string(poi_type)};""")
 
 
 def main():
