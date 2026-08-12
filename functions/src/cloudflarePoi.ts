@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { getFirestore } from 'firebase-admin/firestore';
+import brandDictionary from '../../src/constants/brandDictionary.json';
 
 /**
  * Proxy for Brush's own Cloudflare-backed POI API (poi-api.brushaway.app,
@@ -38,6 +39,7 @@ interface NearbyRequestInput {
   key: string;
   type: string;
   attribute?: NearbyAttributeInput;
+  brand?: string;
 }
 
 interface PoiAllInput {
@@ -66,6 +68,14 @@ const SUBTYPE_FILTER_VALUES: Record<NearbyAttributeInput['dimension'], readonly 
   food_cuisine: ['asian', 'bbq', 'brazilian', 'burger', 'healthy', 'indian', 'italian', 'mediterranean', 'mexican', 'pizza', 'portuguese', 'seafood', 'steak', 'sushi', 'thai', 'vegetarian'],
   store_kind: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
 };
+
+const BRAND_FILTER_TYPES = new Set(['gym', 'bank']);
+const CANONICAL_BRANDS = new Map(
+  Object.entries(brandDictionary).map(([type, brands]) => [
+    type,
+    new Set((brands as Array<{ name: string }>).map(brand => brand.name)),
+  ]),
+);
 
 function assertAuthenticated(auth: unknown): void {
   if (!auth) {
@@ -123,6 +133,12 @@ function assertNearbyRequests(data: PoiAllInput): { requests: NearbyRequestInput
       request.attribute.values.some(value => typeof value !== 'string' || !SUBTYPE_FILTER_VALUES[request.attribute!.dimension].includes(value))
     )) {
       throw new HttpsError('invalid-argument', 'Each nearby attribute filter needs one supported dimension and value.');
+    }
+    if (request.brand !== undefined && (
+      typeof request.brand !== 'string' || !BRAND_FILTER_TYPES.has(request.type) ||
+      !CANONICAL_BRANDS.get(request.type)?.has(request.brand)
+    )) {
+      throw new HttpsError('invalid-argument', 'Each nearby brand filter needs one supported canonical Gym or Bank brand.');
     }
   }
   return { requests, limitPerRequest };

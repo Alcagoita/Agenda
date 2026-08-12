@@ -774,6 +774,32 @@ describe('TaskFormScreen — save (create)', () => {
       poi: 'restaurant', restaurantFoodType: 'vegetarian',
     })));
   });
+
+  it('requires and saves a canonical Gym brand in create mode', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'gym', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Training tonight');
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+    fireEvent.press(screen.getByLabelText('Solinca'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'gym', poiBrand: 'Solinca',
+    })));
+  });
+
+  it('requires and saves a canonical Bank brand in create mode', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'bank', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Visit my bank');
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+    fireEvent.press(screen.getByLabelText('Caixa Geral de Depósitos'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'bank', poiBrand: 'Caixa Geral de Depósitos',
+    })));
+  });
 });
 
 // ── Save — edit ───────────────────────────────────────────────────────────────

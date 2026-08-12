@@ -225,6 +225,14 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
+  it('uses the new quick POI dictionary entries without calling the LLM classifier', async () => {
+    expect(await inferPoiForQuickAdd('buy bread')).toBe('bakery');
+    expect(await inferPoiForQuickAdd('buy flowers')).toBe('florist');
+    expect(await inferPoiForQuickAdd('meet for cocktails')).toBe('bar');
+    expect(await inferPoiForQuickAdd('comprar flores')).toBe('florist');
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
   it('keeps restaurant food intent on the broad restaurant type', async () => {
     expect(await inferPoiForQuickAdd('go out to sushi')).toBe('restaurant');
     expect(mockLoad).not.toHaveBeenCalled();

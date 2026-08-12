@@ -26,7 +26,7 @@ export const GOOGLE_TYPE_ICON: Record<string, string> = {
   // Food & drink
   acai_shop:            'cafe',
   bagel_shop:           'cafe',
-  bakery:               'store',
+  bakery:               'bakery',
   bar:                  'cafe',
   bar_and_grill:        'restaurant',
   beer_garden:          'cafe',
@@ -347,6 +347,32 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    case 'currency_exchange':
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="12" r="8" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M15.5 9.5c-.7-1-1.9-1.5-3.4-1.5-2 0-3.5 1.3-3.5 3s1.5 3 3.5 3c1.5 0 2.7-.5 3.4-1.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="m14 6.5 1.5 1.5-1.5 1.5M10 14l-1.5 1.5 1.5 1.5" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'money_transfer':
+      return (
+        <Svg {...p}>
+          <Path d="M4 8h12l-2.5-2.5M20 16H8l2.5 2.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M16 8a4 4 0 0 1 4 4M8 16a4 4 0 0 1-4-4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'financial_service':
+      return (
+        <Svg {...p}>
+          <Rect x="3" y="4" width="18" height="16" rx="2" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="12" cy="12" r="3.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M12 9.5v5M10.5 11h3M10.5 13h3" stroke={color} strokeWidth={1.4} {...S} />
+        </Svg>
+      );
+
     case 'restaurant':
       return (
         <Svg {...p}>
@@ -355,6 +381,18 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
           <Path d="M17 3v5" stroke={color} strokeWidth={1.6} {...S} />
           <Path d="M17 12a4 4 0 0 1-4-4V3h8v5a4 4 0 0 1-4 4z" stroke={color} strokeWidth={1.6} {...S} />
           <Line x1="17" y1="12" x2="17" y2="21" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'bakery':
+      return (
+        <Svg {...p}>
+          <Path
+            d="M4 20v-8a8 8 0 0 1 16 0v8H4z"
+            stroke={color} strokeWidth={1.6} {...S}
+          />
+          <Path d="M8 10.5 10.5 13M12 8.5 14.5 11M16 10.5 18 12.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="4" y1="20" x2="20" y2="20" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
 
@@ -448,6 +486,10 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
 }
 
 export function resolvePoiIconType(type: string): string {
+  // Source-only financial-service records have a dedicated neutral icon; do
+  // not let the generic "service" fallback misrepresent them as a Bank.
+  if (type === 'financial_service') return type;
+
   if (GOOGLE_TYPE_ICON[type]) {
     return GOOGLE_TYPE_ICON[type];
   }

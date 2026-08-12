@@ -83,22 +83,24 @@ const makePosition = (lat: number, lng: number) => ({
   timestamp: 1_700_000_000,
 });
 
-const makeTask = (id: string, poi: string, title: string = `Task ${id}`): Task => ({
+const makeTask = (id: string, poi: string, title: string = `Task ${id}`, poiBrand?: string): Task => ({
   id,
   title,
   category: 'errands',
   done: false,
   date: '2026-06-27',
   poi: poi as Task['poi'],
+  ...(poiBrand ? { poiBrand } : {}),
   createdAt: { seconds: 0, nanoseconds: 0 } as unknown as Task['createdAt'],
 });
 
-const makePlace = (placeId: string, name: string, distanceMeters: number) => ({
+const makePlace = (placeId: string, name: string, distanceMeters: number, brand?: string) => ({
   placeId,
   name,
   lat: 38.7,
   lng: -9.1,
   distanceMeters,
+  ...(brand ? { brand } : {}),
 });
 
 describe('runProximitySearch — multiple results per type', () => {
@@ -200,5 +202,24 @@ describe('runProximitySearch — multiple results per type', () => {
     expect(heroType).toBeNull();
     expect(heroPlace).toBeNull();
     expect(allPlaces.restaurant).toBeUndefined();
+  });
+
+  it('keeps only the task’s canonical Gym brand and sends it to the API', async () => {
+    const solinca = makePlace('gym-1', 'Solinca Alcobaça', 50, 'Solinca');
+    const fitnessHut = makePlace('gym-2', 'Fitness Hut', 25, 'Fitness Hut');
+    mockSearchResults({ gym: [fitnessHut, solinca] });
+
+    await runProximitySearch('uid-1', [
+      makeTask('t1', 'gym', 'Go to Solinca', 'Solinca'),
+    ], mockOnUpdate);
+
+    expect(mockSearchNearbyPlaces).toHaveBeenCalledWith(
+      expect.any(Number), expect.any(Number), ['gym'], expect.any(Number),
+      [{ key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' }],
+    );
+    const [heroType, heroPlace, allPlaces] = mockOnUpdate.mock.calls[0];
+    expect(heroType).toBe('gym');
+    expect(heroPlace?.placeId).toBe('gym-1');
+    expect(allPlaces.gym).toEqual([solinca]);
   });
 });

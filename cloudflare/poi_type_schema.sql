@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS poi_type (
   PRIMARY KEY (fsq_place_id, poi_type)
 );
 
--- No secondary index: the only lookup against this table (index.ts EXISTS
--- subquery) filters on (place_id, fsq_place_id), the PK's own leading
--- columns — already covered. A (place_id, poi_type) index would never be
--- hit by that predicate shape, so it'd cost write overhead for nothing.
+-- KAN-364's global nearby query starts from requested types before joining
+-- POIs. The primary key is place-first; this complementary type-first index
+-- lets D1 intersect type, canonical brand and geohash without scanning every
+-- type row for a branded Gym/Bank request.
+CREATE INDEX IF NOT EXISTS idx_poi_type_type_place
+  ON poi_type (poi_type, fsq_place_id);

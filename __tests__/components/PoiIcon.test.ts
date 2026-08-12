@@ -9,6 +9,7 @@ describe('resolvePoiIconType', () => {
   it('keeps existing built-in poi keys unchanged', () => {
     expect(resolvePoiIconType('atm')).toBe('atm');
     expect(resolvePoiIconType('supermarket')).toBe('supermarket');
+    expect(resolvePoiIconType('financial_service')).toBe('financial_service');
   });
 
   it('maps common API families with suffix rules', () => {

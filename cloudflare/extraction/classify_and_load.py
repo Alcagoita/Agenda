@@ -36,8 +36,8 @@ def normalize_text(s):
     return re.sub(r'\s+', ' ', s).strip()
 
 def load_brand_dictionary():
-    # Reuses the app's existing taught-places brand list (KAN-304) rather
-    # than building a second, parallel one — see src/services/brandDictionary.ts.
+    # One canonical app/import/API catalogue. Every item has a persisted
+    # `name` and source/title aliases that must resolve to that same value.
     return load_mapping(os.path.join(REPO_ROOT, 'src', 'constants', 'brandDictionary.json'))
 
 def find_brand(name, ranked_types, brand_dictionary):
@@ -52,10 +52,60 @@ def find_brand(name, ranked_types, brand_dictionary):
     padded_name = f' {normalized_name} '
     for t in ranked_types:
         for brand in brand_dictionary.get(t, []):
-            normalized_brand = normalize_text(brand)
-            if normalized_brand and f' {normalized_brand} ' in padded_name:
-                return brand
+            canonical_name = brand['name']
+            for candidate in [canonical_name, *brand.get('aliases', [])]:
+                normalized_brand = normalize_text(candidate)
+                if normalized_brand and f' {normalized_brand} ' in padded_name:
+                    return canonical_name
     return None
+
+
+def is_explicit_atm_name(name, name_rules):
+    """True only when the source title identifies the POI itself as an ATM.
+
+    Foursquare often tags a real bank branch with both Bank and ATM because it
+    has a cash machine on-site. That category overlap must remain searchable
+    as a Bank. This rule deliberately relies on the POI's own title instead:
+    e.g. "Multibanco CGD" and "ATM - Montepio" are ATM-only locations.
+    """
+    normalized_name = normalize_text(name)
+    padded_name = f' {normalized_name} '
+    for alias in name_rules.get('atm', []):
+        normalized_alias = normalize_text(alias)
+        if normalized_alias == 'mb':
+            if normalized_name == normalized_alias:  # Portuguese Multibanco label.
+                return True
+        elif normalized_alias and f' {normalized_alias} ' in padded_name:
+            return True
+    return False
+
+def load_financial_service_name_rules():
+    """Curated provider/title rules for Foursquare's incorrectly Bank-tagged
+    exchange and transfer locations. These classify source data, not task text."""
+    return load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'financialServiceNameRules.json'))
+
+def financial_service_classification(name, cat_ids, name_rules):
+    """Return (primary type, optional subtype) only for an explicit source signal.
+
+    Currency Exchange has its own Foursquare category. Transfer providers are
+    often Bank-only rows, so a small title allowlist is the reliable fallback.
+    Other financial businesses use a source-only type with a name-verified
+    ``financial_service_kind`` attribute; none are task-selectable POI types.
+    """
+    if '5744ccdfe4b0c0459246b4be' in cat_ids:
+        return ('currency_exchange', None)
+    padded_name = f' {normalize_text(name)} '
+    for service_type in ('money_transfer', 'currency_exchange'):
+        for alias in name_rules.get(service_type, []):
+            normalized_alias = normalize_text(alias)
+            if normalized_alias and f' {normalized_alias} ' in padded_name:
+                return (service_type, None)
+    for kind, aliases in name_rules.get('financial_service', {}).items():
+        for alias in aliases:
+            normalized_alias = normalize_text(alias)
+            if normalized_alias and f' {normalized_alias} ' in padded_name:
+                return ('financial_service', kind)
+    return (None, None)
 
 def load_keyword_dictionary(filename):
     # KAN-340: reuses the app's existing keyword-inference dictionaries
@@ -145,7 +195,11 @@ def build_reverse_map(mapping):
     this warning exists so a *new*, unhandled collision doesn't go unnoticed."""
     reverse = {}
     for k, v in mapping.items():
-        cid = v['category_id']
+        cid = v.get('category_id')
+        # Some useful app types have no reliable Foursquare category. They are
+        # classified by explicit title rules, without widening the extract.
+        if not cid:
+            continue
         if cid in reverse:
             print(f"WARNING: category_id {cid} claimed by both '{reverse[cid]}' and '{k}' — "
                   f"'{k}' wins classification, '{reverse[cid]}' gets zero rows unless merged "
@@ -314,6 +368,7 @@ def classify(place_id, csv_path, out_sql_path):
     store_reverse = {v['category_id']: k for k, v in store_subtypes.items() if k != 'any'}
     food_reverse = build_reverse_map(food_subtypes)
     brand_dictionary = load_brand_dictionary()
+    financial_service_rules = load_financial_service_name_rules()
 
     # KAN-340: Foursquare frequently tags a place as the generic 'restaurant'
     # or 'store' with no specific cuisine/kind category id at all — no
@@ -387,6 +442,20 @@ def classify(place_id, csv_path, out_sql_path):
                     matched_types.add('restaurant')
                     food_cuisines.add(food_reverse[cid])
 
+            # A named ATM is not a Bank search result. Keep genuine branches
+            # that merely carry both Foursquare categories intact; only the
+            # explicit title markers override Foursquare's Bank-only tagging.
+            if is_explicit_atm_name(row['name'], financial_service_rules):
+                matched_types.discard('bank')
+                matched_types.add('atm')
+
+            service_type, financial_service_kind = financial_service_classification(
+                row['name'], cat_ids, financial_service_rules,
+            )
+            if service_type:
+                matched_types.discard('bank')
+                matched_types.add(service_type)
+
             # KAN-340 keyword fallback — only for dimensions category-tag
             # matching left empty, and only for rows already classified as
             # store/restaurant by real Foursquare category tags (never
@@ -430,6 +499,8 @@ def classify(place_id, csv_path, out_sql_path):
                     poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'store_kind', value, dedupe_name, lat, lng))
                 for value in sorted(food_cuisines):
                     poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
+                if financial_service_kind:
+                    poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'financial_service_kind', financial_service_kind, dedupe_name, lat, lng))
                 continue
             seen_identities[identity] = row['fsq_place_id']
             if keyword_store_kind_match:
@@ -454,6 +525,8 @@ def classify(place_id, csv_path, out_sql_path):
                 poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'store_kind', value, dedupe_name, lat, lng))
             for value in sorted(food_cuisines):
                 poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
+            if financial_service_kind:
+                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'financial_service_kind', financial_service_kind, dedupe_name, lat, lng))
             type_counts[primary_poi_type] = type_counts.get(primary_poi_type, 0) + 1
 
     print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped_no_type} (no matching poi_type)")

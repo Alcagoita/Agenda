@@ -28,6 +28,8 @@ export interface CloudflareNearbyRequest {
     dimension: 'food_cuisine' | 'store_kind';
     values: [string];
   };
+  /** Canonical Gym/Bank brand. Validated by the proxy and Worker. */
+  brand?: string;
 }
 
 interface PoiAllResponse {

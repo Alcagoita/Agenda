@@ -42,6 +42,7 @@ import { persistLearnedKeyword } from './firestore';
 import { isSuggestedPoiType, searchPlaceTypesLocal } from './poiTypeCache';
 import { inferRestaurantFoodTypeForPoiInference } from './restaurantFoodTypes';
 import { inferStoreSubtypeForPoiInference } from './storeSubtypes';
+import { findRequiredBrandInText } from './brandDictionary';
 import vocabJson from '../../assets/poi-model/vocab.json';
 import labelsJson from '../../assets/poi-model/labels.json';
 
@@ -198,6 +199,11 @@ export async function classifyPoi(
  * to `null` on failure, so this works fully offline (airplane mode).
  */
 export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution | null> {
+  // Gym and Bank tasks are brand-specific. A recognised chain is therefore
+  // stronger than generic title keywords and lets the form preselect both
+  // the type and its canonical brand (KAN-364).
+  const requiredBrand = findRequiredBrandInText(title);
+  if (requiredBrand) { return requiredBrand.poiType; }
   if (inferRestaurantFoodTypeForPoiInference(title)) { return 'restaurant'; }
 
   const localSuggestion = searchPlaceTypesLocal(title)[0]?.type ?? null;

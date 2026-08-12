@@ -1,4 +1,5 @@
 import csv
+import contextlib
 import io
 import os
 import sqlite3
@@ -13,9 +14,294 @@ MIGRATION_PATH = os.path.join(
 sys.path.insert(0, EXTRACTION_DIR)
 
 import classify_and_load
+import backfill_brands
 
 
 class ClassifyDeduplicationTest(unittest.TestCase):
+    def test_brand_backfill_uses_normalized_phrase_boundaries(self):
+        sql = backfill_brands.brand_case([{
+            'name': 'Caixa Geral de Depósitos', 'aliases': ['CGD'],
+        }])
+        self.assertIn("' ' || normalized_name || ' '", sql)
+        self.assertIn("% caixa geral de depositos %", sql)
+        self.assertIn("% cgd %", sql)
+        self.assertNotIn("LIKE '%CGD%'", sql)
+
+    def test_brand_backfill_can_limit_a_d1_batch_by_hex_identifier_prefix(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.emit_for_foursquare('bank', [{'name': 'Banco BPI', 'aliases': ['BPI']}], 'a')
+            backfill_brands.emit_for_curated('bank', [{'name': 'Banco BPI', 'aliases': ['BPI']}], 'a')
+        self.assertIn("target.fsq_place_id LIKE 'a%'", output.getvalue())
+        self.assertIn("target.poi_id LIKE 'a%'", output.getvalue())
+
+    def test_brand_backfill_prefix_does_not_clear_rows_outside_the_shard(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.emit_for_foursquare('bank', [{'name': 'Banco BPI', 'aliases': ['BPI']}], 'a')
+        with sqlite3.connect(':memory:') as database:
+            database.executescript('''
+                CREATE TABLE poi (fsq_place_id TEXT PRIMARY KEY, name TEXT, dedupe_name TEXT, brand TEXT);
+                CREATE TABLE poi_type (fsq_place_id TEXT, poi_type TEXT);
+            ''')
+            database.execute("INSERT INTO poi VALUES ('a-match', 'BPI', 'bpi', NULL)")
+            database.execute("INSERT INTO poi VALUES ('b-untouched', 'Other bank', 'other bank', 'source value')")
+            database.execute("INSERT INTO poi_type VALUES ('a-match', 'bank')")
+            database.execute("INSERT INTO poi_type VALUES ('b-untouched', 'bank')")
+            database.executescript(output.getvalue())
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'a-match'").fetchone(), ('Banco BPI',))
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'b-untouched'").fetchone(), ('source value',))
+
+    def test_brand_backfill_cli_can_emit_one_bank_shard(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.main(['--poi-type', 'bank', '--id-prefix', 'a'])
+        sql = output.getvalue()
+        self.assertIn("poi_type.poi_type = 'bank'", sql)
+        self.assertIn("target.fsq_place_id LIKE 'a%'", sql)
+        self.assertNotIn("poi_type.poi_type = 'gym'", sql)
+
+    def test_brand_backfill_reuses_importer_normalization_for_foursquare_and_curated_rows(self):
+        entries = [{'name': 'Caixa Geral de Depósitos', 'aliases': ['CGD']}]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.emit_for_foursquare('bank', entries)
+            backfill_brands.emit_for_curated('bank', entries)
+        with sqlite3.connect(':memory:') as database:
+            database.executescript('''
+                CREATE TABLE poi (fsq_place_id TEXT PRIMARY KEY, name TEXT, dedupe_name TEXT, brand TEXT);
+                CREATE TABLE poi_type (fsq_place_id TEXT, poi_type TEXT);
+                CREATE TABLE curated_poi (poi_id TEXT PRIMARY KEY, name TEXT, dedupe_name TEXT, primary_poi_type TEXT, brand TEXT);
+            ''')
+            database.execute("INSERT INTO poi VALUES ('fsq-cgd', 'CGD — Alcobaça', 'cgd alcobaca', NULL)")
+            database.execute("INSERT INTO poi VALUES ('fsq-unlisted', 'Unlisted Source Bank', 'unlisted source bank', 'source value')")
+            database.execute("INSERT INTO poi_type VALUES ('fsq-cgd', 'bank')")
+            database.execute("INSERT INTO poi_type VALUES ('fsq-unlisted', 'bank')")
+            database.execute("INSERT INTO curated_poi VALUES ('manual-cgd', 'Caixa Geral de Depositos - Alcobaça', 'caixa geral de depositos alcobaca', 'bank', NULL)")
+            database.execute("INSERT INTO curated_poi VALUES ('manual-unlisted', 'Unlisted Source Bank', 'unlisted source bank', 'bank', 'source value')")
+            database.executescript(output.getvalue())
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'fsq-cgd'").fetchone(), ('Caixa Geral de Depósitos',))
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'fsq-unlisted'").fetchone(), ('source value',))
+            self.assertEqual(database.execute("SELECT brand FROM curated_poi WHERE poi_id = 'manual-cgd'").fetchone(), ('Caixa Geral de Depósitos',))
+            self.assertEqual(database.execute("SELECT brand FROM curated_poi WHERE poi_id = 'manual-unlisted'").fetchone(), ('source value',))
+
+    def test_brand_aliases_resolve_to_the_canonical_persisted_value(self):
+        dictionary = classify_and_load.load_brand_dictionary()
+        self.assertEqual(
+            classify_and_load.find_brand('CGD - Alcobaça', ['bank'], dictionary),
+            'Caixa Geral de Depósitos',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Viva Fit Leiria', ['gym'], dictionary),
+            'Vivafit',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('BANIF Batalha', ['bank'], dictionary),
+            'Santander',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Unicaja Banco (EspañaDuero)', ['bank'], dictionary),
+            'Unicaja',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('BPCE', ['bank'], dictionary),
+            'Banque Populaire',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('BPN Tomar', ['bank'], dictionary),
+            'ABANCA',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('BancoBIC Alhos Vedros', ['bank'], dictionary),
+            'ABANCA',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Caixa Credito Agricula', ['bank'], dictionary),
+            'Crédito Agrícola',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Finibanco em Abrantes', ['bank'], dictionary),
+            'Montepio',
+        )
+
+    def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
+        rules = classify_and_load.load_financial_service_name_rules()
+        self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('MB', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Caixa Agrícola - Multibanco', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Multibanco CGD - ATM', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Cajero Automático EspañaDuero Banco', rules))
+        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco Montepio', rules))
+        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco BPI', rules))
+
+    def test_financial_service_rules_only_override_bank_for_explicit_signals(self):
+        rules = classify_and_load.load_financial_service_name_rules()
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Damane Cash Soltana', ['5744ccdfe4b0c0459246b4be'], rules),
+            ('currency_exchange', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Western Union - Faro', [], rules),
+            ('money_transfer', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('MoneyGram - Faro', [], rules),
+            ('money_transfer', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Cashplus Agence Alfadl', [], rules),
+            ('money_transfer', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Moneyone Cascais', [], rules),
+            ('money_transfer', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Transfex Rua Ouro', [], rules),
+            ('money_transfer', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Wafa Cash 2 Mars', [], rules),
+            ('money_transfer', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Bureau de change', [], rules),
+            ('currency_exchange', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Hivernage Exchange', [], rules),
+            ('currency_exchange', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Taha Change', [], rules),
+            ('currency_exchange', None),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Cofidis', [], rules),
+            ('financial_service', 'consumer_credit'),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Fidelidade Rua 5 De Outubro', [], rules),
+            ('financial_service', 'insurance'),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Banco de Portugal - Agência de Faro', [], rules),
+            ('financial_service', 'central_bank'),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Banco Santander', [], rules),
+            (None, None),
+        )
+
+    def test_named_atm_is_loaded_as_atm_only_even_when_foursquare_says_bank(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = os.path.join(temp_dir, 'source.csv')
+            sql_path = os.path.join(temp_dir, 'load.sql')
+            previous_build_dir = classify_and_load.BUILD_DIR
+            classify_and_load.BUILD_DIR = temp_dir
+            try:
+                with open(csv_path, 'w', newline='') as source:
+                    writer = csv.DictWriter(source, fieldnames=[
+                        'fsq_place_id', 'name', 'latitude', 'longitude',
+                        'category_ids', 'category_labels', 'address',
+                    ])
+                    writer.writeheader()
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-atm', 'name': 'ATM - Montepio',
+                        'latitude': '38.000000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735',
+                        'category_labels': 'Bank', 'address': '1 Main Street',
+                    })
+
+                result = classify_and_load.classify('test-place', csv_path, sql_path)
+                with sqlite3.connect(result['sqlite_path']) as export:
+                    self.assertEqual(
+                        export.execute('SELECT primary_poi_type FROM poi').fetchall(),
+                        [('atm',)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT poi_type FROM poi_type').fetchall(),
+                        [('atm',)],
+                    )
+            finally:
+                classify_and_load.BUILD_DIR = previous_build_dir
+
+    def test_exchange_and_transfer_are_loaded_without_bank(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = os.path.join(temp_dir, 'source.csv')
+            sql_path = os.path.join(temp_dir, 'load.sql')
+            previous_build_dir = classify_and_load.BUILD_DIR
+            classify_and_load.BUILD_DIR = temp_dir
+            try:
+                with open(csv_path, 'w', newline='') as source:
+                    writer = csv.DictWriter(source, fieldnames=[
+                        'fsq_place_id', 'name', 'latitude', 'longitude',
+                        'category_ids', 'category_labels', 'address',
+                    ])
+                    writer.writeheader()
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-exchange', 'name': 'Damane Cash Soltana',
+                        'latitude': '38.000000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735|5744ccdfe4b0c0459246b4be',
+                        'category_labels': 'Bank|Currency Exchange', 'address': '1 Main Street',
+                    })
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-transfer', 'name': 'Western Union - Faro',
+                        'latitude': '38.100000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735',
+                        'category_labels': 'Bank', 'address': '2 Main Street',
+                    })
+
+                result = classify_and_load.classify('test-place', csv_path, sql_path)
+                with sqlite3.connect(result['sqlite_path']) as export:
+                    self.assertEqual(
+                        export.execute('SELECT name, primary_poi_type, brand FROM poi ORDER BY name').fetchall(),
+                        [('Damane Cash Soltana', 'currency_exchange', None), ('Western Union - Faro', 'money_transfer', None)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT fsq_place_id, poi_type FROM poi_type ORDER BY fsq_place_id').fetchall(),
+                        [('fsq-exchange', 'currency_exchange'), ('fsq-transfer', 'money_transfer')],
+                    )
+            finally:
+                classify_and_load.BUILD_DIR = previous_build_dir
+
+    def test_named_financial_service_is_loaded_without_bank_and_with_kind(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = os.path.join(temp_dir, 'source.csv')
+            sql_path = os.path.join(temp_dir, 'load.sql')
+            previous_build_dir = classify_and_load.BUILD_DIR
+            classify_and_load.BUILD_DIR = temp_dir
+            try:
+                with open(csv_path, 'w', newline='') as source:
+                    writer = csv.DictWriter(source, fieldnames=[
+                        'fsq_place_id', 'name', 'latitude', 'longitude',
+                        'category_ids', 'category_labels', 'address',
+                    ])
+                    writer.writeheader()
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-cofidis', 'name': 'Cofidis',
+                        'latitude': '38.000000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735',
+                        'category_labels': 'Bank', 'address': '1 Main Street',
+                    })
+
+                result = classify_and_load.classify('test-place', csv_path, sql_path)
+                with sqlite3.connect(result['sqlite_path']) as export:
+                    self.assertEqual(
+                        export.execute('SELECT primary_poi_type FROM poi').fetchall(),
+                        [('financial_service',)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT poi_type FROM poi_type').fetchall(),
+                        [('financial_service',)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT dimension, value FROM poi_attribute').fetchall(),
+                        [('financial_service_kind', 'consumer_credit')],
+                    )
+            finally:
+                classify_and_load.BUILD_DIR = previous_build_dir
+
     def test_child_batches_stay_below_compound_select_cap(self):
         output = io.StringIO()
         select = "SELECT fsq_place_id, 'cafe' AS poi_type, 0 AS rank FROM poi WHERE fsq_place_id = 'fsq-1'"
@@ -131,7 +417,8 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                           dedupe_name TEXT NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL,
                           geohash TEXT NOT NULL, primary_poi_type TEXT NOT NULL,
                           brand TEXT, category_label TEXT, raw_category_ids TEXT,
-                          raw_category_labels TEXT, address TEXT, date_refreshed TEXT NOT NULL
+                          raw_category_labels TEXT, address TEXT, date_refreshed TEXT NOT NULL,
+                          open_min INTEGER, close_min INTEGER
                         );
                         CREATE UNIQUE INDEX idx_poi_canonical_identity
                           ON poi (dedupe_name, lat, lng);

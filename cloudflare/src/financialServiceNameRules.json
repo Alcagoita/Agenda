@@ -1,0 +1,79 @@
+{
+  "atm": [
+    "mb",
+    "atm",
+    "multibanco",
+    "cajero automatico"
+  ],
+  "currency_exchange": [
+    "currency exchange",
+    "cambio",
+    "cambios",
+    "novacambios",
+    "unicambio",
+    "cota cambios",
+    "bureau de change",
+    "hivernage exchange",
+    "taha change"
+  ],
+  "money_transfer": [
+    "western union",
+    "wafacash",
+    "real transfer",
+    "munditransfers",
+    "money transfers",
+    "swift international money transfers",
+    "moneygram",
+    "cashplus",
+    "moneyone",
+    "transfex",
+    "wafa cash"
+  ],
+  "financial_service": {
+    "insurance": [
+      "acoreana",
+      "fernando figueiredo seguros imperio",
+      "fidelidade",
+      "goseguro",
+      "icoral assurances",
+      "mamda assurance",
+      "mapfre",
+      "marfouk assurances",
+      "pedro rodrigues seguros",
+      "privilege seguros",
+      "seguro directo",
+      "zurich"
+    ],
+    "consumer_credit": [
+      "bbva consumer finance",
+      "bnp paribas personal finance",
+      "cetelem",
+      "cofidis",
+      "credibom",
+      "ge consumer finance",
+      "wafasalaf",
+      "wizink"
+    ],
+    "financial_intermediary": [
+      "decisoes e solucoes",
+      "esaf espirito santo activos financeiros",
+      "fagent",
+      "finsorinveste",
+      "liderfin",
+      "rothschild portugal servicos financeiros"
+    ],
+    "leasing_factoring": [
+      "bescleasing",
+      "besleasing"
+    ],
+    "central_bank": [
+      "banco de portugal",
+      "banco de espana"
+    ],
+    "public_finance": [
+      "financas lisboa 7",
+      "reparticao de financas",
+      "tesouraria rtp"
+    ]
+  }
+}

@@ -50,6 +50,8 @@ service cloud.firestore {
         'atm',
         'bakery',
         'bank',
+        'currency_exchange',
+        'money_transfer',
         'bar',
         'beach',
         'beauty_salon',
@@ -214,6 +216,57 @@ service cloud.firestore {
       ];
     }
 
+    // KAN-364 — canonical values from src/constants/brandDictionary.json.
+    // Firestore Rules cannot import JSON; keep this allowlist narrow so a
+    // direct client write cannot invent an unqueryable Gym/Bank brand.
+    function validRequiredPoiBrand(poi, brand) {
+      return (poi == 'gym' && brand in [
+        'Fitness Hut', 'Solinca', 'Holmes Place', 'Go Fit', 'Element',
+        'Pump Fitness Spirit', 'Time to Fitness', 'Urban Sports Club',
+        'Fitness Factory', 'Vivafit'
+      ]) || (poi == 'bank' && brand in [
+        'Novo Banco', 'Millennium bcp', 'ActivoBank', 'Santander', 'Montepio',
+        'Banco do Brasil', 'Itaú BBA', 'ABANCA', 'Carregosa',
+        'Banco Português de Gestão', 'Bank of China', 'Credit Suisse',
+        'PrivatBank', 'Sabadell', 'Haitong Bank', 'Banco CTT', 'Bankinter',
+        'Banco BPI', 'Caixa Geral de Depósitos', 'CaixaBI', 'BBVA',
+        'Deutsche Bank', 'Banco Invest', 'Finantia', 'BNP Paribas', 'ATLANTICO',
+        'Caja de Badajoz', 'BNI Europa', 'BANC Angolano', 'Crédito Agrícola',
+        'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'La Caixa',
+        'Banco Popular', 'Unicaja', 'Banque Populaire'
+      ]);
+    }
+
+    function validTaskBrand(data) {
+      return ((('poi' in data.keys()) && data.poi in ['gym', 'bank'])
+        ? ('poiBrand' in data.keys() && validRequiredPoiBrand(data.poi, data.poiBrand))
+        : !('poiBrand' in data.keys()));
+    }
+
+    // KAN-364: old generic Gym/Bank records remain usable. A status-only
+    // lifecycle write must not force a user to choose a brand first, but any
+    // POI/brand edit still has to satisfy validTaskBrand above.
+    function validLegacyRequiredBrandLifecycleUpdate(data, previous) {
+      return ('poi' in previous.keys())
+        && previous.poi in ['gym', 'bank']
+        && !('poiBrand' in previous.keys())
+        && ('poi' in data.keys())
+        && data.poi == previous.poi
+        && !('poiBrand' in data.keys())
+        && data.diff(previous).affectedKeys().hasOnly([
+          'done',
+          'completedAt',
+          'completedPlaceId',
+          'completedPlaceName',
+          'completedPoiType',
+          'completedTripId',
+          'poiAlertSeenDate',
+          'exitPromptSeenDate',
+          'pendingSync',
+          'dateHandoff',
+        ]);
+    }
+
     function validTaskData(data) {
       // KAN-353 removed the unused Google-specific poiPlaceId field after a
       // production audit confirmed no persisted tasks carried it.
@@ -228,6 +281,7 @@ service cloud.firestore {
           'poi',
           'storeSubtype',
           'restaurantFoodType',
+          'poiBrand',
           'completedPlaceId',
           'completedPlaceName',
           'completedPoiType',
@@ -504,6 +558,9 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && validTaskData(request.resource.data)
+          && (validTaskBrand(request.resource.data)
+            || (request.method == 'update'
+              && validLegacyRequiredBrandLifecycleUpdate(request.resource.data, resource.data)))
           && (request.method == 'create'
             || validDatedTaskHandoffUpdate(request.resource.data, resource.data));
       }

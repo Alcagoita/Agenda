@@ -115,6 +115,30 @@ describe('nearby-search validation', () => {
       .rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
+  it('accepts canonical Gym/Bank brand requests and rejects unknown or mismatched values', async () => {
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' }],
+      },
+    } as never)).resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'gym:brand:unknown', type: 'gym', brand: 'Unknown Gym' }],
+      },
+    } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'cafe:brand:Solinca', type: 'cafe', brand: 'Solinca' }],
+      },
+    } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
   it('rejects a subtype dimension that does not belong to its POI type', async () => {
     await expect(cloudflarePoiAllProxy.run({
       auth: AUTH,

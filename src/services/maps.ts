@@ -89,6 +89,8 @@ export interface NearbyPlace {
   /** KAN-318: default opening window, minutes from local midnight. null/undefined = always open (also 24h / unknown). */
   openMin?: number | null;
   closeMin?: number | null;
+  /** Canonical brand returned by Brush's POI API, when classified. */
+  brand?: string | null;
 }
 
 /** A request-specific nearby bucket. Generic requests omit `attribute`; subtype
@@ -421,6 +423,7 @@ async function searchNearbyPlacesCloudflare(
           lng: p.lng,
           distanceMeters: p.distanceMeters,
           primaryType: p.primary_poi_type,
+          brand: p.brand,
           restaurantFoodType: restaurantFoodTypes[0],
           restaurantFoodTypes: restaurantFoodTypes.length > 0 ? restaurantFoodTypes : undefined,
           storeSubtype: storeSubtypes[0],

@@ -45,5 +45,6 @@ CREATE TABLE IF NOT EXISTS poi (
 );
 
 CREATE INDEX IF NOT EXISTS idx_poi_geo ON poi (geohash);
+CREATE INDEX IF NOT EXISTS idx_poi_brand_geo ON poi (brand, geohash);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_canonical_identity
   ON poi (dedupe_name, lat, lng);

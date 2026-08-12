@@ -52,4 +52,32 @@ describe('buildNearbySearchRequests', () => {
       { key: 'restaurant:food_cuisine:pizza', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['pizza'] } },
     ]);
   });
+
+  it('creates separate canonical Gym/Bank brand requests and skips legacy generic tasks', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'gym', title: 'Train at Solinca', poiBrand: 'Solinca' },
+      { poi: 'gym', title: 'Old generic gym task' },
+      { poi: 'bank', title: 'Go to Caixa', poiBrand: 'Caixa Geral de Depósitos' },
+    ])).toEqual([
+      { key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' },
+      { key: 'bank:brand:Caixa Geral de Depósitos', type: 'bank', brand: 'Caixa Geral de Depósitos' },
+    ]);
+  });
+
+  it('deduplicates canonical brands, keeps distinct brands, and omits unbranded Gym/Bank tasks', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'gym', title: 'Solinca one', poiBrand: 'Solinca' },
+      { poi: 'gym', title: 'Solinca two', poiBrand: 'Solinca' },
+      { poi: 'gym', title: 'Fitness Hut', poiBrand: 'Fitness Hut' },
+      { poi: 'bank', title: 'Legacy bank' },
+      { poi: 'gym', title: 'Legacy gym' },
+    ])).toEqual([
+      { key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' },
+      { key: 'gym:brand:Fitness Hut', type: 'gym', brand: 'Fitness Hut' },
+    ]);
+    expect(buildNearbySearchRequests([
+      { poi: 'gym', title: 'Legacy gym' },
+      { poi: 'bank', title: 'Legacy bank' },
+    ])).toEqual([]);
+  });
 });

@@ -2,6 +2,7 @@ import { encodeGeohash, haversineMeters, neighborPrefixes, precisionForRadius, r
 import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
 import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManualPoiInput, isManualPoiInput, type ManualPoiAttribute } from './manualPoi';
+import brandDictionary from '../../src/constants/brandDictionary.json';
 
 // Re-exported (not just imported) — the Workers runtime resolves the
 // `durable_objects` binding's `class_name` against this module's exports,
@@ -361,6 +362,7 @@ interface NearbySearchRequest {
   key: string;
   type: string;
   attributeFilter: AttributeFilter | null;
+  brand: string | null;
 }
 interface NearbySearchBody extends ParsedCoordsAndRadius {
   requests: NearbySearchRequest[];
@@ -375,6 +377,27 @@ const MAX_NEARBY_LIMIT_PER_TYPE = 50;
 // KAN-344 groups (pizza/asian/…) resolve from raw category labels at query
 // time. KAN-362 reuses this exact allowlist for community submissions.
 const SUBTYPE_FILTERS = MANUAL_SUBTYPE_FILTERS;
+const BRAND_FILTER_TYPES = new Set(['gym', 'bank']);
+const CANONICAL_BRANDS = new Map(
+  Object.entries(brandDictionary).map(([type, brands]) => [
+    type,
+    new Set((brands as Array<{ name: string }>).map(brand => brand.name)),
+  ]),
+);
+
+/** Resolve a community submission name to the same canonical value the importer writes. */
+function inferCanonicalBrand(poiType: string, name: string): string | null {
+  const normalizedName = normalizePoiName(name);
+  if (!normalizedName) return null;
+  const haystack = ` ${normalizedName} `;
+  for (const brand of (brandDictionary[poiType as keyof typeof brandDictionary] ?? []) as Array<{ name: string; aliases: string[] }>) {
+    for (const candidate of [brand.name, ...brand.aliases]) {
+      const normalizedCandidate = normalizePoiName(candidate);
+      if (normalizedCandidate && haystack.includes(` ${normalizedCandidate} `)) return brand.name;
+    }
+  }
+  return null;
+}
 
 /** attribute+value are optional but must appear together — e.g. attribute=food_cuisine&value=sushi, or value=sushi,italian for an OR match. Capped at 2 values (matches the current real use case: a place tagged with two cuisines, not an open-ended list). */
 function parseAttributeFilter(url: URL): AttributeFilter | null | Response {
@@ -506,7 +529,14 @@ function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
       }
       attributeFilter = { dimension: allowed.dimension, values: [attribute.values[0]] };
     }
-    requests.push({ key: request.key, type: request.type, attributeFilter });
+    let brand: string | null = null;
+    if (request.brand !== undefined) {
+      if (typeof request.brand !== 'string' || !BRAND_FILTER_TYPES.has(request.type) || !CANONICAL_BRANDS.get(request.type)?.has(request.brand)) {
+        return json({ error: 'brand is not a supported canonical Gym or Bank filter for this type' }, 400);
+      }
+      brand = request.brand;
+    }
+    requests.push({ key: request.key, type: request.type, attributeFilter, brand });
   }
   return { lat, lng, radius, requests, limitPerRequest };
 }
@@ -910,12 +940,26 @@ async function queryNearbyPoiDb(
   limitPerRequest: number,
 ): Promise<NearbyQueryResult> {
   const relatedTypes = await Promise.all(requestedSearches.map(request => typesForSearch(db, request.type)));
-  const acceptedTypes = [...new Set(relatedTypes.flat())];
   const precision = precisionForRadius(radiusMeters);
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
   const geohashClauses = prefixes.map(() => '(poi.geohash >= ? AND poi.geohash < ?)');
   const curatedGeohashClauses = prefixes.map(() => '(curated_poi.geohash >= ? AND curated_poi.geohash < ?)');
-  const typePlaceholders = acceptedTypes.map(() => '?').join(',');
+  // Keep a brand-only Gym/Bank request in D1's predicate. A generic request
+  // for the same type legitimately broadens its own bucket, but a sole
+  // branded request never materialises unrelated candidates in Worker memory.
+  const poiRequestClauses: string[] = [];
+  const poiRequestBinds: unknown[] = [];
+  const curatedRequestClauses: string[] = [];
+  const curatedRequestBinds: unknown[] = [];
+  for (let index = 0; index < requestedSearches.length; index++) {
+    const request = requestedSearches[index];
+    const types = relatedTypes[index];
+    const placeholders = types.map(() => '?').join(',');
+    poiRequestClauses.push(`(poi_type.poi_type IN (${placeholders})${request.brand ? ' AND poi.brand = ?' : ''})`);
+    poiRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
+    curatedRequestClauses.push(`(curated_poi.primary_poi_type IN (${placeholders})${request.brand ? ' AND curated_poi.brand = ?' : ''})`);
+    curatedRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
+  }
   const d1StartedAt = performance.now();
   const { results: rows } = await db.prepare(
     `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
@@ -926,8 +970,8 @@ async function queryNearbyPoiDb(
      INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
      LEFT JOIN poi_attribute ON poi_attribute.fsq_place_id = poi.fsq_place_id
        AND poi_attribute.dimension IN ('food_cuisine', 'store_kind')
-     WHERE (${geohashClauses.join(' OR ')}) AND poi_type.poi_type IN (${typePlaceholders})`,
-  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
+     WHERE (${geohashClauses.join(' OR ')}) AND (${poiRequestClauses.join(' OR ')})`,
+  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...poiRequestBinds).all<{
     fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null; category_label: string | null;
     raw_category_labels: string | null;
@@ -936,16 +980,16 @@ async function queryNearbyPoiDb(
   }>();
   const { results: curatedRows } = await db.prepare(
     `SELECT curated_poi.poi_id, curated_poi.dedupe_name, curated_poi.name, curated_poi.lat, curated_poi.lng,
-            curated_poi.primary_poi_type, curated_poi.address,
+            curated_poi.primary_poi_type, curated_poi.brand, curated_poi.address,
             curated_poi_attribute.dimension AS attribute_dimension, curated_poi_attribute.value AS attribute_value
      FROM curated_poi
      LEFT JOIN curated_poi_attribute ON curated_poi_attribute.poi_id = curated_poi.poi_id
      WHERE curated_poi.status = 'active'
        AND (${curatedGeohashClauses.join(' OR ')})
-       AND curated_poi.primary_poi_type IN (${typePlaceholders})`,
-  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...acceptedTypes).all<{
+       AND (${curatedRequestClauses.join(' OR ')})`,
+  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...curatedRequestBinds).all<{
     poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-    primary_poi_type: string; address: string | null;
+    primary_poi_type: string; brand: string | null; address: string | null;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
   const d1Ms = performance.now() - d1StartedAt;
@@ -992,7 +1036,9 @@ async function queryNearbyPoiDb(
     } else {
       candidates.set(candidateKey, {
         poi_id: row.poi_id, fsq_place_id: null, name: row.name, lat: row.lat, lng: row.lng,
-        primary_poi_type: row.primary_poi_type, brand: null, category_label: null,
+        primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
+        // Community rows do not carry curated hours yet: NULL keeps KAN-318's
+        // safe always-open behaviour rather than hiding an approved POI.
         address: row.address, open_min: null, close_min: null, source: 'community', dedupeName: row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
@@ -1032,7 +1078,8 @@ async function queryNearbyPoiDb(
       const matchesType = relatedTypes[index].some(type => candidate.matchedTypes.has(type));
       const matchesAttribute = request.attributeFilter == null || request.attributeFilter.values
         .some(value => attributeValueMatches(request.attributeFilter!.dimension, value, candidate));
-      if (matchesType && matchesAttribute) {
+      const matchesBrand = request.brand == null || candidate.brand === request.brand;
+      if (matchesType && matchesAttribute && matchesBrand) {
         result[request.key].push(poi);
       }
     }
@@ -1318,12 +1365,13 @@ export default {
 
       const poiId = `community:${crypto.randomUUID()}`;
       const attributes = storedManualPoiAttributes(submission.attributes_json);
+      const brand = inferCanonicalBrand(submission.poi_type, submission.name);
       const statements = [
         env.REGISTRY_DB.prepare(
           `INSERT INTO curated_poi
-             (poi_id, source, source_submission_id, name, dedupe_name, lat, lng, geohash, primary_poi_type, address, status, created_at, created_by, updated_at, updated_by)
-           VALUES (?, 'community', ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-        ).bind(poiId, submissionId, submission.name, submission.dedupe_name, submission.lat, submission.lng, encodeGeohash(submission.lat, submission.lng, 7), submission.poi_type, submission.address, reviewedAt, reviewer, reviewedAt, reviewer),
+             (poi_id, source, source_submission_id, name, dedupe_name, lat, lng, geohash, primary_poi_type, brand, address, status, created_at, created_by, updated_at, updated_by)
+           VALUES (?, 'community', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+        ).bind(poiId, submissionId, submission.name, submission.dedupe_name, submission.lat, submission.lng, encodeGeohash(submission.lat, submission.lng, 7), submission.poi_type, brand, submission.address, reviewedAt, reviewer, reviewedAt, reviewer),
         ...attributes.map(attribute => env.REGISTRY_DB.prepare(
           'INSERT INTO curated_poi_attribute (poi_id, dimension, value) VALUES (?, ?, ?)',
         ).bind(poiId, attribute.dimension, attribute.value)),
@@ -1332,7 +1380,7 @@ export default {
         ).bind(reviewedAt, reviewer, poiId, submissionId),
         env.REGISTRY_DB.prepare(
           'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        ).bind(crypto.randomUUID(), 'submission', submissionId, 'approved', reviewer, JSON.stringify({ poiId }), reviewedAt),
+        ).bind(crypto.randomUUID(), 'submission', submissionId, 'approved', reviewer, JSON.stringify({ poiId, brand }), reviewedAt),
         env.REGISTRY_DB.prepare(
           'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         ).bind(crypto.randomUUID(), 'curated_poi', poiId, 'created', reviewer, JSON.stringify({ submissionId }), reviewedAt),
@@ -1723,7 +1771,7 @@ export default {
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius, types, limitPerType } = parsed;
       const startedAt = performance.now();
-      const searches = types.map(type => ({ key: type, type, attributeFilter: null }));
+      const searches = types.map(type => ({ key: type, type, attributeFilter: null, brand: null }));
       const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, searches, limitPerType);
       const totalMs = performance.now() - startedAt;
       logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });

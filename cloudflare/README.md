@@ -243,6 +243,64 @@ Real but modest recovery given the dictionaries' size (10 cuisines, 14
 store kinds): +120 `food_cuisine` / +36 `store_kind` rows on Lisboa,
 +22 / +8 on Odivelas.
 
+### Financial classification and rebuild rules
+
+The fresh-import path is the recovery path. `extraction/classify_and_load.py`
+applies the version-controlled rules while it loads each Foursquare row, so a
+re-import does **not** depend on the historical one-off D1 migrations:
+
+- `../src/constants/brandDictionary.json` is the single catalogue for Bank and
+  Gym brands. It contains both the canonical app value and historical aliases
+  (for example BPN/BancoBIC/EuroBic → ABANCA, Finibanco → Montepio, and the
+  Crédito Agrícola variants).
+- `src/financialServiceNameRules.json` contains the explicit, whole-word title
+  rules that remove non-Banks from Bank search: named ATMs, currency exchange,
+  money transfer, and `financial_service` kinds. Its six source-only kinds are
+  insurance, consumer credit, financial intermediary, leasing/factoring,
+  central bank, and public finance. They are stored as
+  `poi_attribute.financial_service_kind`; they are not task-creation choices.
+
+For a database rebuild, rerun the ordinary current extraction Container for
+each required country or Place. It reads both files automatically and produces
+the same canonical `poi.brand`, `poi.primary_poi_type`, `poi_type`, and
+`poi_attribute` values as a clean import. Do not replay the old
+`0011`–`0014` data migrations against a rebuilt database.
+
+### D1 migration ledger
+
+`brush-poi-registry` existed before Wrangler's migration ledger was adopted.
+On 2026-08-12 its already-present schema and data state were verified, then
+the historical `0001`–`0014` filenames were recorded in `d1_migrations` without
+executing them again. For this existing database, all future migrations must be
+applied with `npx wrangler d1 migrations apply brush-poi-registry --remote`;
+do not run a migration file directly with `d1 execute`. A newly created D1
+database must use the normal migration-apply path instead of this baseline.
+
+After a rebuild, verify the rules with these read-only queries:
+
+```sql
+-- No financial-service record must still be returned as a Bank.
+SELECT COUNT(*) AS bank_with_financial_service_kind
+FROM poi AS p
+JOIN poi_attribute AS a ON a.fsq_place_id = p.fsq_place_id
+WHERE p.primary_poi_type = 'bank'
+  AND a.dimension = 'financial_service_kind';
+
+-- Review the durable source-only subtype distribution.
+SELECT a.value AS financial_service_kind, COUNT(*) AS pois
+FROM poi AS p
+JOIN poi_attribute AS a ON a.fsq_place_id = p.fsq_place_id
+WHERE p.primary_poi_type = 'financial_service'
+  AND a.dimension = 'financial_service_kind'
+GROUP BY a.value
+ORDER BY pois DESC;
+
+-- Canonical Bank brands and all remaining unbranded source names.
+SELECT COALESCE(brand, '(unbranded)') AS brand, COUNT(*) AS pois
+FROM poi WHERE primary_poi_type = 'bank'
+GROUP BY brand ORDER BY pois DESC, brand;
+```
+
 **OSM enrichment (`extraction/enrich_osm_cuisine.py`, KAN-340's originally
 higher-priority source)**: run separately from `classify_and_load.py`, not
 inline — Overpass is a slow, flaky, retryable external call (~40-60%

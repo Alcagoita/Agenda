@@ -92,7 +92,7 @@ function makePosition(lat: number, lng: number) {
   return { coords: { latitude: lat, longitude: lng, accuracy: 20 }, timestamp: 1_700_000_000 };
 }
 
-function makeTask(id: string, poi: string): Task {
+function makeTask(id: string, poi: string, poiBrand?: string): Task {
   return {
     id,
     title: `Task ${id}`,
@@ -100,6 +100,7 @@ function makeTask(id: string, poi: string): Task {
     done: false,
     date: '2026-07-17',
     poi: poi as Task['poi'],
+    ...(poiBrand ? { poiBrand } : {}),
     createdAt: { seconds: 0, nanoseconds: 0 } as unknown as Task['createdAt'],
   };
 }
@@ -156,6 +157,20 @@ describe('runProximitySearchOrReuseSnapshot', () => {
     await runProximitySearchOrReuseSnapshot('uid-1', [makeTask('t1', 'pharmacy')], mockOnUpdate);
 
     expect(mockSearchNearbyPlaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls through to a fresh search when only the required brand changed', async () => {
+    mockLoadProximitySnapshot.mockReturnValue(makeSnapshot({ poiTypesKey: 'gym:brand:Solinca' }));
+
+    await runProximitySearchOrReuseSnapshot(
+      'uid-1', [makeTask('t1', 'gym', 'Fitness Hut')], mockOnUpdate,
+    );
+
+    expect(mockSearchNearbyPlaces).toHaveBeenCalledTimes(1);
+    expect(mockSearchNearbyPlaces).toHaveBeenCalledWith(
+      expect.any(Number), expect.any(Number), ['gym'], expect.any(Number),
+      [{ key: 'gym:brand:Fitness Hut', type: 'gym', brand: 'Fitness Hut' }],
+    );
   });
 
   it('falls through to a real search when no snapshot has ever been saved, and saves one after', async () => {
