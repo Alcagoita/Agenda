@@ -225,7 +225,8 @@ service cloud.firestore {
       ]) || (poi == 'bank' && brand in [
         'Caixa Geral de Depósitos', 'Millennium bcp', 'Santander', 'Novo Banco',
         'Crédito Agrícola', 'Banco BPI', 'Banco CTT', 'Montepio', 'Bankinter',
-        'ActivoBank', 'EuroBic', 'ABANCA'
+        'ActivoBank', 'EuroBic', 'ABANCA', 'BBVA', 'La Caixa', 'Deutsche Bank',
+        'Banco Popular'
       ]);
     }
 

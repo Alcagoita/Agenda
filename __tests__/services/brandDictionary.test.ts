@@ -42,6 +42,8 @@ describe('brandDictionary', () => {
   it('resolves Portuguese Bank aliases and title text to one canonical value', () => {
     expect(getCanonicalBrand('bank', 'CGD')).toBe('Caixa Geral de Depósitos');
     expect(findBrandInText('bank', 'Visit Caixa Geral de Depositos Alcobaça')).toBe('Caixa Geral de Depósitos');
+    expect(getCanonicalBrand('bank', 'CaixaBank')).toBe('La Caixa');
+    expect(findBrandInText('bank', 'Use BBVA near home')).toBe('BBVA');
     expect(findRequiredBrandInText('Go to Solinca after work')).toEqual({ poiType: 'gym', brand: 'Solinca' });
   });
 

@@ -64,7 +64,11 @@
     { "name": "Bankinter", "aliases": [] },
     { "name": "ActivoBank", "aliases": ["Activo Bank"] },
     { "name": "EuroBic", "aliases": ["Banco BIC"] },
-    { "name": "ABANCA", "aliases": [] }
+    { "name": "ABANCA", "aliases": [] },
+    { "name": "BBVA", "aliases": [] },
+    { "name": "La Caixa", "aliases": ["la Caixa", "CaixaBank", "Caixabank"] },
+    { "name": "Deutsche Bank", "aliases": [] },
+    { "name": "Banco Popular", "aliases": [] }
   ],
   "restaurant": [
     { "name": "McDonald's", "aliases": ["McDonalds"] },
