@@ -33,7 +33,12 @@ WHERE poi_type = 'bank'
 
 UPDATE poi
 SET primary_poi_type = CASE
-      WHEN EXISTS (SELECT 1 FROM poi_type WHERE poi_type.fsq_place_id = poi.fsq_place_id AND poi_type.poi_type = 'money_transfer')
+      WHEN EXISTS (
+        SELECT 1
+        FROM poi_type
+        WHERE poi_type.fsq_place_id = poi.fsq_place_id
+          AND poi_type.poi_type = 'money_transfer'
+      )
         THEN 'money_transfer'
       ELSE 'currency_exchange'
     END,

@@ -137,7 +137,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
  */
 export const QUICK_ACTIONABLE_POI_TYPES: readonly PoiType[] = [
   'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
-  'florist', 'bakery', 'park', 'gym', 'bar', 'library', 'bank',
+  'florist', 'bakery', 'park', 'gym', 'bar', 'library',
 ];
 
 export function isQuickActionablePoiType(value: string | null | undefined): value is PoiType {

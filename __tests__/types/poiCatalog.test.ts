@@ -23,7 +23,7 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
   'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
-  'florist', 'bakery', 'park', 'gym', 'bar', 'library', 'bank',
+  'florist', 'bakery', 'park', 'gym', 'bar', 'library',
 ];
 
 describe('POI_CATALOG', () => {
@@ -46,7 +46,7 @@ describe('POI_CATALOG', () => {
     for (const type of QUICK_ACTIONABLE_TYPES) {
       expect(isQuickActionablePoiType(type)).toBe(true);
     }
-    for (const type of ['post', 'clinic', 'bus', 'school']) {
+    for (const type of ['bank', 'post', 'clinic', 'bus', 'school']) {
       expect(isQuickActionablePoiType(type)).toBe(false);
     }
   });

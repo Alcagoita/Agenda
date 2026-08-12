@@ -10,6 +10,17 @@ JOIN poi_type AS bank_type
 WHERE lower(p.name) LIKE '%atm%'
    OR lower(p.name) LIKE '%multibanco%';
 
+UPDATE poi
+SET primary_poi_type = 'atm',
+    brand = NULL
+WHERE (lower(name) LIKE '%atm%'
+    OR lower(name) LIKE '%multibanco%')
+  AND fsq_place_id IN (
+    SELECT fsq_place_id
+    FROM poi_type
+    WHERE poi_type = 'bank'
+  );
+
 DELETE FROM poi_type
 WHERE poi_type = 'bank'
   AND fsq_place_id IN (
@@ -18,9 +29,3 @@ WHERE poi_type = 'bank'
     WHERE lower(name) LIKE '%atm%'
        OR lower(name) LIKE '%multibanco%'
   );
-
-UPDATE poi
-SET primary_poi_type = 'atm',
-    brand = NULL
-WHERE lower(name) LIKE '%atm%'
-   OR lower(name) LIKE '%multibanco%';
