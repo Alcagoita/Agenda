@@ -1,4 +1,10 @@
 {
+  "atm": [
+    "mb",
+    "atm",
+    "multibanco",
+    "cajero automatico"
+  ],
   "currency_exchange": [
     "currency exchange",
     "cambio",

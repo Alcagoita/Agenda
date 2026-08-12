@@ -60,7 +60,7 @@ def find_brand(name, ranked_types, brand_dictionary):
     return None
 
 
-def is_explicit_atm_name(name):
+def is_explicit_atm_name(name, name_rules):
     """True only when the source title identifies the POI itself as an ATM.
 
     Foursquare often tags a real bank branch with both Bank and ATM because it
@@ -70,12 +70,14 @@ def is_explicit_atm_name(name):
     """
     normalized_name = normalize_text(name)
     padded_name = f' {normalized_name} '
-    return (
-        normalized_name == 'mb'  # Portuguese Multibanco's official short label.
-        or ' atm ' in padded_name
-        or ' multibanco ' in padded_name
-        or ' cajero automatico ' in padded_name
-    )
+    for alias in name_rules.get('atm', []):
+        normalized_alias = normalize_text(alias)
+        if normalized_alias == 'mb':
+            if normalized_name == normalized_alias:  # Portuguese Multibanco label.
+                return True
+        elif normalized_alias and f' {normalized_alias} ' in padded_name:
+            return True
+    return False
 
 def load_financial_service_name_rules():
     """Curated provider/title rules for Foursquare's incorrectly Bank-tagged
@@ -443,7 +445,7 @@ def classify(place_id, csv_path, out_sql_path):
             # A named ATM is not a Bank search result. Keep genuine branches
             # that merely carry both Foursquare categories intact; only the
             # explicit title markers override Foursquare's Bank-only tagging.
-            if is_explicit_atm_name(row['name']):
+            if is_explicit_atm_name(row['name'], financial_service_rules):
                 matched_types.discard('bank')
                 matched_types.add('atm')
 

@@ -125,13 +125,14 @@ class ClassifyDeduplicationTest(unittest.TestCase):
         )
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
-        self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio'))
-        self.assertTrue(classify_and_load.is_explicit_atm_name('MB'))
-        self.assertTrue(classify_and_load.is_explicit_atm_name('Caixa Agrícola - Multibanco'))
-        self.assertTrue(classify_and_load.is_explicit_atm_name('Multibanco CGD - ATM'))
-        self.assertTrue(classify_and_load.is_explicit_atm_name('Cajero Automático EspañaDuero Banco'))
-        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco Montepio'))
-        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco BPI'))
+        rules = classify_and_load.load_financial_service_name_rules()
+        self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('MB', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Caixa Agrícola - Multibanco', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Multibanco CGD - ATM', rules))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Cajero Automático EspañaDuero Banco', rules))
+        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco Montepio', rules))
+        self.assertFalse(classify_and_load.is_explicit_atm_name('Banco BPI', rules))
 
     def test_financial_service_rules_only_override_bank_for_explicit_signals(self):
         rules = classify_and_load.load_financial_service_name_rules()
