@@ -82,21 +82,28 @@ def load_financial_service_name_rules():
     exchange and transfer locations. These classify source data, not task text."""
     return load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'financialServiceNameRules.json'))
 
-def financial_service_type(name, cat_ids, name_rules):
-    """Return a non-bank service only for an explicit source signal.
+def financial_service_classification(name, cat_ids, name_rules):
+    """Return (primary type, optional subtype) only for an explicit source signal.
 
     Currency Exchange has its own Foursquare category. Transfer providers are
     often Bank-only rows, so a small title allowlist is the reliable fallback.
+    Other financial businesses use a source-only type with a name-verified
+    ``financial_service_kind`` attribute; none are task-selectable POI types.
     """
     if '5744ccdfe4b0c0459246b4be' in cat_ids:
-        return 'currency_exchange'
+        return ('currency_exchange', None)
     padded_name = f' {normalize_text(name)} '
     for service_type in ('money_transfer', 'currency_exchange'):
         for alias in name_rules.get(service_type, []):
             normalized_alias = normalize_text(alias)
             if normalized_alias and f' {normalized_alias} ' in padded_name:
-                return service_type
-    return None
+                return (service_type, None)
+    for kind, aliases in name_rules.get('financial_service', {}).items():
+        for alias in aliases:
+            normalized_alias = normalize_text(alias)
+            if normalized_alias and f' {normalized_alias} ' in padded_name:
+                return ('financial_service', kind)
+    return (None, None)
 
 def load_keyword_dictionary(filename):
     # KAN-340: reuses the app's existing keyword-inference dictionaries
@@ -440,7 +447,9 @@ def classify(place_id, csv_path, out_sql_path):
                 matched_types.discard('bank')
                 matched_types.add('atm')
 
-            service_type = financial_service_type(row['name'], cat_ids, financial_service_rules)
+            service_type, financial_service_kind = financial_service_classification(
+                row['name'], cat_ids, financial_service_rules,
+            )
             if service_type:
                 matched_types.discard('bank')
                 matched_types.add(service_type)
@@ -488,6 +497,8 @@ def classify(place_id, csv_path, out_sql_path):
                     poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'store_kind', value, dedupe_name, lat, lng))
                 for value in sorted(food_cuisines):
                     poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
+                if financial_service_kind:
+                    poi_attribute_rows.append((canonical_fsq_place_id, place_id, build_id, 'financial_service_kind', financial_service_kind, dedupe_name, lat, lng))
                 continue
             seen_identities[identity] = row['fsq_place_id']
             if keyword_store_kind_match:
@@ -512,6 +523,8 @@ def classify(place_id, csv_path, out_sql_path):
                 poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'store_kind', value, dedupe_name, lat, lng))
             for value in sorted(food_cuisines):
                 poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'food_cuisine', value, dedupe_name, lat, lng))
+            if financial_service_kind:
+                poi_attribute_rows.append((row['fsq_place_id'], place_id, build_id, 'financial_service_kind', financial_service_kind, dedupe_name, lat, lng))
             type_counts[primary_poi_type] = type_counts.get(primary_poi_type, 0) + 1
 
     print(f"[{place_id}] classified {len(poi_rows)} rows, skipped {skipped_no_type} (no matching poi_type)")

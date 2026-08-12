@@ -364,6 +364,15 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    case 'financial_service':
+      return (
+        <Svg {...p}>
+          <Rect x="3" y="4" width="18" height="16" rx="2" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="12" cy="12" r="3.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M12 9.5v5M10.5 11h3M10.5 13h3" stroke={color} strokeWidth={1.4} {...S} />
+        </Svg>
+      );
+
     case 'restaurant':
       return (
         <Svg {...p}>
@@ -477,6 +486,10 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
 }
 
 export function resolvePoiIconType(type: string): string {
+  // Source-only financial-service records have a dedicated neutral icon; do
+  // not let the generic "service" fallback misrepresent them as a Bank.
+  if (type === 'financial_service') return type;
+
   if (GOOGLE_TYPE_ICON[type]) {
     return GOOGLE_TYPE_ICON[type];
   }

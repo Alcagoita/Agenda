@@ -136,48 +136,60 @@ class ClassifyDeduplicationTest(unittest.TestCase):
     def test_financial_service_rules_only_override_bank_for_explicit_signals(self):
         rules = classify_and_load.load_financial_service_name_rules()
         self.assertEqual(
-            classify_and_load.financial_service_type('Damane Cash Soltana', ['5744ccdfe4b0c0459246b4be'], rules),
-            'currency_exchange',
+            classify_and_load.financial_service_classification('Damane Cash Soltana', ['5744ccdfe4b0c0459246b4be'], rules),
+            ('currency_exchange', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Western Union - Faro', [], rules),
-            'money_transfer',
+            classify_and_load.financial_service_classification('Western Union - Faro', [], rules),
+            ('money_transfer', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('MoneyGram - Faro', [], rules),
-            'money_transfer',
+            classify_and_load.financial_service_classification('MoneyGram - Faro', [], rules),
+            ('money_transfer', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Cashplus Agence Alfadl', [], rules),
-            'money_transfer',
+            classify_and_load.financial_service_classification('Cashplus Agence Alfadl', [], rules),
+            ('money_transfer', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Moneyone Cascais', [], rules),
-            'money_transfer',
+            classify_and_load.financial_service_classification('Moneyone Cascais', [], rules),
+            ('money_transfer', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Transfex Rua Ouro', [], rules),
-            'money_transfer',
+            classify_and_load.financial_service_classification('Transfex Rua Ouro', [], rules),
+            ('money_transfer', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Wafa Cash 2 Mars', [], rules),
-            'money_transfer',
+            classify_and_load.financial_service_classification('Wafa Cash 2 Mars', [], rules),
+            ('money_transfer', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Bureau de change', [], rules),
-            'currency_exchange',
+            classify_and_load.financial_service_classification('Bureau de change', [], rules),
+            ('currency_exchange', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Hivernage Exchange', [], rules),
-            'currency_exchange',
+            classify_and_load.financial_service_classification('Hivernage Exchange', [], rules),
+            ('currency_exchange', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Taha Change', [], rules),
-            'currency_exchange',
+            classify_and_load.financial_service_classification('Taha Change', [], rules),
+            ('currency_exchange', None),
         )
         self.assertEqual(
-            classify_and_load.financial_service_type('Banco Santander', [], rules),
-            None,
+            classify_and_load.financial_service_classification('Cofidis', [], rules),
+            ('financial_service', 'consumer_credit'),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Fidelidade Rua 5 De Outubro', [], rules),
+            ('financial_service', 'insurance'),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Banco de Portugal - Agência de Faro', [], rules),
+            ('financial_service', 'central_bank'),
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_classification('Banco Santander', [], rules),
+            (None, None),
         )
 
     def test_named_atm_is_loaded_as_atm_only_even_when_foursquare_says_bank(self):
@@ -248,6 +260,43 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                     self.assertEqual(
                         export.execute('SELECT fsq_place_id, poi_type FROM poi_type ORDER BY fsq_place_id').fetchall(),
                         [('fsq-exchange', 'currency_exchange'), ('fsq-transfer', 'money_transfer')],
+                    )
+            finally:
+                classify_and_load.BUILD_DIR = previous_build_dir
+
+    def test_named_financial_service_is_loaded_without_bank_and_with_kind(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = os.path.join(temp_dir, 'source.csv')
+            sql_path = os.path.join(temp_dir, 'load.sql')
+            previous_build_dir = classify_and_load.BUILD_DIR
+            classify_and_load.BUILD_DIR = temp_dir
+            try:
+                with open(csv_path, 'w', newline='') as source:
+                    writer = csv.DictWriter(source, fieldnames=[
+                        'fsq_place_id', 'name', 'latitude', 'longitude',
+                        'category_ids', 'category_labels', 'address',
+                    ])
+                    writer.writeheader()
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-cofidis', 'name': 'Cofidis',
+                        'latitude': '38.000000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735',
+                        'category_labels': 'Bank', 'address': '1 Main Street',
+                    })
+
+                result = classify_and_load.classify('test-place', csv_path, sql_path)
+                with sqlite3.connect(result['sqlite_path']) as export:
+                    self.assertEqual(
+                        export.execute('SELECT primary_poi_type FROM poi').fetchall(),
+                        [('financial_service',)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT poi_type FROM poi_type').fetchall(),
+                        [('financial_service',)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT dimension, value FROM poi_attribute').fetchall(),
+                        [('financial_service_kind', 'consumer_credit')],
                     )
             finally:
                 classify_and_load.BUILD_DIR = previous_build_dir
