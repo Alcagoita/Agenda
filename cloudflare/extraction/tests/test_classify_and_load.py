@@ -95,6 +95,18 @@ class ClassifyDeduplicationTest(unittest.TestCase):
             classify_and_load.find_brand('Viva Fit Leiria', ['gym'], dictionary),
             'Vivafit',
         )
+        self.assertEqual(
+            classify_and_load.find_brand('BANIF Batalha', ['bank'], dictionary),
+            'Santander',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Unicaja Banco (EspañaDuero)', ['bank'], dictionary),
+            'Unicaja',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('BPCE', ['bank'], dictionary),
+            'Banque Populaire',
+        )
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
         self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio'))

@@ -48,6 +48,9 @@ describe('brandDictionary', () => {
     expect(findBrandInText('bank', 'Use Banco BIG near home')).toBe('Banco BiG');
     expect(getCanonicalBrand('bank', 'SabadellAtlántico')).toBe('Sabadell');
     expect(findBrandInText('bank', 'Use BBVA near home')).toBe('BBVA');
+    expect(findBrandInText('bank', 'BANIF Batalha')).toBe('Santander');
+    expect(findBrandInText('bank', 'Unicaja Banco (EspañaDuero)')).toBe('Unicaja');
+    expect(getCanonicalBrand('bank', 'BPCE')).toBe('Banque Populaire');
     expect(findRequiredBrandInText('Go to Solinca after work')).toEqual({ poiType: 'gym', brand: 'Solinca' });
   });
 

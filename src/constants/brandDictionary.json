@@ -56,7 +56,7 @@
     { "name": "Novo Banco", "aliases": ["Novobanco", "BES", "Banco BES", "Banco Espírito Santo", "Banco Espirito Santo"] },
     { "name": "Millennium bcp", "aliases": ["Millennium BCP", "MillenniumBCP", "Millennium", "Millenium BCP", "Millenium", "Milenium", "BCP", "Banco Comercial Português", "Banco Comercial Portugues"] },
     { "name": "ActivoBank", "aliases": ["Activo Bank"] },
-    { "name": "Santander", "aliases": ["Santander Totta", "Banco Santander Totta", "Banco Santander"] },
+    { "name": "Santander", "aliases": ["Santander Totta", "Banco Santander Totta", "Banco Santander", "Banif", "Banco Banif"] },
     { "name": "Montepio", "aliases": ["Banco Montepio", "Montepio Geral", "Caixa Económica Montepio Geral", "Caixa Economica Montepio Geral"] },
     { "name": "Banco do Brasil", "aliases": [] },
     { "name": "Itaú BBA", "aliases": ["Itau BBA"] },
@@ -88,7 +88,9 @@
     { "name": "Banco BEST", "aliases": ["Banco Best"] },
     { "name": "EuroBic", "aliases": ["Banco BIC", "BancoBIC"] },
     { "name": "La Caixa", "aliases": ["la Caixa", "CaixaBank", "Caixabank"] },
-    { "name": "Banco Popular", "aliases": [] }
+    { "name": "Banco Popular", "aliases": [] },
+    { "name": "Unicaja", "aliases": ["Unicaja Banco", "Unicaja Banco (EspañaDuero)", "Unicaja Banco (EspanaDuero)"] },
+    { "name": "Banque Populaire", "aliases": ["BPCE"] }
   ],
   "restaurant": [
     { "name": "McDonald's", "aliases": ["McDonalds"] },
