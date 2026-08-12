@@ -232,7 +232,7 @@ service cloud.firestore {
         'Banco BPI', 'Caixa Geral de Depósitos', 'CaixaBI', 'BBVA',
         'Deutsche Bank', 'Banco Invest', 'Finantia', 'BNP Paribas', 'ATLANTICO',
         'Caja de Badajoz', 'BNI Europa', 'BANC Angolano', 'Crédito Agrícola',
-        'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'EuroBic', 'La Caixa',
+        'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'La Caixa',
         'Banco Popular', 'Unicaja', 'Banque Populaire'
       ]);
     }

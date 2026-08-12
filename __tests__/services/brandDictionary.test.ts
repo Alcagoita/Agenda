@@ -51,6 +51,10 @@ describe('brandDictionary', () => {
     expect(findBrandInText('bank', 'BANIF Batalha')).toBe('Santander');
     expect(findBrandInText('bank', 'Unicaja Banco (EspañaDuero)')).toBe('Unicaja');
     expect(getCanonicalBrand('bank', 'BPCE')).toBe('Banque Populaire');
+    expect(findBrandInText('bank', 'BPN Tomar')).toBe('ABANCA');
+    expect(findBrandInText('bank', 'BancoBIC Alhos Vedros')).toBe('ABANCA');
+    expect(findBrandInText('bank', 'Caixa Credito Agricula')).toBe('Crédito Agrícola');
+    expect(findBrandInText('bank', 'Finibanco em Abrantes')).toBe('Montepio');
     expect(findRequiredBrandInText('Go to Solinca after work')).toEqual({ poiType: 'gym', brand: 'Solinca' });
   });
 

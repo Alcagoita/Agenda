@@ -107,6 +107,22 @@ class ClassifyDeduplicationTest(unittest.TestCase):
             classify_and_load.find_brand('BPCE', ['bank'], dictionary),
             'Banque Populaire',
         )
+        self.assertEqual(
+            classify_and_load.find_brand('BPN Tomar', ['bank'], dictionary),
+            'ABANCA',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('BancoBIC Alhos Vedros', ['bank'], dictionary),
+            'ABANCA',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Caixa Credito Agricula', ['bank'], dictionary),
+            'Crédito Agrícola',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Finibanco em Abrantes', ['bank'], dictionary),
+            'Montepio',
+        )
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
         self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio'))
@@ -124,6 +140,14 @@ class ClassifyDeduplicationTest(unittest.TestCase):
         )
         self.assertEqual(
             classify_and_load.financial_service_type('Western Union - Faro', [], rules),
+            'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('MoneyGram - Faro', [], rules),
+            'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Cashplus Agence Alfadl', [], rules),
             'money_transfer',
         )
         self.assertEqual(
