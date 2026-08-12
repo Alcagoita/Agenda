@@ -266,6 +266,16 @@ the same canonical `poi.brand`, `poi.primary_poi_type`, `poi_type`, and
 `poi_attribute` values as a clean import. Do not replay the old
 `0011`–`0014` data migrations against a rebuilt database.
 
+### D1 migration ledger
+
+`brush-poi-registry` existed before Wrangler's migration ledger was adopted.
+On 2026-08-12 its already-present schema and data state were verified, then
+the historical `0001`–`0014` filenames were recorded in `d1_migrations` without
+executing them again. For this existing database, all future migrations must be
+applied with `npx wrangler d1 migrations apply brush-poi-registry --remote`;
+do not run a migration file directly with `d1 execute`. A newly created D1
+database must use the normal migration-apply path instead of this baseline.
+
 After a rebuild, verify the rules with these read-only queries:
 
 ```sql
