@@ -50,6 +50,8 @@ service cloud.firestore {
         'atm',
         'bakery',
         'bank',
+        'currency_exchange',
+        'money_transfer',
         'bar',
         'beach',
         'beauty_salon',

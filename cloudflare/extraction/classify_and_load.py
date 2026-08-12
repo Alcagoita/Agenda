@@ -70,7 +70,32 @@ def is_explicit_atm_name(name):
     """
     normalized_name = normalize_text(name)
     padded_name = f' {normalized_name} '
-    return ' atm ' in padded_name or ' multibanco ' in padded_name
+    return (
+        ' atm ' in padded_name
+        or ' multibanco ' in padded_name
+        or ' cajero automatico ' in padded_name
+    )
+
+def load_financial_service_name_rules():
+    """Curated provider/title rules for Foursquare's incorrectly Bank-tagged
+    exchange and transfer locations. These classify source data, not task text."""
+    return load_mapping(os.path.join(CLOUDFLARE_DIR, 'src', 'financialServiceNameRules.json'))
+
+def financial_service_type(name, cat_ids, name_rules):
+    """Return a non-bank service only for an explicit source signal.
+
+    Currency Exchange has its own Foursquare category. Transfer providers are
+    often Bank-only rows, so a small title allowlist is the reliable fallback.
+    """
+    if '5744ccdfe4b0c0459246b4be' in cat_ids:
+        return 'currency_exchange'
+    padded_name = f' {normalize_text(name)} '
+    for service_type in ('money_transfer', 'currency_exchange'):
+        for alias in name_rules.get(service_type, []):
+            normalized_alias = normalize_text(alias)
+            if normalized_alias and f' {normalized_alias} ' in padded_name:
+                return service_type
+    return None
 
 def load_keyword_dictionary(filename):
     # KAN-340: reuses the app's existing keyword-inference dictionaries
@@ -160,7 +185,11 @@ def build_reverse_map(mapping):
     this warning exists so a *new*, unhandled collision doesn't go unnoticed."""
     reverse = {}
     for k, v in mapping.items():
-        cid = v['category_id']
+        cid = v.get('category_id')
+        # Some useful app types have no reliable Foursquare category. They are
+        # classified by explicit title rules, without widening the extract.
+        if not cid:
+            continue
         if cid in reverse:
             print(f"WARNING: category_id {cid} claimed by both '{reverse[cid]}' and '{k}' — "
                   f"'{k}' wins classification, '{reverse[cid]}' gets zero rows unless merged "
@@ -329,6 +358,7 @@ def classify(place_id, csv_path, out_sql_path):
     store_reverse = {v['category_id']: k for k, v in store_subtypes.items() if k != 'any'}
     food_reverse = build_reverse_map(food_subtypes)
     brand_dictionary = load_brand_dictionary()
+    financial_service_rules = load_financial_service_name_rules()
 
     # KAN-340: Foursquare frequently tags a place as the generic 'restaurant'
     # or 'store' with no specific cuisine/kind category id at all — no
@@ -408,6 +438,11 @@ def classify(place_id, csv_path, out_sql_path):
             if is_explicit_atm_name(row['name']):
                 matched_types.discard('bank')
                 matched_types.add('atm')
+
+            service_type = financial_service_type(row['name'], cat_ids, financial_service_rules)
+            if service_type:
+                matched_types.discard('bank')
+                matched_types.add(service_type)
 
             # KAN-340 keyword fallback — only for dimensions category-tag
             # matching left empty, and only for rows already classified as

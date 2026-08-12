@@ -4,7 +4,8 @@
  * Covers:
  *   - The quick-actionable list drives new-task choices
  *   - Each catalog entry has a non-empty label
- *   - POI_GEOFENCE_RADIUS and POI_GOOGLE_TYPES preserve all built-in types
+ *   - POI_GEOFENCE_RADIUS covers all built-in types; Google only covers its
+ *     own legacy searchable types
  *   - No duplicate types in catalog
  */
 
@@ -17,6 +18,7 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'atm', 'cafe', 'supermarket', 'pharmacy',
   'gas', 'gym', 'bank', 'restaurant', 'park', 'library', 'post', 'store',
   'clinic', 'salon', 'bus', 'school', 'bakery', 'florist', 'bar',
+  'currency_exchange', 'money_transfer',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -26,7 +28,7 @@ const QUICK_ACTIONABLE_TYPES: PoiType[] = [
 
 describe('POI_CATALOG', () => {
   it('keeps all built-in types available for legacy task support', () => {
-    expect(POI_CATALOG).toHaveLength(19);
+    expect(POI_CATALOG).toHaveLength(21);
   });
 
   it('contains all built-in POI types', () => {
@@ -72,10 +74,16 @@ describe('POI_GEOFENCE_RADIUS', () => {
 });
 
 describe('POI_GOOGLE_TYPES', () => {
-  it('has a Google Places type string for every POI type', () => {
-    for (const type of ALL_BUILT_IN_TYPES) {
-      expect(typeof POI_GOOGLE_TYPES[type]).toBe('string');
-      expect(POI_GOOGLE_TYPES[type].length).toBeGreaterThan(0);
+  it('does not map services Google cannot search distinctly to generic banks', () => {
+    const googleBackedTypes = ALL_BUILT_IN_TYPES.filter(
+      type => type !== 'currency_exchange' && type !== 'money_transfer',
+    );
+    for (const type of googleBackedTypes) {
+      const googleType = POI_GOOGLE_TYPES[type];
+      expect(typeof googleType).toBe('string');
+      expect(googleType?.length).toBeGreaterThan(0);
     }
+    expect(POI_GOOGLE_TYPES.currency_exchange).toBeUndefined();
+    expect(POI_GOOGLE_TYPES.money_transfer).toBeUndefined();
   });
 });

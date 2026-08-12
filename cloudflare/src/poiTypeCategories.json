@@ -115,6 +115,10 @@
     "category_id": "4bf58dd8d48988d12b941735",
     "category_name": "Courthouse"
   },
+  "currency_exchange": {
+    "category_id": "5744ccdfe4b0c0459246b4be",
+    "category_name": "Currency Exchange"
+  },
   "cultural_center": {
     "category_id": "52e81612bcbc57f1066b7a32",
     "category_name": "Cultural Center"
@@ -206,6 +210,9 @@
   "movie_theater": {
     "category_id": "4bf58dd8d48988d17f941735",
     "category_name": "Movie Theater"
+  },
+  "money_transfer": {
+    "category_name": "Money Transfer"
   },
   "museum": {
     "category_id": "4bf58dd8d48988d181941735",

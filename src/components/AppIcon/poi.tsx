@@ -347,6 +347,23 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    case 'currency_exchange':
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="12" r="8" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M15.5 9.5c-.7-1-1.9-1.5-3.4-1.5-2 0-3.5 1.3-3.5 3s1.5 3 3.5 3c1.5 0 2.7-.5 3.4-1.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="m14 6.5 1.5 1.5-1.5 1.5M10 14l-1.5 1.5 1.5 1.5" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'money_transfer':
+      return (
+        <Svg {...p}>
+          <Path d="M4 8h12l-2.5-2.5M20 16H8l2.5 2.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M16 8a4 4 0 0 1 4 4M8 16a4 4 0 0 1-4-4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
     case 'restaurant':
       return (
         <Svg {...p}>

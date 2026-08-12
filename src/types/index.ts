@@ -116,7 +116,8 @@ export type PoiType =
   | 'atm' | 'cafe' | 'supermarket' | 'pharmacy'
   | 'gas' | 'gym' | 'bank' | 'restaurant' | 'park'
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
-  | 'bus' | 'school' | 'bakery' | 'florist' | 'bar';
+  | 'bus' | 'school' | 'bakery' | 'florist' | 'bar'
+  | 'currency_exchange' | 'money_transfer';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
@@ -127,6 +128,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
   // outside the curated quick-actionable list below.
   { type: 'gas' }, { type: 'post' }, { type: 'clinic' },
   { type: 'salon' }, { type: 'bus' }, { type: 'school' },
+  { type: 'currency_exchange' }, { type: 'money_transfer' },
 ];
 
 /**
@@ -319,14 +321,19 @@ export interface Category {
 
 /** Which POI types can appear on tasks of each category. */
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
-  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'post', 'store', 'bakery', 'florist'],
+  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'post', 'store', 'bakery', 'florist'],
   health:   ['pharmacy', 'clinic', 'gym'],
   personal: ['cafe', 'restaurant', 'bar', 'park', 'salon'],
   work:     ['library', 'school'],
 };
 
-/** Maps our PoiType to the corresponding Google Places type string. */
-export const POI_GOOGLE_TYPES: Record<PoiType, string> = {
+/** Maps the legacy Google fallback's supported PoiTypes to a Places type.
+ *
+ * Currency exchange and money transfer intentionally have no Google fallback:
+ * Google exposes neither as a distinct searchable type, and mapping either to
+ * Bank would return the wrong places. The Brush POI API remains authoritative.
+ */
+export const POI_GOOGLE_TYPES: Partial<Record<PoiType, string>> = {
   atm:         'atm',
   cafe:         'cafe',
   supermarket:  'supermarket',
@@ -363,6 +370,8 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   gas:         { key: 'amenity', value: 'fuel' },
   gym:         { key: 'leisure', value: 'fitness_centre' },
   bank:        { key: 'amenity', value: 'bank' },
+  currency_exchange: { key: 'amenity', value: 'bureau_de_change' },
+  money_transfer: { key: 'amenity', value: 'money_transfer' },
   restaurant:  { key: 'amenity', value: 'restaurant' },
   park:        { key: 'leisure', value: 'park' },
   library:     { key: 'amenity', value: 'library' },
@@ -424,6 +433,8 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   gas:         75,
   gym:         100,
   bank:        50,
+  currency_exchange: 50,
+  money_transfer: 50,
   restaurant:  75,
   park:        150,
   library:     75,

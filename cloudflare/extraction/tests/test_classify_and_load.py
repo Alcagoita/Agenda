@@ -61,8 +61,24 @@ class ClassifyDeduplicationTest(unittest.TestCase):
         self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio'))
         self.assertTrue(classify_and_load.is_explicit_atm_name('Caixa Agrícola - Multibanco'))
         self.assertTrue(classify_and_load.is_explicit_atm_name('Multibanco CGD - ATM'))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('Cajero Automático EspañaDuero Banco'))
         self.assertFalse(classify_and_load.is_explicit_atm_name('Banco Montepio'))
         self.assertFalse(classify_and_load.is_explicit_atm_name('Banco BPI'))
+
+    def test_financial_service_rules_only_override_bank_for_explicit_signals(self):
+        rules = classify_and_load.load_financial_service_name_rules()
+        self.assertEqual(
+            classify_and_load.financial_service_type('Damane Cash Soltana', ['5744ccdfe4b0c0459246b4be'], rules),
+            'currency_exchange',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Western Union - Faro', [], rules),
+            'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Banco Santander', [], rules),
+            None,
+        )
 
     def test_named_atm_is_loaded_as_atm_only_even_when_foursquare_says_bank(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -93,6 +109,45 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                     self.assertEqual(
                         export.execute('SELECT poi_type FROM poi_type').fetchall(),
                         [('atm',)],
+                    )
+            finally:
+                classify_and_load.BUILD_DIR = previous_build_dir
+
+    def test_exchange_and_transfer_are_loaded_without_bank(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = os.path.join(temp_dir, 'source.csv')
+            sql_path = os.path.join(temp_dir, 'load.sql')
+            previous_build_dir = classify_and_load.BUILD_DIR
+            classify_and_load.BUILD_DIR = temp_dir
+            try:
+                with open(csv_path, 'w', newline='') as source:
+                    writer = csv.DictWriter(source, fieldnames=[
+                        'fsq_place_id', 'name', 'latitude', 'longitude',
+                        'category_ids', 'category_labels', 'address',
+                    ])
+                    writer.writeheader()
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-exchange', 'name': 'Damane Cash Soltana',
+                        'latitude': '38.000000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735|5744ccdfe4b0c0459246b4be',
+                        'category_labels': 'Bank|Currency Exchange', 'address': '1 Main Street',
+                    })
+                    writer.writerow({
+                        'fsq_place_id': 'fsq-transfer', 'name': 'Western Union - Faro',
+                        'latitude': '38.100000', 'longitude': '-9.000000',
+                        'category_ids': '4bf58dd8d48988d10a951735',
+                        'category_labels': 'Bank', 'address': '2 Main Street',
+                    })
+
+                result = classify_and_load.classify('test-place', csv_path, sql_path)
+                with sqlite3.connect(result['sqlite_path']) as export:
+                    self.assertEqual(
+                        export.execute('SELECT name, primary_poi_type, brand FROM poi ORDER BY name').fetchall(),
+                        [('Damane Cash Soltana', 'currency_exchange', None), ('Western Union - Faro', 'money_transfer', None)],
+                    )
+                    self.assertEqual(
+                        export.execute('SELECT fsq_place_id, poi_type FROM poi_type ORDER BY fsq_place_id').fetchall(),
+                        [('fsq-exchange', 'currency_exchange'), ('fsq-transfer', 'money_transfer')],
                     )
             finally:
                 classify_and_load.BUILD_DIR = previous_build_dir
