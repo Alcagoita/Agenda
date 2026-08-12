@@ -126,6 +126,7 @@ class ClassifyDeduplicationTest(unittest.TestCase):
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
         self.assertTrue(classify_and_load.is_explicit_atm_name('ATM - Montepio'))
+        self.assertTrue(classify_and_load.is_explicit_atm_name('MB'))
         self.assertTrue(classify_and_load.is_explicit_atm_name('Caixa Agrícola - Multibanco'))
         self.assertTrue(classify_and_load.is_explicit_atm_name('Multibanco CGD - ATM'))
         self.assertTrue(classify_and_load.is_explicit_atm_name('Cajero Automático EspañaDuero Banco'))
@@ -149,6 +150,30 @@ class ClassifyDeduplicationTest(unittest.TestCase):
         self.assertEqual(
             classify_and_load.financial_service_type('Cashplus Agence Alfadl', [], rules),
             'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Moneyone Cascais', [], rules),
+            'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Transfex Rua Ouro', [], rules),
+            'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Wafa Cash 2 Mars', [], rules),
+            'money_transfer',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Bureau de change', [], rules),
+            'currency_exchange',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Hivernage Exchange', [], rules),
+            'currency_exchange',
+        )
+        self.assertEqual(
+            classify_and_load.financial_service_type('Taha Change', [], rules),
+            'currency_exchange',
         )
         self.assertEqual(
             classify_and_load.financial_service_type('Banco Santander', [], rules),

@@ -71,7 +71,8 @@ def is_explicit_atm_name(name):
     normalized_name = normalize_text(name)
     padded_name = f' {normalized_name} '
     return (
-        ' atm ' in padded_name
+        normalized_name == 'mb'  # Portuguese Multibanco's official short label.
+        or ' atm ' in padded_name
         or ' multibanco ' in padded_name
         or ' cajero automatico ' in padded_name
     )
