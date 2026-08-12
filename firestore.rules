@@ -225,9 +225,14 @@ service cloud.firestore {
         'Pump Fitness Spirit', 'Time to Fitness', 'Urban Sports Club',
         'Fitness Factory', 'Vivafit'
       ]) || (poi == 'bank' && brand in [
-        'Caixa Geral de Depósitos', 'Millennium bcp', 'Santander', 'Novo Banco',
-        'Crédito Agrícola', 'Banco BPI', 'Banco CTT', 'Montepio', 'Bankinter',
-        'ActivoBank', 'EuroBic', 'ABANCA', 'BBVA', 'La Caixa', 'Deutsche Bank',
+        'Novo Banco', 'Millennium bcp', 'ActivoBank', 'Santander', 'Montepio',
+        'Banco do Brasil', 'Itaú BBA', 'ABANCA', 'Carregosa',
+        'Banco Português de Gestão', 'Bank of China', 'Credit Suisse',
+        'PrivatBank', 'Sabadell', 'Haitong Bank', 'Banco CTT', 'Bankinter',
+        'Banco BPI', 'Caixa Geral de Depósitos', 'CaixaBI', 'BBVA',
+        'Deutsche Bank', 'Banco Invest', 'Finantia', 'BNP Paribas', 'ATLANTICO',
+        'Caja de Badajoz', 'BNI Europa', 'BANC Angolano', 'Crédito Agrícola',
+        'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'EuroBic', 'La Caixa',
         'Banco Popular'
       ]);
     }

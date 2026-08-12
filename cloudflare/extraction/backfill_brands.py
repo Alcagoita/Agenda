@@ -3,17 +3,25 @@
 Run after migrations/0010_brand_aware_nearby.sql, without re-importing the
 country dataset:
 
-  python3 cloudflare/extraction/backfill_brands.py > /tmp/brand-backfill.sql
-  cd cloudflare && npx wrangler d1 execute brush-poi-registry --remote --file=/tmp/brand-backfill.sql
+  for type in gym bank; do
+    for prefix in 0 1 2 3 4 5 6 7 8 9 a b c d e f; do
+      python3 cloudflare/extraction/backfill_brands.py --poi-type "$type" --id-prefix "$prefix" > "/tmp/brand-backfill-$type-$prefix.sql"
+      (cd cloudflare && npx wrangler d1 execute brush-poi-registry --remote --file="/tmp/brand-backfill-$type-$prefix.sql")
+    done
+  done
+
+Each prefix is a separate D1 import because a whole-country normalization
+statement exceeds D1's remote memory limit. The operations are idempotent and
+guarded by the same prefix on the update target.
 
 The canonical values and aliases come directly from the shared app/import/API
 catalogue. A matching update always writes the canonical `name`; unmatched
-Gym/Bank records become NULL, which is intentional and makes the script safe
-to rerun after the catalogue grows.
+Gym/Bank records retain their source value so they remain available for the
+next catalogue review.
 """
+import argparse
 import json
 import os
-import string
 
 from classify_and_load import normalize_text
 
@@ -23,62 +31,6 @@ DICTIONARY_PATH = os.path.join(ROOT, 'src', 'constants', 'brandDictionary.json')
 
 def sql_string(value):
     return "'" + value.replace("'", "''") + "'"
-
-
-SQL_ACCENT_REPLACEMENTS = {
-    'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
-    'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
-    'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
-    'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-    'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ç': 'c', 'ñ': 'n',
-}
-SQL_PUNCTUATION = string.punctuation + '–—“”‘’…\t\n\r'
-
-
-def normalization_steps():
-    """Return the importer-equivalent SQL transformations in shallow layers."""
-    steps = [lambda expression: f"lower({expression})"]
-    for source, target in SQL_ACCENT_REPLACEMENTS.items():
-        steps.append(lambda expression, source=source, target=target: (
-            f"replace({expression}, {sql_string(source.upper())}, {sql_string(target)})"
-        ))
-        steps.append(lambda expression, source=source, target=target: (
-            f"replace({expression}, {sql_string(source)}, {sql_string(target)})"
-        ))
-    for character in SQL_PUNCTUATION:
-        steps.append(lambda expression, character=character: (
-            f"replace({expression}, {sql_string(character)}, ' ')"
-        ))
-    for _ in range(8):
-        steps.append(lambda expression: f"replace({expression}, '  ', ' ')")
-    steps.append(lambda expression: f"trim({expression})")
-    return steps
-
-
-def normalized_poi_ctes(identifier_column, identifier_name, name_column, source_table, where_clause):
-    """Build shallow D1-compatible CTEs for the complete normalization rule.
-
-    D1 rejects one expression with every replacement nested inside it, and its
-    remote authorizer rejects TEMP tables. Each CTE therefore performs at most
-    eight transformations while retaining the exact same value flow.
-    """
-    ctes = [
-        f"normalized_0 AS (SELECT {identifier_column} AS {identifier_name}, coalesce({name_column}, '') AS normalized_name "
-        f"FROM {source_table} WHERE {where_clause})",
-    ]
-    previous = 'normalized_0'
-    steps = normalization_steps()
-    for index, group_start in enumerate(range(0, len(steps), 8), start=1):
-        expression = 'normalized_name'
-        for step in steps[group_start:group_start + 8]:
-            expression = step(expression)
-        current = f'normalized_{index}'
-        ctes.append(
-            f"{current} AS (SELECT {identifier_name}, {expression} AS normalized_name FROM {previous})",
-        )
-        previous = current
-    ctes.append(f"normalized_poi AS (SELECT {identifier_name}, normalized_name FROM {previous})")
-    return ',\n'.join(ctes)
 
 
 def brand_case(entries, normalized_column='normalized_name'):
@@ -98,52 +50,63 @@ def brand_case(entries, normalized_column='normalized_name'):
     return '\n      '.join(clauses)
 
 
-def emit_for_foursquare(poi_type, entries):
+HEX_ID_PREFIXES = '0123456789abcdef'
+
+
+def hex_id_prefix(value):
+    normalized = value.lower()
+    if not normalized or any(character not in HEX_ID_PREFIXES for character in normalized):
+        raise argparse.ArgumentTypeError('id prefix must contain only hexadecimal characters')
+    return normalized
+
+
+def emit_for_foursquare(poi_type, entries, id_prefix=None):
     where_clause = f"""EXISTS (
     SELECT 1 FROM poi_type
-    WHERE poi_type.fsq_place_id = source.fsq_place_id
+    WHERE poi_type.fsq_place_id = target.fsq_place_id
       AND poi_type.poi_type = {sql_string(poi_type)}
 )"""
-    print(f"""WITH {normalized_poi_ctes('source.fsq_place_id', 'fsq_place_id', 'source.name', 'poi AS source', where_clause)}
-UPDATE poi AS target
-SET brand = (
-  SELECT CASE
-      {brand_case(entries)}
-      ELSE NULL
+    if id_prefix is not None:
+        where_clause += f"\n  AND target.fsq_place_id LIKE {sql_string(id_prefix + '%')}"
+    print(f"""UPDATE poi AS target
+SET brand = CASE
+      {brand_case(entries, 'target.dedupe_name')}
+      -- Preserve a source value that is not in this curated catalogue. It is
+      -- evidence for the next bank-review pass, not a reason to erase data.
+      ELSE target.brand
     END
-  FROM normalized_poi
-  WHERE normalized_poi.fsq_place_id = target.fsq_place_id
-)
-WHERE EXISTS (
-  SELECT 1 FROM poi_type
-  WHERE poi_type.fsq_place_id = target.fsq_place_id
-    AND poi_type.poi_type = {sql_string(poi_type)}
-);""")
+WHERE {where_clause};""")
 
 
-def emit_for_curated(poi_type, entries):
-    where_clause = f"source.primary_poi_type = {sql_string(poi_type)}"
-    print(f"""WITH {normalized_poi_ctes('source.poi_id', 'poi_id', 'source.name', 'curated_poi AS source', where_clause)}
-UPDATE curated_poi AS target
-SET brand = (
-  SELECT CASE
-      {brand_case(entries)}
-      ELSE NULL
+def emit_for_curated(poi_type, entries, id_prefix=None):
+    where_clause = f"target.primary_poi_type = {sql_string(poi_type)}"
+    if id_prefix is not None:
+        where_clause += f" AND target.poi_id LIKE {sql_string(id_prefix + '%')}"
+    print(f"""UPDATE curated_poi AS target
+SET brand = CASE
+      {brand_case(entries, 'target.dedupe_name')}
+      ELSE target.brand
     END
-  FROM normalized_poi
-  WHERE normalized_poi.poi_id = target.poi_id
-)
-WHERE target.primary_poi_type = {sql_string(poi_type)};""")
+WHERE {where_clause};""")
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--poi-type', choices=('gym', 'bank'), action='append')
+    parser.add_argument('--id-prefix', type=hex_id_prefix)
+    args = parser.parse_args(argv)
+
     with open(DICTIONARY_PATH) as source:
         dictionary = json.load(source)
     print('-- Generated by extraction/backfill_brands.py. Do not hand-edit.')
-    for poi_type in ('gym', 'bank'):
+    for poi_type in args.poi_type or ('gym', 'bank'):
         entries = dictionary[poi_type]
-        emit_for_foursquare(poi_type, entries)
-        emit_for_curated(poi_type, entries)
+        # D1 cannot materialise the full normalisation CTE for every global
+        # Bank row at once. Foursquare and curated UUID ids are hex, so split
+        # into small deterministic batches without changing matching logic.
+        for prefix in (args.id_prefix or HEX_ID_PREFIXES):
+            emit_for_foursquare(poi_type, entries, prefix)
+            emit_for_curated(poi_type, entries, prefix)
     print("""-- Backfill report: capture these result rows with the deployment record.
 SELECT poi_type.poi_type, poi.brand, COUNT(*) AS places
 FROM poi_type

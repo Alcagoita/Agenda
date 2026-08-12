@@ -27,6 +27,40 @@ class ClassifyDeduplicationTest(unittest.TestCase):
         self.assertIn("% cgd %", sql)
         self.assertNotIn("LIKE '%CGD%'", sql)
 
+    def test_brand_backfill_can_limit_a_d1_batch_by_hex_identifier_prefix(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.emit_for_foursquare('bank', [{'name': 'Banco BPI', 'aliases': ['BPI']}], 'a')
+            backfill_brands.emit_for_curated('bank', [{'name': 'Banco BPI', 'aliases': ['BPI']}], 'a')
+        self.assertIn("target.fsq_place_id LIKE 'a%'", output.getvalue())
+        self.assertIn("target.poi_id LIKE 'a%'", output.getvalue())
+
+    def test_brand_backfill_prefix_does_not_clear_rows_outside_the_shard(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.emit_for_foursquare('bank', [{'name': 'Banco BPI', 'aliases': ['BPI']}], 'a')
+        with sqlite3.connect(':memory:') as database:
+            database.executescript('''
+                CREATE TABLE poi (fsq_place_id TEXT PRIMARY KEY, name TEXT, dedupe_name TEXT, brand TEXT);
+                CREATE TABLE poi_type (fsq_place_id TEXT, poi_type TEXT);
+            ''')
+            database.execute("INSERT INTO poi VALUES ('a-match', 'BPI', 'bpi', NULL)")
+            database.execute("INSERT INTO poi VALUES ('b-untouched', 'Other bank', 'other bank', 'source value')")
+            database.execute("INSERT INTO poi_type VALUES ('a-match', 'bank')")
+            database.execute("INSERT INTO poi_type VALUES ('b-untouched', 'bank')")
+            database.executescript(output.getvalue())
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'a-match'").fetchone(), ('Banco BPI',))
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'b-untouched'").fetchone(), ('source value',))
+
+    def test_brand_backfill_cli_can_emit_one_bank_shard(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            backfill_brands.main(['--poi-type', 'bank', '--id-prefix', 'a'])
+        sql = output.getvalue()
+        self.assertIn("poi_type.poi_type = 'bank'", sql)
+        self.assertIn("target.fsq_place_id LIKE 'a%'", sql)
+        self.assertNotIn("poi_type.poi_type = 'gym'", sql)
+
     def test_brand_backfill_reuses_importer_normalization_for_foursquare_and_curated_rows(self):
         entries = [{'name': 'Caixa Geral de Depósitos', 'aliases': ['CGD']}]
         output = io.StringIO()
@@ -35,16 +69,21 @@ class ClassifyDeduplicationTest(unittest.TestCase):
             backfill_brands.emit_for_curated('bank', entries)
         with sqlite3.connect(':memory:') as database:
             database.executescript('''
-                CREATE TABLE poi (fsq_place_id TEXT PRIMARY KEY, name TEXT, brand TEXT);
+                CREATE TABLE poi (fsq_place_id TEXT PRIMARY KEY, name TEXT, dedupe_name TEXT, brand TEXT);
                 CREATE TABLE poi_type (fsq_place_id TEXT, poi_type TEXT);
-                CREATE TABLE curated_poi (poi_id TEXT PRIMARY KEY, name TEXT, primary_poi_type TEXT, brand TEXT);
+                CREATE TABLE curated_poi (poi_id TEXT PRIMARY KEY, name TEXT, dedupe_name TEXT, primary_poi_type TEXT, brand TEXT);
             ''')
-            database.execute("INSERT INTO poi VALUES ('fsq-cgd', 'CGD — Alcobaça', NULL)")
+            database.execute("INSERT INTO poi VALUES ('fsq-cgd', 'CGD — Alcobaça', 'cgd alcobaca', NULL)")
+            database.execute("INSERT INTO poi VALUES ('fsq-unlisted', 'Unlisted Source Bank', 'unlisted source bank', 'source value')")
             database.execute("INSERT INTO poi_type VALUES ('fsq-cgd', 'bank')")
-            database.execute("INSERT INTO curated_poi VALUES ('manual-cgd', 'Caixa Geral de Depositos - Alcobaça', 'bank', NULL)")
+            database.execute("INSERT INTO poi_type VALUES ('fsq-unlisted', 'bank')")
+            database.execute("INSERT INTO curated_poi VALUES ('manual-cgd', 'Caixa Geral de Depositos - Alcobaça', 'caixa geral de depositos alcobaca', 'bank', NULL)")
+            database.execute("INSERT INTO curated_poi VALUES ('manual-unlisted', 'Unlisted Source Bank', 'unlisted source bank', 'bank', 'source value')")
             database.executescript(output.getvalue())
             self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'fsq-cgd'").fetchone(), ('Caixa Geral de Depósitos',))
+            self.assertEqual(database.execute("SELECT brand FROM poi WHERE fsq_place_id = 'fsq-unlisted'").fetchone(), ('source value',))
             self.assertEqual(database.execute("SELECT brand FROM curated_poi WHERE poi_id = 'manual-cgd'").fetchone(), ('Caixa Geral de Depósitos',))
+            self.assertEqual(database.execute("SELECT brand FROM curated_poi WHERE poi_id = 'manual-unlisted'").fetchone(), ('source value',))
 
     def test_brand_aliases_resolve_to_the_canonical_persisted_value(self):
         dictionary = classify_and_load.load_brand_dictionary()

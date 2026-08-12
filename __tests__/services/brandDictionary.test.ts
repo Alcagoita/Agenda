@@ -43,6 +43,10 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('bank', 'CGD')).toBe('Caixa Geral de Depósitos');
     expect(findBrandInText('bank', 'Visit Caixa Geral de Depositos Alcobaça')).toBe('Caixa Geral de Depósitos');
     expect(getCanonicalBrand('bank', 'CaixaBank')).toBe('La Caixa');
+    expect(getCanonicalBrand('bank', 'BES')).toBe('Novo Banco');
+    expect(findBrandInText('bank', 'Banco Montepio, Alcobaça')).toBe('Montepio');
+    expect(findBrandInText('bank', 'Use Banco BIG near home')).toBe('Banco BiG');
+    expect(getCanonicalBrand('bank', 'SabadellAtlántico')).toBe('Sabadell');
     expect(findBrandInText('bank', 'Use BBVA near home')).toBe('BBVA');
     expect(findRequiredBrandInText('Go to Solinca after work')).toEqual({ poiType: 'gym', brand: 'Solinca' });
   });
