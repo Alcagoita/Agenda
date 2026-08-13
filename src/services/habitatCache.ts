@@ -106,14 +106,36 @@ const METRES_PER_DEGREE_LAT = 111_195;
  * corrected by cos(latitude) — clamped away from 0 so it never blows up near
  * the poles.
  */
+type LongitudeRange = readonly [min: number, max: number];
+
 function boundingBoxDeg(lat: number, lng: number, radiusMeters: number) {
   const latDeg = radiusMeters / METRES_PER_DEGREE_LAT;
   const cosLat = Math.max(Math.cos(lat * DEG_TO_RAD), 0.01);
   const lngDeg = radiusMeters / (METRES_PER_DEGREE_LAT * cosLat);
+
+  // A longitude span covering half the globe or more contains every valid
+  // longitude. This is only plausible very close to a pole, but avoids
+  // generating invalid wrapped ranges there.
+  const lngRanges: LongitudeRange[] = lngDeg >= 180
+    ? [[-180, 180]]
+    : lng - lngDeg < -180
+      ? [[lng - lngDeg + 360, 180], [-180, lng + lngDeg]]
+      : lng + lngDeg > 180
+        ? [[lng - lngDeg, 180], [-180, lng + lngDeg - 360]]
+        : [[lng - lngDeg, lng + lngDeg]];
+
   return {
     latMin: lat - latDeg, latMax: lat + latDeg,
-    lngMin: lng - lngDeg, lngMax: lng + lngDeg,
+    lngRanges,
   };
+}
+
+function longitudeRangePredicate(ranges: readonly LongitudeRange[]): string {
+  return `(${ranges.map(() => 'lng BETWEEN ? AND ?').join(' OR ')})`;
+}
+
+function longitudeRangeParams(ranges: readonly LongitudeRange[]): number[] {
+  return ranges.flatMap(([min, max]) => [min, max]);
 }
 
 // ─── DB handle (lazy, cached) ─────────────────────────────────────────────────
@@ -327,8 +349,8 @@ function findMatchingRow(
     `SELECT * FROM habitat_places
      WHERE poi_type = ?
        AND lat BETWEEN ? AND ?
-       AND lng BETWEEN ? AND ?`,
-    [poiType, box.latMin, box.latMax, box.lngMin, box.lngMax],
+       AND ${longitudeRangePredicate(box.lngRanges)}`,
+    [poiType, box.latMin, box.latMax, ...longitudeRangeParams(box.lngRanges)],
   );
 
   const candidateName = normalize(name);
@@ -585,8 +607,8 @@ export function queryHabitatCache(
       `SELECT * FROM habitat_places
        WHERE poi_type IN (${placeholders})
          AND lat BETWEEN ? AND ?
-         AND lng BETWEEN ? AND ?`,
-      [...poiTypes, box.latMin, box.latMax, box.lngMin, box.lngMax],
+         AND ${longitudeRangePredicate(box.lngRanges)}`,
+      [...poiTypes, box.latMin, box.latMax, ...longitudeRangeParams(box.lngRanges)],
     );
 
     for (const row of rows) {
@@ -776,10 +798,10 @@ export async function refreshHabitatCacheIfStale(
         `SELECT poi_type FROM habitat_places
          WHERE poi_type IN (${placeholders})
            AND lat BETWEEN ? AND ?
-           AND lng BETWEEN ? AND ?
+           AND ${longitudeRangePredicate(box.lngRanges)}
            AND osm_id IS NOT NULL
            AND osm_fetched_at >= ?`,
-        [...mappableTypes, box.latMin, box.latMax, box.lngMin, box.lngMax, staleCutoff],
+        [...mappableTypes, box.latMin, box.latMax, ...longitudeRangeParams(box.lngRanges), staleCutoff],
       );
       const freshTypes = new Set(freshRows.map(r => r.poi_type));
       const staleTypes = mappableTypes.filter(t => !freshTypes.has(t));
@@ -862,8 +884,8 @@ export function hasCachedPlacesNear(
     const rows = getDb().getAllSync<{ lat: number; lng: number }>(
       `SELECT lat, lng FROM habitat_places
        WHERE lat BETWEEN ? AND ?
-         AND lng BETWEEN ? AND ?`,
-      [box.latMin, box.latMax, box.lngMin, box.lngMax],
+         AND ${longitudeRangePredicate(box.lngRanges)}`,
+      [box.latMin, box.latMax, ...longitudeRangeParams(box.lngRanges)],
     );
     // The bounding box is a square around a circle, so the corners still need
     // the real distance check before we claim anything.
