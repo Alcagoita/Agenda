@@ -376,6 +376,7 @@ function NearbyCard({
   const slideWidth = windowWidth - spacing.page * 2;
 
   // Active carousel page — updated once per swipe settle (cheap; not per-frame).
+  const carouselRef = React.useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const onCarouselScroll = React.useCallback(
     (e: { nativeEvent: { contentOffset: { x: number } } }) => {
@@ -415,6 +416,20 @@ function NearbyCard({
 
   // Notify parent after render — never during render (avoids setState-in-render warning).
   React.useEffect(() => { onHasContent?.(hasContent); }, [hasContent, onHasContent]);
+
+  // Rewind the carousel whenever the slide set changes (KAN-327).
+  //
+  // The ScrollView keeps its contentOffset across content changes. Swipe to
+  // slide 3, then let a proximity search drop the set to 1–2 slides, and the
+  // offset now points past the end of the content: the carousel renders as an
+  // empty gap until something remounts it. Keying on the entry signature (not
+  // just the count) also covers a same-length set whose slides are different
+  // tasks, where the offset stays valid but lands on an unrelated card.
+  const heroSignature = heroEntries.map(e => `${e.poiType}:${e.task.id}`).join(',');
+  React.useEffect(() => {
+    carouselRef.current?.scrollTo({ x: 0, animated: false });
+    setActiveIndex(0);
+  }, [heroSignature]);
 
   if (poiTasks.length === 0) { return null; }
 
@@ -465,6 +480,7 @@ function NearbyCard({
       {heroEntries.length > 0 && (
         <>
           <ScrollView
+            ref={carouselRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}

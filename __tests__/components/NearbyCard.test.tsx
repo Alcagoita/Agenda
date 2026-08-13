@@ -9,9 +9,10 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Dimensions, ScrollView, Text, View as RNView } from 'react-native';
 import NearbyCard from '../../src/components/NearbyCard';
+import { spacing } from '../../src/theme/tokens';
 import type { Task } from '../../src/types';
 import { Timestamp } from '@react-native-firebase/firestore';
 import { COPY, setCopyLanguage } from '../../src/constants/copy';
@@ -323,6 +324,139 @@ describe('NearbyCard — hero carousel page indicator', () => {
       />,
     );
     expect(screen.queryByTestId('nearby-page-dots')).toBeNull();
+  });
+});
+
+describe('NearbyCard — carousel rewind when the hero set shrinks (KAN-327)', () => {
+  beforeEach(() => { setCopyLanguage('en'); });
+  afterEach(() => { setCopyLanguage('en'); jest.restoreAllMocks(); });
+
+  const slideWidth = Dimensions.get('window').width - spacing.page * 2;
+
+  const THREE_HERO_TASKS = [
+    makeTask({ id: 'a', poi: 'pharmacy',    title: 'Pick up prescription' }),
+    makeTask({ id: 'b', poi: 'supermarket', title: 'Buy groceries' }),
+    makeTask({ id: 'c', poi: 'atm',         title: 'Withdraw cash' }),
+  ];
+
+  const THREE_HERO_PLACES = {
+    pharmacy:    [{ ...NEARBY_PLACE, placeId: 'p-1', name: 'Pharmacy',    distanceMeters: 30 }],
+    supermarket: [{ ...NEARBY_PLACE, placeId: 'p-2', name: 'Supermarket', distanceMeters: 60 }],
+    atm:         [{ ...NEARBY_PLACE, placeId: 'p-3', name: 'ATM',         distanceMeters: 90 }],
+  };
+
+  // Swipes the carousel to the slide at `index` by settling its scroll offset.
+  const settleOnSlide = (index: number) => {
+    fireEvent(
+      screen.UNSAFE_getAllByType(ScrollView)[0],
+      'momentumScrollEnd',
+      { nativeEvent: { contentOffset: { x: slideWidth * index } } },
+    );
+  };
+
+  it('rewinds the carousel to the first slide when hero slides disappear', () => {
+    const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+
+    const { rerender } = render(
+      <NearbyCard tasks={THREE_HERO_TASKS} nearbyPoiType="pharmacy" poiPlaces={THREE_HERO_PLACES} />,
+    );
+    expect(screen.getAllByTestId('nearby-page-dot')).toHaveLength(2); // 3 slides, 1 active
+
+    settleOnSlide(2);
+    scrollTo.mockClear();
+
+    // Two of the three places drop out of the hero zone.
+    rerender(
+      <NearbyCard
+        tasks={THREE_HERO_TASKS}
+        nearbyPoiType="pharmacy"
+        poiPlaces={{ pharmacy: THREE_HERO_PLACES.pharmacy }}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenCalledWith({ x: 0, animated: false });
+  });
+
+  it('keeps the first dot active after the hero set shrinks', () => {
+    jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+
+    const { rerender } = render(
+      <NearbyCard tasks={THREE_HERO_TASKS} nearbyPoiType="pharmacy" poiPlaces={THREE_HERO_PLACES} />,
+    );
+
+    settleOnSlide(2);
+
+    rerender(
+      <NearbyCard
+        tasks={THREE_HERO_TASKS}
+        nearbyPoiType="pharmacy"
+        poiPlaces={{
+          pharmacy:    THREE_HERO_PLACES.pharmacy,
+          supermarket: THREE_HERO_PLACES.supermarket,
+        }}
+      />,
+    );
+
+    // Two slides remain; the active dot must be the first one, not a stale index 2.
+    const dots = screen.UNSAFE_getAllByType(RNView).filter(
+      n => typeof n.props.testID === 'string' && n.props.testID.startsWith('nearby-page-dot') && n.props.testID !== 'nearby-page-dots',
+    );
+    expect(dots).toHaveLength(2);
+    expect(dots[0].props.testID).toBe('nearby-page-dot-active');
+    expect(dots[1].props.testID).toBe('nearby-page-dot');
+  });
+
+  it('rewinds when the slide set changes without changing length', () => {
+    const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+
+    const { rerender } = render(
+      <NearbyCard tasks={THREE_HERO_TASKS} nearbyPoiType="pharmacy" poiPlaces={THREE_HERO_PLACES} />,
+    );
+
+    settleOnSlide(1);
+    scrollTo.mockClear();
+
+    // Same slide count, different POI types — the old offset would land on an
+    // unrelated task's card.
+    rerender(
+      <NearbyCard
+        tasks={THREE_HERO_TASKS}
+        nearbyPoiType="pharmacy"
+        poiPlaces={{
+          pharmacy: THREE_HERO_PLACES.pharmacy,
+          atm:      THREE_HERO_PLACES.atm,
+          bank:     [{ ...NEARBY_PLACE, placeId: 'p-4', name: 'Bank', distanceMeters: 50 }],
+        }}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenCalledWith({ x: 0, animated: false });
+  });
+
+  it('does not rewind when the hero slides are unchanged', () => {
+    const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+
+    const { rerender } = render(
+      <NearbyCard tasks={THREE_HERO_TASKS} nearbyPoiType="pharmacy" poiPlaces={THREE_HERO_PLACES} />,
+    );
+
+    settleOnSlide(2);
+    scrollTo.mockClear();
+
+    // Distances move, but the same tasks stay in the hero zone in the same order.
+    rerender(
+      <NearbyCard
+        tasks={THREE_HERO_TASKS}
+        nearbyPoiType="pharmacy"
+        poiPlaces={{
+          pharmacy:    [{ ...THREE_HERO_PLACES.pharmacy[0],    distanceMeters: 35 }],
+          supermarket: [{ ...THREE_HERO_PLACES.supermarket[0], distanceMeters: 65 }],
+          atm:         [{ ...THREE_HERO_PLACES.atm[0],         distanceMeters: 95 }],
+        }}
+      />,
+    );
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });
 
