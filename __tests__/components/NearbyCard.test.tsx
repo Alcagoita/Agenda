@@ -409,9 +409,14 @@ describe('NearbyCard — carousel rewind when the hero set shrinks (KAN-327)', (
   it('rewinds when the slide set changes without changing length', () => {
     const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
 
+    // The bank task is present in both renders; only its place comes and goes,
+    // so the supermarket slide is swapped for a bank one at the same count.
+    const tasks = [...THREE_HERO_TASKS, makeTask({ id: 'd', poi: 'bank', title: 'Pay the fee' })];
+
     const { rerender } = render(
-      <NearbyCard tasks={THREE_HERO_TASKS} nearbyPoiType="pharmacy" poiPlaces={THREE_HERO_PLACES} />,
+      <NearbyCard tasks={tasks} nearbyPoiType="pharmacy" poiPlaces={THREE_HERO_PLACES} />,
     );
+    expect(screen.getAllByTestId('nearby-page-dot')).toHaveLength(2); // 3 slides
 
     settleOnSlide(1);
     scrollTo.mockClear();
@@ -420,7 +425,7 @@ describe('NearbyCard — carousel rewind when the hero set shrinks (KAN-327)', (
     // unrelated task's card.
     rerender(
       <NearbyCard
-        tasks={THREE_HERO_TASKS}
+        tasks={tasks}
         nearbyPoiType="pharmacy"
         poiPlaces={{
           pharmacy: THREE_HERO_PLACES.pharmacy,
@@ -430,6 +435,7 @@ describe('NearbyCard — carousel rewind when the hero set shrinks (KAN-327)', (
       />,
     );
 
+    expect(screen.getAllByTestId('nearby-page-dot')).toHaveLength(2); // still 3 slides
     expect(scrollTo).toHaveBeenCalledWith({ x: 0, animated: false });
   });
 
