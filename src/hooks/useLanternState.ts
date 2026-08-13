@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { PlaceContext } from '../services/proximity';
-import { getLastPoiSearchState } from '../services/proximity';
+import { getLastPoiSearchState, NEARBY_RADIUS } from '../services/proximity';
 import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
 import { getPositionLowAccuracy } from '../services/geolocation';
@@ -38,7 +38,6 @@ export function useLanternState(
   coords: LanternCoords | null,
   permissionGranted: boolean,
 ): LanternState {
-  const { offline, hasCache } = useOfflineCoverage();
   const wasHomeRef = useRef(false);
   const [cityName, setCityName] = useState<string | null>(null);
   const [seedCoords, setSeedCoords] = useState<LanternCoords | null>(null);
@@ -46,6 +45,11 @@ export function useLanternState(
   // The engine's search coords when it has them (POI tasks present); otherwise
   // our own one-shot seed. Engine coords win so a moving user stays fresh.
   const effectiveCoords = coords ?? seedCoords;
+
+  // KAN-316 — `knowsHere` asks the cache about THIS position, within the same
+  // radius the Nearby list uses, so the dot means "there is cached ground where
+  // you're standing", not "the cache has something, somewhere".
+  const { offline, knowsHere } = useOfflineCoverage(effectiveCoords, NEARBY_RADIUS);
 
   // One-shot position seed — only when we have no fix at all and permission is
   // granted. Re-runs when those change but early-returns once a fix exists, so
@@ -78,13 +82,13 @@ export function useLanternState(
   const homeDistanceM: number | null =
     homeSet && effectiveCoords ? distanceFromHome(effectiveCoords) : null;
 
-  // KAN-316 — the offline dot's per-location gate. Read at render, not stored:
-  // getLastPoiSearchState() is the proximity engine's last settled answer, and
-  // this hook re-runs whenever the Today screen re-renders (a search tick, a
-  // connectivity change, a new fix), so a plain read stays in step with it
-  // without a watcher, an interval or a subscription (KAN-231).
-  const { coverageStatus, degraded } = getLastPoiSearchState();
-  const offlineDot = resolveOfflineDot({ offline, hasCache, coverageStatus, degraded });
+  // The last search's own verdict on this location — read at render, not
+  // stored: this hook re-runs whenever the Today screen re-renders (a search
+  // tick, a connectivity change, a new fix), so a plain read stays in step with
+  // it without a watcher, an interval or a subscription (KAN-231). Only its
+  // refusals matter here — see resolveOfflineDot.
+  const { source, coverageStatus } = getLastPoiSearchState();
+  const offlineDot = resolveOfflineDot({ offline, knowsHere, source, coverageStatus });
 
   const state = resolveLanternState({
     placeContext,

@@ -16,7 +16,7 @@
  * token and localized label, exactly as ContextChip maps ContextChipView.
  */
 import type { PlaceContext } from '../services/proximity';
-import type { PoiCoverageStatus } from '../services/maps';
+import type { PoiCoverageStatus, PoiSearchSource } from '../services/maps';
 import { isTodayWithinTripDates } from './contextChip';
 
 export type LanternStateKind =
@@ -61,37 +61,50 @@ export function resolveHomeProximity(distanceM: number, wasHome: boolean): boole
 export interface ResolveOfflineDotInput {
   /** Whether the device is offline (useOfflineCoverage). */
   offline: boolean;
-  /** Tri-state cache probe — `null` means "not read yet this offline period". */
-  hasCache: boolean | null;
-  /** Coverage for the exact location the last search asked about (getLastPoiSearchState). */
+  /** Whether the cache holds places around the current position — tri-state,
+   *  `null` = not read yet (useOfflineCoverage.knowsHere). */
+  knowsHere: boolean | null;
+  /** Which source answered the last search (getLastPoiSearchState). */
+  source: PoiSearchSource | null;
+  /** Coverage for the exact location that search asked about (getLastPoiSearchState). */
   coverageStatus: PoiCoverageStatus | undefined;
-  /** Derived-fresh completeness flag for that same search (getLastPoiSearchState). */
-  degraded: boolean;
 }
 
 /**
  * Whether the Lantern's offline dot may claim "I know this area" (KAN-316).
  *
- * The dot asserts something location-specific, so it is gated on the
- * location-specific answer: `coverageStatus`, which is the coverage of the
- * exact place the last search asked about — NOT `hasCache`, which only says
- * the cache was seeded *somewhere* (cache Lisbon, land in Tokyo, and hasCache
- * alone would still claim we know Tokyo).
+ * The claim is location-specific, so the evidence must be too. That evidence is
+ * `knowsHere` — the cache actually holds places around this position — NOT the
+ * global `hasCache`, which only says the cache was seeded *somewhere* (cache
+ * Lisbon, land in Tokyo, and `hasCache` alone would still claim Tokyo).
  *
- * `hasCache` keeps one job: its tri-state `null` suppresses the dot on the
- * render where `offline` first flips true, before the cache has been read, so
- * the dot can't flash. `false` suppresses too — with no cached places at all
- * there is nothing to know this area *with*, whatever the server last said
- * about coverage.
+ * Its tri-state `null` is what keeps the dot from flashing on the render where
+ * `offline` first flips true, before the probe has run.
  *
- * `building`, `none` and `degraded` are all excluded, which is what makes
- * KAN-349's "still getting to know this area" line mutually exclusive with
- * this dot by construction, rather than by extra suppression logic.
+ * ── Why this is not gated on `degraded` ──
+ * The ticket's original gate was `coverageStatus === 'ready' && !degraded`.
+ * That is unreachable in practice: `isPoiSearchDegraded` treats every `cache`
+ * answer as degraded, and offline is precisely when the cache answers, so the
+ * dot could never appear in the situation it exists for. `degraded` describes
+ * how complete the LAST FETCH was; the dot is about whether we hold this
+ * ground. Different questions.
+ *
+ * What we do keep from the last search is its refusals, so the dot never
+ * contradicts KAN-349's line about the same place:
+ *   • `none`/`building` — the server told us, for this exact location, that it
+ *     isn't covered yet. That is KAN-349's "still getting to know this area".
+ *   • `osm` — we are running on the fallback source, which is KAN-349's
+ *     "I know less than usual around here".
+ * An offline `cache` tick reports neither, so the two remain mutually
+ * exclusive by construction, as both tickets require.
  */
 export function resolveOfflineDot({
-  offline, hasCache, coverageStatus, degraded,
+  offline, knowsHere, source, coverageStatus,
 }: ResolveOfflineDotInput): boolean {
-  return offline && hasCache === true && coverageStatus === 'ready' && !degraded;
+  if (!offline || knowsHere !== true) { return false; }
+  if (coverageStatus === 'none' || coverageStatus === 'building') { return false; }
+  if (source === 'osm') { return false; }
+  return true;
 }
 
 export interface ResolveLanternStateInput {

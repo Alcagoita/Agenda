@@ -14,6 +14,7 @@ import {
   HOME_LEAVE_M,
 } from '../../src/utils/lantern';
 import type { PlaceContext } from '../../src/services/proximity';
+import type { PoiCoverageStatus, PoiSearchSource } from '../../src/services/maps';
 
 const mallCtx = (name: string): PlaceContext =>
   ({ kind: 'mall', snapshot: { name } } as unknown as PlaceContext);
@@ -114,42 +115,52 @@ describe('resolveLanternState — offlineDot reaches home and outside (KAN-316 A
 });
 
 describe('resolveOfflineDot — the coverage gate (KAN-316 AC1/AC2/AC3/AC6)', () => {
-  const ready = { offline: true, hasCache: true as boolean | null, coverageStatus: 'ready' as const, degraded: false };
+  /** The real-world offline case: cached ground here, last tick served from cache. */
+  const offlineHere = {
+    offline: true,
+    knowsHere: true as boolean | null,
+    source: 'cache' as PoiSearchSource | null,
+    coverageStatus: undefined as PoiCoverageStatus | undefined,
+  };
 
-  it('true only when offline, coverage is ready for this location and not degraded (AC1)', () => {
-    expect(resolveOfflineDot(ready)).toBe(true);
+  it('shows offline over ground we hold, even though the tick came from the cache (AC1)', () => {
+    // The whole point of the dot. A cache-sourced answer is "degraded" by
+    // maps.ts's definition, which is why degraded is NOT the gate — offline
+    // always means the cache answered.
+    expect(resolveOfflineDot(offlineHere)).toBe(true);
+  });
+
+  it('shows when the last online answer was Cloudflare + ready as well', () => {
+    expect(resolveOfflineDot({ ...offlineHere, source: 'cloudflare', coverageStatus: 'ready' })).toBe(true);
   });
 
   it('online never shows the dot', () => {
-    expect(resolveOfflineDot({ ...ready, offline: false })).toBe(false);
+    expect(resolveOfflineDot({ ...offlineHere, offline: false })).toBe(false);
   });
 
-  it('building and none render no dot (AC2)', () => {
-    expect(resolveOfflineDot({ ...ready, coverageStatus: 'building' })).toBe(false);
-    expect(resolveOfflineDot({ ...ready, coverageStatus: 'none' })).toBe(false);
+  it('building and none render no dot — KAN-349 speaks for those (AC2)', () => {
+    expect(resolveOfflineDot({ ...offlineHere, coverageStatus: 'building' })).toBe(false);
+    expect(resolveOfflineDot({ ...offlineHere, coverageStatus: 'none' })).toBe(false);
   });
 
-  it('an unknown coverage status renders no dot — e.g. a cache-sourced tick (AC2)', () => {
-    expect(resolveOfflineDot({ ...ready, coverageStatus: undefined })).toBe(false);
-  });
-
-  it('degraded renders no dot even when coverage says ready (AC2)', () => {
-    expect(resolveOfflineDot({ ...ready, degraded: true })).toBe(false);
+  it('an OSM-sourced answer renders no dot — that is the degraded line, not this (AC2)', () => {
+    expect(resolveOfflineDot({ ...offlineHere, source: 'osm' })).toBe(false);
   });
 
   it('a cache seeded for a DIFFERENT location produces no dot (AC3)', () => {
-    // hasCache is global ("seeded somewhere"), so this is the Lisbon-cache-in-
-    // Tokyo case: places are cached, but this location is not covered.
-    expect(resolveOfflineDot({ ...ready, coverageStatus: 'none' })).toBe(false);
-    expect(resolveOfflineDot({ ...ready, coverageStatus: 'building', degraded: true })).toBe(false);
+    // knowsHere is the per-location probe: places cached in Lisbon, standing in
+    // Tokyo → false, whatever the global cache holds.
+    expect(resolveOfflineDot({ ...offlineHere, knowsHere: false })).toBe(false);
   });
 
-  it('hasCache === null suppresses the dot — no flash on the first offline render (AC6)', () => {
-    expect(resolveOfflineDot({ ...ready, hasCache: null })).toBe(false);
+  it('knowsHere === null suppresses the dot — no flash on the first offline render (AC6)', () => {
+    expect(resolveOfflineDot({ ...offlineHere, knowsHere: null })).toBe(false);
   });
 
-  it('hasCache === false suppresses it too — nothing cached to know this area with', () => {
-    expect(resolveOfflineDot({ ...ready, hasCache: false })).toBe(false);
+  it('no search has run yet (source null) but we hold this ground — still shows', () => {
+    // A user with no POI tasks never triggers a search, so source stays null.
+    // That is an absence of refusals, not a refusal.
+    expect(resolveOfflineDot({ ...offlineHere, source: null })).toBe(true);
   });
 });
 
