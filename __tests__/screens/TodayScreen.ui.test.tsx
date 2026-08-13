@@ -134,6 +134,11 @@ jest.mock('react-native-reanimated', () => {
 jest.mock('../../src/components/Header',                () => () => null);
 jest.mock('../../src/components/Lantern',               () => () => null);
 jest.mock('../../src/hooks/useLanternState', () => ({ useLanternState: () => ({ kind: 'unset' }) }));
+// Same reason as the line above: this hook reads proximity.ts, which pulls
+// notifee into a graph this UI test deliberately keeps lean (KAN-349).
+jest.mock('../../src/hooks/useAreaCoverageNotice', () => ({
+  useAreaCoverageNotice: () => ({ notice: null, recheck: jest.fn() }),
+}));
 jest.mock('../../src/components/ProgressRing',          () => () => null);
 jest.mock('../../src/components/NearbyCard',            () => () => null);
 jest.mock('../../src/components/ContextChip',           () => () => null);

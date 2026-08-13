@@ -107,6 +107,40 @@ export function resolveOfflineDot({
   return true;
 }
 
+/** What the Lantern zone owes the user an explanation about (KAN-349). */
+export type AreaNotice = 'building' | 'degraded';
+
+export interface ResolveAreaNoticeInput {
+  /** Which source answered the last search (getLastPoiSearchState). */
+  source: PoiSearchSource | null;
+  /** The Worker's latest answer for this location, from checkAreaCoverage — undefined until one lands. */
+  coverageStatus: PoiCoverageStatus | undefined;
+}
+
+/**
+ * Which line, if any, the Lantern zone shows (KAN-349).
+ *
+ * Only an `osm` answer can produce a line at all. That is the whole of the
+ * "never on a normal empty result" rule: a Cloudflare answer with zero places
+ * is a settled, complete answer about a covered area — an empty answer IS an
+ * answer — and it reports `cloudflare`, so it falls straight through here.
+ *
+ * Given we are on the fallback source, the Worker's own coverage answer says
+ * which of the two situations it is:
+ *   • `building` — the area is being prepared. Temporary, progressing.
+ *   • anything else, or no answer yet — a fault: our API didn't serve us and
+ *     we are running thin. Not progress, so it gets the other line.
+ *
+ * `cache` (offline) and `null` (no search yet) produce nothing: offline is the
+ * KAN-316 dot's territory, and that dot requires `source !== 'osm'` while both
+ * lines here require `source === 'osm'`. The two are mutually exclusive by
+ * construction — verified in the tests, never enforced by suppression logic.
+ */
+export function resolveAreaNotice({ source, coverageStatus }: ResolveAreaNoticeInput): AreaNotice | null {
+  if (source !== 'osm') { return null; }
+  return coverageStatus === 'building' ? 'building' : 'degraded';
+}
+
 export interface ResolveLanternStateInput {
   /** Mall/trip context for the last position fix, or null (from proximity.ts). */
   placeContext: PlaceContext;

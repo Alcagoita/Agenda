@@ -45,7 +45,7 @@ import { spacing } from '../theme/tokens';
 import type { Palette } from '../theme/tokens';
 import { SECTION_H_COLLAPSED } from '../screens/TodayScreen/constants';
 import { COPY } from '../constants/copy';
-import type { LanternState } from '../utils/lantern';
+import type { AreaNotice, LanternState } from '../utils/lantern';
 import {
   ChevronRightIcon,
   CrosshairIcon,
@@ -242,12 +242,20 @@ export interface LanternProps {
   collapsedStyle?: AnimatedStyle<ViewStyle>;
   /** JS mirror of the collapse state — drives which layer receives touches. */
   collapsed?: boolean;
+  /**
+   * KAN-349 — what the app owes the user an explanation about here, or null for
+   * the calm empty zone. Rendered in the rest layout only: the collapsed row has
+   * no vertical room beside the icon/label/pill, and a quiet aside is not worth
+   * displacing the place name for once the user has scrolled past it. The state
+   * itself persists, so the line is there again at rest.
+   */
+  notice?: AreaNotice | null;
   /** Test override for reduce-motion. */
   reduceMotionOverride?: boolean;
 }
 
 export default function Lantern({
-  state, onPillPress, restStyle, collapsedStyle, collapsed = false, reduceMotionOverride,
+  state, notice = null, onPillPress, restStyle, collapsedStyle, collapsed = false, reduceMotionOverride,
 }: LanternProps) {
   const { palette } = useTheme();
   const [reduceMotion, setReduceMotion] = useState(reduceMotionOverride ?? false);
@@ -260,6 +268,10 @@ export default function Lantern({
   }, [reduceMotionOverride]);
 
   const v = getVisual(state, palette);
+
+  const noticeText = notice === 'building' ? COPY.lantern.buildingArea
+    : notice === 'degraded' ? COPY.lantern.degradedArea
+      : null;
 
   // The dot only ever renders when the coverage gate passed (KAN-316), so it
   // says what it actually asserts — "I know this area" — not the bare "Offline".
@@ -287,6 +299,11 @@ export default function Lantern({
       <View style={styles.restPill}>
         <Pill label={v.pillLabel} expanded onPress={onPillPress} a11yLabel={v.pillA11y} palette={palette} />
       </View>
+      {noticeText != null && (
+        <Text style={[styles.notice, { color: palette.muted }]} numberOfLines={2} accessibilityRole="text">
+          {noticeText}
+        </Text>
+      )}
     </>
   );
 
@@ -410,6 +427,19 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 9999,
+  },
+  // KAN-349 — a quiet aside on the background, below the pill. Muted text, no
+  // icon, no warning colour, no surface of its own: it explains, it doesn't
+  // alarm. Sized and capped so it lives inside the zone's existing slack and
+  // never pushes Nearby down (see SECTION_H_REST).
+  notice: {
+    marginTop: 10,
+    maxWidth: 260,
+    fontSize: 13,
+    fontFamily: 'Geist-Regular',
+    fontWeight: '400',
+    lineHeight: 17,
+    textAlign: 'center',
   },
   // ── Pill (static layout; colours + press transform stay inline) ──
   pillBase: {

@@ -10,6 +10,7 @@ import {
   resolveLanternState,
   resolveHomeProximity,
   resolveOfflineDot,
+  resolveAreaNotice,
   HOME_ENTER_M,
   HOME_LEAVE_M,
 } from '../../src/utils/lantern';
@@ -161,6 +162,51 @@ describe('resolveOfflineDot — the coverage gate (KAN-316 AC1/AC2/AC3/AC6)', ()
     // A user with no POI tasks never triggers a search, so source stays null.
     // That is an absence of refusals, not a refusal.
     expect(resolveOfflineDot({ ...offlineHere, source: null })).toBe(true);
+  });
+});
+
+describe('resolveAreaNotice — which line the zone owes (KAN-349 AC1/AC2)', () => {
+  it('building when we are on the fallback source and the area is being prepared', () => {
+    expect(resolveAreaNotice({ source: 'osm', coverageStatus: 'building' })).toBe('building');
+  });
+
+  it('degraded when we are on the fallback source for any other reason', () => {
+    expect(resolveAreaNotice({ source: 'osm', coverageStatus: 'none' })).toBe('degraded');
+    expect(resolveAreaNotice({ source: 'osm', coverageStatus: 'ready' })).toBe('degraded');
+    // No coverage answer has landed yet — still a fault, not progress.
+    expect(resolveAreaNotice({ source: 'osm', coverageStatus: undefined })).toBe('degraded');
+  });
+
+  it('nothing on a normal empty result — an empty answer is an answer (AC2)', () => {
+    // A covered area that genuinely has no places nearby answers from
+    // Cloudflare. It must never produce a line.
+    expect(resolveAreaNotice({ source: 'cloudflare', coverageStatus: 'ready' })).toBeNull();
+  });
+
+  it('nothing offline, and nothing before the first search', () => {
+    expect(resolveAreaNotice({ source: 'cache', coverageStatus: undefined })).toBeNull();
+    expect(resolveAreaNotice({ source: null, coverageStatus: undefined })).toBeNull();
+  });
+});
+
+describe('the dot and the line are mutually exclusive (KAN-349 AC9)', () => {
+  // Verified, not enforced: no suppression logic exists in either resolver.
+  // The dot requires source !== 'osm'; both lines require source === 'osm'.
+  const sources: Array<PoiSearchSource | null> = ['cloudflare', 'osm', 'cache', null];
+  const statuses: Array<PoiCoverageStatus | undefined> = ['none', 'building', 'ready', undefined];
+
+  it('never both, for any source/coverage combination, offline or not', () => {
+    for (const source of sources) {
+      for (const coverageStatus of statuses) {
+        for (const offline of [true, false]) {
+          for (const knowsHere of [true, false, null]) {
+            const dot = resolveOfflineDot({ offline, knowsHere, source, coverageStatus });
+            const line = resolveAreaNotice({ source, coverageStatus });
+            expect(dot && line != null).toBe(false);
+          }
+        }
+      }
+    }
   });
 });
 

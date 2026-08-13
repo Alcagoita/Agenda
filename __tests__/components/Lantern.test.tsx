@@ -12,6 +12,7 @@ import { render, screen, fireEvent } from '@testing-library/react-native';
 import Lantern from '../../src/components/Lantern';
 import type { LanternState } from '../../src/utils/lantern';
 import { COPY } from '../../src/constants/copy';
+import { SECTION_H_COLLAPSED, SECTION_H_REST } from '../../src/screens/TodayScreen/constants';
 
 jest.mock('../../src/theme', () => ({
   useTheme: () => ({
@@ -129,6 +130,72 @@ describe('Lantern — offline dot (KAN-316)', () => {
     expect(screen.getAllByLabelText(DOT)).toHaveLength(2);
     expect(screen.getAllByText('Colombo')).toHaveLength(2);
     expect(screen.getAllByRole('button')).toHaveLength(2);
+  });
+});
+
+describe('Lantern — the area notice (KAN-349)', () => {
+  const HOME: LanternState = { kind: 'home', offlineDot: false };
+
+  it('renders distinct lines for building and degraded, neither naming a source (AC1)', () => {
+    const { unmount } = render(<Lantern state={HOME} notice="building" reduceMotionOverride />);
+    expect(screen.getByText(COPY.lantern.buildingArea)).toBeTruthy();
+    unmount();
+
+    render(<Lantern state={HOME} notice="degraded" reduceMotionOverride />);
+    expect(screen.getByText(COPY.lantern.degradedArea)).toBeTruthy();
+    expect(COPY.lantern.buildingArea).not.toBe(COPY.lantern.degradedArea);
+
+    for (const line of [COPY.lantern.buildingArea, COPY.lantern.degradedArea]) {
+      expect(line.toLowerCase()).not.toMatch(/api|server|servidor|osm|cloudflare|foursquare|cache|list[ai]?\b/);
+    }
+  });
+
+  it('renders no line, and no empty placeholder, when there is nothing to say (AC4)', () => {
+    render(<Lantern state={HOME} reduceMotionOverride />);
+    expect(screen.queryByText(COPY.lantern.buildingArea)).toBeNull();
+    expect(screen.queryByText(COPY.lantern.degradedArea)).toBeNull();
+    // The zone's own structure is unchanged: same label, same single pill.
+    expect(screen.getByText(COPY.lantern.home)).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('keeps the Lantern intact — the line never replaces the place name or the pill (AC3)', () => {
+    render(<Lantern state={{ kind: 'outside', cityName: 'Porto', offlineDot: false }} notice="building" reduceMotionOverride />);
+    expect(screen.getByText('Porto')).toBeTruthy();
+    expect(screen.getByText(PLACES)).toBeTruthy();
+    expect(screen.getByText(COPY.lantern.buildingArea)).toBeTruthy();
+  });
+
+  it('is a quiet aside — muted text, no warning colour, no icon (AC10)', () => {
+    render(<Lantern state={HOME} notice="degraded" reduceMotionOverride />);
+    const flat = StyleSheet.flatten(screen.getByText(COPY.lantern.degradedArea).props.style);
+    expect(flat.color).toBe('#999');            // palette.muted from the mock above
+    expect(flat.backgroundColor).toBeUndefined(); // no surface of its own
+    expect(flat.borderWidth).toBeUndefined();
+  });
+
+  it('stays out of the collapsed layer, and the zone height is untouched (AC5)', () => {
+    render(
+      <Lantern
+        state={HOME}
+        notice="building"
+        restStyle={{ opacity: 1 }}
+        collapsedStyle={{ opacity: 1 }}
+        collapsed
+        reduceMotionOverride
+      />,
+    );
+    // Both layers render, but the line belongs to the rest layer only — once.
+    expect(screen.getAllByText(COPY.lantern.home)).toHaveLength(2);
+    expect(screen.getAllByText(COPY.lantern.buildingArea)).toHaveLength(1);
+  });
+
+  it('the Lantern zone keeps its existing height, so Nearby cannot be pushed down (AC5)', () => {
+    // The line lives inside the zone's existing slack. If a future change needs
+    // more room than this, KAN-349 says Nearby wins and the ticket needs a
+    // design pass — so these constants moving should fail loudly here.
+    expect(SECTION_H_REST).toBe(240);
+    expect(SECTION_H_COLLAPSED).toBe(150);
   });
 });
 

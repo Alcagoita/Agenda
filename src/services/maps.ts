@@ -356,6 +356,30 @@ async function classifyLocation(lat: number, lng: number): Promise<LocationClass
   }
 }
 
+/**
+ * Ask the Worker what it holds for this exact location, and how long to wait
+ * before asking again (KAN-349).
+ *
+ * Distinct from requestCoverageDemandOnce below in the two ways the notice
+ * needs: it returns the answer instead of discarding it, and it is NOT
+ * deduped — a re-check is the whole point, and the dedupe cell would suppress
+ * every one after the first for the rest of the session.
+ *
+ * Never throws: a failed check is "we still don't know", which leaves whatever
+ * line is showing exactly as it was.
+ */
+export async function checkAreaCoverage(
+  lat: number,
+  lng: number,
+): Promise<{ coverageStatus: PoiCoverageStatus; retryAfterSeconds?: number } | null> {
+  try {
+    const { coverageStatus, retryAfterSeconds } = await cloudflareRequestCoverageProxy(lat, lng);
+    return { coverageStatus, retryAfterSeconds };
+  } catch {
+    return null;
+  }
+}
+
 /** Fire-and-forget, deduped — never awaited by callers, never throws. */
 function requestCoverageDemandOnce(lat: number, lng: number): void {
   const cell = coverageDemandCellKey(lat, lng);

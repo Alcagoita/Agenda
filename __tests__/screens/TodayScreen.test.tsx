@@ -287,6 +287,10 @@ jest.mock('../../src/services/proximity', () => ({
   }),
   runProximitySearchOrReuseSnapshot: (...args: unknown[]) => mockRunProximitySearchOrReuseSnapshot(...args),
   getLastSearchCoords:           jest.fn().mockReturnValue(null),
+  // KAN-349 — the Lantern zone's notice reads the last search's source.
+  // Default: nothing has answered yet, so no line and no coverage check.
+  getLastPoiSearchState:         jest.fn().mockReturnValue({ source: null, coverageStatus: undefined, degraded: true }),
+  NEARBY_RADIUS:                 400,
   getActivePlaceContext:         jest.fn().mockReturnValue(null),
   updateProximityTasks:          jest.fn(),
   updateProximityPoiPreferences: jest.fn(),

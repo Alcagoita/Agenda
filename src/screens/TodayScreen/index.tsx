@@ -56,6 +56,7 @@ import StoreTuningPromptSheet from '../../components/StoreTuningPromptSheet';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { useTodayScreen } from '../../hooks/useTodayScreen';
 import { useLanternState } from '../../hooks/useLanternState';
+import { useAreaCoverageNotice } from '../../hooks/useAreaCoverageNotice';
 import { consumeTasksDirty } from '../../services/taskMutationSignal';
 import { COPY } from '../../constants/copy';
 import { localDateISO } from '../../utils/date';
@@ -153,6 +154,10 @@ export default function TodayScreen() {
 
   // ── Lantern — persistent place-familiarity header (KAN-301) ───────────────────
   const lanternState = useLanternState(placeContext, coords, permissionGranted);
+  // KAN-349 — the other half of what the Lantern says about here: the zone
+  // flexes to explain a building or degraded area, and the same hook owns the
+  // re-check that keeps that explanation's promise.
+  const { notice: areaNotice } = useAreaCoverageNotice(coords, refreshProximity);
   const onLanternPill = useCallback(() => {
     // Unset points at the home-address flow; every other state opens Places
     // (KAN-304).
@@ -456,6 +461,7 @@ export default function TodayScreen() {
 
           <Lantern
             state={lanternState}
+            notice={areaNotice}
             onPillPress={onLanternPill}
             restStyle={captionStyle}
             collapsedStyle={collapsedStyle}

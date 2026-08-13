@@ -424,6 +424,15 @@ const en = {
     lookingAround: 'Looking around…',
     /** The fix never arrived (past the ceiling). First-person, no claimed cause. */
     cantFindYou: "Can't find you",
+    /**
+     * KAN-349 — the two lines the Lantern zone flexes to hold. Never name a
+     * source, a server, an API or a list: the user's model is the app, not our
+     * plumbing. Both second sentences are promises the refresh loop keeps —
+     * if that loop is ever removed, cut the second sentence with it.
+     */
+    buildingArea: "Still getting to know this area — I'll have more soon.",
+    /** Running on the fallback source. A fault, not progress — but still calm. */
+    degradedArea: "I know less than usual around here right now. I'll top it up when I can.",
     /** Pill a11y for the resolved states (label = current place word). */
     placesPillA11y: (label: string) => `${label} — see the places I know`,
     /** Pill a11y for the unset state. */
@@ -1551,6 +1560,8 @@ const ptPT: typeof en = {
     tellMe: 'Diz-me',
     lookingAround: 'À procura…',
     cantFindYou: 'Não te encontro',
+    buildingArea: 'Ainda estou a conhecer esta zona — em breve sei mais.',
+    degradedArea: 'Neste momento conheço menos por aqui do que é costume. Vou completar quando puder.',
     placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
     setHomePillA11y: 'Diz-me onde é casa',
   },
