@@ -74,8 +74,26 @@ interface MockHabitatRow {
 
 let rows: MockHabitatRow[] = [];
 
-function matchesBox(row: MockHabitatRow, latMin: number, latMax: number, lngMin: number, lngMax: number): boolean {
-  return row.lat >= latMin && row.lat <= latMax && row.lng >= lngMin && row.lng <= lngMax;
+function matchesBox(
+  row: MockHabitatRow,
+  latMin: number,
+  latMax: number,
+  lngRanges: Array<readonly [number, number]>,
+): boolean {
+  return row.lat >= latMin
+    && row.lat <= latMax
+    && lngRanges.some(([lngMin, lngMax]) => row.lng >= lngMin && row.lng <= lngMax);
+}
+
+function longitudeRangesFromParams(params: unknown[], start: number, count: number): Array<readonly [number, number]> {
+  return Array.from({ length: count }, (_, index) => {
+    const offset = start + index * 2;
+    return [params[offset], params[offset + 1]] as [number, number];
+  });
+}
+
+function longitudeRangeCount(sql: string): number {
+  return (sql.match(/lng BETWEEN \? AND \?/g) ?? []).length;
 }
 
 const mockDb = {
@@ -116,30 +134,37 @@ const mockDb = {
       return (rows.length > 0 ? [{ one: 1 }] : []) as unknown as T[];
     }
     if (s.startsWith('SELECT poi_type FROM habitat_places WHERE poi_type IN')) {
-      const inCount = (s.match(/\?/g) ?? []).length - 5; // poiTypes + 4 box bounds + 1 cutoff
+      const rangeCount = longitudeRangeCount(s);
+      const inCount = (s.match(/\?/g) ?? []).length - 3 - rangeCount * 2; // poiTypes + lat bounds + lng ranges + cutoff
       const poiTypes = params.slice(0, inCount) as string[];
-      const [latMin, latMax, lngMin, lngMax, cutoff] = params.slice(inCount) as number[];
+      const [latMin, latMax] = params.slice(inCount, inCount + 2) as number[];
+      const lngRanges = longitudeRangesFromParams(params, inCount + 2, rangeCount);
+      const cutoff = params[inCount + 2 + rangeCount * 2] as number;
       return rows.filter(r =>
-        poiTypes.includes(r.poi_type) && matchesBox(r, latMin, latMax, lngMin, lngMax)
+        poiTypes.includes(r.poi_type) && matchesBox(r, latMin, latMax, lngRanges)
         && r.osm_id != null && r.osm_fetched_at >= cutoff,
       ) as unknown as T[];
     }
     if (s.startsWith('SELECT lat, lng FROM habitat_places WHERE lat BETWEEN')) {
       // hasCachedPlacesNear (KAN-316) — type-blind bounding-box prefilter.
-      const [latMin, latMax, lngMin, lngMax] = params as number[];
+      const [latMin, latMax] = params as number[];
+      const lngRanges = longitudeRangesFromParams(params, 2, longitudeRangeCount(s));
       return rows
-        .filter(r => matchesBox(r, latMin, latMax, lngMin, lngMax))
+        .filter(r => matchesBox(r, latMin, latMax, lngRanges))
         .map(r => ({ lat: r.lat, lng: r.lng })) as unknown as T[];
     }
     if (s.startsWith('SELECT * FROM habitat_places WHERE poi_type IN')) {
-      const inCount = (s.match(/\?/g) ?? []).length - 4;
+      const rangeCount = longitudeRangeCount(s);
+      const inCount = (s.match(/\?/g) ?? []).length - 2 - rangeCount * 2;
       const poiTypes = params.slice(0, inCount) as string[];
-      const [latMin, latMax, lngMin, lngMax] = params.slice(inCount) as number[];
-      return rows.filter(r => poiTypes.includes(r.poi_type) && matchesBox(r, latMin, latMax, lngMin, lngMax)) as unknown as T[];
+      const [latMin, latMax] = params.slice(inCount, inCount + 2) as number[];
+      const lngRanges = longitudeRangesFromParams(params, inCount + 2, rangeCount);
+      return rows.filter(r => poiTypes.includes(r.poi_type) && matchesBox(r, latMin, latMax, lngRanges)) as unknown as T[];
     }
     if (s.startsWith('SELECT * FROM habitat_places WHERE poi_type = ?')) {
-      const [poiType, latMin, latMax, lngMin, lngMax] = params as [string, number, number, number, number];
-      return rows.filter(r => r.poi_type === poiType && matchesBox(r, latMin, latMax, lngMin, lngMax)) as unknown as T[];
+      const [poiType, latMin, latMax] = params as [string, number, number];
+      const lngRanges = longitudeRangesFromParams(params, 3, longitudeRangeCount(s));
+      return rows.filter(r => r.poi_type === poiType && matchesBox(r, latMin, latMax, lngRanges)) as unknown as T[];
     }
     throw new Error(`mockDb.getAllSync: unrecognized query: ${s}`);
   }),
@@ -532,6 +557,15 @@ describe('findExistingPlaceId (KAN-229)', () => {
     expect(found).toBe(id);
   });
 
+  it('finds a matching place across the antimeridian', () => {
+    const id = upsertPlace({
+      poiType: 'atm', name: 'Date Line ATM', lat: 0, lng: -179.9995,
+      source: { osm: 'node/date-line' },
+    });
+
+    expect(findExistingPlaceId('atm', 'Date Line ATM', 0, 179.9995)).toBe(id);
+  });
+
   it('returns null when the place has no cache counterpart yet — never invents an id', () => {
     const found = findExistingPlaceId('atm', 'Some New Place', 0, 0);
     expect(found).toBeNull();
@@ -594,6 +628,17 @@ describe('queryHabitatCache', () => {
     expect(result.atm[0].distanceMeters).toBeLessThan(result.atm[1].distanceMeters);
     // placeId is the internal id, not a raw source id.
     expect(result.atm[0].placeId).toMatch(/^hp_/);
+  });
+
+  it('returns in-radius places across the antimeridian', () => {
+    upsertPlace({
+      poiType: 'atm', name: 'Date Line ATM', lat: 0, lng: -179.99,
+      source: { osm: 'node/date-line' },
+    });
+
+    const result = queryHabitatCache(0, 179.999, ['atm'], 2_000);
+
+    expect(result.atm.map(place => place.name)).toEqual(['Date Line ATM']);
   });
 
   it('returns stored restaurant and store subtype metadata with cached places', () => {
@@ -725,6 +770,17 @@ describe('refreshHabitatCacheIfStale', () => {
     upsertPlace({ poiType: 'atm', name: 'Existing ATM', lat: 0, lng: 0, source: { osm: 'node/1' } });
 
     await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['atm']);
+
+    expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+  });
+
+  it('recognizes fresh OSM data across the antimeridian', async () => {
+    upsertPlace({
+      poiType: 'atm', name: 'Date Line ATM', lat: 0, lng: -179.99,
+      source: { osm: 'node/date-line' },
+    });
+
+    await refreshHabitatCacheIfStale(0, 179.999, ['atm']);
 
     expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
   });
@@ -1255,6 +1311,15 @@ describe('hasCachedPlacesNear (KAN-316)', () => {
   it('true when a place of any type sits within the radius — type-blind', () => {
     upsertPlace({ poiType: 'atm', name: 'Bank ATM', lat: LISBON.lat, lng: LISBON.lng, source: { osm: 'node/1' } });
     expect(hasCachedPlacesNear(LISBON.lat, LISBON.lng, 400)).toBe(true);
+  });
+
+  it('finds cached places across the antimeridian', () => {
+    upsertPlace({
+      poiType: 'cafe', name: 'Date Line Cafe', lat: 0, lng: -179.99,
+      source: { osm: 'node/date-line' },
+    });
+
+    expect(hasCachedPlacesNear(0, 179.999, 2_000)).toBe(true);
   });
 
   it('false for a cache seeded somewhere else entirely — the Lisbon/Tokyo case', () => {
