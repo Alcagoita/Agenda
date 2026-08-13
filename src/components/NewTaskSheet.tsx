@@ -505,8 +505,9 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       handleClose();
       setTimeout(() => navigateTo('TaskForm', {
         uid,
-        initialTitle: title.trim() || undefined,
-        initialPoi:   poi ?? undefined,
+        initialTitle:    title.trim() || undefined,
+        initialCategory: category ?? undefined,
+        initialPoi:      poi ?? undefined,
         ...(poi === 'store' ? {
           initialStoreSubtype: storeSubtype ?? undefined,
           initialStoreSubtypeExplicitlySelected: storeSubtypeTouched,
@@ -517,7 +518,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         ...(poiTypeRequiresBrand(poi) && poiBrand ? { initialPoiBrand: poiBrand } : {}),
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, poiBrand, poiTouched]);
+    }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, poiBrand, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.

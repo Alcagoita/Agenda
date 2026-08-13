@@ -614,6 +614,7 @@ describe('"More details" navigation', () => {
       expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', {
         uid:                          'test-uid',
         initialTitle:                 'Visit police',
+        initialCategory:              undefined,
         initialPoi:                   'police',
         initialStoreSubtype:          undefined,
         initialPoiExplicitlySelected: false,
@@ -636,6 +637,7 @@ describe('"More details" navigation', () => {
       expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', {
         uid:                          'test-uid',
         initialTitle:                 'Buy groceries',
+        initialCategory:              undefined,
         initialPoi:                   'supermarket',
         initialStoreSubtype:          undefined,
         initialPoiExplicitlySelected: true,
@@ -655,6 +657,7 @@ describe('"More details" navigation', () => {
       expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', {
         uid:                          'test-uid',
         initialTitle:                 'Buy a t-shirt',
+        initialCategory:              undefined,
         initialPoi:                   'store',
         initialStoreSubtype:          'clothing',
         initialStoreSubtypeExplicitlySelected: true,
@@ -676,6 +679,21 @@ describe('"More details" navigation', () => {
     }, { timeout: 500 });
   });
 
+  it('carries the chosen category through More details (KAN-372)', async () => {
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Call the clinic');
+    fireEvent.press(screen.getByLabelText('Health'));
+    fireEvent.press(screen.getByLabelText('More details'));
+
+    await waitFor(() => {
+      expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', expect.objectContaining({
+        initialTitle:    'Call the clinic',
+        initialCategory: 'health',
+      }));
+    }, { timeout: 500 });
+  });
+
   it('navigates to TaskForm with only uid when title and POI are empty', async () => {
     renderSheet();
     fireEvent.press(screen.getByLabelText('More details'));
@@ -684,6 +702,7 @@ describe('"More details" navigation', () => {
       expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', {
         uid:                          'test-uid',
         initialTitle:                 undefined,
+        initialCategory:              undefined,
         initialPoi:                   undefined,
         initialStoreSubtype:          undefined,
         initialPoiExplicitlySelected: false,

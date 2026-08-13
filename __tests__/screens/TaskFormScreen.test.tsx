@@ -169,6 +169,7 @@ type RouteParams = {
   task?: any;
   initialDate?: string;
   initialTitle?: string;
+  initialCategory?: string;
   initialPoi?: string;
   initialRestaurantFoodType?: string;
   initialStoreSubtype?: string;
@@ -1500,5 +1501,67 @@ describe('TaskFormScreen — Notes stays above the keyboard (KAN-369)', () => {
 
     expect(liftPaddingBottom()).toBe(SCREEN_HEIGHT - 500);
     expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+});
+
+// ── Category handed over from the quick sheet (KAN-372) ───────────────────────
+
+describe('TaskFormScreen — initialCategory (KAN-372)', () => {
+  it('saves the category chosen in the quick sheet', async () => {
+    setRouteParams({
+      uid:             'user-123',
+      initialTitle:    'Call the clinic',
+      initialCategory: 'health',
+      initialPoi:      'pharmacy',
+      initialPoiExplicitlySelected: true,
+    });
+    mockAddTask.mockResolvedValueOnce('new-id');
+
+    render(<TaskFormScreen />);
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+
+    await waitFor(() =>
+      expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        title:    'Call the clinic',
+        category: 'health',
+      })),
+    );
+  });
+
+  it('still falls back to personal when the quick sheet passes no category', async () => {
+    setRouteParams({
+      uid:          'user-123',
+      initialTitle: 'Call the clinic',
+      initialPoi:   'pharmacy',
+      initialPoiExplicitlySelected: true,
+    });
+    mockAddTask.mockResolvedValueOnce('new-id');
+
+    render(<TaskFormScreen />);
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+
+    await waitFor(() =>
+      expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        category: 'personal',
+      })),
+    );
+  });
+
+  it('prefers the edited task own category over any passed-in one', async () => {
+    setRouteParams({
+      uid:             'user-123',
+      task:            makeTask({ category: 'errands' }),
+      initialCategory: 'health',
+    });
+    mockUpdateTask.mockResolvedValueOnce(undefined);
+
+    render(<TaskFormScreen />);
+    await act(async () => { fireEvent.press(screen.getByLabelText('Save changes')); });
+
+    await waitFor(() =>
+      expect(mockUpdateTask).toHaveBeenCalledWith('user-123', 'task-1', expect.objectContaining({
+        category: 'errands',
+      })),
+    );
   });
 });
