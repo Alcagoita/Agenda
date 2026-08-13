@@ -18,6 +18,7 @@ export const queryHabitatCache = jest.fn().mockReturnValue({});
 export const getHabitatPlaceById = jest.fn().mockReturnValue(null);
 export const findExistingPlaceId = jest.fn().mockReturnValue(null);
 export const hasCachedPlaces = jest.fn().mockReturnValue(false);
+export const hasCachedPlacesNear = jest.fn().mockReturnValue(false);
 export const enforceSizeBudget = jest.fn();
 export const deleteTripAreaPlaces = jest.fn();
 export const deleteExpiredTripPlaces = jest.fn();
