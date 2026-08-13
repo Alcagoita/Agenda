@@ -6,12 +6,12 @@
  *     supported place types, not just this tick's uniquePoiTypes derived from
  *     open tasks — so a task created later for a never-before-seen type still
  *     finds cached candidates offline
- *   - supported custom category place types (setCustomCategoryPoiTypes) are
- *     folded into the same prefetch list; unsupported saved types are ignored
  *   - the live Places search and queryHabitatCache (the read/query side)
  *     stay filtered to this tick's actual open-task types, unchanged
- *   - setCustomCategoryPoiTypes(null) / resetProximityState() clear the
- *     custom types back to just the curated baseline
+ *
+ * KAN-371 removed the custom-category cases from this file: categories no
+ * longer carry a place type, so setCustomCategoryPoiTypes and the widening it
+ * did are gone. The prefetch list is now the curated baseline, always.
  */
 
 jest.mock('@react-native-community/netinfo', () =>
@@ -126,7 +126,6 @@ jest.mock('../../src/services/reverseGeocodeCache', () => ({
 import {
   runProximitySearch,
   resetProximityState,
-  setCustomCategoryPoiTypes,
   getLastPoiSearchState,
 } from '../../src/services/proximity';
 import { ALL_POI_TYPES, CLUSTER_LEISURE_TYPES } from '../../src/types';
@@ -196,22 +195,6 @@ describe('habitat cache prefetch covers all POI types', () => {
     expect(prefetchedTypes).toContain('pharmacy');
   });
 
-  it('filters unsupported saved custom category types before habitat prefetch', async () => {
-    setCustomCategoryPoiTypes(['gym', 'my_custom_type', 'coffee_shop']);
-    mockAtmSearchResponse();
-
-    await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
-
-    const [, , prefetchedTypes] = mockRefreshHabitatCacheIfStale.mock.calls[0];
-    expect(SUPPORTED_GOOGLE_PLACE_TYPES).toContain('coffee_shop');
-    expect(SUPPORTED_GOOGLE_PLACE_TYPES).not.toContain('my_custom_type');
-    expect(prefetchedTypes).toContain('coffee_shop');
-    expect(prefetchedTypes).not.toContain('my_custom_type');
-    // 'gym' is already a built-in — must not be duplicated.
-    expect(prefetchedTypes.filter((t: string) => t === 'gym')).toHaveLength(1);
-    expect(new Set(prefetchedTypes).size).toBe(prefetchedTypes.length);
-  });
-
   it('leaves the live Places search filtered to the tick\'s actual open-task types', async () => {
     mockAtmSearchResponse();
 
@@ -234,27 +217,6 @@ describe('habitat cache prefetch covers all POI types', () => {
     expect(mockQueryHabitatCache).toHaveBeenCalledWith(0, 0, ['atm'], 400);
   });
 
-  it('setCustomCategoryPoiTypes(null) clears back to just the built-ins', async () => {
-    setCustomCategoryPoiTypes(['my_custom_type']);
-    setCustomCategoryPoiTypes(null);
-    mockAtmSearchResponse();
-
-    await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
-
-    const [, , prefetchedTypes] = mockRefreshHabitatCacheIfStale.mock.calls[0];
-    expect(prefetchedTypes).not.toContain('my_custom_type');
-  });
-
-  it('resetProximityState() clears custom category types', async () => {
-    setCustomCategoryPoiTypes(['my_custom_type']);
-    resetProximityState();
-    mockAtmSearchResponse();
-
-    await runProximitySearch('uid-1', [makeTask({ poi: 'atm' })], jest.fn());
-
-    const [, , prefetchedTypes] = mockRefreshHabitatCacheIfStale.mock.calls[0];
-    expect(prefetchedTypes).not.toContain('my_custom_type');
-  });
 });
 
 describe('KAN-342: source-aware identity + source/coverageStatus threading', () => {

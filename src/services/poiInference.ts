@@ -6,22 +6,22 @@
  * imported tasks (wired into the import flow in KAN-197). No AI, no network —
  * the on-device LLM fallback for titles this misses lands in KAN-196.
  *
- * Output is a `PoiResolution` (a built-in `PoiType` or, for custom categories,
- * any Google Places type string) or `null`. `null` is a valid, expected result:
+ * Output is a `PoiResolution` (a built-in `PoiType` or any place type string)
+ * or `null`. `null` is a valid, expected result:
  * when no keyword matches we do NOT guess, and the caller simply leaves
  * `task.poi` unset. The seed covers all 19 built-in `PoiType`s in EN + pt-PT.
  *
  * ── Self-growing dictionary ───────────────────────────────────────────────
  * The dictionary has two layers:
  *   - SEED_DICTIONARY — hand-curated, checked in, never mutated at runtime.
- *   - learned layer   — keyword→POI pairs appended at runtime, fed by:
- *       • the on-device LLM (KAN-196) and user POI edits (KAN-197), and
- *       • custom categories the user adds — `registerCategoryKeywords` /
- *         `syncCategoryKeywords` turn a category's name (+ synonyms) into
- *         keywords pointing at its POI, so user-added POIs are inferable too.
+ *   - learned layer   — keyword→POI pairs appended at runtime by the on-device
+ *                       LLM (KAN-196) and user POI edits (KAN-197).
  * Lookups consult the learned layer first, then the seed. This file owns the
  * in-memory structure only; durable persistence (local + Firestore) is wired
- * in KAN-196 — custom categories are re-synced from Firestore on load until then.
+ * in KAN-196.
+ *
+ * A third layer once derived keywords from custom categories' place types.
+ * Categories no longer carry one (KAN-371), so it is gone.
  *
  * ── Adding a language ─────────────────────────────────────────────────────
  * Add a new `SupportedLang` literal and a matching entry in SEED_DICTIONARY.
@@ -203,21 +203,16 @@ export function normalize(text: string): string {
     .trim();
 }
 
-// ─── Runtime layers ──────────────────────────────────────────────────────────
+// ─── Runtime layer ───────────────────────────────────────────────────────────
 //
-// Two independent runtime layers sit on top of the seed:
+// One runtime layer sits on top of the seed:
 //   - learned   — keyword→POI pairs confirmed by the on-device LLM (KAN-196)
 //                 and user POI edits (KAN-197). Additive; grows over the session.
-//   - category  — keywords derived from the user's custom categories. REBUILT
-//                 wholesale by `replaceCategoryKeywords` so renamed/deleted
-//                 categories never leave stale keywords behind.
 //
-// Lookup precedence (see lookupEntries): learned → category → seed, so an
-// explicit user/LLM signal beats an auto-derived category term, which beats the
-// built-in seed.
+// Lookup precedence (see lookupEntries): learned → seed, so an explicit
+// user/LLM signal beats the built-in seed.
 
 const learned: Record<SupportedLang, KeywordMap> = { en: {}, 'pt-PT': {} };
-const category: Record<SupportedLang, KeywordMap> = { en: {}, 'pt-PT': {} };
 
 const ALL_LANGS: SupportedLang[] = ['en', 'pt-PT'];
 
@@ -248,58 +243,10 @@ export function registerPoiKeywords(
   for (const kw of keywords) { registerLearnedKeyword(kw, poi, lang); }
 }
 
-/**
- * Register a custom category's wording into the category layer so future imports
- * infer its POI. This is the "user adds a new POI" hook: a custom category's
- * `name` (and any extra `synonyms`) become keywords pointing at its POI/Places
- * type.
- *
- * `lang` is **optional**: when omitted (the Firestore callers never know the
- * lookup language up front) the terms are registered under **every** supported
- * language, so a user category written in Portuguese still matches an EN lookup
- * and vice-versa. Pass `lang` to scope to a single language.
- *
- * No-op for categories without a POI (`poi == null`) or with an empty name.
- */
-export function registerCategoryKeywords(
-  cat: { name: string; poi: string | null; synonyms?: string[] },
-  lang?: SupportedLang,
-): void {
-  if (!cat.poi) { return; }
-  const langs = lang ? [lang] : ALL_LANGS;
-  const terms = [cat.name, ...(cat.synonyms ?? [])];
-  for (const l of langs) {
-    for (const term of terms) {
-      const key = normalize(term);
-      if (key) { category[l][key] = cat.poi; }
-    }
-  }
-}
-
-/**
- * Rebuild the category layer from the current custom-category list. Clears the
- * existing category-derived keywords first (so renamed/deleted categories stop
- * matching), then re-registers every category. This is the Firestore reload hook
- * — call on app start / category load. Categories without a POI are skipped.
- *
- * `lang` optional: omit to rebuild all languages (default), or scope to one.
- */
-export function replaceCategoryKeywords(
-  categories: { name: string; poi: string | null; synonyms?: string[] }[],
-  lang?: SupportedLang,
-): void {
-  const langs = lang ? [lang] : ALL_LANGS;
-  for (const l of langs) { category[l] = {}; }
-  for (const c of categories) { registerCategoryKeywords(c, lang); }
-}
-
-/** @deprecated Use {@link replaceCategoryKeywords}. Kept for back-compat; same replace semantics. */
-export const syncCategoryKeywords = replaceCategoryKeywords;
-
-/** Clear the runtime learned + category layers (one language or all). Primarily for tests. */
+/** Clear the runtime learned layer (one language or all). Primarily for tests. */
 export function clearLearnedKeywords(lang?: SupportedLang): void {
   const langs = lang ? [lang] : ALL_LANGS;
-  for (const l of langs) { learned[l] = {}; category[l] = {}; }
+  for (const l of langs) { learned[l] = {}; }
 }
 
 // ─── Normalized-entry cache ───────────────────────────────────────────────────
@@ -319,13 +266,11 @@ function normalizedSeed(lang: SupportedLang): [string, PoiResolution][] {
 
 /**
  * All candidate [normalizedKeyword, poi] entries for a language, in precedence
- * order: learned (user/LLM) → category (custom categories) → seed. Earlier
- * entries win on a length tie.
+ * order: learned (user/LLM) → seed. Earlier entries win on a length tie.
  */
 function lookupEntries(lang: SupportedLang): [string, PoiResolution][] {
   return [
     ...(Object.entries(learned[lang]) as [string, PoiResolution][]),
-    ...(Object.entries(category[lang]) as [string, PoiResolution][]),
     ...normalizedSeed(lang),
   ];
 }

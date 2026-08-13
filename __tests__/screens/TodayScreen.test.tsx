@@ -298,7 +298,6 @@ jest.mock('../../src/services/proximity', () => ({
   updateNotifNearbyEnabled:      jest.fn(),
   updateExitPromptPref:          jest.fn(),
   setLearnedPlaces:              jest.fn(),
-  setCustomCategoryPoiTypes:     jest.fn(),
   setActiveTrips:                jest.fn(),
   setMallSnapshot:                jest.fn(),
 }));

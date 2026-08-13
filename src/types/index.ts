@@ -306,13 +306,10 @@ export interface Category {
   name: string;
   /** Hex colour string, e.g. one from `categories` or `categoryHues` in theme/tokens.ts. */
   color: string;
-  /**
-   * Google Places primary type string (e.g. "gym", "restaurant", "atm").
-   * Built-in categories use one of the four PoiType values; custom categories
-   * may store any Google Places type discovered via the search feature.
-   * Null means no location association.
-   */
-  poi: string | null;
+  // A category carries no place type. It used to (`poi`), and the Add Category
+  // sheet asked for one, but a category is a colour and a name — where a task
+  // happens belongs to the task (KAN-371). Documents written before this may
+  // still hold a stale `poi`; nothing reads it.
   /** Built-in categories cannot be renamed, recoloured, or deleted. */
   isBuiltIn: boolean;
 }

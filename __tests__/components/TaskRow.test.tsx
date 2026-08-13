@@ -70,8 +70,8 @@ const BASE_TASK: Task = {
 };
 
 const CUSTOM_CATEGORIES: Category[] = [
-  { id: 'custom-gym',    name: 'Gym',    color: '#ff6b6b', poi: null, isBuiltIn: false },
-  { id: 'custom-study',  name: 'Study',  color: '#4ecdc4', poi: null, isBuiltIn: false },
+  { id: 'custom-gym',    name: 'Gym',    color: '#ff6b6b', isBuiltIn: false },
+  { id: 'custom-study',  name: 'Study',  color: '#4ecdc4', isBuiltIn: false },
 ];
 
 const onToggle = jest.fn();
@@ -205,7 +205,7 @@ describe('TaskRow — custom categories (KAN-61)', () => {
 
   it('prefers built-in over custom if IDs collide', () => {
     const colliding: Category[] = [
-      { id: 'work', name: 'My Work Override', color: '#000', poi: null, isBuiltIn: false },
+      { id: 'work', name: 'My Work Override', color: '#000', isBuiltIn: false },
     ];
     render(
       <TaskRow

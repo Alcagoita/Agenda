@@ -55,8 +55,6 @@ jest.mock('@react-native-firebase/firestore', () => ({
 }));
 
 jest.mock('../../src/services/poiInference', () => ({
-  registerCategoryKeywords: jest.fn(),
-  replaceCategoryKeywords:  jest.fn(),
   registerLearnedKeyword:   jest.fn(),
   normalize:                jest.fn((s: string) => s),
 }));

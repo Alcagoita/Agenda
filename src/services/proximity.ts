@@ -85,7 +85,7 @@ import { Coordinates, getPositionLowAccuracy } from './geolocation';
 import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel, PoiSearchSource, PoiCoverageStatus, isPoiSearchDegraded } from './maps';
 import { markAllPoiAlertsSeen } from './firestore';
 import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
-import { SUPPORTED_GOOGLE_PLACE_TYPES, filterSupportedGooglePlaceTypes } from '../constants/googlePlaceTypes';
+import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../constants/googlePlaceTypes';
 import { fireExitPrompt } from './notifications';
 import { markExitPromptSeen } from './firestore';
 import { COPY } from '../constants/copy';
@@ -281,9 +281,6 @@ export function shouldShowCoverageInvitation(invitationShownCount: number): bool
 /** KAN-230 — on-device learned-place ranking, fed in from outside (see setLearnedPlaces). */
 let _learnedPlaces: LearnedBrand[] = [];
 
-/** KAN-238 — user's custom category place types, fed in from outside (see setCustomCategoryPoiTypes). */
-let _customCategoryPoiTypes: string[] = [];
-
 /** KAN-237 — active trip areas, fed in from outside (see setActiveTrips). Used only to decide cache-first coverage, never for trip-specific business logic. */
 let _activeTrips: Trip[] = [];
 
@@ -377,11 +374,6 @@ export function updateNotifNearbyEnabled(enabled: boolean): void {
 /** KAN-230 — feed in the on-device learned-place ranking. Pass null/empty to clear (e.g. on sign-out). */
 export function setLearnedPlaces(places: LearnedBrand[] | null): void {
   _learnedPlaces = places ?? [];
-}
-
-/** KAN-238 — feed in the user's custom category place types for the habitat cache's all-types prefetch. */
-export function setCustomCategoryPoiTypes(types: string[] | null): void {
-  _customCategoryPoiTypes = filterSupportedGooglePlaceTypes(types ?? []);
 }
 
 /** KAN-237 — feed in the user's active (unexpired) trip areas, for cache-first coverage. Pass null/empty to clear (e.g. on sign-out). */
@@ -808,8 +800,11 @@ async function runProximitySearch(
           // mention. Same single Overpass request: searchOsmPlaces emits one
           // clause per type into one query, so these ride along at the cost
           // of a few extra clauses, never an extra round-trip.
+          //
+          // Custom categories used to widen this list with their own place
+          // type (KAN-238); categories no longer carry one (KAN-371).
           const prefetchTypes = [...new Set([
-            ...ALL_POI_TYPES, ...SUPPORTED_GOOGLE_PLACE_TYPES, ..._customCategoryPoiTypes, 'shopping_mall', ...CLUSTER_LEISURE_TYPES,
+            ...ALL_POI_TYPES, ...SUPPORTED_GOOGLE_PLACE_TYPES, 'shopping_mall', ...CLUSTER_LEISURE_TYPES,
           ])];
           refreshHabitatCacheIfStale(coords.lat, coords.lng, prefetchTypes).catch(err =>
             reportProximityError('habitat cache refresh failed', err),
@@ -1212,7 +1207,6 @@ export function resetProximityState(): void {
   _netInfoUnsubscribe = null;
   _offlineUncoveredNoticeShown = false;
   _learnedPlaces = [];
-  _customCategoryPoiTypes = [];
   _activeTrips = [];
   _mallSnapshot = null;
   _lastPlaceContext = null;

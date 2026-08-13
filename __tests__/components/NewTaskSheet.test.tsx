@@ -96,7 +96,7 @@ jest.mock('../../src/components/AppIcon', () => ({
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const CUSTOM_CATEGORIES: Category[] = [
-  { id: 'custom-gym', name: 'Gym', color: '#ff6b6b', poi: null, isBuiltIn: false },
+  { id: 'custom-gym', name: 'Gym', color: '#ff6b6b', isBuiltIn: false },
 ];
 
 const DEFAULT_PROPS = {

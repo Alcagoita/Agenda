@@ -39,7 +39,6 @@ const CAT = {
   id:        'cat-1',
   name:      'Gym',
   color:     '#ff0000',
-  poi:       null,
   isBuiltIn: false,
 };
 
@@ -123,7 +122,7 @@ describe('useCategoriesScreen — sheet visibility', () => {
 });
 
 describe('useCategoriesScreen — handleSave', () => {
-  const DATA = { name: 'Gym', color: '#ff0000', poi: null };
+  const DATA = { name: 'Gym', color: '#ff0000' };
 
   it('calls addCategory in add mode (editing=null)', async () => {
     const { result } = renderHook(() => useCategoriesScreen(UID));

@@ -238,9 +238,9 @@ export default function TaskFormScreen() {
     if (!trimmed) { return; }
     setNewCatSaving(true);
     try {
-      const id = await addCategory(uid, { name: trimmed, color: newCatColor, poi: null });
+      const id = await addCategory(uid, { name: trimmed, color: newCatColor });
       // No live listener anymore (KAN-218) — append locally instead of refetching.
-      setCustomCategories(prev => [...prev, { id, name: trimmed, color: newCatColor, poi: null, isBuiltIn: false }]);
+      setCustomCategories(prev => [...prev, { id, name: trimmed, color: newCatColor, isBuiltIn: false }]);
       setCategory(id);
       setAddingCat(false);
     } catch (err) {

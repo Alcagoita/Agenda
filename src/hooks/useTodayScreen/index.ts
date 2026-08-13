@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect } from 'react';
 import type { NearbyPlace } from '../../services/maps';
-import { setLearnedPlaces, setCustomCategoryPoiTypes } from '../../services/proximity';
+import { setLearnedPlaces } from '../../services/proximity';
 import type { PlacesMap, PlaceContext } from '../../services/proximity';
 import type { Category, Task } from '../../types';
 import { useTodayScreenData } from './useTodayScreenData';
@@ -136,12 +136,6 @@ export function useTodayScreen(uid: string | undefined): TodayScreenState {
   useEffect(() => {
     setLearnedPlaces(learnedPlaces);
   }, [learnedPlaces]);
-
-  useEffect(() => {
-    setCustomCategoryPoiTypes(
-      data.customCategories.map(c => c.poi).filter((poi): poi is string => !!poi),
-    );
-  }, [data.customCategories]);
 
   // setActiveTrips/setMallSnapshot (KAN-237) are fed synchronously from
   // useTodayScreenData's loadData, not from an effect here — see that file
