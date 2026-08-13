@@ -23,8 +23,6 @@ import {
   normalize,
   registerLearnedKeyword,
   registerPoiKeywords,
-  registerCategoryKeywords,
-  syncCategoryKeywords,
   clearLearnedKeywords,
   isSupportedLang,
 } from '../../src/services/poiInference';
@@ -257,73 +255,5 @@ describe('learned layer', () => {
     registerPoiKeywords('gym', ['crossfit', 'spin class']);
     expect(inferPoiFromRules('crossfit session')).toBe('gym');
     expect(inferPoiFromRules('book a spin class')).toBe('gym');
-  });
-});
-
-// ─── Dynamic custom-category registration ──────────────────────────────────────
-
-describe('registerCategoryKeywords (user adds a new POI)', () => {
-  it('registers a custom category name → its POI', () => {
-    expect(inferPoiFromRules('weekly book club')).toBeNull();
-    registerCategoryKeywords({ name: 'Book club', poi: 'library' });
-    expect(inferPoiFromRules('weekly book club')).toBe('library');
-  });
-
-  it('supports a custom Google Places type beyond the 16 built-ins', () => {
-    registerCategoryKeywords({ name: 'Bakery run', poi: 'bakery' });
-    expect(inferPoiFromRules('morning bakery run')).toBe('bakery');
-  });
-
-  it('registers extra synonyms alongside the name', () => {
-    registerCategoryKeywords({ name: 'Vet', poi: 'veterinary_care', synonyms: ['vaccine', 'pet checkup'] });
-    expect(inferPoiFromRules('dog vaccine')).toBe('veterinary_care');
-    expect(inferPoiFromRules('pet checkup')).toBe('veterinary_care');
-  });
-
-  it('is a no-op when the category has no POI', () => {
-    registerCategoryKeywords({ name: 'Misc', poi: null });
-    expect(inferPoiFromRules('some misc task')).toBeNull();
-  });
-
-  it('is a no-op for an empty name', () => {
-    registerCategoryKeywords({ name: '   ', poi: 'gym' });
-    expect(inferPoiFromRules('   ')).toBeNull();
-  });
-
-  it('syncCategoryKeywords bulk-registers many categories', () => {
-    syncCategoryKeywords([
-      { name: 'Florist', poi: 'florist' },
-      { name: 'Hardware store', poi: 'hardware_store' },
-      { name: 'No location', poi: null },
-    ]);
-    expect(inferPoiFromRules('order from florist')).toBe('florist');
-    expect(inferPoiFromRules('go to the hardware store')).toBe('hardware_store');
-  });
-
-  it('registers category terms across all languages (matches a pt-PT lookup)', () => {
-    // Firestore callers pass no lang; the term must match regardless of the
-    // language the import later infers with.
-    registerCategoryKeywords({ name: 'Padaria', poi: 'bakery' });
-    expect(inferPoiFromRules('ir à padaria', 'pt-PT')).toBe('bakery');
-    expect(inferPoiFromRules('stop at padaria', 'en')).toBe('bakery');
-  });
-
-  it('replaceCategoryKeywords prunes categories no longer in the list', () => {
-    syncCategoryKeywords([
-      { name: 'Petal delivery', poi: 'florist' },
-      { name: 'Hardware store', poi: 'hardware_store' },
-    ]);
-    expect(inferPoiFromRules('order from petal delivery')).toBe('florist');
-
-    // Re-sync with the custom florist category removed (e.g. user deleted it).
-    syncCategoryKeywords([{ name: 'Hardware store', poi: 'hardware_store' }]);
-    expect(inferPoiFromRules('order from petal delivery')).toBeNull();
-    expect(inferPoiFromRules('go to the hardware store')).toBe('hardware_store');
-  });
-
-  it('explicit user/LLM learned entry wins over a category-derived term', () => {
-    registerCategoryKeywords({ name: 'pilates', poi: 'gym' });
-    registerLearnedKeyword('pilates', 'salon'); // hypothetical correction
-    expect(inferPoiFromRules('book pilates')).toBe('salon');
   });
 });

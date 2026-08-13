@@ -28,7 +28,6 @@ const mockGetLearnedPlaceCounts = jest.fn().mockResolvedValue([]);
 const mockGetTrips = jest.fn().mockResolvedValue([]);
 const mockGetMallSnapshot = jest.fn().mockResolvedValue(null);
 const mockSetLearnedPlaces           = jest.fn();
-const mockSetCustomCategoryPoiTypes  = jest.fn();
 const mockSetActiveTrips             = jest.fn();
 const mockSetMallSnapshot            = jest.fn();
 const mockSetHomeLocation            = jest.fn();
@@ -171,7 +170,6 @@ jest.mock('../../src/services/proximity', () => ({
   updateNotifNearbyEnabled:      jest.fn(),
   updateExitPromptPref:          jest.fn(),
   setLearnedPlaces:              (...args: unknown[]) => mockSetLearnedPlaces(...args),
-  setCustomCategoryPoiTypes:     (...args: unknown[]) => mockSetCustomCategoryPoiTypes(...args),
   setActiveTrips:                (...args: unknown[]) => mockSetActiveTrips(...args),
   setMallSnapshot:               (...args: unknown[]) => mockSetMallSnapshot(...args),
 }));
@@ -442,20 +440,6 @@ describe('useTodayScreen — nearbyReady (KAN-281 follow-up)', () => {
     await act(async () => {});
 
     expect(result.current.nearbyReady).toBe(true);
-  });
-});
-
-describe('useTodayScreen — custom category POI types (KAN-238)', () => {
-  it('feeds the habitat cache prefetch with custom category place types', async () => {
-    mockGetCategories.mockResolvedValue([
-      { id: 'cat-1', name: 'Climbing', color: '#123456', poi: 'climbing_gym', isBuiltIn: false },
-      { id: 'cat-2', name: 'No Place', color: '#654321', poi: null, isBuiltIn: false },
-    ]);
-
-    renderHook(() => useTodayScreen(UID));
-    await act(async () => {});
-
-    expect(mockSetCustomCategoryPoiTypes).toHaveBeenCalledWith(['climbing_gym']);
   });
 });
 

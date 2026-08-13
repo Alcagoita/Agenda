@@ -10,7 +10,6 @@
  *   4. Add/Edit bottom sheet (Modal)
  *      - Name text input
  *      - Color picker (18 swatches + hex input)
- *      - POI picker   (4 quick-pick chips + Google Places search)
  *      - Save / Cancel
  *
  * Rules:
@@ -19,9 +18,8 @@
  *   - All colours via useTheme() — no hardcoded values.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Keyboard,
   Modal,
   Pressable,
@@ -44,11 +42,6 @@ import {
   categoryPickerColors,
   swatchSelectedRing,
 } from '../theme/tokens';
-import {
-  placeTypeLabel,
-  PlaceTypeSuggestion,
-} from '../services/maps';
-import { searchPlaceTypesCached } from '../services/poiTypeCache';
 import { Category } from '../types';
 import { ChevronLeftIcon } from '../components/AppIcon';
 import { useCategoriesScreen } from '../hooks/useCategoriesScreen';
@@ -63,28 +56,18 @@ import { COPY } from '../constants/copy';
 export const CATEGORY_COLORS = categoryPickerColors;
 
 /**
- * Quick-pick POI types shown as chips at the top of the location picker, and
- * the built-in categories derived from design tokens (never stored in
- * Firestore) — both built by functions called inside the component instead
- * of a module-scope constant, since COPY/`categories` are language-dynamic
+ * The built-in categories derived from design tokens (never stored in
+ * Firestore) — built by a function called inside the component instead of a
+ * module-scope constant, since COPY/`categories` are language-dynamic
  * (KAN-252) and a module-scope read would freeze the text in whatever
  * language was active on first import.
  */
-function buildQuickPoiOptions(): { value: string; label: string }[] {
-  return [
-    { value: 'atm',         label: COPY.categoriesScreen.quickPickAtm },
-    { value: 'cafe',        label: COPY.categoriesScreen.quickPickCafe },
-    { value: 'supermarket', label: COPY.categoriesScreen.quickPickSupermarket },
-    { value: 'pharmacy',    label: COPY.categoriesScreen.quickPickPharmacy },
-  ];
-}
-
 function buildBuiltInCategories(): Category[] {
   return [
-    { id: 'work',     name: builtInMeta.work.label,     color: builtInMeta.work.color,     poi: null,          isBuiltIn: true },
-    { id: 'health',   name: builtInMeta.health.label,    color: builtInMeta.health.color,   poi: 'pharmacy',    isBuiltIn: true },
-    { id: 'errands',  name: builtInMeta.errands.label,   color: builtInMeta.errands.color,  poi: 'supermarket', isBuiltIn: true },
-    { id: 'personal', name: builtInMeta.personal.label,  color: builtInMeta.personal.color, poi: 'cafe',        isBuiltIn: true },
+    { id: 'work',     name: builtInMeta.work.label,     color: builtInMeta.work.color,     isBuiltIn: true },
+    { id: 'health',   name: builtInMeta.health.label,    color: builtInMeta.health.color,   isBuiltIn: true },
+    { id: 'errands',  name: builtInMeta.errands.label,   color: builtInMeta.errands.color,  isBuiltIn: true },
+    { id: 'personal', name: builtInMeta.personal.label,  color: builtInMeta.personal.color, isBuiltIn: true },
   ];
 }
 
@@ -106,16 +89,9 @@ function CategoryRow({ category, onEdit, onDelete }: CategoryRowProps) {
       {/* Colour dot */}
       <View style={[styles.colorDot, { backgroundColor: category.color }]} />
 
-      {/* Name + POI badge */}
+      {/* Name */}
       <View style={styles.rowContent}>
         <Text style={[styles.rowName, { color: palette.text }]}>{category.name}</Text>
-        {category.poi !== null && (
-          <View style={[styles.poiBadge, { backgroundColor: palette.surface2, borderColor: palette.line }]}>
-            <Text style={[styles.poiBadgeText, { color: palette.muted }]}>
-              {placeTypeLabel(category.poi)}
-            </Text>
-          </View>
-        )}
       </View>
 
       {/* Edit + × delete — custom categories only */}
@@ -154,19 +130,12 @@ function CategorySheet({ visible, initial, onSave, onCancel }: SheetProps) {
   const { palette, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
-  const quickPoiOptions = buildQuickPoiOptions();
 
   const [name,         setName]         = useState('');
   const [color,        setColor]        = useState<string>(CATEGORY_COLORS[0]);
   const [hexInput,     setHexInput]     = useState<string>(CATEGORY_COLORS[0]);
-  const [poi,          setPoi]          = useState<string | null>(null);
-  const [poiQuery,     setPoiQuery]     = useState('');
-  const [poiResults,   setPoiResults]   = useState<PlaceTypeSuggestion[]>([]);
-  const [poiSearching, setPoiSearching] = useState(false);
   const [nameErr,      setNameErr]      = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Populate form when opening
   useEffect(() => {
@@ -175,18 +144,9 @@ function CategorySheet({ visible, initial, onSave, onCancel }: SheetProps) {
       setName(initial?.name  ?? '');
       setColor(initColor);
       setHexInput(initColor);
-      setPoi(initial?.poi   ?? null);
-      setPoiQuery('');
-      setPoiResults([]);
-      setPoiSearching(false);
       setNameErr('');
     }
   }, [visible, initial]);
-
-  // Cleanup debounce timer on unmount
-  useEffect(() => () => {
-    if (searchTimer.current) { clearTimeout(searchTimer.current); }
-  }, []);
 
   useEffect(() => {
     if (!visible) {
@@ -224,38 +184,10 @@ function CategorySheet({ visible, initial, onSave, onCancel }: SheetProps) {
 
   const hexValid = /^#[0-9a-fA-F]{6}$/.test(hexInput);
 
-  const handlePoiSearch = (text: string) => {
-    const trimmed = text.trim();
-    setPoiQuery(text);
-    if (searchTimer.current) { clearTimeout(searchTimer.current); }
-    if (!trimmed) {
-      setPoiResults([]);
-      setPoiSearching(false);
-      return;
-    }
-    setPoiSearching(true);
-    searchTimer.current = setTimeout(async () => {
-      try {
-        const results = await searchPlaceTypesCached(trimmed);
-        setPoiResults(results);
-      } catch {
-        setPoiResults([]);
-      } finally {
-        setPoiSearching(false);
-      }
-    }, 350);
-  };
-
-  const handlePoiSelect = (type: string | null) => {
-    setPoi(type);
-    setPoiQuery('');
-    setPoiResults([]);
-  };
-
   const handleSave = () => {
     const trimmed = name.trim();
     if (!trimmed) { setNameErr(COPY.categoriesScreen.nameRequiredError); return; }
-    onSave({ name: trimmed, color, poi });
+    onSave({ name: trimmed, color });
   };
 
   const isAdd = initial === null;
@@ -379,119 +311,6 @@ function CategorySheet({ visible, initial, onSave, onCancel }: SheetProps) {
               />
             </View>
           </View>
-
-          {/* ── Location type ── */}
-          <Text style={[styles.fieldLabel, { color: palette.muted }]}>{COPY.categoriesScreen.locationFieldLabel}</Text>
-
-          {/* Quick-pick chips + None */}
-          <View style={styles.quickPickRow}>
-            {/* None chip */}
-            <Pressable
-              onPress={() => handlePoiSelect(null)}
-              style={[
-                styles.poiChip,
-                {
-                  backgroundColor: poi === null ? palette.text  : palette.surface2,
-                  borderColor:     poi === null ? palette.text  : palette.line,
-                },
-              ]}
-              accessibilityRole="radio"
-              accessibilityLabel={COPY.categoriesScreen.locationNone}
-              accessibilityState={{ checked: poi === null }}>
-              <Text style={[styles.poiChipText, { color: poi === null ? palette.bg : palette.muted }]}>
-                {COPY.categoriesScreen.locationNone}
-              </Text>
-            </Pressable>
-
-            {quickPoiOptions.map(opt => {
-              const active = poi === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => handlePoiSelect(opt.value)}
-                  style={[
-                    styles.poiChip,
-                    {
-                      backgroundColor: active ? palette.text  : palette.surface2,
-                      borderColor:     active ? palette.text  : palette.line,
-                    },
-                  ]}
-                  accessibilityRole="radio"
-                  accessibilityLabel={opt.label}
-                  accessibilityState={{ checked: active }}>
-                  <Text style={[styles.poiChipText, { color: active ? palette.bg : palette.muted }]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Search for more types */}
-          <View style={[
-            styles.poiSearchWrap,
-            { backgroundColor: palette.surface2, borderColor: palette.line },
-          ]}>
-            <TextInput
-              style={[styles.poiSearchInput, { color: palette.text }]}
-              value={poiQuery}
-              onChangeText={handlePoiSearch}
-              placeholder={COPY.categoriesScreen.locationSearchPlaceholder}
-              placeholderTextColor={palette.faint}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-              accessibilityLabel={COPY.categoriesScreen.locationSearchA11y}
-            />
-            {poiSearching && (
-              <ActivityIndicator
-                size="small"
-                color={palette.muted}
-                style={styles.poiSearchSpinner}
-              />
-            )}
-          </View>
-
-          {/* Search results */}
-          {poiResults.length > 0 && (
-            <View style={styles.poiResultsRow}>
-              {poiResults.map(r => (
-                <Pressable
-                  key={r.type}
-                  onPress={() => handlePoiSelect(r.type)}
-                  style={[
-                    styles.poiResultChip,
-                    { borderColor: palette.line, backgroundColor: palette.surface2 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={r.label}>
-                  <Text style={[styles.poiResultChipText, { color: palette.text }]}>
-                    {r.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-
-          {/* Currently selected (non-quick-pick) */}
-          {poi !== null && !quickPoiOptions.some(o => o.value === poi) && (
-            <View style={styles.poiSelectedRow}>
-              <Text style={[styles.poiSelectedLabel, { color: palette.muted }]}>
-                {COPY.categoriesScreen.locationSelectedLabel}
-              </Text>
-              <View style={[styles.poiSelectedChip, { backgroundColor: palette.surface2, borderColor: palette.line }]}>
-                <Text style={[styles.poiSelectedChipText, { color: palette.text }]}>
-                  {placeTypeLabel(poi)}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => handlePoiSelect(null)}
-                accessibilityRole="button"
-                accessibilityLabel={COPY.categoriesScreen.locationClearA11y}>
-                <Text style={[styles.poiClearX, { color: palette.muted }]}>×</Text>
-              </Pressable>
-            </View>
-          )}
 
           {/* ── Actions ── */}
           <View style={styles.sheetActions}>
@@ -708,16 +527,6 @@ const styles = StyleSheet.create({
     fontSize:   15,
     fontFamily: 'Geist-Regular',
   },
-  poiBadge: {
-    borderRadius:      9999,
-    borderWidth:        1,
-    paddingHorizontal: 8,
-    paddingVertical:   2,
-  },
-  poiBadgeText: {
-    fontSize:   11,
-    fontFamily: 'Geist-Regular',
-  },
   rowActions: {
     flexDirection: 'row',
     alignItems:    'center',
@@ -877,82 +686,6 @@ const styles = StyleSheet.create({
     fontSize:        13,
     fontFamily:      'Geist-Regular',
     paddingVertical:  8,
-  },
-
-  // ── POI picker ──
-  quickPickRow: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:            8,
-    marginBottom:   12,
-  },
-  poiChip: {
-    borderRadius:      9999,
-    borderWidth:        1,
-    paddingHorizontal: 14,
-    paddingVertical:    7,
-  },
-  poiChipText: {
-    fontSize:   13,
-    fontFamily: 'Geist-Regular',
-  },
-  poiSearchWrap: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    borderRadius:       8,
-    borderWidth:        1,
-    paddingHorizontal: 12,
-    marginBottom:       8,
-  },
-  poiSearchInput: {
-    flex:            1,
-    fontSize:        14,
-    fontFamily:      'Geist-Regular',
-    paddingVertical: 10,
-  },
-  poiSearchSpinner: {
-    marginLeft: 8,
-  },
-  poiResultsRow: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:            8,
-    marginBottom:   8,
-  },
-  poiResultChip: {
-    borderRadius:      9999,
-    borderWidth:        1,
-    paddingHorizontal: 12,
-    paddingVertical:    6,
-  },
-  poiResultChipText: {
-    fontSize:   13,
-    fontFamily: 'Geist-Regular',
-  },
-  poiSelectedRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:            8,
-    marginBottom:   16,
-  },
-  poiSelectedLabel: {
-    fontSize:   12,
-    fontFamily: 'Geist-Regular',
-  },
-  poiSelectedChip: {
-    borderRadius:      9999,
-    borderWidth:        1,
-    paddingHorizontal: 10,
-    paddingVertical:    4,
-  },
-  poiSelectedChipText: {
-    fontSize:   13,
-    fontFamily: 'Geist-Regular',
-  },
-  poiClearX: {
-    fontSize:   20,
-    lineHeight: 24,
-    fontFamily: 'Geist-Regular',
   },
 
   // ── Sheet actions ──

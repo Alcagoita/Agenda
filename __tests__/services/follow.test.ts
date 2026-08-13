@@ -41,8 +41,6 @@ jest.mock('@react-native-firebase/analytics', () => () => ({ logEvent: jest.fn()
 jest.mock('@react-native-firebase/auth', () => ({}));
 jest.mock('../../src/services/analytics', () => ({ logTap: jest.fn() }));
 jest.mock('../../src/services/poiInference', () => ({
-  registerCategoryKeywords: jest.fn(),
-  replaceCategoryKeywords:  jest.fn(),
   registerLearnedKeyword:   jest.fn(),
   normalize:                jest.fn(),
 }));

@@ -98,7 +98,7 @@ import CategoriesScreen from '../../src/screens/CategoriesScreen';
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const CUSTOM_CAT = {
-  id: 'cat-gym', name: 'Gym', color: '#ff0000', poi: null, isBuiltIn: false,
+  id: 'cat-gym', name: 'Gym', color: '#ff0000', isBuiltIn: false,
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

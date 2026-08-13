@@ -1,9 +1,11 @@
 /**
- * KAN-23 — Category-to-POI type mapping tests.
+ * KAN-23 — place type label tests.
  *
  * Covers:
- *   - resolveCategoryPlaceType: maps Category.poi to the Google Places type string
- *   - placeTypeLabel:           human-readable labels + fallback title-casing
+ *   - placeTypeLabel: human-readable labels + fallback title-casing
+ *
+ * KAN-371 removed the "resolveCategoryPlaceType" describe block: categories
+ * no longer carry a place type, so there is nothing left to map from.
  *
  * KAN-342 removed two describe blocks that lived here:
  *   - "searchNearbyPlaces — custom type" tested a direct Google Places fetch
@@ -23,47 +25,13 @@
  *     than rewritten around a code path that no longer exists.
  */
 
-import { resolveCategoryPlaceType, placeTypeLabel } from '../../src/services/maps';
+import { placeTypeLabel } from '../../src/services/maps';
 import { setCopyLanguage } from '../../src/constants/copy';
-import { Category } from '../../src/types';
 
 // searchNearbyPlaces (used by placeTypeLabel? no — but maps.ts as a whole)
 // transitively imports placesFunctions.ts / cloudflarePoiFunctions.ts ->
 // @react-native-firebase/functions, mocked globally in jest.setup.js.
 // reverseGeocodeCache.ts (expo-sqlite) is also globally mocked there.
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function makeCategory(overrides: Partial<Category> = {}): Category {
-  return {
-    id:        'cat-1',
-    name:      'Test',
-    color:     '#ff0000',
-    poi:       null,
-    isBuiltIn: false,
-    ...overrides,
-  };
-}
-
-// ─── resolveCategoryPlaceType ─────────────────────────────────────────────────
-
-describe('resolveCategoryPlaceType', () => {
-  it('returns null for a category with no location association', () => {
-    expect(resolveCategoryPlaceType(makeCategory({ poi: null }))).toBeNull();
-  });
-
-  it('returns the poi string unchanged for a built-in type', () => {
-    expect(resolveCategoryPlaceType(makeCategory({ poi: 'pharmacy' }))).toBe('pharmacy');
-    expect(resolveCategoryPlaceType(makeCategory({ poi: 'atm' }))).toBe('atm');
-    expect(resolveCategoryPlaceType(makeCategory({ poi: 'cafe' }))).toBe('cafe');
-  });
-
-  it('returns the poi string unchanged for a custom Google Places type', () => {
-    expect(resolveCategoryPlaceType(makeCategory({ poi: 'gym' }))).toBe('gym');
-    expect(resolveCategoryPlaceType(makeCategory({ poi: 'restaurant' }))).toBe('restaurant');
-    expect(resolveCategoryPlaceType(makeCategory({ poi: 'beauty_salon' }))).toBe('beauty_salon');
-  });
-});
 
 // ─── placeTypeLabel ───────────────────────────────────────────────────────────
 

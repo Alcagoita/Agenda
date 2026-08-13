@@ -21,7 +21,7 @@ import type { Feature, Polygon } from 'geojson';
 import { cloudflarePoiAllProxy, cloudflareRequestCoverageProxy, type CloudflareNearbyRequest } from './cloudflarePoiFunctions';
 import { searchOsmPlacesStrict } from './osmPlaces';
 import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
-import { Category, PoiType, poiCatalogLabel } from '../types';
+import { PoiType, poiCatalogLabel } from '../types';
 import type { RestaurantFoodType } from './restaurantFoodTypes';
 import type { StoreSubtype } from './storeSubtypes';
 
@@ -803,23 +803,6 @@ export function placeTypeLabel(type: string): string {
     PLACE_TYPE_LABELS[type] ??
     type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   );
-}
-
-// ─── Category → place type mapping ───────────────────────────────────────────
-
-/**
- * Returns the Google Places primary type string to use for proximity searches
- * for tasks that belong to `category`.
- *
- * This is the formal mapping layer (KAN-23): because `category.poi` is already
- * stored as a Google Places primary type string, the mapping is an identity
- * pass-through. The function exists as the single place to put any future
- * translation logic (e.g. aliasing, overrides) without touching call sites.
- *
- * Returns null when the category has no location association.
- */
-export function resolveCategoryPlaceType(category: Category): string | null {
-  return category.poi ?? null;
 }
 
 /** A single autocomplete suggestion returned by an autocomplete search. */

@@ -49,11 +49,11 @@ export type ImportPoiCache = Map<string, Promise<string | null>>;
  * (e.g. recurring calendar events) — skips redundant rule-map lookups and,
  * more importantly, redundant on-device classifier calls. The cache is scoped
  * to a single import run rather than kept module-level: the rule-map
- * dictionary is mutated at runtime whenever custom categories change
- * (registerCategoryKeywords/replaceCategoryKeywords), so a longer-lived cache
- * could keep returning a stale classification after the user renames/deletes
- * a category. A failed lookup is never cached, so a transient classifier
- * failure doesn't permanently poison a title for the rest of the batch.
+ * dictionary's learned layer is mutated at runtime by the on-device
+ * classifier and by user POI edits, so a longer-lived cache could keep
+ * returning a classification the user has since corrected. A failed lookup is
+ * never cached, so a transient classifier failure doesn't permanently poison a
+ * title for the rest of the batch.
  */
 export async function inferImportedPoi(
   title: string,
