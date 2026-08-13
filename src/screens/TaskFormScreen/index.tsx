@@ -68,6 +68,7 @@ export interface TaskFormParams {
   task?: Task;
   initialDate?: string;
   initialTitle?: string;
+  initialCategory?: string;
   initialPoi?: string;
   initialRestaurantFoodType?: RestaurantFoodType;
   initialStoreSubtype?: StoreSubtype;
@@ -84,14 +85,14 @@ export default function TaskFormScreen() {
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
 
-  const { uid, task: existingTask, initialDate, initialTitle, initialPoi, initialRestaurantFoodType, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
+  const { uid, task: existingTask, initialDate, initialTitle, initialCategory, initialPoi, initialRestaurantFoodType, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
   const isEdit = !!existingTask;
   const hasExplicitInitialPoi = Boolean(existingTask?.poi || initialPoiExplicitlySelected);
 
   // ── Form state ──────────────────────────────────────────────────────────────
 
   const [title,    setTitle]    = useState(existingTask?.title    ?? initialTitle ?? '');
-  const [category, setCategory] = useState<string | null>(existingTask?.category ?? null);
+  const [category, setCategory] = useState<string | null>(existingTask?.category ?? initialCategory ?? null);
   const [notes,    setNotes]    = useState(existingTask?.description ?? '');
   // Rotating title placeholder freezes permanently once the user taps the field (KAN-149).
   const [titleFocused, setTitleFocused] = useState(false);
