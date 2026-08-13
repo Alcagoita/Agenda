@@ -794,10 +794,13 @@ describe('TaskFormScreen — save (create)', () => {
     render(<TaskFormScreen />);
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Visit my bank');
     expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
-    fireEvent.press(screen.getByLabelText('Caixa Geral de Depósitos'));
+    // BrandSelector is a virtualized FlatList. Select a canonical Bank from
+    // its initial render window; a later row such as CGD is intentionally not
+    // mounted until the user scrolls.
+    fireEvent.press(screen.getByLabelText('Novo Banco'));
     await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
     await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
-      poi: 'bank', poiBrand: 'Caixa Geral de Depósitos',
+      poi: 'bank', poiBrand: 'Novo Banco',
     })));
   });
 });
