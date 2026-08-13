@@ -15,7 +15,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   Pressable,
   ScrollView,
   Switch,
@@ -252,6 +254,50 @@ export default function TaskFormScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const titleRef = useRef<TextInput>(null);
+
+  // ── Keeping Notes above the keyboard (KAN-369) ──────────────────────────────
+  //
+  // Notes is the last section of the scroll content, so an opening keyboard
+  // lands right on top of it. Nothing moves it on its own: Android's
+  // KeyboardAvoidingView is deliberately a no-op (windowSoftInputMode
+  // adjustResize owns the resize — see getScreenKeyboardAvoidingBehavior), a
+  // resize alone does not scroll a focused input into view, and
+  // automaticallyAdjustKeyboardInsets is iOS-only.
+  //
+  // So scroll it up ourselves: record where the Notes section sits inside the
+  // content, then scroll to it on focus. The keyboard opens after the focus
+  // event and the resize lands after that, so repeat the scroll on
+  // keyboardDidShow while Notes still holds focus.
+  const scrollRef      = useRef<ScrollView>(null);
+  const notesOffsetRef = useRef<number | null>(null);
+  const notesFocusedRef = useRef(false);
+
+  const handleNotesLayout = useCallback((e: LayoutChangeEvent) => {
+    notesOffsetRef.current = e.nativeEvent.layout.y;
+  }, []);
+
+  const scrollNotesIntoView = useCallback(() => {
+    const y = notesOffsetRef.current;
+    if (y == null) { return; }
+    // Leave the section label visible above the box.
+    scrollRef.current?.scrollTo({ y: Math.max(y - 24, 0), animated: true });
+  }, []);
+
+  const handleNotesFocus = useCallback(() => {
+    notesFocusedRef.current = true;
+    scrollNotesIntoView();
+  }, [scrollNotesIntoView]);
+
+  const handleNotesBlur = useCallback(() => {
+    notesFocusedRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (notesFocusedRef.current) { scrollNotesIntoView(); }
+    });
+    return () => sub.remove();
+  }, [scrollNotesIntoView]);
 
   useEffect(() => {
     const myRequestId = ++inferenceRequestIdRef.current;
@@ -561,6 +607,7 @@ export default function TaskFormScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         testID="task-form-scroll"
         style={[styles.scrollView, { backgroundColor: palette.bg }]}
         contentContainerStyle={[
@@ -1055,7 +1102,7 @@ export default function TaskFormScreen() {
         </View>
 
         {/* ── NOTES section ── */}
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={handleNotesLayout}>
           <View style={styles.sectionLabelRow}>
             <Text style={[styles.sectionLabel, { color: palette.muted }]}>NOTES</Text>
             <Text style={[styles.sectionLabelOptional, { color: palette.faint }]}>
@@ -1063,6 +1110,7 @@ export default function TaskFormScreen() {
             </Text>
           </View>
           <TextInput
+            testID="task-form-notes"
             style={[
               styles.notesInput,
               {
@@ -1075,6 +1123,8 @@ export default function TaskFormScreen() {
             placeholderTextColor={palette.muted}
             value={notes}
             onChangeText={setNotes}
+            onFocus={handleNotesFocus}
+            onBlur={handleNotesBlur}
             multiline
             numberOfLines={3}
             textAlignVertical="top"

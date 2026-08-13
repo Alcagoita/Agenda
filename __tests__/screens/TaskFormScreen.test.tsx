@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 import type { Alert as AlertType } from 'react-native';
 import TaskFormScreen from '../../src/screens/TaskFormScreen';
 import { COPY } from '../../src/constants/copy';
@@ -1302,5 +1302,109 @@ describe('TaskFormScreen — take me there', () => {
     });
 
     expect(mockOpenTakeMeThereMaps).toHaveBeenCalledWith('pharmacy');
+  });
+});
+
+// ── Notes above the keyboard (KAN-369) ────────────────────────────────────────
+
+describe('TaskFormScreen — Notes stays above the keyboard (KAN-369)', () => {
+  const NOTES_Y = 900;
+
+  // Captures the screen's keyboardDidShow subscription so a test can fire it.
+  const keyboardShowHandlers: Array<() => void> = [];
+
+  beforeEach(() => {
+    keyboardShowHandlers.length = 0;
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: () => void) => {
+      if (event === 'keyboardDidShow') { keyboardShowHandlers.push(cb); }
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+  });
+
+  function emitKeyboardDidShow() {
+    keyboardShowHandlers.forEach(handler => handler());
+  }
+
+  // Reports the Notes section's position inside the scroll content, the way a
+  // real layout pass would.
+  function layoutNotesSection() {
+    const notes = screen.getByTestId('task-form-notes');
+    fireEvent(notes.parent!, 'layout', { nativeEvent: { layout: { x: 0, y: NOTES_Y, width: 300, height: 120 } } });
+  }
+
+  function spyOnScroll() {
+    return jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+  }
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('scrolls the Notes section into view when it takes focus in create mode', () => {
+    const scrollTo = spyOnScroll();
+    render(<TaskFormScreen />);
+    layoutNotesSection();
+
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+
+  it('scrolls the Notes section into view when it takes focus in edit mode', () => {
+    const scrollTo = spyOnScroll();
+    setRouteParams({ uid: 'user-123', task: makeTask() });
+    render(<TaskFormScreen />);
+    layoutNotesSection();
+
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+
+  it('scrolls again once the keyboard has opened, since the resize lands after focus', () => {
+    const scrollTo = spyOnScroll();
+    render(<TaskFormScreen />);
+    layoutNotesSection();
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+    scrollTo.mockClear();
+
+    act(() => { emitKeyboardDidShow(); });
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+
+  it('does not scroll on keyboardDidShow when Notes does not hold focus', () => {
+    const scrollTo = spyOnScroll();
+    render(<TaskFormScreen />);
+    layoutNotesSection();
+
+    act(() => { emitKeyboardDidShow(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('stops scrolling on keyboardDidShow after Notes loses focus', () => {
+    const scrollTo = spyOnScroll();
+    render(<TaskFormScreen />);
+    layoutNotesSection();
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+    fireEvent(screen.getByTestId('task-form-notes'), 'blur');
+    scrollTo.mockClear();
+
+    act(() => { emitKeyboardDidShow(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('never scrolls to a negative offset when Notes sits near the top', () => {
+    const scrollTo = spyOnScroll();
+    render(<TaskFormScreen />);
+    fireEvent(
+      screen.getByTestId('task-form-notes').parent!,
+      'layout',
+      { nativeEvent: { layout: { x: 0, y: 10, width: 300, height: 120 } } },
+    );
+
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: true });
   });
 });
