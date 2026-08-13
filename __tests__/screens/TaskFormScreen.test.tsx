@@ -764,6 +764,19 @@ describe('TaskFormScreen — save (create)', () => {
     });
   });
 
+  it('saves a Financial service kind selected in More Details', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'financial_service', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Sort my finances');
+    fireEvent.press(screen.getByLabelText('Consumer credit'));
+    await waitFor(() => expect(screen.getByLabelText('Consumer credit').props.accessibilityState?.selected).toBe(true));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'financial_service', financialServiceKind: 'consumer_credit',
+    })));
+  });
+
   it('hydrates and saves a restaurant food type passed from quick create', async () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'restaurant', initialPoiExplicitlySelected: true, initialRestaurantFoodType: 'vegetarian' });
     mockAddTask.mockResolvedValueOnce('new-id');

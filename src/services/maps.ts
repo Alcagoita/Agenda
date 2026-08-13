@@ -24,6 +24,7 @@ import { getCachedCity, putCachedCity } from './reverseGeocodeCache';
 import { PoiType, poiCatalogLabel } from '../types';
 import type { RestaurantFoodType } from './restaurantFoodTypes';
 import type { StoreSubtype } from './storeSubtypes';
+import type { FinancialServiceKind } from './financialServiceKinds';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,8 @@ export interface NearbyPlace {
   storeSubtype?: StoreSubtype;
   /** All authoritative store kinds returned by Cloudflare, when known. */
   storeSubtypes?: StoreSubtype[];
+  /** All authoritative financial-service kinds returned by Cloudflare, when known. */
+  financialServiceKinds?: FinancialServiceKind[];
   /** KAN-318: default opening window, minutes from local midnight. null/undefined = always open (also 24h / unknown). */
   openMin?: number | null;
   closeMin?: number | null;
@@ -391,6 +394,7 @@ async function searchNearbyPlacesCloudflare(
       // the classified value or the name.
       const requestFoodValues = (request.attribute?.dimension === 'food_cuisine' ? request.attribute.values : []) as RestaurantFoodType[];
       const requestStoreValues = (request.attribute?.dimension === 'store_kind' ? request.attribute.values : []) as StoreSubtype[];
+      const requestFinancialServiceValues = (request.attribute?.dimension === 'financial_service_kind' ? request.attribute.values : []) as FinancialServiceKind[];
       for (const p of data.results[request.key] ?? []) {
         const existing = places.get(p.poi_id);
         if (existing) {
@@ -404,6 +408,11 @@ async function searchNearbyPlacesCloudflare(
             ...(p.attributes?.store_kind ?? []),
             ...requestStoreValues,
           ])] as StoreSubtype[];
+          const financialServiceKinds = [...new Set([
+            ...(existing.financialServiceKinds ?? []),
+            ...(p.attributes?.financial_service_kind ?? []),
+            ...requestFinancialServiceValues,
+          ])] as FinancialServiceKind[];
           if (restaurantFoodTypes.length > 0) {
             existing.restaurantFoodTypes = restaurantFoodTypes;
             existing.restaurantFoodType = restaurantFoodTypes[0];
@@ -412,10 +421,14 @@ async function searchNearbyPlacesCloudflare(
             existing.storeSubtypes = storeSubtypes;
             existing.storeSubtype = storeSubtypes[0];
           }
+          if (financialServiceKinds.length > 0) {
+            existing.financialServiceKinds = financialServiceKinds;
+          }
           continue;
         }
         const restaurantFoodTypes = [...new Set([...(p.attributes?.food_cuisine ?? []), ...requestFoodValues])] as RestaurantFoodType[];
         const storeSubtypes = [...new Set([...(p.attributes?.store_kind ?? []), ...requestStoreValues])] as StoreSubtype[];
+        const financialServiceKinds = [...new Set([...(p.attributes?.financial_service_kind ?? []), ...requestFinancialServiceValues])] as FinancialServiceKind[];
         const place: NearbyPlace = {
           placeId: p.poi_id,
           name: p.name,
@@ -428,6 +441,7 @@ async function searchNearbyPlacesCloudflare(
           restaurantFoodTypes: restaurantFoodTypes.length > 0 ? restaurantFoodTypes : undefined,
           storeSubtype: storeSubtypes[0],
           storeSubtypes: storeSubtypes.length > 0 ? storeSubtypes : undefined,
+          financialServiceKinds: financialServiceKinds.length > 0 ? financialServiceKinds : undefined,
           openMin: p.open_min,
           closeMin: p.close_min,
         };

@@ -55,6 +55,7 @@ import { useToastStore } from '../store/toastStore';
 import RotatingTitlePlaceholder from './RotatingTitlePlaceholder';
 import { localPoiLabel } from '../services/poiTypeCache';
 import FoodTypeSelector from './FoodTypeSelector';
+import FinancialServiceKindSelector from './FinancialServiceKindSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 import StoreSubtypeSelector from './StoreSubtypeSelector';
 import BrandSelector from './BrandSelector';
@@ -63,6 +64,7 @@ import {
   type StoreSubtype,
 } from '../services/storeSubtypes';
 import { findBrandInText, isCanonicalBrandForType, poiTypeRequiresBrand } from '../services/brandDictionary';
+import { inferFinancialServiceKind, type FinancialServiceKind } from '../services/financialServiceKinds';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -224,6 +226,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [category, setCategory] = useState<string | null>(null);
     const [poi,      setPoi]      = useState<string | null>(null);
     const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
+    const [financialServiceKind, setFinancialServiceKind] = useState<FinancialServiceKind | null>(null);
     const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
     const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(false);
     const [poiBrand, setPoiBrand] = useState<string | null>(null);
@@ -299,6 +302,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setCategory(null);
       setPoi(null);
       setRestaurantFoodType(null);
+      setFinancialServiceKind(null);
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
       setPoiBrand(null);
@@ -423,6 +427,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
+      if (poi !== 'financial_service') { setFinancialServiceKind(null); }
       if (poi !== 'store') {
         setStoreSubtype(null);
         setStoreSubtypeTouched(false);
@@ -438,6 +443,11 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       if (poi !== 'store' || storeSubtypeTouched) { return; }
       setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
     }, [poi, storeSubtypeTouched, title]);
+
+    useEffect(() => {
+      if (poi !== 'financial_service') return;
+      setFinancialServiceKind(current => current ?? inferFinancialServiceKind(title.trim()));
+    }, [poi, title]);
 
     const suggestedBrand = poiTypeRequiresBrand(poi) ? findBrandInText(poi, title) : null;
     useEffect(() => {
@@ -473,6 +483,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           poi,
           ...(poi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
           ...(poi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
+          ...(poi === 'financial_service' && financialServiceKind ? { financialServiceKind } : {}),
           ...(poiTypeRequiresBrand(poi) && isCanonicalBrandForType(poi, poiBrand) ? { poiBrand } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
@@ -499,7 +510,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         console.warn('[NewTaskSheet] addTask failed', err);
         setSubmitting(false);
       }
-    }, [title, category, poi, storeSubtype, restaurantFoodType, poiBrand, suggestedPoi, suggestedTitle, uid, submitting]);
+    }, [title, category, poi, storeSubtype, restaurantFoodType, financialServiceKind, poiBrand, suggestedPoi, suggestedTitle, uid, submitting]);
 
     const handleMoreDetails = useCallback(() => {
       handleClose();
@@ -515,10 +526,13 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         ...(poi === 'restaurant' && restaurantFoodType ? {
           initialRestaurantFoodType: restaurantFoodType,
         } : {}),
+        ...(poi === 'financial_service' && financialServiceKind ? {
+          initialFinancialServiceKind: financialServiceKind,
+        } : {}),
         ...(poiTypeRequiresBrand(poi) && poiBrand ? { initialPoiBrand: poiBrand } : {}),
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, poiBrand, poiTouched]);
+    }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, financialServiceKind, poiBrand, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.
@@ -697,6 +711,22 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         setStoreSubtype(subtype ?? 'any');
                       }}
                     />
+                  </View>
+                </View>
+              )}
+
+              {poi === 'financial_service' && (
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.subtypeQuestion}
+                    </Text>
+                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                      {COPY.newTaskSheet.catOptional}
+                    </Text>
+                  </View>
+                  <View style={styles.foodTypePad}>
+                    <FinancialServiceKindSelector selected={financialServiceKind} onSelect={setFinancialServiceKind} />
                   </View>
                 </View>
               )}

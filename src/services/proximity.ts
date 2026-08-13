@@ -115,6 +115,7 @@ import {
 import { buildNearbySearchRequests } from './nearbySearchRequests';
 import { isOpenNow } from './openingHours';
 import { brandTaskMatchesPlace, filterBrandPlacesForTasks } from './brandDictionary';
+import { filterFinancialServicePlacesForTasks, financialServiceTaskMatchesPlace } from './financialServiceKinds';
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 //
@@ -867,7 +868,11 @@ function processProximityTick(
       ? mergeRestaurantPlaceCandidates(restaurantGroups)
       : poiType === 'store'
         ? mergeStorePlaceCandidates(storeGroups)
-        : filterStorePlacesForTasks(poiType, filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks), undonePoiTasks);
+        : filterFinancialServicePlacesForTasks(
+          poiType,
+          filterStorePlacesForTasks(poiType, filterRestaurantPlacesForTasks(poiType, rawPlaces, undonePoiTasks), undonePoiTasks),
+          undonePoiTasks,
+        );
     // KAN-318: never surface a place that is closed right now. A place with no
     // known hours (OSM/cache rows, 24h, unknown) is always kept — closed is
     // only ever asserted on a real window from the POI backend. `poiType` is
@@ -1010,6 +1015,7 @@ function processProximityTick(
         (!heroPlace || (
           restaurantTaskMatchesPlaceName(t, heroPlace) &&
           storeTaskMatchesPlaceName(t, heroPlace) &&
+          financialServiceTaskMatchesPlace(t, heroPlace) &&
           brandTaskMatchesPlace(t, heroPlace)
         )),
     );

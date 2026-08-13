@@ -52,6 +52,7 @@ service cloud.firestore {
         'bank',
         'currency_exchange',
         'money_transfer',
+        'financial_service',
         'bar',
         'beach',
         'beauty_salon',
@@ -159,6 +160,13 @@ service cloud.firestore {
       return value in [
         'sushi', 'vegetarian', 'portuguese', 'italian', 'burger',
         'healthy', 'indian', 'thai', 'mexican', 'steak',
+      ];
+    }
+
+    function validFinancialServiceKind(value) {
+      return value in [
+        'consumer_credit', 'insurance', 'financial_intermediary',
+        'leasing_factoring', 'central_bank', 'public_finance',
       ];
     }
 
@@ -281,6 +289,7 @@ service cloud.firestore {
           'poi',
           'storeSubtype',
           'restaurantFoodType',
+          'financialServiceKind',
           'poiBrand',
           'completedPlaceId',
           'completedPlaceName',
@@ -309,6 +318,8 @@ service cloud.firestore {
         && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
         && (!('restaurantFoodType' in data.keys()) ||
           (data.poi == 'restaurant' && validRestaurantFoodType(data.restaurantFoodType)))
+        && (!('financialServiceKind' in data.keys()) ||
+          (data.poi == 'financial_service' && validFinancialServiceKind(data.financialServiceKind)))
         && (!('completedPlaceId' in data.keys()) || validString(data.completedPlaceId, 200))
         && (!('completedPlaceName' in data.keys()) || validString(data.completedPlaceName, 200))
         && (!('completedPoiType' in data.keys()) || validPoiType(data.completedPoiType))

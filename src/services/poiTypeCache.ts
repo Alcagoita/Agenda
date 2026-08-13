@@ -183,6 +183,30 @@ const POI_CONCEPTS: PoiConcept[] = [
       'pt-PT': ['correio', 'posta', 'enviar encomenda', 'correios'],
     },
   },
+  {
+    intents: ['retail'],
+    types: ['currency_exchange'],
+    terms: {
+      en: ['currency exchange', 'bureau de change', 'exchange money', 'foreign currency', 'cambio'],
+      'pt-PT': ['câmbio', 'cambio', 'casa de câmbio', 'trocar moeda', 'câmbio de moeda'],
+    },
+  },
+  {
+    intents: ['retail'],
+    types: ['money_transfer'],
+    terms: {
+      en: ['money transfer', 'send money', 'remittance', 'western union', 'moneygram'],
+      'pt-PT': ['transferência de dinheiro', 'transferir dinheiro', 'remessa', 'western union', 'moneygram'],
+    },
+  },
+  {
+    intents: ['retail'],
+    types: ['financial_service'],
+    terms: {
+      en: ['financial service', 'consumer credit', 'credit', 'insurance', 'financial intermediary', 'leasing', 'factoring', 'central bank', 'tax office'],
+      'pt-PT': ['serviço financeiro', 'crédito', 'crédito ao consumo', 'seguros', 'intermediário financeiro', 'leasing', 'factoring', 'banco central', 'finanças'],
+    },
+  },
 ];
 
 interface PoiDictionaryEntry {

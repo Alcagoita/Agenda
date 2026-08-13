@@ -25,7 +25,7 @@ export interface CloudflareNearbyRequest {
   key: string;
   type: string;
   attribute?: {
-    dimension: 'food_cuisine' | 'store_kind';
+    dimension: 'food_cuisine' | 'store_kind' | 'financial_service_kind';
     values: [string];
   };
   /** Canonical Gym/Bank brand. Validated by the proxy and Worker. */

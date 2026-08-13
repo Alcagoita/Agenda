@@ -486,8 +486,8 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
 }
 
 export function resolvePoiIconType(type: string): string {
-  // Source-only financial-service records have a dedicated neutral icon; do
-  // not let the generic "service" fallback misrepresent them as a Bank.
+  // Financial service has a dedicated neutral icon; do not let the generic
+  // "service" fallback misrepresent it as a Bank.
   if (type === 'financial_service') return type;
 
   if (GOOGLE_TYPE_ICON[type]) {

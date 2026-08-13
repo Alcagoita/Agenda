@@ -844,6 +844,14 @@ const mapsSource = fs.readFileSync(mapsPath, 'utf8');
 const types = extractQuotedValues(typesSource, 'export const SUPPORTED_GOOGLE_PLACE_TYPES');
 const englishOverrides = extractEnglishOverrides(mapsSource);
 
+// Brush-specific types are backed by the POI Worker rather than Google. Keep
+// them in the same bundled dictionary so More Details remains fully offline.
+const APP_ONLY_TYPES = {
+  currency_exchange: { en: 'Currency exchange', 'pt-PT': 'Câmbio' },
+  money_transfer: { en: 'Money transfer', 'pt-PT': 'Transferência de dinheiro' },
+  financial_service: { en: 'Financial service', 'pt-PT': 'Serviço financeiro' },
+};
+
 const enDictionary = {};
 const ptDictionary = {};
 
@@ -851,6 +859,11 @@ for (const type of types) {
   const enLabel = englishOverrides[type] ?? humanizeType(type);
   enDictionary[type] = enLabel;
   ptDictionary[type] = translateType(type, enLabel);
+}
+
+for (const [type, labels] of Object.entries(APP_ONLY_TYPES)) {
+  enDictionary[type] = labels.en;
+  ptDictionary[type] = labels['pt-PT'];
 }
 
 fs.writeFileSync(outEnPath, JSON.stringify(enDictionary, null, 2) + '\n');

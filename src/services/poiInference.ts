@@ -87,6 +87,13 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     fitness: 'gym', training: 'gym',
     // ── bank ──
     bank: 'bank', deposit: 'bank', 'bank branch': 'bank', cheque: 'bank',
+    // ── financial services ──
+    'currency exchange': 'currency_exchange', 'bureau de change': 'currency_exchange',
+    'exchange money': 'currency_exchange',
+    'money transfer': 'money_transfer', 'send money': 'money_transfer', remittance: 'money_transfer',
+    'western union': 'money_transfer', moneygram: 'money_transfer',
+    'financial service': 'financial_service', credit: 'financial_service', insurance: 'financial_service',
+    leasing: 'financial_service', factoring: 'financial_service',
     // ── restaurant ──
     restaurant: 'restaurant', lunch: 'restaurant', dinner: 'restaurant',
     'eat out': 'restaurant', 'dine out': 'restaurant', reservation: 'restaurant',
@@ -142,6 +149,12 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     'ginásio': 'gym', treino: 'gym', 'exercício': 'gym', 'musculação': 'gym',
     // ── bank ──
     banco: 'bank', 'depósito': 'bank', 'balcão': 'bank',
+    // ── financial services ──
+    'câmbio': 'currency_exchange', 'casa de câmbio': 'currency_exchange', 'trocar moeda': 'currency_exchange',
+    'transferência de dinheiro': 'money_transfer', 'transferir dinheiro': 'money_transfer', remessa: 'money_transfer',
+    'western union': 'money_transfer', moneygram: 'money_transfer',
+    'serviço financeiro': 'financial_service', crédito: 'financial_service', seguros: 'financial_service',
+    leasing: 'financial_service', factoring: 'financial_service', finanças: 'financial_service',
     // ── restaurant ──
     restaurante: 'restaurant', 'almoço': 'restaurant', jantar: 'restaurant',
     reserva: 'restaurant', 'refeição': 'restaurant',

@@ -3,6 +3,7 @@ import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
 import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManualPoiInput, isManualPoiInput, type ManualPoiAttribute } from './manualPoi';
 import brandDictionary from '../../src/constants/brandDictionary.json';
+import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
 
 // Re-exported (not just imported) — the Workers runtime resolves the
 // `durable_objects` binding's `class_name` against this module's exports,
@@ -376,7 +377,13 @@ const MAX_NEARBY_LIMIT_PER_TYPE = 50;
 
 // KAN-344 groups (pizza/asian/…) resolve from raw category labels at query
 // time. KAN-362 reuses this exact allowlist for community submissions.
-const SUBTYPE_FILTERS = MANUAL_SUBTYPE_FILTERS;
+const SUBTYPE_FILTERS: Record<string, { dimension: string; values: readonly string[] }> = {
+  ...MANUAL_SUBTYPE_FILTERS,
+  financial_service: {
+    dimension: 'financial_service_kind',
+    values: Object.keys(financialServiceKindDictionary),
+  },
+};
 const BRAND_FILTER_TYPES = new Set(['gym', 'bank']);
 const CANONICAL_BRANDS = new Map(
   Object.entries(brandDictionary).map(([type, brands]) => [
@@ -470,7 +477,7 @@ function parseNearbySearch(url: URL): NearbySearchParams | Response {
 }
 
 /** Validates the structured POST request used by the authenticated Firebase
- * proxy. A subtype filter is deliberately constrained to the two dimensions
+ * proxy. A subtype filter is deliberately constrained to the supported
  * and dictionary values the importer writes; this endpoint is not a general
  * arbitrary-attribute query surface. */
 function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
@@ -969,7 +976,7 @@ async function queryNearbyPoiDb(
      FROM poi
      INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
      LEFT JOIN poi_attribute ON poi_attribute.fsq_place_id = poi.fsq_place_id
-       AND poi_attribute.dimension IN ('food_cuisine', 'store_kind')
+       AND poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
      WHERE (${geohashClauses.join(' OR ')}) AND (${poiRequestClauses.join(' OR ')})`,
   ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...poiRequestBinds).all<{
     fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;

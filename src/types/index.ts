@@ -2,6 +2,7 @@ import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { COPY } from '../constants/copy';
 import type { StoreSubtype } from '../services/storeSubtypes';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
+import type { FinancialServiceKind } from '../services/financialServiceKinds';
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -117,7 +118,7 @@ export type PoiType =
   | 'gas' | 'gym' | 'bank' | 'restaurant' | 'park'
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
   | 'bus' | 'school' | 'bakery' | 'florist' | 'bar'
-  | 'currency_exchange' | 'money_transfer';
+  | 'currency_exchange' | 'money_transfer' | 'financial_service';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
@@ -128,7 +129,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
   // outside the curated quick-actionable list below.
   { type: 'gas' }, { type: 'post' }, { type: 'clinic' },
   { type: 'salon' }, { type: 'bus' }, { type: 'school' },
-  { type: 'currency_exchange' }, { type: 'money_transfer' },
+  { type: 'currency_exchange' }, { type: 'money_transfer' }, { type: 'financial_service' },
 ];
 
 /**
@@ -217,6 +218,8 @@ export interface Task {
   storeSubtype?: StoreSubtype;
   /** Optional cuisine preference selected for restaurant tasks. */
   restaurantFoodType?: RestaurantFoodType;
+  /** Optional specific financial service selected for Financial service tasks. */
+  financialServiceKind?: FinancialServiceKind;
   /** Canonical Gym/Bank brand required for actionable nearby matching (KAN-364). */
   poiBrand?: string;
   /**
@@ -318,7 +321,7 @@ export interface Category {
 
 /** Which POI types can appear on tasks of each category. */
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
-  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'post', 'store', 'bakery', 'florist'],
+  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist'],
   health:   ['pharmacy', 'clinic', 'gym'],
   personal: ['cafe', 'restaurant', 'bar', 'park', 'salon'],
   work:     ['library', 'school'],
@@ -369,6 +372,7 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   bank:        { key: 'amenity', value: 'bank' },
   currency_exchange: { key: 'amenity', value: 'bureau_de_change' },
   money_transfer: { key: 'amenity', value: 'money_transfer' },
+  financial_service: { key: 'office', value: 'financial' },
   restaurant:  { key: 'amenity', value: 'restaurant' },
   park:        { key: 'leisure', value: 'park' },
   library:     { key: 'amenity', value: 'library' },
@@ -432,6 +436,7 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   bank:        50,
   currency_exchange: 50,
   money_transfer: 50,
+  financial_service: 50,
   restaurant:  75,
   park:        150,
   library:     75,
