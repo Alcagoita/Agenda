@@ -12,7 +12,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   InteractionManager,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -39,6 +41,7 @@ import {
   ShareIcon,
   CameraIcon,
   BuildingIcon,
+  PinIcon,
   CloudOffIcon,
 } from '../components/AppIcon';
 import Avatar from '../components/Avatar';
@@ -200,6 +203,15 @@ export default function ProfileScreen() {
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
+  // The suggestion page lives on brushaway.app, the same host this app claims
+  // App Links for — only the routed paths are claimed (see AndroidManifest),
+  // so this URL leaves the app for the browser as intended (KAN-374).
+  const handleSuggestMissingPlace = useCallback(() => {
+    Linking.openURL('https://brushaway.app/manual-poi').catch(() => {
+      Alert.alert(COPY.profile.suggestMissingPlaceErrorTitle, COPY.profile.suggestMissingPlaceError);
+    });
+  }, []);
+
   const { nextTier, maxed, bandPct, toGo } = deriveTierStanding(totalPoints);
 
   // KAN-129: achievements is now AchievementsMap — keyed by AchievementType.
@@ -415,6 +427,25 @@ export default function ProfileScreen() {
             {COPY.mallSnapshot.downloadingLabel}
           </Text>
         ) : null}
+
+        {/* ── Community (KAN-374) ── */}
+        <Text style={[styles.sectionLabel, { color: palette.muted }]}>
+          {COPY.profile.sectionCommunity}
+        </Text>
+        <Pressable
+          style={[styles.shareRow, { backgroundColor: palette.surface, borderColor: palette.line }]}
+          onPress={handleSuggestMissingPlace}
+          accessibilityRole="button"
+          accessibilityLabel={COPY.profile.suggestMissingPlace}>
+          <View style={[styles.iconTile, { backgroundColor: palette.surface2 }]}>
+            <PinIcon color={palette.muted} size={20} />
+          </View>
+          <View style={styles.mallRowTextCol}>
+            <Text style={[styles.shareRowLabel, { color: palette.text }]}>{COPY.profile.suggestMissingPlace}</Text>
+            <Text style={[styles.mallRowSublabel, { color: palette.muted }]}>{COPY.profile.suggestMissingPlaceSub}</Text>
+          </View>
+          <ChevronRightIcon color={palette.faint} size={18} />
+        </Pressable>
 
         {/* ── Section label ── */}
         <Text style={[styles.sectionLabel, { color: palette.muted }]}>

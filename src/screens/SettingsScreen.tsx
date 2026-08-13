@@ -15,7 +15,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -52,7 +51,6 @@ import {
   LogOutIcon,
   MoonIcon,
   SunIcon,
-  PinIcon,
 } from '../components/AppIcon';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { ImportResult } from '../types';
@@ -366,12 +364,6 @@ export default function SettingsScreen() {
     );
   }, []);
 
-  const handleSuggestMissingPlace = useCallback(() => {
-    Linking.openURL('https://brushaway.app/manual-poi').catch(() => {
-      Alert.alert(COPY.settings.signOutErrorTitle, COPY.settings.suggestMissingPlaceError);
-    });
-  }, []);
-
   // Stable across the component's lifetime — the platform-specific connector
   // choice never changes at runtime, only the label needs to stay live (see
   // importLabels below).
@@ -503,17 +495,6 @@ export default function SettingsScreen() {
               isLast={idx === importSources.length - 1}
             />
           ))}
-        </Section>
-
-        <Section title={COPY.settings.sectionCommunity}>
-          <SettingsRow
-            Icon={PinIcon}
-            label={COPY.settings.suggestMissingPlace}
-            sublabel={COPY.settings.suggestMissingPlaceSub}
-            onPress={handleSuggestMissingPlace}
-            isLast
-            accessibilityLabel={COPY.settings.suggestMissingPlace}
-          />
         </Section>
 
         {/* ACCOUNT */}
