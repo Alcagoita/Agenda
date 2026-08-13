@@ -7,6 +7,7 @@
  * utils/lantern.test.ts; the halo-tint palette in theme/contrast.test.ts.
  */
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import Lantern from '../../src/components/Lantern';
 import type { LanternState } from '../../src/utils/lantern';
@@ -32,9 +33,9 @@ const PLACES = COPY.tripPlanner.placesIKnowTitle;
 
 describe('Lantern — states (KAN-301 AC1)', () => {
   const cases: Array<{ name: string; state: LanternState; label: string; pill: string }> = [
-    { name: 'home',    state: { kind: 'home' },                                   label: COPY.lantern.home,          pill: PLACES },
-    { name: 'outside', state: { kind: 'outside', cityName: 'Porto' },             label: 'Porto',                    pill: PLACES },
-    { name: 'outside offline', state: { kind: 'outside', cityName: null },        label: COPY.lantern.outside,       pill: PLACES },
+    { name: 'home',    state: { kind: 'home', offlineDot: false },                label: COPY.lantern.home,          pill: PLACES },
+    { name: 'outside', state: { kind: 'outside', cityName: 'Porto', offlineDot: false }, label: 'Porto',             pill: PLACES },
+    { name: 'outside offline', state: { kind: 'outside', cityName: null, offlineDot: false }, label: COPY.lantern.outside, pill: PLACES },
     { name: 'mall',    state: { kind: 'mall', name: 'Colombo', offlineDot: false }, label: 'Colombo',                pill: PLACES },
     { name: 'trip',    state: { kind: 'trip', destination: 'Faro', offlineDot: false }, label: 'Faro',               pill: PLACES },
     { name: 'unset',   state: { kind: 'unset' },                                  label: COPY.lantern.whereIsHome,   pill: COPY.lantern.tellMe },
@@ -63,7 +64,7 @@ describe('Lantern — states (KAN-301 AC1)', () => {
 
 describe('Lantern — interaction', () => {
   it('only the pill is pressable (AC6) — exactly one button in the tree', () => {
-    render(<Lantern state={{ kind: 'home' }} reduceMotionOverride />);
+    render(<Lantern state={{ kind: 'home', offlineDot: false }} reduceMotionOverride />);
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
@@ -75,11 +76,67 @@ describe('Lantern — interaction', () => {
   });
 });
 
+describe('Lantern — offline dot (KAN-316)', () => {
+  const DOT = COPY.contextChip.offlineGlyphA11y;
+
+  const dotStates: Array<{ name: string; on: LanternState; off: LanternState; label: string }> = [
+    { name: 'home',    on: { kind: 'home', offlineDot: true },                        off: { kind: 'home', offlineDot: false },                        label: COPY.lantern.home },
+    { name: 'outside', on: { kind: 'outside', cityName: null, offlineDot: true },     off: { kind: 'outside', cityName: null, offlineDot: false },     label: COPY.lantern.outside },
+    { name: 'mall',    on: { kind: 'mall', name: 'Colombo', offlineDot: true },       off: { kind: 'mall', name: 'Colombo', offlineDot: false },       label: 'Colombo' },
+    { name: 'trip',    on: { kind: 'trip', destination: 'Faro', offlineDot: true },   off: { kind: 'trip', destination: 'Faro', offlineDot: false },   label: 'Faro' },
+  ];
+
+  it.each(dotStates)('$name renders the dot when the state carries it, and nothing when it does not (AC4)', ({ on, off }) => {
+    const { unmount } = render(<Lantern state={on} reduceMotionOverride />);
+    expect(screen.getByLabelText(DOT)).toBeTruthy();
+    unmount();
+
+    render(<Lantern state={off} reduceMotionOverride />);
+    expect(screen.queryByLabelText(DOT)).toBeNull();
+  });
+
+  it('labels the dot with what it asserts, not the bare "Offline" (AC5)', () => {
+    render(<Lantern state={{ kind: 'home', offlineDot: true }} reduceMotionOverride />);
+    expect(screen.getByLabelText(COPY.contextChip.offlineGlyphA11y)).toBeTruthy();
+    expect(screen.queryByLabelText(COPY.contextChip.offlineDotA11y)).toBeNull();
+  });
+
+  it.each(dotStates)('$name keeps its icon, place name and single pill with the dot showing (AC7)', ({ on, label }) => {
+    render(<Lantern state={on} reduceMotionOverride />);
+    expect(screen.getByText(label)).toBeTruthy();       // never replaced or truncated
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('the dot is a fixed 6×6 mark inside the label row — it cannot grow the block (AC7)', () => {
+    render(<Lantern state={{ kind: 'home', offlineDot: true }} reduceMotionOverride />);
+    const flat = StyleSheet.flatten(screen.getByLabelText(DOT).props.style);
+    expect(flat).toMatchObject({ width: 6, height: 6 });
+    // Smaller than the label's 20px line height, so the row height is the label's.
+    expect(flat.height).toBeLessThan(20);
+  });
+
+  it('renders in the collapsed layer too (AC7)', () => {
+    render(
+      <Lantern
+        state={{ kind: 'mall', name: 'Colombo', offlineDot: true }}
+        restStyle={{ opacity: 1 }}
+        collapsedStyle={{ opacity: 1 }}
+        collapsed
+        reduceMotionOverride
+      />,
+    );
+    // One per layer, and the name survives in both.
+    expect(screen.getAllByLabelText(DOT)).toHaveLength(2);
+    expect(screen.getAllByText('Colombo')).toHaveLength(2);
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+  });
+});
+
 describe('Lantern — collapsed layout (AC7)', () => {
   it('renders both the rest and collapsed layers (icon + label + pill) when collapse styles are supplied', () => {
     render(
       <Lantern
-        state={{ kind: 'home' }}
+        state={{ kind: 'home', offlineDot: false }}
         restStyle={{ opacity: 1 }}
         collapsedStyle={{ opacity: 1 }}
         collapsed

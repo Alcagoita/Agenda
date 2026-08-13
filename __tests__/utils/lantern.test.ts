@@ -9,6 +9,7 @@
 import {
   resolveLanternState,
   resolveHomeProximity,
+  resolveOfflineDot,
   HOME_ENTER_M,
   HOME_LEAVE_M,
 } from '../../src/utils/lantern';
@@ -32,25 +33,26 @@ const base = {
   wasHome: false,
   cityName: null as string | null,
   offline: false,
+  offlineDot: false,
 };
 
 describe('resolveLanternState — states (KAN-301 AC1)', () => {
   it('Home when within the buffer and a home is set', () => {
-    expect(resolveLanternState({ ...base, homeDistanceM: 40 })).toEqual({ kind: 'home' });
+    expect(resolveLanternState({ ...base, homeDistanceM: 40 })).toEqual({ kind: 'home', offlineDot: false });
   });
 
   it('Outside (city name) when away and online', () => {
     expect(resolveLanternState({ ...base, homeDistanceM: 4000, cityName: 'Porto' }))
-      .toEqual({ kind: 'outside', cityName: 'Porto' });
+      .toEqual({ kind: 'outside', cityName: 'Porto', offlineDot: false });
   });
 
   it('Outside with null cityName when offline — never a guessed/stale name (AC2)', () => {
     expect(resolveLanternState({ ...base, homeDistanceM: 4000, cityName: 'Porto', offline: true }))
-      .toEqual({ kind: 'outside', cityName: null });
+      .toEqual({ kind: 'outside', cityName: null, offlineDot: false });
   });
 
-  it('Mall when placeContext is a mall — offlineDot mirrors offline (AC2)', () => {
-    expect(resolveLanternState({ ...base, placeContext: mallCtx('Colombo'), homeDistanceM: 4000, offline: true }))
+  it('Mall when placeContext is a mall — offlineDot carries the resolved gate (KAN-316)', () => {
+    expect(resolveLanternState({ ...base, placeContext: mallCtx('Colombo'), homeDistanceM: 4000, offline: true, offlineDot: true }))
       .toEqual({ kind: 'mall', name: 'Colombo', offlineDot: true });
   });
 
@@ -80,12 +82,74 @@ describe('resolveLanternState — priority & filtering', () => {
 
   it('off-grid "trips" are not a trip state — fall through to home/outside', () => {
     expect(resolveLanternState({ ...base, placeContext: tripCtx('Hike', { kind: 'offgrid' }), homeDistanceM: 4000, cityName: 'Sintra' }))
-      .toEqual({ kind: 'outside', cityName: 'Sintra' });
+      .toEqual({ kind: 'outside', cityName: 'Sintra', offlineDot: false });
   });
 
   it('a trip whose dates are in the past does not fire', () => {
     expect(resolveLanternState({ ...base, placeContext: tripCtx('Faro', { startDate: '2026-01-01', endDate: '2026-01-10' }), homeDistanceM: 4000, cityName: 'Porto' }))
-      .toEqual({ kind: 'outside', cityName: 'Porto' });
+      .toEqual({ kind: 'outside', cityName: 'Porto', offlineDot: false });
+  });
+});
+
+describe('resolveLanternState — offlineDot reaches home and outside (KAN-316 AC4)', () => {
+  it('stamps the dot onto Home', () => {
+    expect(resolveLanternState({ ...base, homeDistanceM: 40, offline: true, offlineDot: true }))
+      .toEqual({ kind: 'home', offlineDot: true });
+  });
+
+  it('stamps the dot onto Outside', () => {
+    expect(resolveLanternState({ ...base, homeDistanceM: 4000, offline: true, offlineDot: true }))
+      .toEqual({ kind: 'outside', cityName: null, offlineDot: true });
+  });
+
+  it('stamps it onto trip as well, and never onto the placeless states', () => {
+    expect(resolveLanternState({ ...base, placeContext: tripCtx('Faro'), offline: true, offlineDot: true }))
+      .toEqual({ kind: 'trip', destination: 'Faro', offlineDot: true });
+    // unset / locating have no place to know, so they carry no dot at all.
+    expect(resolveLanternState({ ...base, homeSet: false, offline: true, offlineDot: true }))
+      .toEqual({ kind: 'unset' });
+    expect(resolveLanternState({ ...base, homeDistanceM: null, offline: true, offlineDot: true }))
+      .toEqual({ kind: 'locating' });
+  });
+});
+
+describe('resolveOfflineDot — the coverage gate (KAN-316 AC1/AC2/AC3/AC6)', () => {
+  const ready = { offline: true, hasCache: true as boolean | null, coverageStatus: 'ready' as const, degraded: false };
+
+  it('true only when offline, coverage is ready for this location and not degraded (AC1)', () => {
+    expect(resolveOfflineDot(ready)).toBe(true);
+  });
+
+  it('online never shows the dot', () => {
+    expect(resolveOfflineDot({ ...ready, offline: false })).toBe(false);
+  });
+
+  it('building and none render no dot (AC2)', () => {
+    expect(resolveOfflineDot({ ...ready, coverageStatus: 'building' })).toBe(false);
+    expect(resolveOfflineDot({ ...ready, coverageStatus: 'none' })).toBe(false);
+  });
+
+  it('an unknown coverage status renders no dot — e.g. a cache-sourced tick (AC2)', () => {
+    expect(resolveOfflineDot({ ...ready, coverageStatus: undefined })).toBe(false);
+  });
+
+  it('degraded renders no dot even when coverage says ready (AC2)', () => {
+    expect(resolveOfflineDot({ ...ready, degraded: true })).toBe(false);
+  });
+
+  it('a cache seeded for a DIFFERENT location produces no dot (AC3)', () => {
+    // hasCache is global ("seeded somewhere"), so this is the Lisbon-cache-in-
+    // Tokyo case: places are cached, but this location is not covered.
+    expect(resolveOfflineDot({ ...ready, coverageStatus: 'none' })).toBe(false);
+    expect(resolveOfflineDot({ ...ready, coverageStatus: 'building', degraded: true })).toBe(false);
+  });
+
+  it('hasCache === null suppresses the dot — no flash on the first offline render (AC6)', () => {
+    expect(resolveOfflineDot({ ...ready, hasCache: null })).toBe(false);
+  });
+
+  it('hasCache === false suppresses it too — nothing cached to know this area with', () => {
+    expect(resolveOfflineDot({ ...ready, hasCache: false })).toBe(false);
   });
 });
 

@@ -18,11 +18,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { PlaceContext } from '../services/proximity';
+import { getLastPoiSearchState } from '../services/proximity';
 import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
 import { getPositionLowAccuracy } from '../services/geolocation';
 import { useOfflineCoverage } from './useOfflineCoverage';
-import { resolveLanternState, resolveHomeProximity, type LanternState } from '../utils/lantern';
+import { resolveLanternState, resolveHomeProximity, resolveOfflineDot, type LanternState } from '../utils/lantern';
 import { todayISO } from '../utils/date';
 
 export interface LanternCoords { lat: number; lng: number; }
@@ -37,7 +38,7 @@ export function useLanternState(
   coords: LanternCoords | null,
   permissionGranted: boolean,
 ): LanternState {
-  const { offline } = useOfflineCoverage();
+  const { offline, hasCache } = useOfflineCoverage();
   const wasHomeRef = useRef(false);
   const [cityName, setCityName] = useState<string | null>(null);
   const [seedCoords, setSeedCoords] = useState<LanternCoords | null>(null);
@@ -77,6 +78,14 @@ export function useLanternState(
   const homeDistanceM: number | null =
     homeSet && effectiveCoords ? distanceFromHome(effectiveCoords) : null;
 
+  // KAN-316 — the offline dot's per-location gate. Read at render, not stored:
+  // getLastPoiSearchState() is the proximity engine's last settled answer, and
+  // this hook re-runs whenever the Today screen re-renders (a search tick, a
+  // connectivity change, a new fix), so a plain read stays in step with it
+  // without a watcher, an interval or a subscription (KAN-231).
+  const { coverageStatus, degraded } = getLastPoiSearchState();
+  const offlineDot = resolveOfflineDot({ offline, hasCache, coverageStatus, degraded });
+
   const state = resolveLanternState({
     placeContext,
     todayIso: todayISO(),
@@ -85,6 +94,7 @@ export function useLanternState(
     wasHome: wasHomeRef.current,
     cityName,
     offline,
+    offlineDot,
   });
 
   // ── Locating / unavailable timing (KAN-301 review) ──────────────────────────

@@ -16,6 +16,7 @@
  * token and localized label, exactly as ContextChip maps ContextChipView.
  */
 import type { PlaceContext } from '../services/proximity';
+import type { PoiCoverageStatus } from '../services/maps';
 import { isTodayWithinTripDates } from './contextChip';
 
 export type LanternStateKind =
@@ -24,8 +25,8 @@ export type LanternStateKind =
 export type LanternState =
   | { kind: 'mall'; name: string; offlineDot: boolean }
   | { kind: 'trip'; destination: string; offlineDot: boolean }
-  | { kind: 'home' }
-  | { kind: 'outside'; cityName: string | null }
+  | { kind: 'home'; offlineDot: boolean }
+  | { kind: 'outside'; cityName: string | null; offlineDot: boolean }
   /** Home IS set but the position isn't known yet (no fix). A held state with
    *  its own visual ("Looking around…") — never Outside, which would flash on
    *  cold start and stick for a no-POI-task user until a fix arrives. Produced
@@ -57,6 +58,42 @@ export function resolveHomeProximity(distanceM: number, wasHome: boolean): boole
   return wasHome ? distanceM <= HOME_LEAVE_M : distanceM <= HOME_ENTER_M;
 }
 
+export interface ResolveOfflineDotInput {
+  /** Whether the device is offline (useOfflineCoverage). */
+  offline: boolean;
+  /** Tri-state cache probe — `null` means "not read yet this offline period". */
+  hasCache: boolean | null;
+  /** Coverage for the exact location the last search asked about (getLastPoiSearchState). */
+  coverageStatus: PoiCoverageStatus | undefined;
+  /** Derived-fresh completeness flag for that same search (getLastPoiSearchState). */
+  degraded: boolean;
+}
+
+/**
+ * Whether the Lantern's offline dot may claim "I know this area" (KAN-316).
+ *
+ * The dot asserts something location-specific, so it is gated on the
+ * location-specific answer: `coverageStatus`, which is the coverage of the
+ * exact place the last search asked about — NOT `hasCache`, which only says
+ * the cache was seeded *somewhere* (cache Lisbon, land in Tokyo, and hasCache
+ * alone would still claim we know Tokyo).
+ *
+ * `hasCache` keeps one job: its tri-state `null` suppresses the dot on the
+ * render where `offline` first flips true, before the cache has been read, so
+ * the dot can't flash. `false` suppresses too — with no cached places at all
+ * there is nothing to know this area *with*, whatever the server last said
+ * about coverage.
+ *
+ * `building`, `none` and `degraded` are all excluded, which is what makes
+ * KAN-349's "still getting to know this area" line mutually exclusive with
+ * this dot by construction, rather than by extra suppression logic.
+ */
+export function resolveOfflineDot({
+  offline, hasCache, coverageStatus, degraded,
+}: ResolveOfflineDotInput): boolean {
+  return offline && hasCache === true && coverageStatus === 'ready' && !degraded;
+}
+
 export interface ResolveLanternStateInput {
   /** Mall/trip context for the last position fix, or null (from proximity.ts). */
   placeContext: PlaceContext;
@@ -71,6 +108,10 @@ export interface ResolveLanternStateInput {
   cityName: string | null;
   /** True when the device is offline — a quiet modifier, never its own state. */
   offline: boolean;
+  /** Whether the offline dot may claim we know this area — precomputed with
+   *  resolveOfflineDot, since it needs POI-coverage inputs this resolver has no
+   *  business reading. Stamped onto every state that shows a real place. */
+  offlineDot: boolean;
 }
 
 /**
@@ -85,12 +126,12 @@ export interface ResolveLanternStateInput {
  * resolveContextChipView.
  */
 export function resolveLanternState({
-  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline,
+  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline, offlineDot,
 }: ResolveLanternStateInput): LanternState {
   if (placeContext?.kind === 'mall') {
     // The mall name comes from the stored snapshot, so it's correct offline too
     // — the offlineDot just marks that the surrounding data is cached.
-    return { kind: 'mall', name: placeContext.snapshot.name, offlineDot: offline };
+    return { kind: 'mall', name: placeContext.snapshot.name, offlineDot };
   }
 
   if (
@@ -98,15 +139,17 @@ export function resolveLanternState({
     placeContext.trip.kind !== 'offgrid' &&
     isTodayWithinTripDates(placeContext.trip, todayIso)
   ) {
-    return { kind: 'trip', destination: placeContext.trip.destination, offlineDot: offline };
+    return { kind: 'trip', destination: placeContext.trip.destination, offlineDot };
   }
 
   if (!homeSet) { return { kind: 'unset' }; }
   if (homeDistanceM == null) { return { kind: 'locating' }; }
 
-  if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home' }; }
+  // Home and Outside are where the user spends nearly all their time (KAN-316):
+  // the dot carries the same meaning here as on mall/trip.
+  if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home', offlineDot }; }
 
   // Outside. Never show a guessed or stale name: offline forces the literal
   // "Outside" (the component substitutes it for a null cityName).
-  return { kind: 'outside', cityName: offline ? null : cityName };
+  return { kind: 'outside', cityName: offline ? null : cityName, offlineDot };
 }

@@ -113,14 +113,14 @@ function getVisual(state: LanternState, palette: Palette): Visual {
         Icon: HomeIcon, haloToken: palette.haloHome, iconColor: palette.text,
         label: COPY.lantern.home, pillLabel: placesPill,
         pillA11y: COPY.lantern.placesPillA11y(COPY.lantern.home),
-        offlineDot: false, ...lit,
+        offlineDot: state.offlineDot, ...lit,
       };
     case 'outside': {
       const label = state.cityName ?? COPY.lantern.outside;
       return {
         Icon: PinIcon, haloToken: palette.haloPlace, iconColor: palette.text,
         label, pillLabel: placesPill, pillA11y: COPY.lantern.placesPillA11y(label),
-        offlineDot: false, ...lit,
+        offlineDot: state.offlineDot, ...lit,
       };
     }
     case 'mall':
@@ -261,8 +261,10 @@ export default function Lantern({
 
   const v = getVisual(state, palette);
 
+  // The dot only ever renders when the coverage gate passed (KAN-316), so it
+  // says what it actually asserts — "I know this area" — not the bare "Offline".
   const offlineDot = v.offlineDot ? (
-    <View style={[styles.offlineDot, { backgroundColor: palette.muted }]} accessibilityLabel={COPY.contextChip.offlineDotA11y} />
+    <View style={[styles.offlineDot, { backgroundColor: palette.muted }]} accessibilityLabel={COPY.contextChip.offlineGlyphA11y} />
   ) : null;
 
   // ── Rest layout — centred column ──
