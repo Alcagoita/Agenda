@@ -15,7 +15,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   Pressable,
   ScrollView,
   Switch,
@@ -252,6 +254,79 @@ export default function TaskFormScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const titleRef = useRef<TextInput>(null);
+
+  // ── Keeping Notes above the keyboard (KAN-369) ──────────────────────────────
+  //
+  // Notes is the last section of the scroll content, so an opening keyboard
+  // lands right on top of it, and nothing moves it on its own: Android's
+  // KeyboardAvoidingView is deliberately a no-op (windowSoftInputMode
+  // adjustResize is meant to own the resize — see
+  // getScreenKeyboardAvoidingBehavior) and automaticallyAdjustKeyboardInsets
+  // is iOS-only.
+  //
+  // Scrolling alone is not enough, because the resize cannot be relied on:
+  // under edge-to-edge the window keeps its full height and the keyboard
+  // simply covers it, so there is no extra scroll range to move Notes into.
+  // NewTaskSheet hit the same wall and moves itself off the keyboard metrics
+  // (see its kbOffset) — do the same here.
+  //
+  // Rather than assume either behaviour, derive the overlap: the screen's own
+  // box runs from the top of the window down by its measured height, and
+  // keyboardDidShow reports where the keyboard's top edge lands. Pad the
+  // content by whatever the keyboard reaches into that box, then scroll Notes
+  // into view inside the lifted viewport. When the OS did resize the window,
+  // the box already ends at the keyboard, the overlap clamps to 0 and this
+  // stays inert — the double-compensation bug the hotfix warned about cannot
+  // come back.
+  const scrollRef       = useRef<ScrollView>(null);
+  const notesOffsetRef  = useRef<number | null>(null);
+  const notesFocusedRef = useRef(false);
+  // Height of everything this screen draws — i.e. the app window's height.
+  const screenHeightRef = useRef(0);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  const handleNotesLayout = useCallback((e: LayoutChangeEvent) => {
+    notesOffsetRef.current = e.nativeEvent.layout.y;
+  }, []);
+
+  const handleLiftLayout = useCallback((e: LayoutChangeEvent) => {
+    // Measured with the lift already applied, so add it back to recover the
+    // unlifted height the next overlap calculation needs.
+    screenHeightRef.current = e.nativeEvent.layout.height + keyboardInset;
+  }, [keyboardInset]);
+
+  const scrollNotesIntoView = useCallback(() => {
+    const y = notesOffsetRef.current;
+    if (y == null) { return; }
+    // Leave the section label visible above the box.
+    scrollRef.current?.scrollTo({ y: Math.max(y - 24, 0), animated: true });
+  }, []);
+
+  const handleNotesFocus = useCallback(() => {
+    notesFocusedRef.current = true;
+    scrollNotesIntoView();
+  }, [scrollNotesIntoView]);
+
+  const handleNotesBlur = useCallback(() => {
+    notesFocusedRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', e => {
+      // How far the keyboard reaches into the screen's own box. When the OS
+      // resized the window, the box already ends at (or above) the keyboard
+      // and this clamps to 0 — no double compensation.
+      setKeyboardInset(Math.max(screenHeightRef.current - e.endCoordinates.screenY, 0));
+      if (notesFocusedRef.current) { scrollNotesIntoView(); }
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardInset(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollNotesIntoView]);
 
   useEffect(() => {
     const myRequestId = ++inferenceRequestIdRef.current;
@@ -526,6 +601,13 @@ export default function TaskFormScreen() {
       style={[styles.root, { backgroundColor: palette.bg }]}
       behavior={getScreenKeyboardAvoidingBehavior()}>
 
+      {/* Everything the screen draws, lifted clear of the keyboard when the
+          window itself did not move (KAN-369). */}
+      <View
+        testID="task-form-lift"
+        onLayout={handleLiftLayout}
+        style={[styles.lift, { paddingBottom: keyboardInset }]}>
+
       {/* ── Sticky top bar ── */}
       <View style={[
         styles.topBar,
@@ -561,6 +643,7 @@ export default function TaskFormScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         testID="task-form-scroll"
         style={[styles.scrollView, { backgroundColor: palette.bg }]}
         contentContainerStyle={[
@@ -1055,7 +1138,7 @@ export default function TaskFormScreen() {
         </View>
 
         {/* ── NOTES section ── */}
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={handleNotesLayout}>
           <View style={styles.sectionLabelRow}>
             <Text style={[styles.sectionLabel, { color: palette.muted }]}>NOTES</Text>
             <Text style={[styles.sectionLabelOptional, { color: palette.faint }]}>
@@ -1063,6 +1146,7 @@ export default function TaskFormScreen() {
             </Text>
           </View>
           <TextInput
+            testID="task-form-notes"
             style={[
               styles.notesInput,
               {
@@ -1075,6 +1159,8 @@ export default function TaskFormScreen() {
             placeholderTextColor={palette.muted}
             value={notes}
             onChangeText={setNotes}
+            onFocus={handleNotesFocus}
+            onBlur={handleNotesBlur}
             multiline
             numberOfLines={3}
             textAlignVertical="top"
@@ -1101,14 +1187,18 @@ export default function TaskFormScreen() {
       </ScrollView>
 
       {/* ── Sticky bottom CTA ── */}
-      <View style={[
-        styles.bottomCta,
-        {
-          borderTopColor:    palette.line,
-          backgroundColor:   palette.bg,
-          paddingBottom:     insets.bottom + 16,
-        },
-      ]}>
+      <View
+        testID="task-form-cta"
+        style={[
+          styles.bottomCta,
+          {
+            borderTopColor:    palette.line,
+            backgroundColor:   palette.bg,
+            // The home-indicator gap is the OS keyboard's own space once it is
+            // open — keeping it would leave a dead strip above the keys.
+            paddingBottom:     (keyboardInset > 0 ? 0 : insets.bottom) + 16,
+          },
+        ]}>
         <Text style={[styles.ctaHelper, { color: canSubmit ? palette.muted : palette.faint }]}>
           {isEdit
             ? (canSubmit ? 'Ready to save' : '')
@@ -1137,6 +1227,7 @@ export default function TaskFormScreen() {
               : (isEdit ? 'Save changes' : COPY.newTaskSheet.cta)}
           </Text>
         </Pressable>
+      </View>
       </View>
     </KeyboardAvoidingView>
   );

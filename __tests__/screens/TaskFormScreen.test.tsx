@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 import type { Alert as AlertType } from 'react-native';
 import TaskFormScreen from '../../src/screens/TaskFormScreen';
 import { COPY } from '../../src/constants/copy';
@@ -1302,5 +1302,203 @@ describe('TaskFormScreen — take me there', () => {
     });
 
     expect(mockOpenTakeMeThereMaps).toHaveBeenCalledWith('pharmacy');
+  });
+});
+
+// ── Notes above the keyboard (KAN-369) ────────────────────────────────────────
+
+describe('TaskFormScreen — Notes stays above the keyboard (KAN-369)', () => {
+  const NOTES_Y = 900;
+
+  // Height of the screen's own box, as a layout pass would report it.
+  const SCREEN_HEIGHT = 800;
+
+  // Captures the screen's keyboard subscriptions so a test can fire them.
+  type KeyboardEvent = { endCoordinates: { screenY: number } };
+  const keyboardShowHandlers: Array<(e: KeyboardEvent) => void> = [];
+  const keyboardHideHandlers: Array<() => void> = [];
+
+  beforeEach(() => {
+    keyboardShowHandlers.length = 0;
+    keyboardHideHandlers.length = 0;
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: (e: KeyboardEvent) => void) => {
+      if (event === 'keyboardDidShow') { keyboardShowHandlers.push(cb); }
+      if (event === 'keyboardDidHide') { keyboardHideHandlers.push(cb as () => void); }
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+  });
+
+  // Renders the screen and reports its box height, the way a layout pass would.
+  function renderScreen(height = SCREEN_HEIGHT) {
+    const result = render(<TaskFormScreen />);
+    layoutScreen(height);
+    return result;
+  }
+
+  function layoutScreen(height: number) {
+    fireEvent(
+      screen.getByTestId('task-form-lift'),
+      'layout',
+      { nativeEvent: { layout: { x: 0, y: 0, width: 400, height } } },
+    );
+  }
+
+  /** @param keyboardTop screen Y of the keyboard's top edge. */
+  function emitKeyboardDidShow(keyboardTop = 500) {
+    keyboardShowHandlers.forEach(handler => handler({ endCoordinates: { screenY: keyboardTop } }));
+  }
+
+  function emitKeyboardDidHide() {
+    keyboardHideHandlers.forEach(handler => handler());
+  }
+
+  function liftPaddingBottom() {
+    return StyleSheet.flatten(screen.getByTestId('task-form-lift').props.style).paddingBottom;
+  }
+
+  // Reports the Notes section's position inside the scroll content, the way a
+  // real layout pass would.
+  function layoutNotesSection() {
+    const notes = screen.getByTestId('task-form-notes');
+    fireEvent(notes.parent!, 'layout', { nativeEvent: { layout: { x: 0, y: NOTES_Y, width: 300, height: 120 } } });
+  }
+
+  function spyOnScroll() {
+    return jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => {});
+  }
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('scrolls the Notes section into view when it takes focus in create mode', () => {
+    const scrollTo = spyOnScroll();
+    renderScreen();
+    layoutNotesSection();
+
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+
+  it('scrolls the Notes section into view when it takes focus in edit mode', () => {
+    const scrollTo = spyOnScroll();
+    setRouteParams({ uid: 'user-123', task: makeTask() });
+    renderScreen();
+    layoutNotesSection();
+
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+
+  it('scrolls again once the keyboard has opened, since the resize lands after focus', () => {
+    const scrollTo = spyOnScroll();
+    renderScreen();
+    layoutNotesSection();
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+    scrollTo.mockClear();
+
+    act(() => { emitKeyboardDidShow(); });
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
+  });
+
+  it('does not scroll on keyboardDidShow when Notes does not hold focus', () => {
+    const scrollTo = spyOnScroll();
+    renderScreen();
+    layoutNotesSection();
+
+    act(() => { emitKeyboardDidShow(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('stops scrolling on keyboardDidShow after Notes loses focus', () => {
+    const scrollTo = spyOnScroll();
+    renderScreen();
+    layoutNotesSection();
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+    fireEvent(screen.getByTestId('task-form-notes'), 'blur');
+    scrollTo.mockClear();
+
+    act(() => { emitKeyboardDidShow(); });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('never scrolls to a negative offset when Notes sits near the top', () => {
+    const scrollTo = spyOnScroll();
+    renderScreen();
+    fireEvent(
+      screen.getByTestId('task-form-notes').parent!,
+      'layout',
+      { nativeEvent: { layout: { x: 0, y: 10, width: 300, height: 120 } } },
+    );
+
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+
+    expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: true });
+  });
+
+  // ── Lifting the screen off the keyboard ──────────────────────────────────
+  //
+  // The window does not always shrink when the keyboard opens (edge-to-edge
+  // Android keeps its full height), so the screen pads itself by however much
+  // the keyboard actually covers.
+
+  it('lifts the screen by the height the keyboard covers when the window does not resize', () => {
+    spyOnScroll();
+    renderScreen();
+
+    // The screen's box runs to 800; the keyboard's top edge is at 500.
+    act(() => { emitKeyboardDidShow(500); });
+
+    expect(liftPaddingBottom()).toBe(SCREEN_HEIGHT - 500);
+  });
+
+  it('stays inert when the window already resized above the keyboard', () => {
+    spyOnScroll();
+    renderScreen();
+
+    // Keyboard top below the screen's own box — the OS already made the room.
+    act(() => { emitKeyboardDidShow(SCREEN_HEIGHT + 40); });
+
+    expect(liftPaddingBottom()).toBe(0);
+  });
+
+  it('drops the screen back down when the keyboard hides', () => {
+    spyOnScroll();
+    renderScreen();
+    act(() => { emitKeyboardDidShow(500); });
+    expect(liftPaddingBottom()).toBeGreaterThan(0);
+
+    act(() => { emitKeyboardDidHide(); });
+
+    expect(liftPaddingBottom()).toBe(0);
+  });
+
+  it('lifts by the same amount when the keyboard reopens after a lifted re-layout', () => {
+    spyOnScroll();
+    renderScreen();
+    act(() => { emitKeyboardDidShow(500); });
+
+    // The lift shrinks the box, so the re-layout reports the reduced height —
+    // it must not be mistaken for a smaller window.
+    act(() => { layoutScreen(SCREEN_HEIGHT - (SCREEN_HEIGHT - 500)); });
+    act(() => { emitKeyboardDidShow(500); });
+
+    expect(liftPaddingBottom()).toBe(SCREEN_HEIGHT - 500);
+  });
+
+  it('scrolls Notes into view on top of lifting the screen', () => {
+    const scrollTo = spyOnScroll();
+    renderScreen();
+    layoutNotesSection();
+    fireEvent(screen.getByTestId('task-form-notes'), 'focus');
+    scrollTo.mockClear();
+
+    act(() => { emitKeyboardDidShow(500); });
+
+    expect(liftPaddingBottom()).toBe(SCREEN_HEIGHT - 500);
+    expect(scrollTo).toHaveBeenCalledWith({ y: NOTES_Y - 24, animated: true });
   });
 });
