@@ -396,6 +396,22 @@ describe('TaskFormScreen — POI free-text type', () => {
     expect(screen.getByText('Police')).toBeTruthy();
   });
 
+  it.each([
+    ['Financial service', 'Financial service'],
+    ['Credit', 'Financial service'],
+    ['Currency exchange', 'Currency exchange'],
+    ['Money transfer', 'Money transfer'],
+  ])('shows %s from the bundled local dictionary', (query, expectedLabel) => {
+    render(<TaskFormScreen />);
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText('A café, a pharmacy, a gym…'),
+      query,
+    );
+
+    expect(screen.getByText(expectedLabel)).toBeTruthy();
+  });
+
   it('adjusts the form scroll view for the keyboard', () => {
     render(<TaskFormScreen />);
 
