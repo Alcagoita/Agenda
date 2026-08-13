@@ -7,6 +7,11 @@ export const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
+  // Inner wrapper the screen lifts by the keyboard overlap (KAN-369) — kept
+  // separate from root so it never fights KeyboardAvoidingView's own padding.
+  lift: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
