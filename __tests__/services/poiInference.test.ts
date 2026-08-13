@@ -178,6 +178,9 @@ describe('inferPoiFromRules: extended types (pt-PT)', () => {
     ['corte de cabelo',          'salon'],
     ['apanhar o autocarro',      'bus'],
     ['reunião de pais',          'school'],
+    ['trocar câmbio',            'currency_exchange'],
+    ['transferir dinheiro',      'money_transfer'],
+    ['pagar crédito',            'financial_service'],
   ];
 
   it.each(cases)('maps %p to %p', (title, expected) => {

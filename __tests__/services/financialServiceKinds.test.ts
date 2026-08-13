@@ -8,6 +8,8 @@ describe('financial service kinds', () => {
   it.each([
     ['Pay Cofidis', 'consumer_credit'],
     ['Renew Fidelidade insurance', 'insurance'],
+    ['Meet the financial adviser', 'financial_intermediary'],
+    ['Sign the leasing agreement', 'leasing_factoring'],
     ['Visit Banco de Portugal', 'central_bank'],
     ['Go to Finanças', 'public_finance'],
   ])('infers %p as %p', (title, kind) => {

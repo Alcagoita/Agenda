@@ -86,7 +86,9 @@ describe('buildNearbySearchRequests', () => {
       { poi: 'financial_service', title: 'Pay Cofidis', financialServiceKind: 'consumer_credit' },
       { poi: 'financial_service', title: 'Renew insurance' },
       { poi: 'financial_service', title: 'Tax office' },
+      { poi: 'financial_service', title: 'Sort my finances' },
     ])).toEqual([
+      { key: 'financial_service', type: 'financial_service' },
       { key: 'financial_service:financial_service_kind:consumer_credit', type: 'financial_service', attribute: { dimension: 'financial_service_kind', values: ['consumer_credit'] } },
       { key: 'financial_service:financial_service_kind:insurance', type: 'financial_service', attribute: { dimension: 'financial_service_kind', values: ['insurance'] } },
       { key: 'financial_service:financial_service_kind:public_finance', type: 'financial_service', attribute: { dimension: 'financial_service_kind', values: ['public_finance'] } },

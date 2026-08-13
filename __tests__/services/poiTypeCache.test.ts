@@ -67,11 +67,12 @@ describe('searchPlaceTypesCached', () => {
   });
 
   it.each([
-    ['currency exchange', 'currency_exchange', 'Currency exchange'],
-    ['transferir dinheiro', 'money_transfer', 'Money transfer'],
-    ['crédito ao consumo', 'financial_service', 'Financial service'],
-    ['seguros', 'financial_service', 'Financial service'],
-  ])('finds the worker-backed financial type for %p', async (query, type, label) => {
+    ['en', 'currency exchange', 'currency_exchange', 'Currency exchange'],
+    ['pt-PT', 'transferir dinheiro', 'money_transfer', 'Transferência de dinheiro'],
+    ['pt-PT', 'crédito ao consumo', 'financial_service', 'Serviço financeiro'],
+    ['pt-PT', 'seguros', 'financial_service', 'Serviço financeiro'],
+  ])('finds the worker-backed financial type for %p', async (language, query, type, label) => {
+    setCopyLanguage(language as 'en' | 'pt-PT');
     await expect(searchPlaceTypesCached(query)).resolves.toContainEqual({ type, label });
   });
 

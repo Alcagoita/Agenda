@@ -74,6 +74,7 @@ export interface TaskFormParams {
   initialPoi?: string;
   initialRestaurantFoodType?: RestaurantFoodType;
   initialFinancialServiceKind?: FinancialServiceKind;
+  initialFinancialServiceKindExplicitlySelected?: boolean;
   initialStoreSubtype?: StoreSubtype;
   initialPoiBrand?: string;
   initialStoreSubtypeExplicitlySelected?: boolean;
@@ -88,7 +89,7 @@ export default function TaskFormScreen() {
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
 
-  const { uid, task: existingTask, initialDate, initialTitle, initialCategory, initialPoi, initialRestaurantFoodType, initialFinancialServiceKind, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
+  const { uid, task: existingTask, initialDate, initialTitle, initialCategory, initialPoi, initialRestaurantFoodType, initialFinancialServiceKind, initialFinancialServiceKindExplicitlySelected, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
   const isEdit = !!existingTask;
   const hasExplicitInitialPoi = Boolean(existingTask?.poi || initialPoiExplicitlySelected);
 
@@ -184,6 +185,9 @@ export default function TaskFormScreen() {
     existingTask?.poi === 'financial_service'
       ? existingTask.financialServiceKind ?? null
       : initialPoi === 'financial_service' ? initialFinancialServiceKind ?? null : null,
+  );
+  const [financialServiceKindTouched, setFinancialServiceKindTouched] = useState(
+    Boolean(initialFinancialServiceKindExplicitlySelected),
   );
   const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(
     existingTask?.poi === 'store'
@@ -405,7 +409,10 @@ export default function TaskFormScreen() {
 
   useEffect(() => {
     if (effectivePoi !== 'restaurant') { setRestaurantFoodType(null); }
-    if (effectivePoi !== 'financial_service') { setFinancialServiceKind(null); }
+    if (effectivePoi !== 'financial_service') {
+      setFinancialServiceKind(null);
+      setFinancialServiceKindTouched(false);
+    }
     if (effectivePoi !== 'store') {
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
@@ -423,9 +430,14 @@ export default function TaskFormScreen() {
   }, [effectivePoi, storeSubtypeTouched, title]);
 
   useEffect(() => {
-    if (effectivePoi !== 'financial_service') return;
+    if (effectivePoi !== 'financial_service' || financialServiceKindTouched) return;
     setFinancialServiceKind(current => current ?? inferFinancialServiceKind(title.trim()));
-  }, [effectivePoi, title]);
+  }, [effectivePoi, financialServiceKindTouched, title]);
+
+  const handleFinancialServiceKindSelect = useCallback((kind: FinancialServiceKind | null) => {
+    setFinancialServiceKindTouched(true);
+    setFinancialServiceKind(kind);
+  }, []);
 
   const suggestedBrand = poiTypeRequiresBrand(effectivePoi) ? findBrandInText(effectivePoi, title) : null;
   useEffect(() => {
@@ -959,7 +971,7 @@ export default function TaskFormScreen() {
                   {COPY.newTaskSheet.catOptional}
                 </Text>
               </View>
-              <FinancialServiceKindSelector selected={financialServiceKind} onSelect={setFinancialServiceKind} />
+              <FinancialServiceKindSelector selected={financialServiceKind} onSelect={handleFinancialServiceKindSelect} />
             </View>
           )}
 

@@ -227,6 +227,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [poi,      setPoi]      = useState<string | null>(null);
     const [restaurantFoodType, setRestaurantFoodType] = useState<RestaurantFoodType | null>(null);
     const [financialServiceKind, setFinancialServiceKind] = useState<FinancialServiceKind | null>(null);
+    const [financialServiceKindTouched, setFinancialServiceKindTouched] = useState(false);
     const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
     const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(false);
     const [poiBrand, setPoiBrand] = useState<string | null>(null);
@@ -303,6 +304,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setPoi(null);
       setRestaurantFoodType(null);
       setFinancialServiceKind(null);
+      setFinancialServiceKindTouched(false);
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
       setPoiBrand(null);
@@ -427,7 +429,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     useEffect(() => {
       if (poi !== 'restaurant') { setRestaurantFoodType(null); }
-      if (poi !== 'financial_service') { setFinancialServiceKind(null); }
+      if (poi !== 'financial_service') {
+        setFinancialServiceKind(null);
+        setFinancialServiceKindTouched(false);
+      }
       if (poi !== 'store') {
         setStoreSubtype(null);
         setStoreSubtypeTouched(false);
@@ -445,9 +450,14 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     }, [poi, storeSubtypeTouched, title]);
 
     useEffect(() => {
-      if (poi !== 'financial_service') return;
+      if (poi !== 'financial_service' || financialServiceKindTouched) return;
       setFinancialServiceKind(current => current ?? inferFinancialServiceKind(title.trim()));
-    }, [poi, title]);
+    }, [poi, financialServiceKindTouched, title]);
+
+    const handleFinancialServiceKindSelect = useCallback((kind: FinancialServiceKind | null) => {
+      setFinancialServiceKindTouched(true);
+      setFinancialServiceKind(kind);
+    }, []);
 
     const suggestedBrand = poiTypeRequiresBrand(poi) ? findBrandInText(poi, title) : null;
     useEffect(() => {
@@ -526,13 +536,14 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         ...(poi === 'restaurant' && restaurantFoodType ? {
           initialRestaurantFoodType: restaurantFoodType,
         } : {}),
-        ...(poi === 'financial_service' && financialServiceKind ? {
-          initialFinancialServiceKind: financialServiceKind,
+        ...(poi === 'financial_service' ? {
+          initialFinancialServiceKind: financialServiceKind ?? undefined,
+          initialFinancialServiceKindExplicitlySelected: financialServiceKindTouched,
         } : {}),
         ...(poiTypeRequiresBrand(poi) && poiBrand ? { initialPoiBrand: poiBrand } : {}),
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
-    }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, financialServiceKind, poiBrand, poiTouched]);
+    }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, financialServiceKind, financialServiceKindTouched, poiBrand, poiTouched]);
 
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.
@@ -726,7 +737,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                     </Text>
                   </View>
                   <View style={styles.foodTypePad}>
-                    <FinancialServiceKindSelector selected={financialServiceKind} onSelect={setFinancialServiceKind} />
+                    <FinancialServiceKindSelector selected={financialServiceKind} onSelect={handleFinancialServiceKindSelect} />
                   </View>
                 </View>
               )}
