@@ -278,6 +278,9 @@ const en = {
   // area-name-agnostic (no reverse geocoding available); the mall/trip sheets
   // can name the place since it's a destination the user chose themselves.
   contextChip: {
+    /** KAN-316 — LIVE: Lantern.tsx labels its offline dot with this. ContextChip.tsx
+     *  itself no longer renders (KAN-301), so this block otherwise looks dead — move
+     *  this string, never delete it, when that file is finally cleaned up. */
     offlineGlyphA11y: 'Offline — I know this area',
     closeSheetA11y: 'Close sheet',
     closeA11y:      'Close',
@@ -1432,6 +1435,7 @@ const ptPT: typeof en = {
   },
 
   contextChip: {
+    /** KAN-316 — LIVE: Lantern.tsx labels its offline dot with this. See the `en` block. */
     offlineGlyphA11y: 'Offline — conheço esta zona',
     closeSheetA11y: 'Fechar painel',
     closeA11y:      'Fechar',

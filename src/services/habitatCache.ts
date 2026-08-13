@@ -841,6 +841,40 @@ export function hasCachedPlaces(): boolean {
 }
 
 /**
+ * True if the cache holds any place within `radiusMeters` of `lat`/`lng` — the
+ * "nothing cached near here" half of the distinction hasCachedPlaces() above
+ * can't make (KAN-316).
+ *
+ * Type-blind on purpose: this answers "is there cached ground where you're
+ * standing", not "can I solve one of your tasks here". A place of any type
+ * within reach means we learned this area while we had a connection.
+ *
+ * Never throws — a DB failure returns false (the cautious answer: claim
+ * nothing).
+ */
+export function hasCachedPlacesNear(
+  lat: number,
+  lng: number,
+  radiusMeters: number = HABITAT_RADIUS_M,
+): boolean {
+  try {
+    const box = boundingBoxDeg(lat, lng, radiusMeters);
+    const rows = getDb().getAllSync<{ lat: number; lng: number }>(
+      `SELECT lat, lng FROM habitat_places
+       WHERE lat BETWEEN ? AND ?
+         AND lng BETWEEN ? AND ?`,
+      [box.latMin, box.latMax, box.lngMin, box.lngMax],
+    );
+    // The bounding box is a square around a circle, so the corners still need
+    // the real distance check before we claim anything.
+    return rows.some(row => getDistanceMeters(lat, lng, row.lat, row.lng) <= radiusMeters);
+  } catch (err) {
+    console.warn('[habitatCache] hasCachedPlacesNear failed', err);
+    return false;
+  }
+}
+
+/**
  * Epoch ms of the most recent sighting anywhere in the ambient habitat pool
  * (`cache_area_id IS NULL` — excludes trip areas, which have their own
  * separate lifecycle), or null if the cache is empty. Powers ContextChip's

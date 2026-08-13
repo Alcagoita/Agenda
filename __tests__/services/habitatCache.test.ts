@@ -124,6 +124,13 @@ const mockDb = {
         && r.osm_id != null && r.osm_fetched_at >= cutoff,
       ) as unknown as T[];
     }
+    if (s.startsWith('SELECT lat, lng FROM habitat_places WHERE lat BETWEEN')) {
+      // hasCachedPlacesNear (KAN-316) — type-blind bounding-box prefilter.
+      const [latMin, latMax, lngMin, lngMax] = params as number[];
+      return rows
+        .filter(r => matchesBox(r, latMin, latMax, lngMin, lngMax))
+        .map(r => ({ lat: r.lat, lng: r.lng })) as unknown as T[];
+    }
     if (s.startsWith('SELECT * FROM habitat_places WHERE poi_type IN')) {
       const inCount = (s.match(/\?/g) ?? []).length - 4;
       const poiTypes = params.slice(0, inCount) as string[];
@@ -278,6 +285,7 @@ import {
   findExistingPlaceId,
   getHabitatPlaceById,
   hasCachedPlaces,
+  hasCachedPlacesNear,
   getMostRecentHabitatUpdateAt,
   deleteTripAreaPlaces,
   deleteExpiredTripPlaces,
@@ -1232,6 +1240,48 @@ describe('hasCachedPlaces (KAN-236)', () => {
     expect(hasCachedPlaces()).toBe(false);
 
     expect(warnSpy).toHaveBeenCalledWith('[habitatCache] hasCachedPlaces failed', expect.any(Error));
+    warnSpy.mockRestore();
+  });
+});
+
+describe('hasCachedPlacesNear (KAN-316)', () => {
+  const LISBON = { lat: 38.7223, lng: -9.1393 };
+  const TOKYO  = { lat: 35.6762, lng: 139.6503 };
+
+  it('returns false when the cache is empty', () => {
+    expect(hasCachedPlacesNear(LISBON.lat, LISBON.lng, 400)).toBe(false);
+  });
+
+  it('true when a place of any type sits within the radius — type-blind', () => {
+    upsertPlace({ poiType: 'atm', name: 'Bank ATM', lat: LISBON.lat, lng: LISBON.lng, source: { osm: 'node/1' } });
+    expect(hasCachedPlacesNear(LISBON.lat, LISBON.lng, 400)).toBe(true);
+  });
+
+  it('false for a cache seeded somewhere else entirely — the Lisbon/Tokyo case', () => {
+    upsertPlace({ poiType: 'atm', name: 'Bank ATM', lat: LISBON.lat, lng: LISBON.lng, source: { osm: 'node/1' } });
+    expect(hasCachedPlaces()).toBe(true);                              // seeded
+    expect(hasCachedPlacesNear(TOKYO.lat, TOKYO.lng, 400)).toBe(false); // but not here
+  });
+
+  it('excludes a place inside the bounding box but outside the circle', () => {
+    // ~0.0035° of latitude ≈ 390 m north; the same offset applied on both axes
+    // lands inside the square and outside the 400 m circle (~550 m away).
+    upsertPlace({
+      poiType: 'cafe', name: 'Corner Cafe',
+      lat: LISBON.lat + 0.0035, lng: LISBON.lng + 0.0045,
+      source: { osm: 'node/2' },
+    });
+    expect(hasCachedPlacesNear(LISBON.lat, LISBON.lng, 400)).toBe(false);
+    expect(hasCachedPlacesNear(LISBON.lat, LISBON.lng, 700)).toBe(true);
+  });
+
+  it('returns false and logs a warning instead of throwing when the DB read fails', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockDb.getAllSync.mockImplementationOnce(() => { throw new Error('disk full'); });
+
+    expect(hasCachedPlacesNear(LISBON.lat, LISBON.lng, 400)).toBe(false);
+
+    expect(warnSpy).toHaveBeenCalledWith('[habitatCache] hasCachedPlacesNear failed', expect.any(Error));
     warnSpy.mockRestore();
   });
 });
