@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Linking, Text as RNText } from 'react-native';
 import type { AchievementsMap } from '../../src/types';
 import { buildAchievementCatalogue } from '../../src/components/AchievementTile';
 import { setCopyLanguage } from '../../src/constants/copy';
@@ -493,5 +494,55 @@ describe('ProfileScreen — mall snapshot toggle row (KAN-237)', () => {
     await renderScreen();
     expect(screen.getByText('Downloading Shopping mall data…')).toBeTruthy();
     expect(screen.queryByLabelText('Activate Mall mode')).toBeNull();
+  });
+});
+
+// ── Community section (KAN-374) ──────────────────────────────────────────────
+
+describe('ProfileScreen — community section (KAN-374)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setupDefaultMocks();
+  });
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('renders the Community section with the suggest-a-place row', async () => {
+    await renderScreen();
+
+    expect(screen.getByText('COMMUNITY')).toBeTruthy();
+    expect(screen.getByText('Suggest a missing place')).toBeTruthy();
+    expect(screen.getByText('Help improve nearby results')).toBeTruthy();
+  });
+
+  it('sits above the Points & Achievements section', async () => {
+    await renderScreen();
+
+    const rendered = screen.UNSAFE_getAllByType(RNText)
+      .map(node => node.props.children)
+      .flat()
+      .filter((child): child is string => typeof child === 'string');
+
+    expect(rendered.indexOf('COMMUNITY')).toBeGreaterThanOrEqual(0);
+    expect(rendered.indexOf('COMMUNITY')).toBeLessThan(rendered.indexOf('POINTS & ACHIEVEMENTS'));
+  });
+
+  it('opens the suggestion page when the row is pressed', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    await renderScreen();
+
+    fireEvent.press(screen.getByLabelText('Suggest a missing place'));
+
+    expect(openURL).toHaveBeenCalledWith('https://brushaway.app/manual-poi');
+  });
+
+  it('warns instead of failing silently when the page cannot be opened', async () => {
+    jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no handler'));
+    const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    await renderScreen();
+
+    await act(async () => { fireEvent.press(screen.getByLabelText('Suggest a missing place')); });
+
+    expect(alert).toHaveBeenCalledWith('Error', 'Could not open the suggestion page. Please try again.');
   });
 });

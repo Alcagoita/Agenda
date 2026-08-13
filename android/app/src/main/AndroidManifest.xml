@@ -65,11 +65,18 @@
         <!-- autoVerify triggers Android App Link verification against          -->
         <!-- https://brushaway.app/.well-known/assetlinks.json at install time. -->
         <!-- Verified links open directly in the app without a chooser dialog.  -->
+        <!--                                                                    -->
+        <!-- Claim ONLY the paths the app actually routes (KAN-374). This used  -->
+        <!-- to claim the whole host, which swallowed every other brushaway.app -->
+        <!-- URL: Android resolved it back to this singleTask activity, the     -->
+        <!-- navigator's linking config matched nothing, and the page never     -->
+        <!-- opened. Keep in sync with LINKING_CONFIG in App.tsx.               -->
         <intent-filter android:autoVerify="true">
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="brushaway.app" />
+            <data android:scheme="https" android:host="brushaway.app" android:pathPrefix="/u/" />
+            <data android:scheme="https" android:host="brushaway.app" android:path="/inbox" />
         </intent-filter>
 
         <!-- ── Custom scheme fallback (brushaway://) ── -->
