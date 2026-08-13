@@ -23,6 +23,7 @@ interface FakePoi {
   raw_category_labels: string;
   category_label: string;
   food_cuisine?: string[];
+  financial_service_kind?: string[];
   primary_poi_type?: string;
   brand?: string | null;
 }
@@ -55,12 +56,15 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGIS
               category_label: p.category_label, raw_category_labels: p.raw_category_labels,
               address: null, matched_type: p.primary_poi_type ?? 'restaurant',
             };
-            const cuisines = p.food_cuisine ?? [];
-            if (cuisines.length === 0) {
+            const attributes = [
+              ...(p.food_cuisine ?? []).map(value => ({ dimension: 'food_cuisine', value })),
+              ...(p.financial_service_kind ?? []).map(value => ({ dimension: 'financial_service_kind', value })),
+            ];
+            if (attributes.length === 0) {
               results.push({ ...base, attribute_dimension: null, attribute_value: null });
             } else {
-              for (const value of cuisines) {
-                results.push({ ...base, attribute_dimension: 'food_cuisine', attribute_value: value });
+              for (const attribute of attributes) {
+                results.push({ ...base, attribute_dimension: attribute.dimension, attribute_value: attribute.value });
               }
             }
           }
@@ -178,5 +182,22 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     ]), env([], [{ poi_id: 'community:123', name: 'The Sushi Soul', primary_poi_type: 'restaurant', food_cuisine: ['sushi'] }]), CTX);
     const body = await res.json() as { results: Record<string, Array<{ poi_id: string; fsq_place_id: string | null; source: string }>> };
     expect(body.results['restaurant:food_cuisine:sushi']).toEqual([expect.objectContaining({ poi_id: 'community:123', fsq_place_id: null, source: 'community' })]);
+  });
+
+  it('returns only the requested Financial service kind', async () => {
+    const services: FakePoi[] = [
+      { fsq_place_id: 'credit', name: 'Cofidis', raw_category_labels: '', category_label: '', primary_poi_type: 'financial_service', financial_service_kind: ['consumer_credit'] },
+      { fsq_place_id: 'insurance', name: 'Fidelidade', raw_category_labels: '', category_label: '', primary_poi_type: 'financial_service', financial_service_kind: ['insurance'] },
+    ];
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'financial_service', type: 'financial_service' },
+      { key: 'financial_service:financial_service_kind:consumer_credit', type: 'financial_service', attribute: { dimension: 'financial_service_kind', values: ['consumer_credit'] } },
+    ]), env(services), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ name: string; attributes: Record<string, string[]> }>> };
+    expect(names(body.results.financial_service)).toEqual(['Cofidis', 'Fidelidade']);
+    expect(body.results['financial_service:financial_service_kind:consumer_credit']).toEqual([
+      expect.objectContaining({ name: 'Cofidis', attributes: { financial_service_kind: ['consumer_credit'] } }),
+    ]);
   });
 });

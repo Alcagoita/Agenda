@@ -45,6 +45,7 @@ import RotatingTitlePlaceholder from '../../components/RotatingTitlePlaceholder'
 import MiniCalendar from '../../components/MiniCalendar';
 import MiniTimePicker from '../../components/MiniTimePicker';
 import FoodTypeSelector from '../../components/FoodTypeSelector';
+import FinancialServiceKindSelector from '../../components/FinancialServiceKindSelector';
 import { scheduleTaskReminder, cancelTaskReminder } from '../../services/notifications';
 import { refreshDatedTaskHandoff } from '../../services/datedTaskHandoff';
 import { isTaskPoiFarAway, openTakeMeThereMaps, getTakeMeThereA11yLabel } from '../../services/takeMeThere';
@@ -60,6 +61,7 @@ import {
   type StoreSubtype,
 } from '../../services/storeSubtypes';
 import { findBrandInText, isCanonicalBrandForType, poiTypeRequiresBrand } from '../../services/brandDictionary';
+import { inferFinancialServiceKind, type FinancialServiceKind } from '../../services/financialServiceKinds';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,8 @@ export interface TaskFormParams {
   initialCategory?: string;
   initialPoi?: string;
   initialRestaurantFoodType?: RestaurantFoodType;
+  initialFinancialServiceKind?: FinancialServiceKind;
+  initialFinancialServiceKindExplicitlySelected?: boolean;
   initialStoreSubtype?: StoreSubtype;
   initialPoiBrand?: string;
   initialStoreSubtypeExplicitlySelected?: boolean;
@@ -85,7 +89,7 @@ export default function TaskFormScreen() {
   const insets       = useSafeAreaInsets();
   const route        = useRoute<RouteProp<RootStackParamList, 'TaskForm'>>();
 
-  const { uid, task: existingTask, initialDate, initialTitle, initialCategory, initialPoi, initialRestaurantFoodType, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
+  const { uid, task: existingTask, initialDate, initialTitle, initialCategory, initialPoi, initialRestaurantFoodType, initialFinancialServiceKind, initialFinancialServiceKindExplicitlySelected, initialStoreSubtype, initialPoiBrand, initialStoreSubtypeExplicitlySelected, initialPoiExplicitlySelected } = route.params;
   const isEdit = !!existingTask;
   const hasExplicitInitialPoi = Boolean(existingTask?.poi || initialPoiExplicitlySelected);
 
@@ -176,6 +180,14 @@ export default function TaskFormScreen() {
     existingTask?.poi === 'restaurant'
       ? existingTask.restaurantFoodType ?? null
       : initialPoi === 'restaurant' ? initialRestaurantFoodType ?? null : null,
+  );
+  const [financialServiceKind, setFinancialServiceKind] = useState<FinancialServiceKind | null>(
+    existingTask?.poi === 'financial_service'
+      ? existingTask.financialServiceKind ?? null
+      : initialPoi === 'financial_service' ? initialFinancialServiceKind ?? null : null,
+  );
+  const [financialServiceKindTouched, setFinancialServiceKindTouched] = useState(
+    Boolean(initialFinancialServiceKindExplicitlySelected),
   );
   const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(
     existingTask?.poi === 'store'
@@ -397,6 +409,10 @@ export default function TaskFormScreen() {
 
   useEffect(() => {
     if (effectivePoi !== 'restaurant') { setRestaurantFoodType(null); }
+    if (effectivePoi !== 'financial_service') {
+      setFinancialServiceKind(null);
+      setFinancialServiceKindTouched(false);
+    }
     if (effectivePoi !== 'store') {
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
@@ -412,6 +428,16 @@ export default function TaskFormScreen() {
     if (effectivePoi !== 'store' || storeSubtypeTouched) { return; }
     setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
   }, [effectivePoi, storeSubtypeTouched, title]);
+
+  useEffect(() => {
+    if (effectivePoi !== 'financial_service' || financialServiceKindTouched) return;
+    setFinancialServiceKind(current => current ?? inferFinancialServiceKind(title.trim()));
+  }, [effectivePoi, financialServiceKindTouched, title]);
+
+  const handleFinancialServiceKindSelect = useCallback((kind: FinancialServiceKind | null) => {
+    setFinancialServiceKindTouched(true);
+    setFinancialServiceKind(kind);
+  }, []);
 
   const suggestedBrand = poiTypeRequiresBrand(effectivePoi) ? findBrandInText(effectivePoi, title) : null;
   useEffect(() => {
@@ -459,6 +485,7 @@ export default function TaskFormScreen() {
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
         ...(!isBirthday && effectivePoi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
         ...(!isBirthday && effectivePoi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
+        ...(!isBirthday && effectivePoi === 'financial_service' && financialServiceKind ? { financialServiceKind } : {}),
         ...(!isBirthday && poiTypeRequiresBrand(effectivePoi) && isCanonicalBrandForType(effectivePoi, poiBrand) ? { poiBrand } : {}),
       };
 
@@ -476,6 +503,7 @@ export default function TaskFormScreen() {
           updateData.poi = deleteField();
           updateData.storeSubtype = deleteField();
           updateData.restaurantFoodType = deleteField();
+          updateData.financialServiceKind = deleteField();
           updateData.poiBrand = deleteField();
         } else if (existingTask.kind === 'birthday') {
           updateData.kind = deleteField();
@@ -485,6 +513,9 @@ export default function TaskFormScreen() {
         }
         if (!isBirthday && (effectivePoi !== 'restaurant' || !restaurantFoodType)) {
           updateData.restaurantFoodType = deleteField();
+        }
+        if (!isBirthday && (effectivePoi !== 'financial_service' || !financialServiceKind)) {
+          updateData.financialServiceKind = deleteField();
         }
         if (!isBirthday && !poiTypeRequiresBrand(effectivePoi)) {
           updateData.poiBrand = deleteField();
@@ -548,7 +579,7 @@ export default function TaskFormScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [title, category, effectivePoi, storeSubtype, restaurantFoodType, poiBrand, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
+  }, [title, category, effectivePoi, storeSubtype, restaurantFoodType, financialServiceKind, poiBrand, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
 
   // ── Delete (edit mode only) ─────────────────────────────────────────────────
 
@@ -927,6 +958,20 @@ export default function TaskFormScreen() {
                   setStoreSubtype(subtype ?? 'any');
                 }}
               />
+            </View>
+          )}
+
+          {effectivePoi === 'financial_service' && (
+            <View style={styles.subtypeSection}>
+              <View style={styles.questionRow}>
+                <Text style={[styles.questionLabel, { color: palette.text }]}>
+                  {COPY.newTaskSheet.subtypeQuestion}
+                </Text>
+                <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                  {COPY.newTaskSheet.catOptional}
+                </Text>
+              </View>
+              <FinancialServiceKindSelector selected={financialServiceKind} onSelect={handleFinancialServiceKindSelect} />
             </View>
           )}
 

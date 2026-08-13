@@ -50,8 +50,8 @@ afterEach(() => {
 });
 
 describe('searchPlaceTypesCached', () => {
-  it('keeps the bundled POI dictionary trimmed to the curated allowlist', () => {
-    expect(Object.keys(enDictionary)).toHaveLength(SUPPORTED_GOOGLE_PLACE_TYPES.length);
+  it('keeps the bundled POI dictionary to the curated allowlist plus Brush-only financial types', () => {
+    expect(Object.keys(enDictionary)).toHaveLength(SUPPORTED_GOOGLE_PLACE_TYPES.length + 3);
     expect(enDictionary).toHaveProperty('cafe');
     expect(enDictionary).toHaveProperty('coffee_shop');
     expect(enDictionary).not.toHaveProperty('coffee_roastery');
@@ -59,6 +59,21 @@ describe('searchPlaceTypesCached', () => {
     expect(enDictionary).not.toHaveProperty('book_store');
     expect(enDictionary).not.toHaveProperty('electronics_store');
     expect(enDictionary).not.toHaveProperty('pet_store');
+    expect(enDictionary).toMatchObject({
+      currency_exchange: 'Currency exchange',
+      money_transfer: 'Money transfer',
+      financial_service: 'Financial service',
+    });
+  });
+
+  it.each([
+    ['en', 'currency exchange', 'currency_exchange', 'Currency exchange'],
+    ['pt-PT', 'transferir dinheiro', 'money_transfer', 'Transferência de dinheiro'],
+    ['pt-PT', 'crédito ao consumo', 'financial_service', 'Serviço financeiro'],
+    ['pt-PT', 'seguros', 'financial_service', 'Serviço financeiro'],
+  ])('finds the worker-backed financial type for %p', async (language, query, type, label) => {
+    setCopyLanguage(language as 'en' | 'pt-PT');
+    await expect(searchPlaceTypesCached(query)).resolves.toContainEqual({ type, label });
   });
 
   it('returns English labels from the bundled dictionary', async () => {

@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { getFirestore } from 'firebase-admin/firestore';
 import brandDictionary from '../../src/constants/brandDictionary.json';
+import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
 
 /**
  * Proxy for Brush's own Cloudflare-backed POI API (poi-api.brushaway.app,
@@ -31,7 +32,7 @@ interface CoverageInput {
 type RequestCoverageInput = CoverageInput;
 
 interface NearbyAttributeInput {
-  dimension: 'food_cuisine' | 'store_kind';
+  dimension: 'food_cuisine' | 'store_kind' | 'financial_service_kind';
   values: string[];
 }
 
@@ -67,6 +68,7 @@ interface RateLimitDoc {
 const SUBTYPE_FILTER_VALUES: Record<NearbyAttributeInput['dimension'], readonly string[]> = {
   food_cuisine: ['asian', 'bbq', 'brazilian', 'burger', 'healthy', 'indian', 'italian', 'mediterranean', 'mexican', 'pizza', 'portuguese', 'seafood', 'steak', 'sushi', 'thai', 'vegetarian'],
   store_kind: ['beauty', 'bicycle', 'books', 'clothing', 'electronics', 'furniture', 'hardware', 'home', 'jewelry', 'pet', 'shoes', 'sports', 'toys'],
+  financial_service_kind: Object.keys(financialServiceKindDictionary),
 };
 
 const BRAND_FILTER_TYPES = new Set(['gym', 'bank']);
@@ -128,7 +130,8 @@ function assertNearbyRequests(data: PoiAllInput): { requests: NearbyRequestInput
     seenKeys.add(request.key);
     if (request.attribute && (
       !((request.type === 'restaurant' && request.attribute.dimension === 'food_cuisine') ||
-        (request.type === 'store' && request.attribute.dimension === 'store_kind')) ||
+        (request.type === 'store' && request.attribute.dimension === 'store_kind') ||
+        (request.type === 'financial_service' && request.attribute.dimension === 'financial_service_kind')) ||
       !Array.isArray(request.attribute.values) || request.attribute.values.length !== 1 ||
       request.attribute.values.some(value => typeof value !== 'string' || !SUBTYPE_FILTER_VALUES[request.attribute!.dimension].includes(value))
     )) {

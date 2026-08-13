@@ -396,6 +396,22 @@ describe('TaskFormScreen — POI free-text type', () => {
     expect(screen.getByText('Police')).toBeTruthy();
   });
 
+  it.each([
+    ['Financial service', 'Financial service'],
+    ['Credit', 'Financial service'],
+    ['Currency exchange', 'Currency exchange'],
+    ['Money transfer', 'Money transfer'],
+  ])('shows %s from the bundled local dictionary', (query, expectedLabel) => {
+    render(<TaskFormScreen />);
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText('A café, a pharmacy, a gym…'),
+      query,
+    );
+
+    expect(screen.getByText(expectedLabel)).toBeTruthy();
+  });
+
   it('adjusts the form scroll view for the keyboard', () => {
     render(<TaskFormScreen />);
 
@@ -762,6 +778,36 @@ describe('TaskFormScreen — save (create)', () => {
         }),
       );
     });
+  });
+
+  it('saves a Financial service kind selected in More Details', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'financial_service', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Sort my finances');
+    fireEvent.press(screen.getByLabelText('Consumer credit'));
+    await waitFor(() => expect(screen.getByLabelText('Consumer credit').props.accessibilityState?.selected).toBe(true));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'financial_service', financialServiceKind: 'consumer_credit',
+    })));
+  });
+
+  it('keeps an explicitly cleared Financial service kind generic after a title edit', async () => {
+    setRouteParams({
+      uid: 'user-123', initialPoi: 'financial_service', initialPoiExplicitlySelected: true,
+      initialFinancialServiceKind: 'consumer_credit', initialFinancialServiceKindExplicitlySelected: true,
+    });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    expect(screen.getByLabelText('Consumer credit').props.accessibilityState?.selected).toBe(true);
+    fireEvent.press(screen.getByLabelText('Consumer credit'));
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Pay Cofidis again');
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'financial_service',
+    })));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('financialServiceKind');
   });
 
   it('hydrates and saves a restaurant food type passed from quick create', async () => {

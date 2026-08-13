@@ -40,6 +40,7 @@ import { logTap } from '../services/analytics';
 import { openTakeMeThereMaps, getTakeMeThereA11yLabel } from '../services/takeMeThere';
 import { storeSubtypeDisplayLabel } from '../services/storeSubtypes';
 import { restaurantFoodTypeDisplayLabel } from '../services/restaurantFoodTypes';
+import { financialServiceKindDisplayLabel } from '../services/financialServiceKinds';
 
 interface TaskRowProps {
   task: Task;
@@ -76,6 +77,8 @@ function TaskRow({ task, nearbyPoiType = null, onToggle, onPress, customCategori
     ? storeSubtypeDisplayLabel(task.storeSubtype, language)
     : task.poi === 'restaurant' && task.restaurantFoodType
       ? restaurantFoodTypeDisplayLabel(task.restaurantFoodType, language)
+      : task.poi === 'financial_service' && task.financialServiceKind
+        ? financialServiceKindDisplayLabel(task.financialServiceKind, language)
       : null;
   const bodyAccessibilityLabel = `${onPress ? COPY.taskRow.editA11y(task.title) : task.title}${subtypeLabel ? `, ${subtypeLabel}` : ''}`;
 
@@ -325,6 +328,11 @@ function TaskRow({ task, nearbyPoiType = null, onToggle, onPress, customCategori
             {task.poi === 'store' && task.storeSubtype && task.storeSubtype !== 'any' && (
               <View style={[styles.catChip, { backgroundColor: palette.surface2, borderColor: palette.line }]}>
                 <Text style={[styles.catLabel, { color: palette.muted }]}>{storeSubtypeDisplayLabel(task.storeSubtype, language)}</Text>
+              </View>
+            )}
+            {task.poi === 'financial_service' && task.financialServiceKind && (
+              <View style={[styles.catChip, { backgroundColor: palette.surface2, borderColor: palette.line }]}>
+                <Text style={[styles.catLabel, { color: palette.muted }]}>{financialServiceKindDisplayLabel(task.financialServiceKind, language)}</Text>
               </View>
             )}
             {task.poi === 'restaurant' && task.restaurantFoodType && (

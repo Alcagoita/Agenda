@@ -151,6 +151,9 @@ describe('inferPoiFromRules: all built-in types (en)', () => {
     ['book a haircut',          'salon'],
     ['catch the bus',           'bus'],
     ['pick up kids from school','school'],
+    ['exchange money',          'currency_exchange'],
+    ['send money with Western Union', 'money_transfer'],
+    ['renew insurance',         'financial_service'],
   ];
 
   it.each(cases)('maps %p to %p', (title, expected) => {
@@ -175,6 +178,9 @@ describe('inferPoiFromRules: extended types (pt-PT)', () => {
     ['corte de cabelo',          'salon'],
     ['apanhar o autocarro',      'bus'],
     ['reunião de pais',          'school'],
+    ['trocar câmbio',            'currency_exchange'],
+    ['transferir dinheiro',      'money_transfer'],
+    ['pagar crédito',            'financial_service'],
   ];
 
   it.each(cases)('maps %p to %p', (title, expected) => {

@@ -1,0 +1,32 @@
+{
+  "consumer_credit": {
+    "label": "Consumer credit",
+    "labelPt": "Crédito ao consumo",
+    "aliases": ["consumer credit", "credit", "credit provider", "loan", "loans", "crédito", "crédito ao consumo", "crédito pessoal", "empréstimo", "empréstimos", "cofidis", "cetelem", "credibom", "wizink"]
+  },
+  "insurance": {
+    "label": "Insurance",
+    "labelPt": "Seguros",
+    "aliases": ["insurance", "insurer", "insurance broker", "seguro", "seguros", "seguradora", "fidelidade", "zurich", "mapfre"]
+  },
+  "financial_intermediary": {
+    "label": "Financial intermediary",
+    "labelPt": "Intermediário financeiro",
+    "aliases": ["financial intermediary", "financial adviser", "financial advisor", "intermediário financeiro", "consultor financeiro", "decisões e soluções"]
+  },
+  "leasing_factoring": {
+    "label": "Leasing & factoring",
+    "labelPt": "Leasing e factoring",
+    "aliases": ["leasing", "factoring", "lease", "aluguer financeiro"]
+  },
+  "central_bank": {
+    "label": "Central bank",
+    "labelPt": "Banco central",
+    "aliases": ["central bank", "banco central", "banco de portugal", "banco de espanha"]
+  },
+  "public_finance": {
+    "label": "Public finance",
+    "labelPt": "Finanças públicas",
+    "aliases": ["public finance", "tax office", "taxes", "finanças", "financas", "repartição de finanças", "impostos"]
+  }
+}

@@ -19,6 +19,7 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'gas', 'gym', 'bank', 'restaurant', 'park', 'library', 'post', 'store',
   'clinic', 'salon', 'bus', 'school', 'bakery', 'florist', 'bar',
   'currency_exchange', 'money_transfer',
+  'financial_service',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -28,7 +29,7 @@ const QUICK_ACTIONABLE_TYPES: PoiType[] = [
 
 describe('POI_CATALOG', () => {
   it('keeps all built-in types available for legacy task support', () => {
-    expect(POI_CATALOG).toHaveLength(21);
+    expect(POI_CATALOG).toHaveLength(22);
   });
 
   it('contains all built-in POI types', () => {
@@ -76,7 +77,7 @@ describe('POI_GEOFENCE_RADIUS', () => {
 describe('POI_GOOGLE_TYPES', () => {
   it('does not map services Google cannot search distinctly to generic banks', () => {
     const googleBackedTypes = ALL_BUILT_IN_TYPES.filter(
-      type => type !== 'currency_exchange' && type !== 'money_transfer',
+      type => !['currency_exchange', 'money_transfer', 'financial_service'].includes(type),
     );
     for (const type of googleBackedTypes) {
       const googleType = POI_GOOGLE_TYPES[type];
@@ -85,5 +86,6 @@ describe('POI_GOOGLE_TYPES', () => {
     }
     expect(POI_GOOGLE_TYPES.currency_exchange).toBeUndefined();
     expect(POI_GOOGLE_TYPES.money_transfer).toBeUndefined();
+    expect(POI_GOOGLE_TYPES.financial_service).toBeUndefined();
   });
 });

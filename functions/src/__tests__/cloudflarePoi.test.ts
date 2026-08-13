@@ -170,6 +170,31 @@ describe('nearby-search validation', () => {
       } as never)).resolves.toBeDefined();
     }
   });
+
+  it('accepts classified Financial service kinds and rejects unknown values', async () => {
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{
+          key: 'financial_service:financial_service_kind:consumer_credit',
+          type: 'financial_service',
+          attribute: { dimension: 'financial_service_kind', values: ['consumer_credit'] },
+        }],
+      },
+    } as never)).resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{
+          key: 'financial_service:financial_service_kind:unknown',
+          type: 'financial_service',
+          attribute: { dimension: 'financial_service_kind', values: ['unknown'] },
+        }],
+      },
+    } as never)).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
 });
 
 describe('enforceUserRateLimit', () => {
