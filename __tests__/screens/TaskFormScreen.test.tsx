@@ -793,6 +793,26 @@ describe('TaskFormScreen — save (create)', () => {
     expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
   });
 
+  it('saves the Store brand received from quick create in More Details', async () => {
+    setRouteParams({
+      uid: 'user-123',
+      initialTitle: 'Buy a charging cable',
+      initialPoi: 'store',
+      initialPoiBrand: 'Worten',
+      initialPoiExplicitlySelected: true,
+    });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(false);
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'store', poiBrand: 'Worten',
+    })));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
+  });
+
   it('switches a Store from type to brand in create mode without saving a subtype', async () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
     mockAddTask.mockResolvedValueOnce('new-id');

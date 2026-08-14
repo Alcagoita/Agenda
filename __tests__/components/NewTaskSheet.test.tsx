@@ -682,6 +682,26 @@ describe('"More details" navigation', () => {
     }, { timeout: 500 });
   });
 
+  it('passes a selected Store brand through More details', async () => {
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText('Specific store'));
+    fireEvent.changeText(screen.getByLabelText('Search a store brand'), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    fireEvent.press(screen.getByLabelText('More details'));
+
+    await waitFor(() => {
+      expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', expect.objectContaining({
+        uid: 'test-uid',
+        initialPoi: 'store',
+        initialPoiBrand: 'Worten',
+        initialStoreSubtype: undefined,
+      }));
+    }, { timeout: 500 });
+  });
+
   it('passes the selected restaurant food type through More details', async () => {
     renderSheet();
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Have dinner');
