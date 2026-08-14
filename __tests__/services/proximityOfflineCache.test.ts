@@ -302,6 +302,28 @@ describe('offline branch answers from the habitat cache', () => {
       );
     });
 
+    it('uses the OS cached fix when the live one fails, with no prior search to fall back on', async () => {
+      // The cached fix is fresher than our own last search position and costs
+      // nothing to read, so it is consulted first — and it is the only thing
+      // standing between a cold start offline and no answer at all.
+      goOffline();
+      mockSearchOsmPlacesStrict.mockRejectedValue(new Error('network down'));
+      mockGetPosition.mockRejectedValue(new Error('no fix'));
+      mockGetLastKnownPosition.mockResolvedValue({ lat: 0, lng: 0, accuracy: 50, timestamp: Date.now() });
+      mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
+
+      const onUpdate = jest.fn();
+      await expect(runProximitySearch('uid-1', [makeTask()], onUpdate)).resolves.toBeUndefined();
+      await flushAsync();
+
+      expect(mockQueryHabitatCache).toHaveBeenCalledWith(0, 0, ['atm'], 400);
+      expect(onUpdate).toHaveBeenCalledWith(
+        'atm',
+        expect.objectContaining({ placeId: 'hp_cached_1' }),
+        expect.anything(),
+      );
+    });
+
     it('still rejects when there is no last known position to fall back to', async () => {
       // Nothing has ever succeeded — we genuinely do not know where the user
       // is, and claiming otherwise would invent a location.

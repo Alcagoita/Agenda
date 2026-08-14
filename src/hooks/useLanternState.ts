@@ -61,11 +61,21 @@ export function useLanternState(
 ): LanternState {
   const wasHomeRef = useRef(false);
   const [cityName, setCityName] = useState<string | null>(null);
+  /** A fix this hook obtained live. */
   const [seedCoords, setSeedCoords] = useState<LanternCoords | null>(null);
+  /**
+   * The OS's cached fix, held apart from `seedCoords` on purpose: it must not
+   * appear in the seed effect's dependencies. When it did, arriving cached
+   * coords changed `effectiveCoords`, which re-ran that effect, which tore down
+   * the live request still in flight — so the app kept a five-minute-old
+   * position and never took the fresh one. A head start must not cancel the
+   * race it started.
+   */
+  const [cachedSeed, setCachedSeed] = useState<LanternCoords | null>(null);
 
-  // The engine's search coords when it has them (POI tasks present); otherwise
-  // our own one-shot seed. Engine coords win so a moving user stays fresh.
-  const effectiveCoords = coords ?? seedCoords;
+  // Engine coords first (a moving user with POI tasks stays freshest), then our
+  // own live fix, then the cached one. Later sources never displace earlier.
+  const effectiveCoords = coords ?? seedCoords ?? cachedSeed;
 
   const { offline } = useOfflineCoverage();
 
@@ -86,7 +96,7 @@ export function useLanternState(
   // first attempt failing is the ordinary case — the satellites simply aren't
   // acquired yet — so giving up on it read as the app having stopped.
   useEffect(() => {
-    if (effectiveCoords || !permissionGranted) { return; }
+    if (coords || seedCoords || !permissionGranted) { return; }
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | null = null;
 
@@ -97,7 +107,7 @@ export function useLanternState(
     getLastKnownPosition()
       .then(pos => {
         if (cancelled || !pos) { return; }
-        setSeedCoords(prev => prev ?? { lat: pos.lat, lng: pos.lng });
+        setCachedSeed({ lat: pos.lat, lng: pos.lng });
       })
       .catch(() => { /* no cached fix — the live attempt is already running */ });
 
@@ -119,7 +129,7 @@ export function useLanternState(
     attempt();
 
     return () => { cancelled = true; if (retry) { clearTimeout(retry); } };
-  }, [effectiveCoords, permissionGranted]);
+  }, [coords, seedCoords, permissionGranted]);
 
   // Re-seed on foreground. The seed above runs once and then holds forever, so
   // without this a no-POI-task user (whom the engine never supplies coords for)
@@ -129,7 +139,7 @@ export function useLanternState(
   // coords: effectiveCoords stays non-null, so the seed effect early-returns.
   useEffect(() => {
     const sub = AppState.addEventListener('change', next => {
-      if (next === 'active') { setSeedCoords(null); }
+      if (next === 'active') { setSeedCoords(null); setCachedSeed(null); }
     });
     return () => sub.remove();
   }, []);

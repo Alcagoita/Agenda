@@ -175,6 +175,26 @@ describe('the cached OS fix answers first (KAN-377)', () => {
     expect(result.current).toEqual({ kind: 'home' });
   });
 
+  it('a later live fix replaces the cached one — the head start does not cancel the race', async () => {
+    // Regression: seeding from the cached fix used to change the seed effect's
+    // dependencies, which tore down the live request still in flight. The app
+    // then kept a five-minute-old position and never took the fresh one.
+    mockGetHomeLocation.mockReturnValue(HOME);
+    mockDistanceFromHome.mockReturnValue(40);
+    mockGetLastKnownPosition.mockResolvedValue({ lat: 1, lng: 1 });
+    let resolveLive: (c: { lat: number; lng: number }) => void = () => {};
+    mockGetPositionLowAccuracy.mockReturnValue(new Promise(r => { resolveLive = r; }));
+
+    renderHook(() => useLanternState(null, null, true));
+    await act(async () => {});
+    expect(mockDistanceFromHome).toHaveBeenLastCalledWith({ lat: 1, lng: 1 }); // cached first
+
+    await act(async () => { resolveLive({ lat: 2, lng: 2 }); });
+    await act(async () => { jest.advanceTimersByTime(LOCATING_MIN_MS); });
+
+    expect(mockDistanceFromHome).toHaveBeenLastCalledWith({ lat: 2, lng: 2 }); // live wins
+  });
+
   it('never overrides a live fix with the cached one', async () => {
     mockGetHomeLocation.mockReturnValue(HOME);
     mockDistanceFromHome.mockReturnValue(40);

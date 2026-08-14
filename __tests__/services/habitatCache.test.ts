@@ -201,12 +201,14 @@ const mockDb = {
         google, osm, fsq, osmFlag1, lat, osmFlag2, lng, osmFlag3, osmFetchedAt,
         footprintAreaM2, website,
         restaurantFoodType, storeSubtype,
+        areaName,
         tripCacheAreaId, tripExpiresAtA, tripExpiresAtB, tripExpiresAtC,
         lastMatchedAt, id,
       ] = params as [
         string | null, string | null, string | null, number, number, number, number, number, number,
         number | null, string | null,
         string | null, string | null,
+        string | null,
         string | null, number | null, number | null, number | null,
         number, string,
       ];
@@ -226,6 +228,9 @@ const mockDb = {
         row.website = website ?? row.website ?? null;
         row.restaurant_food_type = restaurantFoodType ?? row.restaurant_food_type ?? null;
         row.store_subtype = storeSubtype ?? row.store_subtype ?? null;
+        // COALESCE(?, area_name) — a Cloudflare sighting names an OSM-seeded
+        // row, and a row that already has a name is never cleared (KAN-377).
+        row.area_name = areaName ?? row.area_name ?? null;
         row.cache_area_id = row.cache_area_id ?? tripCacheAreaId;
         if (tripExpiresAtA != null) {
           row.expires_at = row.expires_at == null ? tripExpiresAtB : Math.max(row.expires_at, tripExpiresAtC!);
@@ -1314,6 +1319,35 @@ describe('hasCachedPlaces (KAN-236)', () => {
 
 describe('getCachedAreaName (KAN-377)', () => {
   const LISBON = { lat: 38.7223, lng: -9.1393 };
+
+  it('names a row that was first seeded from OSM and later matched by our API', () => {
+    // The common shape once the prefetch runs (KAN-366 rewires it to our API,
+    // but today it seeds from OSM): the row exists before any settlement name
+    // does, so the name has to arrive through the merge, not the insert.
+    upsertPlace({
+      poiType: 'cafe', name: 'Corner Cafe', lat: LISBON.lat, lng: LISBON.lng,
+      source: { osm: 'node/7' },
+    });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBeNull();
+
+    upsertPlace({
+      poiType: 'cafe', name: 'Corner Cafe', lat: LISBON.lat, lng: LISBON.lng,
+      source: { fsq: 'fsq-7' }, areaName: 'Lisboa',
+    });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBe('Lisboa');
+  });
+
+  it('never clears a stored name when a later sighting carries none', () => {
+    upsertPlace({
+      poiType: 'cafe', name: 'Corner Cafe', lat: LISBON.lat, lng: LISBON.lng,
+      source: { fsq: 'fsq-8' }, areaName: 'Lisboa',
+    });
+    upsertPlace({
+      poiType: 'cafe', name: 'Corner Cafe', lat: LISBON.lat, lng: LISBON.lng,
+      source: { osm: 'node/8' },
+    });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBe('Lisboa');
+  });
 
   it('returns null when nothing nearby carries a name', () => {
     upsertPlace({ poiType: 'atm', name: 'Bank ATM', lat: LISBON.lat, lng: LISBON.lng, source: { osm: 'node/1' } });

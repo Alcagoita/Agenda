@@ -452,6 +452,11 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
            website           = COALESCE(?, website),
            restaurant_food_type = COALESCE(?, restaurant_food_type),
            store_subtype        = COALESCE(?, store_subtype),
+           -- KAN-377: an OSM-seeded row later matched by a Cloudflare result
+           -- picks up the settlement name here. Without this the name only ever
+           -- reached rows Cloudflare created, and the prefetch seeds from OSM
+           -- (KAN-366), so the common row would stay nameless forever.
+           area_name            = COALESCE(?, area_name),
            cache_area_id     = COALESCE(cache_area_id, ?),
            expires_at        = CASE
                                 WHEN ? IS NULL THEN expires_at
@@ -467,6 +472,7 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
         candidate.website ?? null,
         restaurantFoodType,
         storeSubtype,
+        candidate.areaName ?? null,
         tripCacheAreaId,
         tripExpiresAt, tripExpiresAt, tripExpiresAt,
         now, match.id,
