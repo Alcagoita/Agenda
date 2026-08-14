@@ -18,12 +18,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { PlaceContext } from '../services/proximity';
-import { getLastPoiSearchState, NEARBY_RADIUS } from '../services/proximity';
 import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
 import { getPositionLowAccuracy } from '../services/geolocation';
 import { useOfflineCoverage } from './useOfflineCoverage';
-import { resolveLanternState, resolveHomeProximity, resolveOfflineDot, type LanternState } from '../utils/lantern';
+import { resolveLanternState, resolveHomeProximity, type LanternState } from '../utils/lantern';
 import { todayISO } from '../utils/date';
 
 export interface LanternCoords { lat: number; lng: number; }
@@ -46,10 +45,7 @@ export function useLanternState(
   // our own one-shot seed. Engine coords win so a moving user stays fresh.
   const effectiveCoords = coords ?? seedCoords;
 
-  // KAN-316 — `knowsHere` asks the cache about THIS position, within the same
-  // radius the Nearby list uses, so the dot means "there is cached ground where
-  // you're standing", not "the cache has something, somewhere".
-  const { offline, knowsHere } = useOfflineCoverage(effectiveCoords, NEARBY_RADIUS);
+  const { offline } = useOfflineCoverage();
 
   // One-shot position seed — only when we have no fix at all and permission is
   // granted. Re-runs when those change but early-returns once a fix exists, so
@@ -82,14 +78,6 @@ export function useLanternState(
   const homeDistanceM: number | null =
     homeSet && effectiveCoords ? distanceFromHome(effectiveCoords) : null;
 
-  // The last search's own verdict on this location — read at render, not
-  // stored: this hook re-runs whenever the Today screen re-renders (a search
-  // tick, a connectivity change, a new fix), so a plain read stays in step with
-  // it without a watcher, an interval or a subscription (KAN-231). Only its
-  // refusals matter here — see resolveOfflineDot.
-  const { source, coverageStatus } = getLastPoiSearchState();
-  const offlineDot = resolveOfflineDot({ offline, knowsHere, source, coverageStatus });
-
   const state = resolveLanternState({
     placeContext,
     todayIso: todayISO(),
@@ -98,7 +86,6 @@ export function useLanternState(
     wasHome: wasHomeRef.current,
     cityName,
     offline,
-    offlineDot,
   });
 
   // ── Locating / unavailable timing (KAN-301 review) ──────────────────────────

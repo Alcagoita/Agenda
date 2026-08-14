@@ -11,15 +11,8 @@ import { AppState } from 'react-native';
 const mockGetHomeLocation = jest.fn();
 const mockDistanceFromHome = jest.fn();
 const mockGetPositionLowAccuracy = jest.fn();
-/** The proximity engine's last settled coverage answer (KAN-316). */
-const mockPoiSearchState: jest.Mock<{
-  source: 'cloudflare' | 'osm' | 'cache' | null;
-  coverageStatus: 'none' | 'building' | 'ready' | undefined;
-  degraded: boolean;
-}> = jest.fn(() => ({ source: null, coverageStatus: undefined, degraded: true }));
-/** What useOfflineCoverage reports — reassigned per test for the dot cases. */
-let mockOfflineCoverage: { offline: boolean; hasCache: boolean | null; knowsHere: boolean | null } =
-  { offline: false, hasCache: null, knowsHere: null };
+/** What useOfflineCoverage reports. */
+let mockOfflineCoverage: { offline: boolean; hasCache: boolean | null } = { offline: false, hasCache: null };
 
 jest.mock('../../src/services/home', () => ({
   getHomeLocation:  () => mockGetHomeLocation(),
@@ -33,11 +26,9 @@ jest.mock('../../src/services/maps', () => ({ reverseGeocode: jest.fn().mockReso
 jest.mock('../../src/hooks/useOfflineCoverage', () => ({
   useOfflineCoverage: () => mockOfflineCoverage,
 }));
-// proximity pulls in firebase/geolocation; only the coverage read matters here.
-jest.mock('../../src/services/proximity', () => ({
-  getLastPoiSearchState: () => mockPoiSearchState(),
-  NEARBY_RADIUS: 400,
-}));
+// proximity is imported for its PlaceContext type only (erased at runtime), but
+// mocking it keeps firebase/notifee out of this file's graph regardless.
+jest.mock('../../src/services/proximity', () => ({}));
 
 import { useLanternState, LOCATING_MIN_MS, LOCATING_CEILING_MS } from '../../src/hooks/useLanternState';
 import type { PlaceContext } from '../../src/services/proximity';
@@ -49,8 +40,7 @@ const mallCtx = { kind: 'mall', snapshot: { name: 'Colombo' } } as unknown as Pl
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useFakeTimers();
-  mockOfflineCoverage = { offline: false, hasCache: null, knowsHere: null };
-  mockPoiSearchState.mockReturnValue({ source: null, coverageStatus: undefined, degraded: true });
+  mockOfflineCoverage = { offline: false, hasCache: null };
 });
 afterEach(() => {
   jest.useRealTimers();
@@ -67,7 +57,7 @@ it('resolves to Home with no POI tasks (coords null) once its own one-shot fix l
   await act(async () => {});                                   // one-shot resolves
   await act(async () => { jest.advanceTimersByTime(LOCATING_MIN_MS); }); // clear the floor
 
-  expect(result.current).toEqual({ kind: 'home', offlineDot: false });
+  expect(result.current).toEqual({ kind: 'home' });
   expect(mockGetPositionLowAccuracy).toHaveBeenCalledTimes(1); // one read, no watcher
 });
 
@@ -159,76 +149,6 @@ it('keeps Home through a mall/trip override within the leave threshold (KAN-301 
   // Still inside the 1200 m leave threshold → the home buffer must have survived
   // the mall override, so we read Home, not Outside.
   expect(result.current.kind).toBe('home');
-});
-
-describe('offline dot — the per-location coverage gate (KAN-316)', () => {
-  /** What an offline tick actually looks like: the habitat cache answered. */
-  const cacheTick = { source: 'cache', coverageStatus: undefined, degraded: true } as const;
-
-  /** Home, offline, with whatever coverage the test set up. */
-  const renderAtHome = () => {
-    mockGetHomeLocation.mockReturnValue(HOME);
-    mockDistanceFromHome.mockReturnValue(40);
-    return renderHook(() => useLanternState(null, COORDS, true));
-  };
-
-  it('shows the dot at Home, offline, over cached ground (AC1) — the case the device test failed on', async () => {
-    mockOfflineCoverage = { offline: true, hasCache: true, knowsHere: true };
-    mockPoiSearchState.mockReturnValue(cacheTick);
-    const { result } = renderAtHome();
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'home', offlineDot: true });
-  });
-
-  it('shows it with no search ever having run — a user with no POI tasks', async () => {
-    mockOfflineCoverage = { offline: true, hasCache: true, knowsHere: true };
-    mockPoiSearchState.mockReturnValue({ source: null, coverageStatus: undefined, degraded: true });
-    const { result } = renderAtHome();
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'home', offlineDot: true });
-  });
-
-  it('no dot while the area is still building (AC2)', async () => {
-    mockOfflineCoverage = { offline: true, hasCache: true, knowsHere: true };
-    mockPoiSearchState.mockReturnValue({ ...cacheTick, coverageStatus: 'building' });
-    const { result } = renderAtHome();
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'home', offlineDot: false });
-  });
-
-  it('no dot when the cache is seeded elsewhere but not here (AC3)', async () => {
-    mockOfflineCoverage = { offline: true, hasCache: true, knowsHere: false };
-    mockPoiSearchState.mockReturnValue(cacheTick);
-    const { result } = renderAtHome();
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'home', offlineDot: false });
-  });
-
-  it('no dot on the render where offline first flips true, before the probe runs (AC6)', async () => {
-    mockOfflineCoverage = { offline: true, hasCache: true, knowsHere: null };
-    mockPoiSearchState.mockReturnValue(cacheTick);
-    const { result } = renderAtHome();
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'home', offlineDot: false });
-  });
-
-  it('reaches Outside as well as Home (AC4)', async () => {
-    mockOfflineCoverage = { offline: true, hasCache: true, knowsHere: true };
-    mockPoiSearchState.mockReturnValue(cacheTick);
-    mockGetHomeLocation.mockReturnValue(HOME);
-    mockDistanceFromHome.mockReturnValue(4000);
-    const { result } = renderHook(() => useLanternState(null, COORDS, true));
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'outside', cityName: null, offlineDot: true });
-  });
-
-  it('online never shows it, however much is cached', async () => {
-    mockOfflineCoverage = { offline: false, hasCache: true, knowsHere: true };
-    mockPoiSearchState.mockReturnValue({ source: 'cloudflare', coverageStatus: 'ready', degraded: false });
-    const { result } = renderAtHome();
-    await act(async () => {});
-    expect(result.current).toEqual({ kind: 'home', offlineDot: false });
-  });
 });
 
 describe('foreground re-seed (KAN-301 review)', () => {

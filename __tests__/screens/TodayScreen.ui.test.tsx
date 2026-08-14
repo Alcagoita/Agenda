@@ -139,9 +139,7 @@ jest.mock('../../src/hooks/useLanternState', () => ({ useLanternState: () => ({ 
 jest.mock('../../src/hooks/useAreaCoverageNotice', () => ({
   useAreaCoverageNotice: () => ({ notice: null, recheck: jest.fn() }),
 }));
-jest.mock('../../src/components/ProgressRing',          () => () => null);
 jest.mock('../../src/components/NearbyCard',            () => () => null);
-jest.mock('../../src/components/ContextChip',           () => () => null);
 jest.mock('../../src/components/ErrandBundleCard',      () => () => null);
 jest.mock('../../src/components/TripSuggestionCard',    () => () => null);
 jest.mock('../../src/components/StoreTuningPromptSheet',() => ({ __esModule: true, default: () => null }));

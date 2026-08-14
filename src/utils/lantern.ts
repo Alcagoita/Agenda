@@ -13,7 +13,7 @@
  *
  * The resolver returns a copy-free discriminated union (raw names, not
  * localized strings); the Lantern component maps each kind to its icon, halo
- * token and localized label, exactly as ContextChip maps ContextChipView.
+ * token and localized label.
  */
 import type { PlaceContext } from '../services/proximity';
 import type { PoiCoverageStatus, PoiSearchSource } from '../services/maps';
@@ -23,10 +23,10 @@ export type LanternStateKind =
   | 'mall' | 'trip' | 'home' | 'outside' | 'locating' | 'unavailable' | 'unset';
 
 export type LanternState =
-  | { kind: 'mall'; name: string; offlineDot: boolean }
-  | { kind: 'trip'; destination: string; offlineDot: boolean }
-  | { kind: 'home'; offlineDot: boolean }
-  | { kind: 'outside'; cityName: string | null; offlineDot: boolean }
+  | { kind: 'mall'; name: string }
+  | { kind: 'trip'; destination: string }
+  | { kind: 'home' }
+  | { kind: 'outside'; cityName: string | null }
   /** Home IS set but the position isn't known yet (no fix). A held state with
    *  its own visual ("Looking around…") — never Outside, which would flash on
    *  cold start and stick for a no-POI-task user until a fix arrives. Produced
@@ -56,55 +56,6 @@ export const HOME_LEAVE_M = 1200;
  */
 export function resolveHomeProximity(distanceM: number, wasHome: boolean): boolean {
   return wasHome ? distanceM <= HOME_LEAVE_M : distanceM <= HOME_ENTER_M;
-}
-
-export interface ResolveOfflineDotInput {
-  /** Whether the device is offline (useOfflineCoverage). */
-  offline: boolean;
-  /** Whether the cache holds places around the current position — tri-state,
-   *  `null` = not read yet (useOfflineCoverage.knowsHere). */
-  knowsHere: boolean | null;
-  /** Which source answered the last search (getLastPoiSearchState). */
-  source: PoiSearchSource | null;
-  /** Coverage for the exact location that search asked about (getLastPoiSearchState). */
-  coverageStatus: PoiCoverageStatus | undefined;
-}
-
-/**
- * Whether the Lantern's offline dot may claim "I know this area" (KAN-316).
- *
- * The claim is location-specific, so the evidence must be too. That evidence is
- * `knowsHere` — the cache actually holds places around this position — NOT the
- * global `hasCache`, which only says the cache was seeded *somewhere* (cache
- * Lisbon, land in Tokyo, and `hasCache` alone would still claim Tokyo).
- *
- * Its tri-state `null` is what keeps the dot from flashing on the render where
- * `offline` first flips true, before the probe has run.
- *
- * ── Why this is not gated on `degraded` ──
- * The ticket's original gate was `coverageStatus === 'ready' && !degraded`.
- * That is unreachable in practice: `isPoiSearchDegraded` treats every `cache`
- * answer as degraded, and offline is precisely when the cache answers, so the
- * dot could never appear in the situation it exists for. `degraded` describes
- * how complete the LAST FETCH was; the dot is about whether we hold this
- * ground. Different questions.
- *
- * What we do keep from the last search is its refusals, so the dot never
- * contradicts KAN-349's line about the same place:
- *   • `none`/`building` — the server told us, for this exact location, that it
- *     isn't covered yet. That is KAN-349's "still getting to know this area".
- *   • `osm` — we are running on the fallback source, which is KAN-349's
- *     "I know less than usual around here".
- * An offline `cache` tick reports neither, so the two remain mutually
- * exclusive by construction, as both tickets require.
- */
-export function resolveOfflineDot({
-  offline, knowsHere, source, coverageStatus,
-}: ResolveOfflineDotInput): boolean {
-  if (!offline || knowsHere !== true) { return false; }
-  if (coverageStatus === 'none' || coverageStatus === 'building') { return false; }
-  if (source === 'osm') { return false; }
-  return true;
 }
 
 /** What the Lantern zone owes the user an explanation about (KAN-349). */
@@ -155,10 +106,6 @@ export interface ResolveLanternStateInput {
   cityName: string | null;
   /** True when the device is offline — a quiet modifier, never its own state. */
   offline: boolean;
-  /** Whether the offline dot may claim we know this area — precomputed with
-   *  resolveOfflineDot, since it needs POI-coverage inputs this resolver has no
-   *  business reading. Stamped onto every state that shows a real place. */
-  offlineDot: boolean;
 }
 
 /**
@@ -169,16 +116,14 @@ export interface ResolveLanternStateInput {
  * home/outside via the hysteresis buffer.
  *
  * Exactly one kind is ever returned — never two indicators (doctrine §9).
- * Off-grid trips are excluded (a distinct concept, KAN-246), matching
- * resolveContextChipView.
+ * Off-grid trips are excluded (a distinct concept, KAN-246).
  */
 export function resolveLanternState({
-  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline, offlineDot,
+  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline,
 }: ResolveLanternStateInput): LanternState {
   if (placeContext?.kind === 'mall') {
-    // The mall name comes from the stored snapshot, so it's correct offline too
-    // — the offlineDot just marks that the surrounding data is cached.
-    return { kind: 'mall', name: placeContext.snapshot.name, offlineDot };
+    // The mall name comes from the stored snapshot, so it's correct offline too.
+    return { kind: 'mall', name: placeContext.snapshot.name };
   }
 
   if (
@@ -186,17 +131,15 @@ export function resolveLanternState({
     placeContext.trip.kind !== 'offgrid' &&
     isTodayWithinTripDates(placeContext.trip, todayIso)
   ) {
-    return { kind: 'trip', destination: placeContext.trip.destination, offlineDot };
+    return { kind: 'trip', destination: placeContext.trip.destination };
   }
 
   if (!homeSet) { return { kind: 'unset' }; }
   if (homeDistanceM == null) { return { kind: 'locating' }; }
 
-  // Home and Outside are where the user spends nearly all their time (KAN-316):
-  // the dot carries the same meaning here as on mall/trip.
-  if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home', offlineDot }; }
+  if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home' }; }
 
   // Outside. Never show a guessed or stale name: offline forces the literal
   // "Outside" (the component substitutes it for a null cityName).
-  return { kind: 'outside', cityName: offline ? null : cityName, offlineDot };
+  return { kind: 'outside', cityName: offline ? null : cityName };
 }

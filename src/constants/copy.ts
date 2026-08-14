@@ -278,10 +278,6 @@ const en = {
   // area-name-agnostic (no reverse geocoding available); the mall/trip sheets
   // can name the place since it's a destination the user chose themselves.
   contextChip: {
-    /** KAN-316 — LIVE: Lantern.tsx labels its offline dot with this. ContextChip.tsx
-     *  itself no longer renders (KAN-301), so this block otherwise looks dead — move
-     *  this string, never delete it, when that file is finally cleaned up. */
-    offlineGlyphA11y: 'Offline — I know this area',
     closeSheetA11y: 'Close sheet',
     closeA11y:      'Close',
     sheetTitle: 'What I know here',
@@ -297,7 +293,6 @@ const en = {
     // KAN-242 — mall/trip place contexts.
     mallChipA11y: (name: string) => `In ${name} — tap for details`,
     tripChipA11y: (destination: string) => `In ${destination} — tap for details`,
-    offlineDotA11y: 'Offline',
     mallSheetTitle: (name: string) => `While you're at ${name}`,
     tripSheetTitle: (destination: string) => `While you're in ${destination}`,
     placeSheetCoverageLine: "I've learned the places around here.",
@@ -1444,8 +1439,6 @@ const ptPT: typeof en = {
   },
 
   contextChip: {
-    /** KAN-316 — LIVE: Lantern.tsx labels its offline dot with this. See the `en` block. */
-    offlineGlyphA11y: 'Offline — conheço esta zona',
     closeSheetA11y: 'Fechar painel',
     closeA11y:      'Fechar',
     sheetTitle: 'O que conheço aqui',
@@ -1459,7 +1452,6 @@ const ptPT: typeof en = {
 
     mallChipA11y: (name: string) => `Em ${name} — toca para detalhes`,
     tripChipA11y: (destination: string) => `Em ${destination} — toca para detalhes`,
-    offlineDotA11y: 'Offline',
     mallSheetTitle: (name: string) => `Enquanto estás em ${name}`,
     tripSheetTitle: (destination: string) => `Enquanto estás em ${destination}`,
     placeSheetCoverageLine: 'Aprendi os sítios aqui perto.',
