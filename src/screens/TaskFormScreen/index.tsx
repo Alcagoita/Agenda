@@ -968,7 +968,7 @@ export default function TaskFormScreen() {
                     setStoreSubtypeTouched(true);
                     setStoreSubtype(current => current ?? 'any');
                   }}
-                  style={[styles.storeModeOption, storeDetailMode === 'type' && { backgroundColor: palette.surface, borderColor: palette.line }]}
+                  style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'type' && { backgroundColor: palette.surface }]}
                 >
                   <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailType}</Text>
                 </Pressable>
@@ -981,7 +981,7 @@ export default function TaskFormScreen() {
                     setStoreSubtype(null);
                     setStoreSubtypeTouched(false);
                   }}
-                  style={[styles.storeModeOption, storeDetailMode === 'brand' && { backgroundColor: palette.surface, borderColor: palette.line }]}
+                  style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'brand' && { backgroundColor: palette.surface }]}
                 >
                   <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
                 </Pressable>

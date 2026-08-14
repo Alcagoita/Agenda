@@ -47,6 +47,7 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('store', 'Kiwoko - Mundo Animal')).toBe('Kiwoko');
     expect(getCanonicalBrand('store', 'Normal')).toBe('Normal');
     expect(findBrandInText('store', 'Buy a cable at Worten')).toBe('Worten');
+    expect(findBrandInText('store', 'Visit Zara Home')).toBe('Zara Home');
     expect(getBrandSuggestions('store', 'leroy')).toEqual(['Leroy Merlin']);
   });
 

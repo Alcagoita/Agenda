@@ -728,7 +728,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         setStoreSubtypeTouched(true);
                         setStoreSubtype(current => current ?? 'any');
                       }}
-                      style={[styles.storeModeOption, storeDetailMode === 'type' && { backgroundColor: palette.surface, borderColor: palette.line }]}
+                      style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'type' && { backgroundColor: palette.surface }]}
                     >
                       <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailType}</Text>
                     </Pressable>
@@ -741,7 +741,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         setStoreSubtype(null);
                         setStoreSubtypeTouched(false);
                       }}
-                      style={[styles.storeModeOption, storeDetailMode === 'brand' && { backgroundColor: palette.surface, borderColor: palette.line }]}
+                      style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'brand' && { backgroundColor: palette.surface }]}
                     >
                       <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
                     </Pressable>
@@ -1056,10 +1056,9 @@ const styles = StyleSheet.create({
   },
   storeModeOption: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,

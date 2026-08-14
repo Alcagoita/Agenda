@@ -227,10 +227,9 @@ export const styles = StyleSheet.create({
   },
   storeModeOption: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,

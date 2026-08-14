@@ -173,6 +173,7 @@ type RouteParams = {
   initialPoi?: string;
   initialRestaurantFoodType?: string;
   initialStoreSubtype?: string;
+  initialPoiBrand?: string;
   initialPoiExplicitlySelected?: boolean;
 };
 
@@ -792,6 +793,41 @@ describe('TaskFormScreen — save (create)', () => {
     expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
   });
 
+  it('switches a Store from type to brand in create mode without saving a subtype', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy something');
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'store', poiBrand: 'Worten',
+    })));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
+  });
+
+  it('switches a Store from brand to type in create mode without saving a brand', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy something');
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailType));
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'store', storeSubtype: 'clothing',
+    })));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('poiBrand');
+  });
+
   it('saves a Financial service kind selected in More Details', async () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'financial_service', initialPoiExplicitlySelected: true });
     mockAddTask.mockResolvedValueOnce('new-id');
@@ -916,6 +952,39 @@ describe('TaskFormScreen — save (edit)', () => {
         }),
       );
     });
+  });
+
+  it('switches a Store from type to brand in edit mode and deletes the old subtype', async () => {
+    setRouteParams({
+      uid: 'user-123',
+      task: makeTask({ poi: 'store', storeSubtype: 'clothing' }),
+    });
+    mockUpdateTask.mockResolvedValueOnce(undefined);
+    render(<TaskFormScreen />);
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Save changes')); });
+
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('user-123', 'task-1', expect.objectContaining({
+      poi: 'store', poiBrand: 'Worten', storeSubtype: DELETE_FIELD_SENTINEL,
+    })));
+  });
+
+  it('switches a Store from brand to type in edit mode and deletes the old brand', async () => {
+    setRouteParams({
+      uid: 'user-123',
+      task: makeTask({ poi: 'store', poiBrand: 'Worten' }),
+    });
+    mockUpdateTask.mockResolvedValueOnce(undefined);
+    render(<TaskFormScreen />);
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailType));
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Save changes')); });
+
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('user-123', 'task-1', expect.objectContaining({
+      poi: 'store', storeSubtype: 'clothing', poiBrand: DELETE_FIELD_SENTINEL,
+    })));
   });
 });
 

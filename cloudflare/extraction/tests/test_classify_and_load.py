@@ -135,6 +135,10 @@ class ClassifyDeduplicationTest(unittest.TestCase):
             classify_and_load.find_brand('Normal', ['store'], dictionary),
             'Normal',
         )
+        self.assertEqual(
+            classify_and_load.find_brand('Zara Home', ['store'], dictionary),
+            'Zara Home',
+        )
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
         rules = classify_and_load.load_financial_service_name_rules()

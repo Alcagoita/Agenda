@@ -194,8 +194,8 @@
     { "name": "Xiaomi", "aliases": [] },
     { "name": "Yves Rocher", "aliases": [] },
     { "name": "Bertrand", "aliases": ["Livraria Bertrand"] },
-    { "name": "Zara", "aliases": ["Zara Kids"] },
     { "name": "Zara Home", "aliases": [] },
+    { "name": "Zara", "aliases": ["Zara Kids"] },
     { "name": "Zippy", "aliases": ["Zippy Kidstore"] },
     { "name": "Zu", "aliases": [] }
   ],
