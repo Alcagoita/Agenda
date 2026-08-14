@@ -117,6 +117,11 @@ deliberately narrow community-contribution routes listed below.
 - `POST /internal/country-progress` `{countryCode}` — called by a
   country-mode Job once per Place it finishes, incrementing
   `country.place_count` so progress is visible before the whole run ends.
+- `POST /internal/settlement-registry/queue` `{countryCode}` — after a
+  country is `mapped`, starts the separate KAN-378 metadata-only job. It
+  imports bounded OSM settlement areas into `place` for coverage and area
+  naming; it never reloads Foursquare POIs. Repeating a completed job is a
+  no-op; a failed job is safely retryable.
 - `POST /internal/country-complete` `{countryCode, buildId}` — the whole
   country finished; sets `country.status` to `mapped`.
 - `POST /internal/country-failed` `{countryCode}` — the whole run errored;
