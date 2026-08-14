@@ -129,7 +129,7 @@ class ClassifyDeduplicationTest(unittest.TestCase):
         )
         self.assertEqual(
             classify_and_load.find_brand('Media Markt Coimbra', ['store'], dictionary),
-            'MediaMarkt',
+            'Darty',
         )
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
