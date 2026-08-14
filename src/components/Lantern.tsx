@@ -28,7 +28,7 @@
  * cross-fade — nothing animates per frame, matching the KAN-157 doctrine.
  * Rendered without those props (unit tests) it shows the rest layout only.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -256,6 +256,13 @@ export default function Lantern({
   state, notice = null, onPillPress, restStyle, collapsedStyle, collapsed = false, reduceMotionOverride,
 }: LanternProps) {
   const { palette } = useTheme();
+  // The three text colours, memoized per palette instead of re-allocated as
+  // object literals on every render (matches TeachSheet's themedStyles).
+  const themedStyles = useMemo(() => StyleSheet.create({
+    restLabel:      { color: palette.text },
+    collapsedLabel: { color: palette.text },
+    notice:         { color: palette.muted },
+  }), [palette]);
   const [reduceMotion, setReduceMotion] = useState(reduceMotionOverride ?? false);
 
   useEffect(() => {
@@ -281,7 +288,7 @@ export default function Lantern({
       />
       <View style={styles.restLabelRow}>
         <Text
-          style={[styles.restLabel, { color: palette.text }]}
+          style={[styles.restLabel, themedStyles.restLabel]}
           numberOfLines={2}
           accessibilityRole="text">
           {v.label}
@@ -291,7 +298,7 @@ export default function Lantern({
         <Pill label={v.pillLabel} expanded onPress={onPillPress} a11yLabel={v.pillA11y} palette={palette} />
       </View>
       {noticeText != null && (
-        <Text style={[styles.notice, { color: palette.muted }]} numberOfLines={2} accessibilityRole="text">
+        <Text style={[styles.notice, themedStyles.notice]} numberOfLines={2} accessibilityRole="text">
           {noticeText}
         </Text>
       )}
@@ -312,7 +319,7 @@ export default function Lantern({
             baseOpacity={v.baseOpacity} breathe={v.breathe} cycleMs={v.cycleMs} reduceMotion={reduceMotion}
           />
           <View style={styles.collapsedLabelRow}>
-            <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={2}>
+            <Text style={[styles.collapsedLabel, themedStyles.collapsedLabel]} numberOfLines={2}>
               {v.label}
             </Text>
           </View>
