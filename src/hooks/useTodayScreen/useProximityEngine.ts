@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { setStoreTuningPref } from '../../services/firestore';
-import { requestLocationPermission } from '../../services/geolocation';
+import { requestLocationPermission, startTracking, stopTracking } from '../../services/geolocation';
 import type { LocationContext } from '../../services/geolocation';
 import {
   runProximitySearch,
@@ -40,6 +40,14 @@ import { getBatteryLevel, useBatteryLevel } from '../../services/battery';
 import type { StoreTuningState, Task } from '../../types';
 import { DEBUG_DISABLE_BACKGROUND } from './debugFlags';
 
+/**
+ * How far the user must move before the nearby list is recomputed (KAN-377).
+ *
+ * The trigger is distance and nothing else — no timer. Standing still costs
+ * nothing; walking is what changes the answer.
+ */
+export const SEARCH_MOVE_M = 200;
+
 export interface ProximityEngine {
   permissionGranted:  boolean;
   /** True once the Nearby list reflects a real, settled outcome — either a
@@ -60,10 +68,10 @@ export interface ProximityEngine {
   /** Mall/trip context for the last position fix (KAN-242) — feeds the header ContextChip / Lantern. */
   placeContext:       PlaceContext;
   /** Last settled-search position (KAN-301) — feeds the Lantern's home/outside
-   *  resolution while a moving user has open POI tasks. Reuses the existing
-   *  200 m / 3-min search cadence, so it costs no new location watcher. Null
-   *  when no search has run (e.g. no POI tasks); useLanternState takes its own
-   *  one-shot fix in that case. */
+   *  resolution while a moving user has open POI tasks. Updated whenever the
+   *  foreground watcher sees SEARCH_MOVE_M of movement (KAN-377). Null when no
+   *  search has run (e.g. no POI tasks); useLanternState takes its own one-shot
+   *  fix in that case. */
   coords:             { lat: number; lng: number } | null;
   locationUnavailable: boolean;
   storeTuningActive:      boolean;
@@ -154,7 +162,6 @@ export function useProximityEngine(
 
   const isIndoorMonitoringRef   = useRef(false);
   const stopIndoorMonitoringRef = useRef<(() => void) | null>(null);
-  const positionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Location permission (KAN-53) ──────────────────────────────────────────
 
@@ -274,26 +281,43 @@ export function useProximityEngine(
     setHasCompletedScan(false);
     runProximitySearchOrReuseSnapshot(uid, latestTasksRef.current, onNearbyUpdate).catch(onSearchError);
 
-    positionTimerRef.current = setInterval(async () => {
-      try {
-        const fix = await (await import('../../services/geolocation')).getPositionLowAccuracy();
+    // ── Distance, not time (KAN-377) ────────────────────────────────────────
+    // This used to be a 3-minute setInterval that took a fix and compared it to
+    // the last search position. Time was never the thing we cared about: a user
+    // sitting still for an hour needs no search, and one walking past three
+    // shops in ninety seconds needs three. Worse, offline it read as the app
+    // having stopped — the nearby distance is the clearest proof it hasn't, and
+    // it could sit stale for up to three minutes.
+    //
+    // The watcher does the sampling now, and movement alone triggers the
+    // search. Accuracy is untouched (KAN-55 coarse — AC8); this changes WHEN we
+    // search, never how precisely we look. It is foreground-only (KAN-231): the
+    // AppState effect below stops it the moment the app leaves the screen, so
+    // nothing here runs in the background.
+    const watch = () => startTracking(
+      fix => {
         const last = getLastSearchCoords();
-        if (!last) {
-          runProximitySearch(uid, latestTasksRef.current, onNearbyUpdate).catch(onSearchError);
-          return;
-        }
-        const moved = getDistanceMeters(fix.lat, fix.lng, last.lat, last.lng);
-        if (moved >= 200) {
+        if (!last || getDistanceMeters(fix.lat, fix.lng, last.lat, last.lng) >= SEARCH_MOVE_M) {
           runProximitySearch(uid, latestTasksRef.current, onNearbyUpdate).catch(onSearchError);
         }
-      } catch { setLocationUnavailable(true); }
-    }, 3 * 60 * 1_000);
+      },
+      // A watcher error is the OS refusing to look (permission pulled, location
+      // services off) — not the same as a search failing, and not something to
+      // retry into. The last resolved nearby state stays on screen.
+      () => setLocationUnavailable(true),
+    );
+    watch();
+
+    // Foreground-only, enforced here rather than trusted (KAN-231): the watcher
+    // is torn down the moment the app stops being the thing on screen, and
+    // rebuilt on return. Nothing observes location in the background.
+    const appStateSub = AppState.addEventListener('change', next => {
+      if (next === 'active') { watch(); } else { stopTracking(); }
+    });
 
     return () => {
-      if (positionTimerRef.current) {
-        clearInterval(positionTimerRef.current);
-        positionTimerRef.current = null;
-      }
+      appStateSub.remove();
+      stopTracking();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, permissionGranted, hasPOITasks, isStoreTuningActive, onNearbyUpdate]);

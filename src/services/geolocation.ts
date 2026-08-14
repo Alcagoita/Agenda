@@ -208,6 +208,46 @@ export function getCurrentPosition(): Promise<Coordinates> {
 }
 
 /**
+ * How old a cached OS fix may be before we stop trusting it (KAN-377).
+ *
+ * Sized for the questions we ask of it — which area am I in, which places are
+ * around me — not for turn-by-turn. Five minutes of walking is ~400 m, inside
+ * the Lantern's 1000/1200 m home hysteresis and comparable to the movement
+ * that triggers a search anyway. Anything older is thrown away rather than
+ * shown: a fix from this morning's commute would name the wrong place with
+ * total confidence.
+ */
+export const LAST_KNOWN_MAX_AGE_MS = 5 * 60_000;
+
+/**
+ * The OS's own cached fix, or null if there isn't a recent enough one.
+ *
+ * Costs no radio, no satellites and no network — it's a read of what the
+ * platform already had. That makes it the one position source that answers
+ * instantly while offline, which is the whole point: a cold GNSS fix with no
+ * assistance data takes 30–60 s, and for most of that time the phone is
+ * holding a perfectly good answer from minutes ago.
+ *
+ * Never throws — no cached fix is an ordinary answer, not an error.
+ */
+export async function getLastKnownPosition(
+  maxAgeMs: number = LAST_KNOWN_MAX_AGE_MS,
+): Promise<Coordinates | null> {
+  try {
+    const position = await Location.getLastKnownPositionAsync({ maxAge: maxAgeMs });
+    if (!position) { return null; }
+    return {
+      lat:       position.coords.latitude,
+      lng:       position.coords.longitude,
+      accuracy:  position.coords.accuracy ?? 999,
+      timestamp: position.timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * One-shot position query using network/cell location when available.
  *
  * Tries Balanced accuracy (WiFi/cell, low power) first. If network-based

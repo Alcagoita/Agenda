@@ -1797,11 +1797,20 @@ export default {
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius, requests, limitPerRequest } = parsed;
       const startedAt = performance.now();
-      const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, requests, limitPerRequest);
+      // KAN-377 — the settlement's name rides along with the POIs it belongs
+      // to, so the client can name an area offline anywhere it holds places,
+      // instead of only the ~100m cells it reverse-geocoded while online.
+      // Run alongside the POI query, never after it: findPlace is a separate
+      // D1 read and this is the hottest endpoint here, so it must not add its
+      // latency to the response.
+      const [{ results, timings }, place] = await Promise.all([
+        queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, requests, limitPerRequest),
+        findPlace(env, lat, lng),
+      ]);
       const totalMs = performance.now() - startedAt;
       logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
       return jsonWithServerTiming(
-        { results },
+        { results, placeName: place?.name ?? null },
         { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
       );
     }

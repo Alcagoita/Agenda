@@ -32,7 +32,6 @@ const base = {
   homeDistanceM: null as number | null,
   wasHome: false,
   cityName: null as string | null,
-  offline: false,
 };
 
 describe('resolveLanternState — states (KAN-301 AC1)', () => {
@@ -45,13 +44,18 @@ describe('resolveLanternState — states (KAN-301 AC1)', () => {
       .toEqual({ kind: 'outside', cityName: 'Porto' });
   });
 
-  it('Outside with null cityName when offline — never a guessed/stale name (AC2)', () => {
-    expect(resolveLanternState({ ...base, homeDistanceM: 4000, cityName: 'Porto', offline: true }))
+  it('Outside shows whatever name the caller could stand behind — including offline (KAN-377)', () => {
+    // The resolver no longer blanks the name when offline. Supplying only an
+    // honest name (a live geocode, or the settlement stored with the POIs
+    // cached at this position) is the hook's job; a null still reads "Outside".
+    expect(resolveLanternState({ ...base, homeDistanceM: 4000, cityName: 'Porto' }))
+      .toEqual({ kind: 'outside', cityName: 'Porto' });
+    expect(resolveLanternState({ ...base, homeDistanceM: 4000, cityName: null }))
       .toEqual({ kind: 'outside', cityName: null });
   });
 
   it('Mall when placeContext is a mall', () => {
-    expect(resolveLanternState({ ...base, placeContext: mallCtx('Colombo'), homeDistanceM: 4000, offline: true }))
+    expect(resolveLanternState({ ...base, placeContext: mallCtx('Colombo'), homeDistanceM: 4000 }))
       .toEqual({ kind: 'mall', name: 'Colombo' });
   });
 

@@ -80,8 +80,11 @@ jest.mock('../../src/services/firestore', () => ({
 }));
 
 const mockGetPosition = jest.fn();
+const mockGetLastKnownPosition = jest.fn().mockResolvedValue(null);
 jest.mock('../../src/services/geolocation', () => ({
   getPositionLowAccuracy:    (...args: unknown[]) => mockGetPosition(...args),
+  // KAN-377 — consulted when a live fix fails, before the last search position.
+  getLastKnownPosition:      (...args: unknown[]) => mockGetLastKnownPosition(...args),
   requestLocationPermission: jest.fn().mockResolvedValue('granted'),
 }));
 
@@ -241,6 +244,7 @@ beforeEach(() => {
   mockFetch.mockReset();
   mockSearchOsmPlacesStrict.mockReset();
   mockGetPosition.mockResolvedValue(ORIGIN);
+  mockGetLastKnownPosition.mockResolvedValue(null);
   mockQueryHabitatCache.mockReturnValue({});
   mockFindExistingPlaceId.mockReturnValue(null);
   mockHasCachedPlaces.mockReturnValue(false);
@@ -269,6 +273,65 @@ describe('offline branch answers from the habitat cache', () => {
       expect.objectContaining({ atm: [expect.objectContaining({ placeId: 'hp_cached_1' })] }),
     );
     expect(mockDisplayNotification).toHaveBeenCalledTimes(1);
+  });
+
+  describe('a failed position fix falls back to the last known one (KAN-377 AC7)', () => {
+    it('recomputes from the cache instead of rejecting — refresh must never report failure over places we hold', async () => {
+      // First tick establishes a known position.
+      goOffline();
+      mockSearchOsmPlacesStrict.mockRejectedValue(new Error('network down'));
+      mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
+      await runProximitySearch('uid-1', [makeTask()], jest.fn());
+      await flushAsync();
+
+      // Now the user taps refresh and GPS has nothing to give yet — the case
+      // that used to reject before the cache was ever consulted, so the card
+      // showed its failure feedback.
+      goOffline(); // the helper arms a single tick
+      mockGetPosition.mockRejectedValue(new Error('no fix'));
+
+      const onUpdate = jest.fn();
+
+      await expect(runProximitySearch('uid-1', [makeTask()], onUpdate)).resolves.toBeUndefined();
+      await flushAsync();
+
+      expect(onUpdate).toHaveBeenCalledWith(
+        'atm',
+        expect.objectContaining({ placeId: 'hp_cached_1' }),
+        expect.anything(),
+      );
+    });
+
+    it('uses the OS cached fix when the live one fails, with no prior search to fall back on', async () => {
+      // The cached fix is fresher than our own last search position and costs
+      // nothing to read, so it is consulted first — and it is the only thing
+      // standing between a cold start offline and no answer at all.
+      goOffline();
+      mockSearchOsmPlacesStrict.mockRejectedValue(new Error('network down'));
+      mockGetPosition.mockRejectedValue(new Error('no fix'));
+      mockGetLastKnownPosition.mockResolvedValue({ lat: 0, lng: 0, accuracy: 50, timestamp: Date.now() });
+      mockQueryHabitatCache.mockReturnValue({ atm: [cachedPlace()] });
+
+      const onUpdate = jest.fn();
+      await expect(runProximitySearch('uid-1', [makeTask()], onUpdate)).resolves.toBeUndefined();
+      await flushAsync();
+
+      expect(mockQueryHabitatCache).toHaveBeenCalledWith(0, 0, ['atm'], 400);
+      expect(onUpdate).toHaveBeenCalledWith(
+        'atm',
+        expect.objectContaining({ placeId: 'hp_cached_1' }),
+        expect.anything(),
+      );
+    });
+
+    it('still rejects when there is no last known position to fall back to', async () => {
+      // Nothing has ever succeeded — we genuinely do not know where the user
+      // is, and claiming otherwise would invent a location.
+      goOffline();
+      mockGetPosition.mockRejectedValue(new Error('no fix'));
+
+      await expect(runProximitySearch('uid-1', [makeTask()], jest.fn())).rejects.toThrow('no fix');
+    });
   });
 
   it('still enqueues the search for a live refresh on reconnect', async () => {

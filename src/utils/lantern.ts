@@ -102,10 +102,18 @@ export interface ResolveLanternStateInput {
   homeDistanceM: number | null;
   /** Whether the previous render resolved to Home — feeds the hysteresis buffer. */
   wasHome: boolean;
-  /** Reverse-geocoded city / area name, or null (offline / unknown). */
+  /**
+   * The name to show for the current area, or null when we have none.
+   *
+   * Supplying only a name we can stand behind is the caller's job (KAN-377):
+   * a live reverse geocode for this position, or the settlement name stored
+   * with the POIs cached around it. This used to be blanked whenever the
+   * device was offline, on the grounds that any name might be stale — but a
+   * name stored against the places at this position is data about here, not a
+   * guess, and blanking it meant an offline user got the word "Outside" while
+   * the app held every shop around them.
+   */
   cityName: string | null;
-  /** True when the device is offline — a quiet modifier, never its own state. */
-  offline: boolean;
 }
 
 /**
@@ -119,7 +127,7 @@ export interface ResolveLanternStateInput {
  * Off-grid trips are excluded (a distinct concept, KAN-246).
  */
 export function resolveLanternState({
-  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName, offline,
+  placeContext, todayIso, homeSet, homeDistanceM, wasHome, cityName,
 }: ResolveLanternStateInput): LanternState {
   if (placeContext?.kind === 'mall') {
     // The mall name comes from the stored snapshot, so it's correct offline too.
@@ -139,7 +147,7 @@ export function resolveLanternState({
 
   if (resolveHomeProximity(homeDistanceM, wasHome)) { return { kind: 'home' }; }
 
-  // Outside. Never show a guessed or stale name: offline forces the literal
-  // "Outside" (the component substitutes it for a null cityName).
-  return { kind: 'outside', cityName: offline ? null : cityName };
+  // Outside. A null name still reads as the literal "Outside" (the component
+  // substitutes it) — that stays the last resort.
+  return { kind: 'outside', cityName };
 }
