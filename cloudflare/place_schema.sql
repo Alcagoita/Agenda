@@ -10,7 +10,8 @@
 -- Its one job: telling a true zero from an unmapped one. Only queried on a
 -- zero result (docs/poi-coverage-model.md's zero check) — that's what keeps
 -- it cheap, and why no pre-computed coverage geometry is needed beyond the
--- extent actually ingested.
+-- extent actually ingested. KAN-378 also stores real bounded OSM settlement
+-- metadata here after a country POI import; no radius is ever invented.
 
 CREATE TABLE IF NOT EXISTS place (
   place_id         TEXT PRIMARY KEY,   -- Nominatim `osm_type:osm_id` for the settlement — stable, and exactly what coordinate resolution returns. No slug.
@@ -18,8 +19,8 @@ CREATE TABLE IF NOT EXISTS place (
   name             TEXT NOT NULL,
   place_kind       TEXT,               -- city/town/village/administrative from Nominatim — reporting only, never logic
   status           TEXT NOT NULL CHECK (status IN ('none', 'mapping', 'mapped')),
-  -- The extent actually ingested — set by the worker (KAN-354) once mapped,
-  -- NULL until then. Not a boundary chosen in advance (that was the old
+  -- The completed extraction extent or a KAN-378 settlement-registry
+  -- boundary. NULL until then. Not a boundary chosen in advance (that was the old
   -- center_lat/center_lng/radius_km model, and inventing a circle for every
   -- settlement on earth was the mess this table removes).
   min_lat          REAL,

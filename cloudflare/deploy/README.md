@@ -97,6 +97,21 @@ curl -X POST https://poi-api.brushaway.app/internal/country/queue \
   -d '{"countryCode":"PT"}'
 ```
 
+Once the country reports `mapped`, populate its settlement registry without
+re-running the POI import:
+
+```bash
+npx wrangler d1 execute brush-poi-registry --remote --file=migrations/0015_settlement_registry.sql
+npx wrangler deploy --containers-rollout=none
+
+curl -X POST https://poi-api.brushaway.app/internal/settlement-registry/queue \
+  -H "X-Build-Secret: $BUILD_TRIGGER_SECRET" -H "Content-Type: application/json" \
+  -d '{"countryCode":"PT"}'
+```
+
+This KAN-378 job uses bounded OSM areas only for geographic metadata. It does
+not add OSM POIs or change the Foursquare POI dataset.
+
 **Before running this for real**, confirm the assumption `extract.py`'s top
 comment flags: `places.datasets.places_os` actually carries `country` and
 `locality` columns as documented. From a machine with the Foursquare JWT

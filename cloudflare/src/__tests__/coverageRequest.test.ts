@@ -74,6 +74,11 @@ interface FakeCountryAuditRow {
   resolved_localities: number; unresolved_localities: number; failed_places: number;
 }
 
+interface FakeSettlementRegistryRow {
+  country_code: string;
+  status: 'none' | 'mapping' | 'mapped' | 'failed';
+}
+
 interface FakePoiRow {
   fsq_place_id: string; name: string; lat: number; lng: number; geohash: string;
   primary_poi_type: string; brand: string | null; category_label: string | null; address: string | null;
@@ -96,6 +101,7 @@ function createFakeDb(
   }]));
   const buildLogRows = new Map(buildLogSeed.map(r => [r.build_id, { ...r }]));
   const countryAuditRows = new Map<string, FakeCountryAuditRow>();
+  const settlementRegistryRows = new Map<string, FakeSettlementRegistryRow>();
   const progressDeliveries = new Set<string>();
 
   function prepare(sql: string) {
@@ -112,6 +118,9 @@ function createFakeDb(
           }
           if (trimmed.startsWith('SELECT * FROM country WHERE country_code = ?')) {
             return (countryRows.get(args[0] as string) ?? null) as T | null;
+          }
+          if (trimmed.startsWith('SELECT status FROM settlement_registry_import WHERE country_code = ?')) {
+            return (settlementRegistryRows.get(args[0] as string) ?? null) as T | null;
           }
           if (trimmed.startsWith('SELECT country_code FROM country WHERE country_code = ?')) {
             const row = countryRows.get(args[0] as string);
@@ -225,6 +234,13 @@ function createFakeDb(
             if (!countryRows.has(countryCode)) {
               countryRows.set(countryCode, { country_code: countryCode, name, status: 'none', build_id: null, mapped_at: null, place_count: 0 });
             }
+            return { meta: { changes: 1 } };
+          }
+          if (trimmed.startsWith('INSERT INTO settlement_registry_import')) {
+            const [countryCode] = args as [string, string];
+            const existing = settlementRegistryRows.get(countryCode);
+            if (existing && existing.status !== 'none' && existing.status !== 'failed') return { meta: { changes: 0 } };
+            settlementRegistryRows.set(countryCode, { country_code: countryCode, status: 'mapping' });
             return { meta: { changes: 1 } };
           }
           if (trimmed.startsWith("UPDATE country\n         SET status = 'mapping', place_count = 0")) {
@@ -357,8 +373,8 @@ function createFakeDb(
     return results;
   }
 
-  return { prepare, batch, rows, countryRows, buildLogRows, countryAuditRows } as unknown as D1Database & {
-    rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow>; buildLogRows: Map<string, FakeBuildLogRow>; countryAuditRows: Map<string, FakeCountryAuditRow>;
+  return { prepare, batch, rows, countryRows, buildLogRows, countryAuditRows, settlementRegistryRows } as unknown as D1Database & {
+    rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow>; buildLogRows: Map<string, FakeBuildLogRow>; countryAuditRows: Map<string, FakeCountryAuditRow>; settlementRegistryRows: Map<string, FakeSettlementRegistryRow>;
   };
 }
 
@@ -528,6 +544,27 @@ describe('POST /coverage/request', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('prefers a bounded settlement over the country coverage fallback', async () => {
+    const env = makeEnv([
+      {
+        place_id: 'osm-relation-295480', name: 'Portugal', country_code: 'PT', place_kind: 'country',
+        min_lat: 29.8, max_lat: 42.2, min_lng: -31.3, max_lng: -6.1,
+        status: 'mapped', build_id: 'country-build', mapped_at: '2026-08-01T00:00:00.000Z',
+        request_count: 0, first_requested_at: null, last_requested_at: null,
+      },
+      {
+        place_id: 'osm-relation-540089', name: 'Porto', country_code: 'PT', place_kind: 'municipality',
+        min_lat: 41.0, max_lat: 41.3, min_lng: -8.8, max_lng: -8.4,
+        status: 'mapped', build_id: null, mapped_at: '2026-08-14T00:00:00.000Z',
+        request_count: 0, first_requested_at: null, last_requested_at: null,
+      },
+    ]);
+
+    const res = await worker.fetch(coverageRequest(41.15, -8.61), env);
+
+    expect(await res.json()).toEqual({ coverageStatus: 'ready', cityId: 'osm-relation-540089' });
+  });
+
   it('KAN-354: records demand, promotes a brand new Place to mapping, and starts the extraction Container', async () => {
     mockNominatim();
     const env = makeEnv();
@@ -687,6 +724,22 @@ describe('POST /coverage/request', () => {
     expect(body).toEqual({ coverageStatus: 'none', cityId: null });
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
     expect(fakeDb.rows.size).toBe(0);
+  });
+
+  it('does not turn a Nominatim country response into a country-sized Place demand', async () => {
+    mockNominatim({
+      osm_type: 'relation', osm_id: 295480, name: 'Portugal', addresstype: 'country',
+      address: { country_code: 'pt', country: 'Portugal' },
+    });
+    const env = makeEnv();
+
+    const res = await worker.fetch(coverageRequest(41.15, -8.61), env);
+
+    expect(await res.json()).toEqual({ coverageStatus: 'none', cityId: null });
+    const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow> };
+    expect(fakeDb.rows.size).toBe(0);
+    expect(fakeDb.countryRows.size).toBe(0);
+    expect(mockContainerStart).not.toHaveBeenCalled();
   });
 
   it('rejects a brand new Place once the pending-demand budget is exhausted', async () => {
@@ -898,6 +951,37 @@ describe('POST /internal/country/queue', () => {
   });
 });
 
+describe('POST /internal/settlement-registry/queue', () => {
+  it('starts one metadata-only settlement job for a mapped country and dedupes a repeat request', async () => {
+    const env = makeEnv([], { countrySeed: [{
+      country_code: 'PT', name: 'Portugal', status: 'mapped', build_id: 'country-build', mapped_at: '2026-08-01T00:00:00.000Z', place_count: 0,
+    }] });
+
+    const first = await worker.fetch(internalRequest('/internal/settlement-registry/queue', { countryCode: 'pt' }), env);
+    const second = await worker.fetch(internalRequest('/internal/settlement-registry/queue', { countryCode: 'PT' }), env);
+
+    expect(await first.json()).toEqual({ ok: true, status: 'mapping' });
+    expect(await second.json()).toEqual({ ok: true, status: 'mapping' });
+    expect(mockContainerStart).toHaveBeenCalledTimes(1);
+    expect(mockContainerStart).toHaveBeenCalledWith({
+      envVars: { MODE: 'settlements', TARGET: 'PT', BUILD_TRIGGER_SECRET: BUILD_SECRET, FOURSQUARE_JWT: 'test-jwt' },
+    });
+    const fakeDb = env.REGISTRY_DB as unknown as { settlementRegistryRows: Map<string, FakeSettlementRegistryRow> };
+    expect(fakeDb.settlementRegistryRows.get('PT')).toEqual({ country_code: 'PT', status: 'mapping' });
+  });
+
+  it('requires the global Foursquare POI country import to complete first', async () => {
+    const env = makeEnv([], { countrySeed: [{
+      country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0,
+    }] });
+
+    const res = await worker.fetch(internalRequest('/internal/settlement-registry/queue', { countryCode: 'PT' }), env);
+
+    expect(res.status).toBe(409);
+    expect(mockContainerStart).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /internal/place/ensure', () => {
   it('creates a newly discovered country Place in mapping state without touching its identity', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 0 }] });
@@ -982,7 +1066,7 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
     expect(fakeDb.countryRows.get('PT')?.place_count).toBe(4);
   });
 
-  it('marks a country mapped with its build id', async () => {
+  it('marks a country mapped with its build id and starts settlement metadata import', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 300 }] });
 
     await worker.fetch(internalRequest('/internal/country-audit', {
@@ -993,8 +1077,13 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
     const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', runId: 'run-current', buildId: 'country-build-1' }), env);
 
     expect(res.status).toBe(200);
-    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
+    expect(await res.json()).toEqual({ ok: true, settlementRegistryStatus: 'mapping' });
+    expect(mockContainerStart).toHaveBeenCalledWith({
+      envVars: { MODE: 'settlements', TARGET: 'PT', BUILD_TRIGGER_SECRET: BUILD_SECRET, FOURSQUARE_JWT: 'test-jwt' },
+    });
+    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow>; settlementRegistryRows: Map<string, FakeSettlementRegistryRow> };
     expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'mapped', build_id: 'country-build-1' });
+    expect(fakeDb.settlementRegistryRows.get('PT')).toEqual({ country_code: 'PT', status: 'mapping' });
   });
 
   it('blocks completion without a matching valid audit', async () => {

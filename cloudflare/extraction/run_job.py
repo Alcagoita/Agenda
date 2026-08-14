@@ -29,6 +29,7 @@ import worker_client
 import nominatim_client
 import extract
 from classify_and_load import classify
+import settlement_registry
 
 def map_place(place_id):
     """The sole Foursquare -> global-POI loader, used by both modes."""
@@ -219,12 +220,22 @@ def run_country_reconcile(country_code, run_id, source_key):
         worker_client.country_failed(country_code, run_id, stage, type(error).__name__)
         sys.exit(1)
 
+def run_settlement_registry(country_code):
+    """Import geographic settlement metadata; never touch Foursquare POIs."""
+    print(f'[run_job] settlement registry mode: {country_code}')
+    try:
+        result = settlement_registry.import_country_settlements(country_code)
+        print(f"[run_job] settlement registry {country_code} complete: {result['upserted']} areas")
+    except BaseException:
+        traceback.print_exc()
+        sys.exit(1)
+
 if __name__ == '__main__':
     os.makedirs(extract.BUILD_DIR, exist_ok=True)
     mode = os.environ.get('MODE')
     target = os.environ.get('TARGET')
     if not mode or not target:
-        print('MODE and TARGET env vars are required (MODE=place|country, TARGET=<place_id|country_code>)')
+        print('MODE and TARGET env vars are required (MODE=place|country|settlements, TARGET=<place_id|country_code>)')
         sys.exit(2)
 
     if mode == 'place':
@@ -245,6 +256,8 @@ if __name__ == '__main__':
             print('COUNTRY_RUN_ID is required for country-reconcile', file=sys.stderr)
             sys.exit(2)
         run_country_reconcile(target.upper(), run_id, source_key)
+    elif mode == 'settlements':
+        run_settlement_registry(target.upper())
     else:
-        print(f"unknown MODE '{mode}' — expected 'place', 'country', or 'country-reconcile'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', or 'settlements'")
         sys.exit(2)

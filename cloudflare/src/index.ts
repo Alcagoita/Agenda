@@ -55,9 +55,9 @@ interface PlaceRow {
   name: string;
   status: 'none' | 'mapping' | 'mapped';
   place_kind: string | null;
-  // The extent actually ingested — NULL until the worker (KAN-354) maps
-  // this Place. A 'none'/'mapping' row has no bbox to fast-path lookups
-  // against; only 'mapped' rows do (see findPlace).
+  // A mapped Place's area: normally the Foursquare extraction extent, or a
+  // real OSM settlement boundary supplied by KAN-378's registry importer.
+  // A 'none'/'mapping' demand row has no bbox to fast-path lookups against.
   min_lat: number | null;
   max_lat: number | null;
   min_lng: number | null;
@@ -551,11 +551,10 @@ function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
 }
 
 /**
- * KAN-355 — finds the Place whose ingested extent (min/max lat/lng) contains
- * (lat, lng). Only 'mapped' Places ever carry a real extent (place_schema.sql
- * — NULL until the worker actually ingests one), so this is inherently a
- * fast-path for already-mapped areas only; a 'none'/'mapping' row (recorded
- * demand, no extent yet) is never matched here and always falls through to
+ * KAN-355/KAN-378 — finds the mapped Place whose stored real extent (min/max
+ * lat/lng) contains (lat, lng). The extent comes from either a completed
+ * Foursquare extraction or the settlement-metadata registry. A
+ * 'none'/'mapping' demand row has no bbox and always falls through to
  * resolvePlaceIdentity + a lookup by stable id instead (see
  * POST /coverage/request). Places can legitimately overlap (a suburb inside
  * a wider neighbour) — picks the smallest-area match among all containing
@@ -1184,7 +1183,7 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
-  mode: 'place' | 'country' | 'country-reconcile',
+  mode: 'place' | 'country' | 'country-reconcile' | 'settlements',
   target: string,
   countrySourceR2Key?: string,
   countryRunId?: string,
@@ -1209,6 +1208,10 @@ function triggerBuild(
       await env.REGISTRY_DB.prepare(
         "UPDATE place SET status = 'none' WHERE place_id = ? AND status = 'mapping' AND build_id IS NULL",
       ).bind(target).run();
+    } else if (mode === 'settlements') {
+      await env.REGISTRY_DB.prepare(
+        "UPDATE settlement_registry_import SET status = 'failed', completed_at = ?, last_error = ? WHERE country_code = ? AND status = 'mapping'",
+      ).bind(new Date().toISOString(), 'container start failed', target).run();
     } else {
       await env.REGISTRY_DB.prepare(
         "UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'",
@@ -1220,6 +1223,26 @@ function triggerBuild(
   // response. In production Workers always supplies ctx; the fallback keeps
   // the pure route tests usable when they call fetch() directly.
   if (ctx) ctx.waitUntil(startup);
+}
+
+/** Queue the metadata-only settlement registry exactly once per country run. */
+async function queueSettlementRegistry(
+  env: Env,
+  ctx: ExecutionContext | undefined,
+  countryCode: string,
+): Promise<'none' | 'mapping' | 'mapped' | 'failed'> {
+  const result = await env.REGISTRY_DB.prepare(
+    `INSERT INTO settlement_registry_import (country_code, status, started_at, completed_at, last_error)
+     VALUES (?, 'mapping', ?, NULL, NULL)
+     ON CONFLICT(country_code) DO UPDATE SET
+       status = 'mapping', started_at = excluded.started_at, completed_at = NULL, last_error = NULL
+     WHERE settlement_registry_import.status IN ('none', 'failed')`,
+  ).bind(countryCode, new Date().toISOString()).run();
+  if (result.meta.changes === 1) triggerBuild(env, ctx, 'settlements', countryCode);
+  const registry = await env.REGISTRY_DB.prepare(
+    'SELECT status FROM settlement_registry_import WHERE country_code = ?',
+  ).bind(countryCode).first<{ status: 'none' | 'mapping' | 'mapped' | 'failed' }>();
+  return registry?.status ?? 'none';
 }
 
 /**
@@ -1616,6 +1639,27 @@ export default {
       return json({ ok: true, status: country.status });
     }
 
+    // POST /internal/settlement-registry/queue { countryCode } — imports
+    // only bounded OSM settlement metadata after a country's Foursquare POIs
+    // are already mapped. This is deliberately a separate job: it never
+    // reads, reclassifies, or reloads those POIs.
+    if (url.pathname === '/internal/settlement-registry/queue' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
+        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const country = await env.REGISTRY_DB.prepare('SELECT * FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (!country) return json({ error: `no country row for '${countryCode}'` }, 404);
+      if (country.status !== 'mapped') {
+        return json({ error: `country '${countryCode}' must be mapped before settlement metadata is queued` }, 409);
+      }
+      return json({ ok: true, status: await queueSettlementRegistry(env, ctx, countryCode) });
+    }
+
     // POST /internal/country-source — records the raw country extract as
     // soon as it exists. Later recovery uses this artifact, never Foursquare.
     if (url.pathname === '/internal/country-source' && request.method === 'POST') {
@@ -1760,7 +1804,12 @@ export default {
       if (result.meta.changes !== 1) {
         return json({ error: `no mapping country with a valid audit matched '${body.countryCode}'` }, 409);
       }
-      return json({ ok: true });
+      // A Foursquare country run may have no locality field at all. Start
+      // the independent registry now so a green country import never masks
+      // a missing settlement/area-name backfill.
+      const countryCode = body.countryCode.toUpperCase();
+      const settlementRegistryStatus = await queueSettlementRegistry(env, ctx, countryCode);
+      return json({ ok: true, settlementRegistryStatus });
     }
 
     // POST /internal/country-failed  { countryCode }  — the whole run
@@ -1967,6 +2016,11 @@ export default {
         // stable id to dedupe on.
         return respondCoverageRequest(null);
       }
+
+      // Country-wide rows are coverage fallbacks, not a new Place to map.
+      // A country bbox would make the on-demand worker extract the whole
+      // country for one coordinate. Country provisioning owns that lifecycle.
+      if (geo.placeKind === 'country') return respondCoverageRequest(null);
 
       // findPlace's bbox test above only matches 'mapped' rows (see its own
       // doc comment) — an already-recorded-but-unmapped ('none') Place has
