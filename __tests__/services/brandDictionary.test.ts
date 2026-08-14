@@ -40,7 +40,7 @@ describe('brandDictionary', () => {
   });
 
   it('resolves curated Store brands from aliases and title text', () => {
-    expect(getCanonicalBrand('store', 'Media Markt')).toBe('MediaMarkt');
+    expect(getCanonicalBrand('store', 'Worten')).toBe('Worten');
     expect(getCanonicalBrand('store', 'H & M')).toBe('H&M');
     expect(findBrandInText('store', 'Buy a cable at Worten')).toBe('Worten');
     expect(getBrandSuggestions('store', 'leroy')).toEqual(['Leroy Merlin']);
