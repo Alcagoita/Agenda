@@ -87,6 +87,15 @@ export interface User {
      */
     lowBatteryPause?: boolean;
     /**
+     * Restraint, not permission (KAN-366). The proactive download is how the
+     * app works and has no off switch; this only defers it to Wi-Fi for
+     * someone roaming or on a metered plan.
+     *
+     * Default false — download on any connection. Measured at 21–36 KB per
+     * kilometre, so cellular is an ordinary choice, not a concession.
+     */
+    wifiOnlyDownloads?: boolean;
+    /**
      * Store fine tuning preference (KAN-74).
      *
      *   absent / undefined — user has never interacted; prompt is shown on first

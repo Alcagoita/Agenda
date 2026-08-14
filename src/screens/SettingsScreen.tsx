@@ -33,6 +33,7 @@ import { radius, spacing } from '../theme/tokens';
 import {
   getLowBatteryPausePref,
   setLowBatteryPausePref,
+  setWifiOnlyDownloadsPref,
   getUser,
 } from '../services/firestore';
 import { logout } from '../services/auth';
@@ -55,6 +56,7 @@ import {
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { ImportResult } from '../types';
 import { COPY, type SupportedLanguage } from '../constants/copy';
+import { setWifiOnlyDownloads } from '../services/habitatCache';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const APP_VERSION: string = require('../../package.json').version;
@@ -306,6 +308,7 @@ export default function SettingsScreen() {
   const uid = getAuth().currentUser?.uid ?? '';
 
   const [lowBatteryPause, setLowBatteryPause] = useState(false);
+  const [wifiOnlyDownloads, setWifiOnlyDownloadsState] = useState(false);
 
   useEffect(() => {
     if (!uid) { return; }
@@ -339,6 +342,20 @@ export default function SettingsScreen() {
       await setLowBatteryPausePref(uid, value);
     } catch {
       setLowBatteryPause(!value);
+    }
+  }, [uid]);
+
+  const handleWifiOnlyDownloadsToggle = useCallback(async (value: boolean) => {
+    setWifiOnlyDownloadsState(value);
+    // Push it to the module that actually gates the download before the write
+    // lands: the next prefetch may run before Firestore acknowledges, and the
+    // user's answer should hold from the moment they give it.
+    setWifiOnlyDownloads(value);
+    try {
+      await setWifiOnlyDownloadsPref(uid, value);
+    } catch {
+      setWifiOnlyDownloadsState(!value);
+      setWifiOnlyDownloads(!value);
     }
   }, [uid]);
 
@@ -471,7 +488,6 @@ export default function SettingsScreen() {
           <SettingsRow
             Icon={BatteryIcon}
             label={COPY.settings.pauseLowBattery}
-            isLast
             trailing={
               <Switch
                 value={lowBatteryPause}
@@ -479,6 +495,21 @@ export default function SettingsScreen() {
                 trackColor={{ false: palette.surface2, true: palette.accent }}
                 thumbColor={palette.bg}
                 accessibilityLabel={COPY.settings.pauseLowBatteryToggleA11y}
+              />
+            }
+          />
+          <SettingsRow
+            Icon={GlobeIcon}
+            label={COPY.settings.wifiOnlyDownloads}
+            sublabel={COPY.settings.wifiOnlyDownloadsSublabel}
+            isLast
+            trailing={
+              <Switch
+                value={wifiOnlyDownloads}
+                onValueChange={handleWifiOnlyDownloadsToggle}
+                trackColor={{ false: palette.surface2, true: palette.accent }}
+                thumbColor={palette.bg}
+                accessibilityLabel={COPY.settings.wifiOnlyDownloadsToggleA11y}
               />
             }
           />
