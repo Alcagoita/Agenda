@@ -247,6 +247,14 @@ describe('inferPoiForQuickAdd', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
+  it.each(['Go to the nearest FNAC', 'Find a FNAC'])(
+    'uses a recognised Store brand for %s without calling the LLM classifier',
+    async title => {
+      expect(await inferPoiForQuickAdd(title)).toBe('store');
+      expect(mockLoad).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not force ambiguous food shopping or preparation phrases to restaurant', async () => {
     await expect(inferPoiForQuickAdd('buy pasta')).resolves.not.toBe('restaurant');
     await expect(inferPoiForQuickAdd('buy meat')).resolves.not.toBe('restaurant');

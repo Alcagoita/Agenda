@@ -255,6 +255,18 @@ describe('KAN-232 POI inference auto-suggestion', () => {
     expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
   });
 
+  it('uses a recognised Store brand as the specific Store detail', async () => {
+    jest.useFakeTimers();
+    mockInferPoiForQuickAdd.mockResolvedValue('store');
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a FNAC');
+    await act(async () => { await jest.advanceTimersByTimeAsync(400); });
+
+    expect(screen.getByLabelText('Specific store').props.accessibilityState?.selected).toBe(true);
+    expect(screen.getByLabelText('Search a store brand').props.value).toBe('Fnac');
+  });
+
   it('supports non-catalog suggestions like Police', async () => {
     jest.useFakeTimers();
     mockInferPoiForQuickAdd.mockResolvedValue('police');
