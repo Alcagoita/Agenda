@@ -149,6 +149,11 @@ jest.mock('../../src/services/geolocation', () => ({
   // KAN-301 — useProximityEngine seeds the Lantern's position with one
   // low-accuracy fix on permission grant. Mocked so it resolves cleanly.
   getPositionLowAccuracy:    jest.fn().mockResolvedValue({ lat: 0, lng: 0 }),
+  // KAN-377 — the nearby search is driven by a foreground distance watcher
+  // now, not a timer. These tests don't move the user, so the watcher never
+  // fires; they only need it to exist.
+  startTracking:             jest.fn(),
+  stopTracking:              jest.fn(),
   LocationContext:           {},
 }));
 

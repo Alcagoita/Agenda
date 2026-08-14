@@ -640,7 +640,17 @@ async function runProximitySearch(
     // KAN-285 review fix — runProximitySearchOrReuseSnapshot's fallback path
     // already has a position fix by the time it falls through here; passing
     // it through avoids a second GPS read for the same tick.
-    const coords = presetCoords ?? await getPositionLowAccuracy();
+    //
+    // KAN-377: a failed fix falls back to the last known position rather than
+    // ending the search. Offline this is the difference between the refresh
+    // button recomputing from the cache — the whole point of pressing it — and
+    // reporting failure over places we are holding and could have ranked. The
+    // position may be minutes old; every distance below is still computed from
+    // a real fix, just not the newest one.
+    const coords = presetCoords ?? await getPositionLowAccuracy().catch(err => {
+      if (_lastSearchCoords == null) { throw err; } // nothing to fall back to
+      return { ..._lastSearchCoords, accuracy: 999, timestamp: Date.now() };
+    });
 
     const undonePoiTasks = tasks.filter(t => !t.done && t.poi != null);
     const nearbyRequests = buildNearbySearchRequests(undonePoiTasks);
@@ -678,6 +688,8 @@ async function runProximitySearch(
     // mislabeling every live hit as a Google id was a real bug).
     let tickSource: PoiSearchSource = 'cache';
     let tickCoverageStatus: PoiCoverageStatus | undefined;
+    /** Settlement name from this tick's live answer (KAN-377); null when the source didn't name one. */
+    let tickAreaName: string | null = null;
 
     // KAN-237 — inside an active trip area or the current mall snapshot,
     // skip the live API entirely: this is a deliberately-downloaded, bounded
@@ -693,6 +705,7 @@ async function runProximitySearch(
         results = search.results;
         tickSource = search.source;
         tickCoverageStatus = search.coverageStatus;
+        tickAreaName = search.areaName ?? null;
       } catch (err) {
         // If offline, queue this search for retry when connection returns, and
         // answer from the habitat cache in the meantime (KAN-229) — the cache
@@ -787,6 +800,11 @@ async function runProximitySearch(
                 lat:    place.lat,
                 lng:    place.lng,
                 source: tickSource === 'osm' ? { osm: place.placeId } : { fsq: place.placeId },
+                // KAN-377 — the settlement name rides along with the places it
+                // came with, so this area stays nameable offline everywhere we
+                // hold POIs. Undefined on an OSM tick: that source doesn't name
+                // settlements, and inventing one from elsewhere would be a guess.
+                areaName: tickAreaName,
               });
             }
           }

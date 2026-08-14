@@ -222,6 +222,16 @@ function getDb(): SQLite.SQLiteDatabase {
     if (!existingColumns.has('fsq_place_id')) {
       database.execSync('ALTER TABLE habitat_places ADD COLUMN fsq_place_id TEXT');
     }
+    // KAN-377 migration — the settlement this place sits in, as the POI source
+    // named it. Stored per row so name coverage equals POI coverage: previously
+    // the only offline names were reverseGeocodeCache's ~100 m cells, i.e. the
+    // ground the user had physically stood on while online, while the POI cache
+    // spans kilometres. NULL means a row cached before this existed, or from a
+    // source that doesn't name areas (OSM) — the Lantern falls through to its
+    // usual "Outside" in that case, exactly as before.
+    if (!existingColumns.has('area_name')) {
+      database.execSync('ALTER TABLE habitat_places ADD COLUMN area_name TEXT');
+    }
     database.execSync('CREATE INDEX IF NOT EXISTS idx_habitat_cache_area ON habitat_places(cache_area_id);');
     db = database;
   }
@@ -256,6 +266,8 @@ export interface HabitatRow {
   footprint_area_m2: number | null;
   /** The place's own site from OSM's `website` tag (KAN-293); null when OSM has none. */
   website: string | null;
+  /** Settlement name carried by the POI source (KAN-377); null for rows cached before this, or from a source that doesn't name areas. */
+  area_name: string | null;
   /** Restaurant food subtype inferred at cache-write time (KAN-317). */
   restaurant_food_type: RestaurantFoodType | null;
   /** Store subtype inferred at cache-write time (KAN-317). */
@@ -289,6 +301,8 @@ export interface PlaceCandidate {
   source: { google?: string; osm?: string; fsq?: string };
   /** OSM building-footprint area in m² (KAN-282) — only OSM way/relation malls carry this; omitted otherwise. */
   footprintAreaM2?: number;
+  /** The settlement this place sits in, as the source named it (KAN-377). Omitted by sources that don't name areas. */
+  areaName?: string | null;
   /** The place's own site from OSM's `website` tag (KAN-293); omitted when OSM has none. */
   website?: string;
   /** Optional subtype metadata for restaurant rows (KAN-317). */
@@ -471,12 +485,12 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   const storeSubtype = candidateStoreSubtype(candidate);
   database.runSync(
     `INSERT INTO habitat_places
-       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, area_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, candidate.poiType, candidate.name, candidate.isGenericName === true ? 1 : 0, candidate.lat, candidate.lng,
       candidate.source.google ?? null, candidate.source.osm ?? null, candidate.source.fsq ?? null, now, now,
       trip?.cacheAreaId ?? null, trip?.expiresAt ?? null, candidate.footprintAreaM2 ?? null,
-      candidate.website ?? null, restaurantFoodType, storeSubtype],
+      candidate.website ?? null, restaurantFoodType, storeSubtype, candidate.areaName ?? null],
   );
   return id;
 }
@@ -561,6 +575,8 @@ export function recordLiveResult(candidate: {
   lat: number;
   lng: number;
   source: { osm?: string; fsq?: string };
+  /** Settlement name from the same live answer (KAN-377). */
+  areaName?: string | null;
 }): void {
   upsertPlace({
     poiType: candidate.poiType,
@@ -874,6 +890,49 @@ export function hasCachedPlaces(): boolean {
  * Never throws — a DB failure returns false (the cautious answer: claim
  * nothing).
  */
+/**
+ * The settlement name stored with the cached places around `lat`/`lng`, or
+ * null if none of them carries one (KAN-377).
+ *
+ * The nearest naming row wins. Rows from sources that don't name areas (OSM)
+ * and rows cached before this column existed hold NULL and are skipped, so an
+ * older cache degrades to the previous behaviour rather than to a wrong name.
+ *
+ * This is what makes an area nameable offline across the whole downloaded
+ * region instead of only the ~100 m cells reverseGeocodeCache happened to
+ * record. Costs no network call of any kind.
+ *
+ * Never throws — a DB failure returns null, and the caller falls back to the
+ * literal "Outside".
+ */
+export function getCachedAreaName(
+  lat: number,
+  lng: number,
+  radiusMeters: number = HABITAT_RADIUS_M,
+): string | null {
+  try {
+    const box = boundingBoxDeg(lat, lng, radiusMeters);
+    const rows = getDb().getAllSync<{ lat: number; lng: number; area_name: string | null }>(
+      `SELECT lat, lng, area_name FROM habitat_places
+       WHERE area_name IS NOT NULL
+         AND lat BETWEEN ? AND ?
+         AND ${longitudeRangePredicate(box.lngRanges)}`,
+      [box.latMin, box.latMax, ...longitudeRangeParams(box.lngRanges)],
+    );
+    let best: { name: string; distance: number } | null = null;
+    for (const row of rows) {
+      if (!row.area_name) { continue; }
+      const distance = getDistanceMeters(lat, lng, row.lat, row.lng);
+      if (distance > radiusMeters) { continue; }
+      if (!best || distance < best.distance) { best = { name: row.area_name, distance }; }
+    }
+    return best?.name ?? null;
+  } catch (err) {
+    console.warn('[habitatCache] getCachedAreaName failed', err);
+    return null;
+  }
+}
+
 export function hasCachedPlacesNear(
   lat: number,
   lng: number,

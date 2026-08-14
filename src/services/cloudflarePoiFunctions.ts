@@ -33,6 +33,8 @@ export interface CloudflareNearbyRequest {
 }
 
 interface PoiAllResponse {
+  /** KAN-377 — the settlement the requested point falls in, as the place table names it. Null when the point is in no known settlement. */
+  placeName?: string | null;
   results: Record<string, Array<{
     /** Stable API identity: Foursquare id or an explicitly community-scoped id. */
     poi_id: string;

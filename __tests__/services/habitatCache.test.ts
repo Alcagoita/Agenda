@@ -68,6 +68,8 @@ interface MockHabitatRow {
   restaurant_food_type?: string | null;
   /** KAN-317 — store subtype metadata persisted in the local cache. */
   store_subtype?: string | null;
+  /** KAN-377 — settlement name carried by the POI source. */
+  area_name?: string | null;
 }
 
 // ─── In-memory expo-sqlite mock ────────────────────────────────────────────────
@@ -107,6 +109,7 @@ const mockDb = {
         { name: 'lat' }, { name: 'lng' }, { name: 'google_place_id' }, { name: 'osm_id' }, { name: 'fsq_place_id' },
         { name: 'osm_fetched_at' }, { name: 'last_matched_at' }, { name: 'cache_area_id' }, { name: 'expires_at' },
         { name: 'footprint_area_m2' }, { name: 'website' }, { name: 'restaurant_food_type' }, { name: 'store_subtype' },
+        { name: 'area_name' },
       ] as unknown as T[];
     }
     if (s.startsWith('SELECT MAX(last_matched_at) as maxTs FROM habitat_places WHERE cache_area_id IS NULL')) {
@@ -145,6 +148,14 @@ const mockDb = {
         && r.osm_id != null && r.osm_fetched_at >= cutoff,
       ) as unknown as T[];
     }
+    if (s.startsWith('SELECT lat, lng, area_name FROM habitat_places WHERE area_name IS NOT NULL')) {
+      // getCachedAreaName (KAN-377) — named rows only, same bbox prefilter.
+      const [latMin, latMax] = params as number[];
+      const lngRanges = longitudeRangesFromParams(params, 2, longitudeRangeCount(s));
+      return rows
+        .filter(r => r.area_name != null && matchesBox(r, latMin, latMax, lngRanges))
+        .map(r => ({ lat: r.lat, lng: r.lng, area_name: r.area_name })) as unknown as T[];
+    }
     if (s.startsWith('SELECT lat, lng FROM habitat_places WHERE lat BETWEEN')) {
       // hasCachedPlacesNear (KAN-316) — type-blind bounding-box prefilter.
       const [latMin, latMax] = params as number[];
@@ -180,9 +191,9 @@ const mockDb = {
     const s = sql.replace(/\s+/g, ' ').trim();
 
     if (s.startsWith('INSERT INTO habitat_places')) {
-      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype] =
-        params as [string, string, string, number, number, number, string | null, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null];
-      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype });
+      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, area_name] =
+        params as [string, string, string, number, number, number, string | null, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null, string | null];
+      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, area_name });
       return {} as any;
     }
     if (s.startsWith('UPDATE habitat_places')) {
@@ -311,6 +322,7 @@ import {
   getHabitatPlaceById,
   hasCachedPlaces,
   hasCachedPlacesNear,
+  getCachedAreaName,
   getMostRecentHabitatUpdateAt,
   deleteTripAreaPlaces,
   deleteExpiredTripPlaces,
@@ -1297,6 +1309,43 @@ describe('hasCachedPlaces (KAN-236)', () => {
 
     expect(warnSpy).toHaveBeenCalledWith('[habitatCache] hasCachedPlaces failed', expect.any(Error));
     warnSpy.mockRestore();
+  });
+});
+
+describe('getCachedAreaName (KAN-377)', () => {
+  const LISBON = { lat: 38.7223, lng: -9.1393 };
+
+  it('returns null when nothing nearby carries a name', () => {
+    upsertPlace({ poiType: 'atm', name: 'Bank ATM', lat: LISBON.lat, lng: LISBON.lng, source: { osm: 'node/1' } });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBeNull();
+  });
+
+  it('returns the settlement stored with a nearby place', () => {
+    upsertPlace({
+      poiType: 'cafe', name: 'Corner Cafe', lat: LISBON.lat, lng: LISBON.lng,
+      source: { fsq: 'fsq-1' }, areaName: 'Lisboa',
+    });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBe('Lisboa');
+  });
+
+  it('prefers the nearest naming row', () => {
+    upsertPlace({
+      poiType: 'cafe', name: 'Far Cafe', lat: LISBON.lat + 0.002, lng: LISBON.lng,
+      source: { fsq: 'fsq-far' }, areaName: 'Farther Parish',
+    });
+    upsertPlace({
+      poiType: 'atm', name: 'Near ATM', lat: LISBON.lat, lng: LISBON.lng,
+      source: { fsq: 'fsq-near' }, areaName: 'Nearer Parish',
+    });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBe('Nearer Parish');
+  });
+
+  it('ignores names stored outside the radius', () => {
+    upsertPlace({
+      poiType: 'cafe', name: 'Distant Cafe', lat: LISBON.lat + 0.02, lng: LISBON.lng,
+      source: { fsq: 'fsq-2' }, areaName: 'Somewhere Else',
+    });
+    expect(getCachedAreaName(LISBON.lat, LISBON.lng, 400)).toBeNull();
   });
 });
 

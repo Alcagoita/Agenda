@@ -21,6 +21,8 @@ import type { PlaceContext } from '../services/proximity';
 import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
 import { getPositionLowAccuracy } from '../services/geolocation';
+import { getCachedAreaName } from '../services/habitatCache';
+import { NEARBY_RADIUS } from '../services/proximity';
 import { useOfflineCoverage } from './useOfflineCoverage';
 import { resolveLanternState, resolveHomeProximity, type LanternState } from '../utils/lantern';
 import { todayISO } from '../utils/date';
@@ -29,8 +31,28 @@ export interface LanternCoords { lat: number; lng: number; }
 
 /** Once locating shows, keep it visible this long so a fast fix can't flash it. */
 export const LOCATING_MIN_MS = 400;
-/** No fix within this long → fall through from `locating` to `unavailable`. */
+/**
+ * How long we keep saying "Looking around…" AFTER the position call has
+ * actually failed, before admitting we can't find the user (KAN-377).
+ *
+ * This is a budget measured from the first rejection, never from when we
+ * started looking. A pending fix is not a failed one: online or offline,
+ * "Can't find you" must mean we gave up, not that we're still trying — the
+ * old 10 s timer claimed failure while `getPositionLowAccuracy` was still
+ * running, which offline is the normal case, not the exception.
+ */
 export const LOCATING_CEILING_MS = 10_000;
+/**
+ * The same budget while offline. A cold GPS fix with no assistance data
+ * (which arrives over the network) routinely takes far longer, and retries
+ * fail until the satellites are acquired.
+ *
+ * PROVISIONAL — KAN-377 AC2 requires a real cold-start TTFF measurement,
+ * outdoors and indoors, with the radio off. Set this from that number.
+ */
+export const LOCATING_CEILING_OFFLINE_MS = 90_000;
+/** Gap between position retries while we have no fix at all. */
+export const FIX_RETRY_MS = 5_000;
 
 export function useLanternState(
   placeContext: PlaceContext | null,
@@ -47,16 +69,45 @@ export function useLanternState(
 
   const { offline } = useOfflineCoverage();
 
-  // One-shot position seed — only when we have no fix at all and permission is
-  // granted. Re-runs when those change but early-returns once a fix exists, so
-  // it can never become a watcher or a poll.
+  /**
+   * When the position call first REJECTED, or null while it has never failed
+   * (including while one is still in flight). The failure claim is measured
+   * from here — see LOCATING_CEILING_MS.
+   */
+  const [fixRejectedAt, setFixRejectedAt] = useState<number | null>(null);
+
+  // Position seed — only when we have no fix at all and permission is granted.
+  // Stops the moment a fix exists, so it can never become a watcher on a
+  // located user.
+  //
+  // It retries (KAN-377). Before, a single rejection ended it: the effect's
+  // deps couldn't change without a fix, so one failed cold attempt left the app
+  // with no position until the user backgrounded and reopened it. Offline, that
+  // first attempt failing is the ordinary case — the satellites simply aren't
+  // acquired yet — so giving up on it read as the app having stopped.
   useEffect(() => {
     if (effectiveCoords || !permissionGranted) { return; }
     let cancelled = false;
-    getPositionLowAccuracy()
-      .then(pos => { if (!cancelled && pos) { setSeedCoords({ lat: pos.lat, lng: pos.lng }); } })
-      .catch(() => { /* no fix — resolver stays in `locating` */ });
-    return () => { cancelled = true; };
+    let retry: ReturnType<typeof setTimeout> | null = null;
+
+    const attempt = (): void => {
+      getPositionLowAccuracy()
+        .then(pos => {
+          if (cancelled || !pos) { return; }
+          setSeedCoords({ lat: pos.lat, lng: pos.lng });
+          setFixRejectedAt(null);
+        })
+        .catch(() => {
+          if (cancelled) { return; }
+          // Keep the FIRST rejection's timestamp: the budget runs from when we
+          // started failing, not from the latest retry.
+          setFixRejectedAt(prev => prev ?? Date.now());
+          retry = setTimeout(attempt, FIX_RETRY_MS);
+        });
+    };
+    attempt();
+
+    return () => { cancelled = true; if (retry) { clearTimeout(retry); } };
   }, [effectiveCoords, permissionGranted]);
 
   // Re-seed on foreground. The seed above runs once and then holds forever, so
@@ -85,7 +136,6 @@ export function useLanternState(
     homeDistanceM,
     wasHome: wasHomeRef.current,
     cityName,
-    offline,
   });
 
   // ── Locating / unavailable timing (KAN-301 review) ──────────────────────────
@@ -108,11 +158,19 @@ export function useLanternState(
     () => (state.kind === 'locating' ? 'locating' : 'none'),
   );
 
+  const ceilingMs = offline ? LOCATING_CEILING_OFFLINE_MS : LOCATING_CEILING_MS;
+
   useEffect(() => {
     if (waiting) {
       if (locatingStartRef.current == null) { locatingStartRef.current = Date.now(); }
       setWaitPhase('locating');
-      const ceiling = setTimeout(() => setWaitPhase('unavailable'), LOCATING_CEILING_MS);
+      // Still trying — the call hasn't failed, so there is nothing to admit.
+      // This is what stops "Can't find you" appearing over a fix that is
+      // simply slow, which offline is most of them (KAN-377).
+      if (fixRejectedAt == null) { return; }
+      const remaining = fixRejectedAt + ceilingMs - Date.now();
+      if (remaining <= 0) { setWaitPhase('unavailable'); return; }
+      const ceiling = setTimeout(() => setWaitPhase('unavailable'), remaining);
       return () => clearTimeout(ceiling);
     }
     // Not waiting (a real fix arrived, or we never waited). If locating was on
@@ -126,7 +184,7 @@ export function useLanternState(
       }
     }
     setWaitPhase('none');
-  }, [waiting]);
+  }, [waiting, fixRejectedAt, ceilingMs]);
 
   const display: LanternState =
     waitPhase === 'unavailable' ? { kind: 'unavailable' }
@@ -148,20 +206,41 @@ export function useLanternState(
   // Fetch a city name only when the resolved state is actually Outside — this
   // respects the hysteresis band (no wasted geocode while the buffer still
   // reads Home) and skips it entirely for mall/trip/home/locating/unset.
-  const wantCity = state.kind === 'outside' && !offline && effectiveCoords != null;
+  const wantCity = state.kind === 'outside' && effectiveCoords != null;
 
   useEffect(() => {
     if (!wantCity || !effectiveCoords) { setCityName(null); return; }
-    // Clear the previous city before the replacement request so a move to a new
-    // area never briefly shows the old area's name (it reads "Outside" until the
-    // new lookup lands).
+    // Clear the previous name before resolving the replacement so a move to a
+    // new area never briefly shows the old area's name (it reads "Outside"
+    // until the new one lands).
     setCityName(null);
     let cancelled = false;
-    reverseGeocode(effectiveCoords.lat, effectiveCoords.lng).then(name => {
-      if (!cancelled) { setCityName(name); }
-    });
+
+    // KAN-377 — two sources, in order of precision. The reverse geocode is the
+    // fast path (and is itself cache-backed, so it often costs no request); the
+    // settlement name stored with the POIs cached around this position is the
+    // broad fallback. The stored name is why an offline user one street over
+    // from where they last stood still sees where they are: name coverage now
+    // matches POI coverage instead of the ~100 m cells they walked through.
+    //
+    // No Nominatim call is added by any of this (AC6) — offline we never reach
+    // reverseGeocode at all, and the fallback is a local SQLite read.
+    const nameFromCache = (): void => {
+      if (cancelled) { return; }
+      setCityName(getCachedAreaName(effectiveCoords.lat, effectiveCoords.lng, NEARBY_RADIUS));
+    };
+
+    if (offline) { nameFromCache(); return () => { cancelled = true; }; }
+
+    reverseGeocode(effectiveCoords.lat, effectiveCoords.lng)
+      .then(name => {
+        if (cancelled) { return; }
+        if (name) { setCityName(name); } else { nameFromCache(); }
+      })
+      .catch(nameFromCache);
+
     return () => { cancelled = true; };
-  }, [wantCity, effectiveCoords]);
+  }, [wantCity, effectiveCoords, offline]);
 
   return display;
 }

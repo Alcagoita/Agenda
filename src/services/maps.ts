@@ -262,6 +262,13 @@ export interface PoiSearchResult {
   coverageStatus?: PoiCoverageStatus;
   /** Present only when coverageStatus is 'building' and the Worker has an ETA to offer — currently always undefined (no ETA data exists yet); kept in the shape now so KAN-348/349 don't need to touch this contract again once it does. */
   retryAfterSeconds?: number;
+  /**
+   * The settlement the search ran in, named by the POI source (KAN-377).
+   * Stored with the places it came with, so the area stays nameable offline
+   * wherever we hold POIs. Only Cloudflare answers carry it — OSM doesn't
+   * name settlements, and a cache answer already has whatever name it stored.
+   */
+  areaName?: string | null;
 }
 
 /**
@@ -286,6 +293,8 @@ export function isPoiSearchDegraded(source: PoiSearchSource, coverageStatus?: Po
 interface CloudflareAttempt {
   ok: boolean;
   results?: Record<string, NearbyPlace[]>;
+  /** Settlement name from the same answer (KAN-377) — undefined when the attempt failed. */
+  placeName?: string | null;
   /** A completed global query with no matches. This is the only API result
    * that can contribute to the settled-zero coverage-demand decision. */
   settledEmpty?: boolean;
@@ -479,7 +488,7 @@ async function searchNearbyPlacesCloudflare(
     if (poiTypes.every(poiType => result[poiType].length === 0)) {
       return { ok: false, settledEmpty: true };
     }
-    return { ok: true, results: result };
+    return { ok: true, results: result, placeName: data.placeName ?? null };
   } catch {
     // Network error/timeout before any response — genuinely unknown, not
     // "none". A caller that cares can treat undefined as "couldn't tell."
@@ -531,7 +540,7 @@ export async function searchNearbyPlaces(
 
   const cf = await searchNearbyPlacesCloudflare(lat, lng, poiTypes, radiusMeters, requestedSearches);
   if (cf.ok && cf.results) {
-    return { results: cf.results, source: 'cloudflare', coverageStatus: 'ready' };
+    return { results: cf.results, source: 'cloudflare', coverageStatus: 'ready', areaName: cf.placeName ?? null };
   }
 
   const osmResults = await searchOsmPlacesStrict(lat, lng, poiTypes, radiusMeters);
