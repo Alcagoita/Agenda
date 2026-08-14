@@ -81,7 +81,7 @@ import notifee, { AndroidImportance } from '@notifee/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { InteractionManager, Platform } from 'react-native';
 import WearNotificationModule from '../native/WearNotificationModule';
-import { Coordinates, getPositionLowAccuracy } from './geolocation';
+import { Coordinates, getLastKnownPosition, getPositionLowAccuracy } from './geolocation';
 import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel, PoiSearchSource, PoiCoverageStatus, isPoiSearchDegraded } from './maps';
 import { markAllPoiAlertsSeen } from './firestore';
 import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
@@ -647,7 +647,11 @@ async function runProximitySearch(
     // reporting failure over places we are holding and could have ranked. The
     // position may be minutes old; every distance below is still computed from
     // a real fix, just not the newest one.
-    const coords = presetCoords ?? await getPositionLowAccuracy().catch(err => {
+    const coords = presetCoords ?? await getPositionLowAccuracy().catch(async err => {
+      // The OS's cached fix is fresher than our own last search position and
+      // costs nothing to read, so it goes first.
+      const cached = await getLastKnownPosition();
+      if (cached) { return cached; }
       if (_lastSearchCoords == null) { throw err; } // nothing to fall back to
       return { ..._lastSearchCoords, accuracy: 999, timestamp: Date.now() };
     });

@@ -20,7 +20,7 @@ import { AppState } from 'react-native';
 import type { PlaceContext } from '../services/proximity';
 import { distanceFromHome, getHomeLocation } from '../services/home';
 import { reverseGeocode } from '../services/maps';
-import { getPositionLowAccuracy } from '../services/geolocation';
+import { getLastKnownPosition, getPositionLowAccuracy } from '../services/geolocation';
 import { getCachedAreaName } from '../services/habitatCache';
 import { NEARBY_RADIUS } from '../services/proximity';
 import { useOfflineCoverage } from './useOfflineCoverage';
@@ -89,6 +89,17 @@ export function useLanternState(
     if (effectiveCoords || !permissionGranted) { return; }
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | null = null;
+
+    // The OS's cached fix first — it answers now, costs nothing, and offline
+    // it is the difference between "Looking around…" for a minute and the
+    // Lantern resolving immediately. Only ever a head start: the live attempt
+    // below runs regardless and overwrites this the moment it lands.
+    getLastKnownPosition()
+      .then(pos => {
+        if (cancelled || !pos) { return; }
+        setSeedCoords(prev => prev ?? { lat: pos.lat, lng: pos.lng });
+      })
+      .catch(() => { /* no cached fix — the live attempt is already running */ });
 
     const attempt = (): void => {
       getPositionLowAccuracy()

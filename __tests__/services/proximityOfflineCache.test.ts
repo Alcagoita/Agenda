@@ -80,8 +80,11 @@ jest.mock('../../src/services/firestore', () => ({
 }));
 
 const mockGetPosition = jest.fn();
+const mockGetLastKnownPosition = jest.fn().mockResolvedValue(null);
 jest.mock('../../src/services/geolocation', () => ({
   getPositionLowAccuracy:    (...args: unknown[]) => mockGetPosition(...args),
+  // KAN-377 — consulted when a live fix fails, before the last search position.
+  getLastKnownPosition:      (...args: unknown[]) => mockGetLastKnownPosition(...args),
   requestLocationPermission: jest.fn().mockResolvedValue('granted'),
 }));
 
@@ -241,6 +244,7 @@ beforeEach(() => {
   mockFetch.mockReset();
   mockSearchOsmPlacesStrict.mockReset();
   mockGetPosition.mockResolvedValue(ORIGIN);
+  mockGetLastKnownPosition.mockResolvedValue(null);
   mockQueryHabitatCache.mockReturnValue({});
   mockFindExistingPlaceId.mockReturnValue(null);
   mockHasCachedPlaces.mockReturnValue(false);

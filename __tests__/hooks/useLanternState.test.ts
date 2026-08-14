@@ -18,8 +18,10 @@ jest.mock('../../src/services/home', () => ({
   getHomeLocation:  () => mockGetHomeLocation(),
   distanceFromHome: (...a: unknown[]) => mockDistanceFromHome(...a),
 }));
+const mockGetLastKnownPosition = jest.fn().mockResolvedValue(null);
 jest.mock('../../src/services/geolocation', () => ({
   getPositionLowAccuracy: () => mockGetPositionLowAccuracy(),
+  getLastKnownPosition:   () => mockGetLastKnownPosition(),
 }));
 // maps pulls in firebase via placesFunctions.
 const mockReverseGeocode = jest.fn().mockResolvedValue(null);
@@ -54,6 +56,7 @@ beforeEach(() => {
   mockOfflineCoverage = { offline: false, hasCache: null };
   mockGetCachedAreaName.mockReturnValue(null);
   mockReverseGeocode.mockResolvedValue(null);
+  mockGetLastKnownPosition.mockResolvedValue(null);
 });
 afterEach(() => {
   jest.useRealTimers();
@@ -153,6 +156,40 @@ describe('"Can\'t find you" means we gave up, never "still trying" (KAN-377 AC3)
 
     expect(mockGetPositionLowAccuracy).toHaveBeenCalledTimes(3);
     expect(result.current).toEqual({ kind: 'home' }); // recovered, no "Can't find you"
+  });
+});
+
+describe('the cached OS fix answers first (KAN-377)', () => {
+  it('resolves immediately from the cached fix while the live one is still acquiring', async () => {
+    // Offline this is the difference between a minute of "Looking around…" and
+    // the Lantern being right straight away.
+    mockGetHomeLocation.mockReturnValue(HOME);
+    mockDistanceFromHome.mockReturnValue(40);
+    mockGetLastKnownPosition.mockResolvedValue({ lat: 38.72, lng: -9.14 });
+    mockGetPositionLowAccuracy.mockReturnValue(new Promise(() => {})); // still acquiring
+
+    const { result } = renderHook(() => useLanternState(null, null, true));
+    await act(async () => {});
+    await act(async () => { jest.advanceTimersByTime(LOCATING_MIN_MS); });
+
+    expect(result.current).toEqual({ kind: 'home' });
+  });
+
+  it('never overrides a live fix with the cached one', async () => {
+    mockGetHomeLocation.mockReturnValue(HOME);
+    mockDistanceFromHome.mockReturnValue(40);
+    // The cached fix resolves after the live one — it must not clobber it.
+    let releaseCached: (v: unknown) => void = () => {};
+    mockGetLastKnownPosition.mockReturnValue(new Promise(r => { releaseCached = r; }));
+    mockGetPositionLowAccuracy.mockResolvedValue({ lat: 10, lng: 10 });
+
+    const { result } = renderHook(() => useLanternState(null, null, true));
+    await act(async () => {});
+    await act(async () => { releaseCached({ lat: 99, lng: 99 }); });
+    await act(async () => { jest.advanceTimersByTime(LOCATING_MIN_MS); });
+
+    expect(mockDistanceFromHome).toHaveBeenLastCalledWith({ lat: 10, lng: 10 });
+    expect(result.current).toEqual({ kind: 'home' });
   });
 });
 
