@@ -278,10 +278,6 @@ const en = {
   // area-name-agnostic (no reverse geocoding available); the mall/trip sheets
   // can name the place since it's a destination the user chose themselves.
   contextChip: {
-    /** KAN-316 — LIVE: Lantern.tsx labels its offline dot with this. ContextChip.tsx
-     *  itself no longer renders (KAN-301), so this block otherwise looks dead — move
-     *  this string, never delete it, when that file is finally cleaned up. */
-    offlineGlyphA11y: 'Offline — I know this area',
     closeSheetA11y: 'Close sheet',
     closeA11y:      'Close',
     sheetTitle: 'What I know here',
@@ -297,7 +293,6 @@ const en = {
     // KAN-242 — mall/trip place contexts.
     mallChipA11y: (name: string) => `In ${name} — tap for details`,
     tripChipA11y: (destination: string) => `In ${destination} — tap for details`,
-    offlineDotA11y: 'Offline',
     mallSheetTitle: (name: string) => `While you're at ${name}`,
     tripSheetTitle: (destination: string) => `While you're in ${destination}`,
     placeSheetCoverageLine: "I've learned the places around here.",
@@ -424,6 +419,15 @@ const en = {
     lookingAround: 'Looking around…',
     /** The fix never arrived (past the ceiling). First-person, no claimed cause. */
     cantFindYou: "Can't find you",
+    /**
+     * KAN-349 — the two lines the Lantern zone flexes to hold. Never name a
+     * source, a server, an API or a list: the user's model is the app, not our
+     * plumbing. Both second sentences are promises the refresh loop keeps —
+     * if that loop is ever removed, cut the second sentence with it.
+     */
+    buildingArea: "Still getting to know this area — I'll have more soon.",
+    /** Running on the fallback source. A fault, not progress — but still calm. */
+    degradedArea: "I know less than usual around here right now. I'll top it up when I can.",
     /** Pill a11y for the resolved states (label = current place word). */
     placesPillA11y: (label: string) => `${label} — see the places I know`,
     /** Pill a11y for the unset state. */
@@ -1435,8 +1439,6 @@ const ptPT: typeof en = {
   },
 
   contextChip: {
-    /** KAN-316 — LIVE: Lantern.tsx labels its offline dot with this. See the `en` block. */
-    offlineGlyphA11y: 'Offline — conheço esta zona',
     closeSheetA11y: 'Fechar painel',
     closeA11y:      'Fechar',
     sheetTitle: 'O que conheço aqui',
@@ -1450,7 +1452,6 @@ const ptPT: typeof en = {
 
     mallChipA11y: (name: string) => `Em ${name} — toca para detalhes`,
     tripChipA11y: (destination: string) => `Em ${destination} — toca para detalhes`,
-    offlineDotA11y: 'Offline',
     mallSheetTitle: (name: string) => `Enquanto estás em ${name}`,
     tripSheetTitle: (destination: string) => `Enquanto estás em ${destination}`,
     placeSheetCoverageLine: 'Aprendi os sítios aqui perto.',
@@ -1551,6 +1552,8 @@ const ptPT: typeof en = {
     tellMe: 'Diz-me',
     lookingAround: 'À procura…',
     cantFindYou: 'Não te encontro',
+    buildingArea: 'Ainda estou a conhecer esta zona — em breve sei mais.',
+    degradedArea: 'Neste momento conheço menos por aqui do que é costume. Vou completar quando puder.',
     placesPillA11y: (label: string) => `${label} — vê os sítios que conheço`,
     setHomePillA11y: 'Diz-me onde é casa',
   },

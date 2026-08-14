@@ -1,14 +1,13 @@
 /**
- * contextChip.ts — KAN-242 priority resolver.
+ * contextChip.ts — trip date predicates (KAN-242).
  *
- * Pure decision logic for the header ContextChip: given the current place
- * context (mall/trip/none, already mall-vs-trip prioritized by
- * proximity.ts's findActivePlaceContext) plus offline/cache state, decides
- * the single view to render. Kept independent of geolocation/Firestore so
- * the mall > trip > offline priority and the "never two chips" guarantee
- * are unit-testable without mocking either.
+ * The header ContextChip this file was named for is gone: KAN-301 replaced it
+ * with the Lantern and KAN-349 deleted the component, its view type and its
+ * resolver. What survives is the pure trip-date logic those screens still ask
+ * for — isTodayWithinTripDates (utils/lantern), isTripPast and
+ * isPastMemorableTrip (CalendarScreen, useWhereWeveBeen, usePlaces). The file
+ * keeps its name so those imports stay put.
  */
-import type { PlaceContext } from '../services/proximity';
 import type { Trip } from '../types';
 
 /** True when today falls within the trip's dates. A dateless trip (user skipped both) has no date constraint. */
@@ -39,55 +38,4 @@ export function isTripPast(trip: Trip, todayIso: string): boolean {
  */
 export function isPastMemorableTrip(trip: Trip, todayIso: string): boolean {
   return trip.kind !== 'offgrid' && isTripPast(trip, todayIso);
-}
-
-export type ContextChipView =
-  | { kind: 'mall'; name: string; offlineDot: boolean }
-  | { kind: 'trip'; destination: string; startDate?: string; endDate?: string; offlineDot: boolean }
-  | { kind: 'offgrid'; destination: string; expiresAt: number }
-  | { kind: 'offline' }
-  | { kind: 'none' };
-
-export interface ResolveContextChipViewInput {
-  placeContext: PlaceContext;
-  todayIso: string;
-  offline: boolean;
-  /** Tri-state — null means "not yet checked this offline period" (see useOfflineCoverage). */
-  hasCache: boolean | null;
-  /**
-   * KAN-246 — the active off-grid window, if any. Independent of
-   * placeContext/position — shown whenever the window is active, since the
-   * user set it up in advance and may not be exactly at its center. Optional
-   * (defaults to null) so every existing caller/test is unaffected.
-   */
-  offGridWindow?: { destination: string; expiresAt: number } | null;
-}
-
-/** mall > trip > off-grid window > offline glyph > none. Exactly one kind is ever returned — never two indicators. Off-grid sits at "the offline glyph tier" per KAN-246 — below a real trip/mall context, but ahead of the plain offline glyph since it carries more specific information ("until 18:00"). */
-export function resolveContextChipView({
-  placeContext, todayIso, offline, hasCache, offGridWindow = null,
-}: ResolveContextChipViewInput): ContextChipView {
-  if (placeContext?.kind === 'mall') {
-    return { kind: 'mall', name: placeContext.snapshot.name, offlineDot: offline };
-  }
-
-  if (placeContext?.kind === 'trip' && placeContext.trip.kind !== 'offgrid' && isTodayWithinTripDates(placeContext.trip, todayIso)) {
-    return {
-      kind: 'trip',
-      destination: placeContext.trip.destination,
-      startDate: placeContext.trip.startDate,
-      endDate: placeContext.trip.endDate,
-      offlineDot: offline,
-    };
-  }
-
-  if (offGridWindow) {
-    return { kind: 'offgrid', destination: offGridWindow.destination, expiresAt: offGridWindow.expiresAt };
-  }
-
-  if (offline && hasCache === true) {
-    return { kind: 'offline' };
-  }
-
-  return { kind: 'none' };
 }

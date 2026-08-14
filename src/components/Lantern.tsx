@@ -28,7 +28,7 @@
  * cross-fade — nothing animates per frame, matching the KAN-157 doctrine.
  * Rendered without those props (unit tests) it shows the rest layout only.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -45,7 +45,7 @@ import { spacing } from '../theme/tokens';
 import type { Palette } from '../theme/tokens';
 import { SECTION_H_COLLAPSED } from '../screens/TodayScreen/constants';
 import { COPY } from '../constants/copy';
-import type { LanternState } from '../utils/lantern';
+import type { AreaNotice, LanternState } from '../utils/lantern';
 import {
   ChevronRightIcon,
   CrosshairIcon,
@@ -83,16 +83,14 @@ interface Visual {
   pillLabel: string;
   pillA11y: string;
   isUnset: boolean;
-  offlineDot: boolean;
   baseOpacity: number;
   breathe: { low: number; high: number };
   cycleMs: number;
 }
 
-/** Maps a resolved LanternState to its icon, halo tint, label and pill — the
- *  same shape-the-view step ContextChip does for ContextChipView. Every kind
- *  renders (the Lantern is never empty); `locating`/`unavailable` reuse the
- *  unset state's neutral halo, differing only in the word. */
+/** Maps a resolved LanternState to its icon, halo tint, label and pill. Every
+ *  kind renders (the Lantern is never empty); `locating`/`unavailable` reuse
+ *  the unset state's neutral halo, differing only in the word. */
 function getVisual(state: LanternState, palette: Palette): Visual {
   const lit = {
     baseOpacity: HALO_OPACITY_LIT,
@@ -102,7 +100,7 @@ function getVisual(state: LanternState, palette: Palette): Visual {
   };
   const neutral = {
     Icon: CrosshairIcon, haloToken: palette.haloUnset, iconColor: palette.muted,
-    isUnset: true, offlineDot: false,
+    isUnset: true,
     baseOpacity: HALO_OPACITY_UNSET, breathe: BREATHE_UNSET, cycleMs: BREATHE_CYCLE_MS_UNSET,
   } as const;
   const placesPill = COPY.tripPlanner.placesIKnowTitle;
@@ -113,27 +111,27 @@ function getVisual(state: LanternState, palette: Palette): Visual {
         Icon: HomeIcon, haloToken: palette.haloHome, iconColor: palette.text,
         label: COPY.lantern.home, pillLabel: placesPill,
         pillA11y: COPY.lantern.placesPillA11y(COPY.lantern.home),
-        offlineDot: state.offlineDot, ...lit,
+        ...lit,
       };
     case 'outside': {
       const label = state.cityName ?? COPY.lantern.outside;
       return {
         Icon: PinIcon, haloToken: palette.haloPlace, iconColor: palette.text,
         label, pillLabel: placesPill, pillA11y: COPY.lantern.placesPillA11y(label),
-        offlineDot: state.offlineDot, ...lit,
+        ...lit,
       };
     }
     case 'mall':
       return {
         Icon: ShoppingBagIcon, haloToken: palette.haloPlace, iconColor: palette.text,
         label: state.name, pillLabel: placesPill, pillA11y: COPY.lantern.placesPillA11y(state.name),
-        offlineDot: state.offlineDot, ...lit,
+        ...lit,
       };
     case 'trip':
       return {
         Icon: SuitcaseIcon, haloToken: palette.haloPlace, iconColor: palette.text,
         label: state.destination, pillLabel: placesPill, pillA11y: COPY.lantern.placesPillA11y(state.destination),
-        offlineDot: state.offlineDot, ...lit,
+        ...lit,
       };
     case 'unset':
       return {
@@ -242,14 +240,29 @@ export interface LanternProps {
   collapsedStyle?: AnimatedStyle<ViewStyle>;
   /** JS mirror of the collapse state — drives which layer receives touches. */
   collapsed?: boolean;
+  /**
+   * KAN-349 — what the app owes the user an explanation about here, or null for
+   * the calm empty zone. Rendered in the rest layout only: the collapsed row has
+   * no vertical room beside the icon/label/pill, and a quiet aside is not worth
+   * displacing the place name for once the user has scrolled past it. The state
+   * itself persists, so the line is there again at rest.
+   */
+  notice?: AreaNotice | null;
   /** Test override for reduce-motion. */
   reduceMotionOverride?: boolean;
 }
 
 export default function Lantern({
-  state, onPillPress, restStyle, collapsedStyle, collapsed = false, reduceMotionOverride,
+  state, notice = null, onPillPress, restStyle, collapsedStyle, collapsed = false, reduceMotionOverride,
 }: LanternProps) {
   const { palette } = useTheme();
+  // The three text colours, memoized per palette instead of re-allocated as
+  // object literals on every render (matches TeachSheet's themedStyles).
+  const themedStyles = useMemo(() => StyleSheet.create({
+    restLabel:      { color: palette.text },
+    collapsedLabel: { color: palette.text },
+    notice:         { color: palette.muted },
+  }), [palette]);
   const [reduceMotion, setReduceMotion] = useState(reduceMotionOverride ?? false);
 
   useEffect(() => {
@@ -261,11 +274,9 @@ export default function Lantern({
 
   const v = getVisual(state, palette);
 
-  // The dot only ever renders when the coverage gate passed (KAN-316), so it
-  // says what it actually asserts — "I know this area" — not the bare "Offline".
-  const offlineDot = v.offlineDot ? (
-    <View style={[styles.offlineDot, { backgroundColor: palette.muted }]} accessibilityLabel={COPY.contextChip.offlineGlyphA11y} />
-  ) : null;
+  const noticeText = notice === 'building' ? COPY.lantern.buildingArea
+    : notice === 'degraded' ? COPY.lantern.degradedArea
+      : null;
 
   // ── Rest layout — centred column ──
   const restContent = (
@@ -277,16 +288,20 @@ export default function Lantern({
       />
       <View style={styles.restLabelRow}>
         <Text
-          style={[styles.restLabel, { color: palette.text }]}
+          style={[styles.restLabel, themedStyles.restLabel]}
           numberOfLines={2}
           accessibilityRole="text">
           {v.label}
         </Text>
-        {offlineDot}
       </View>
       <View style={styles.restPill}>
         <Pill label={v.pillLabel} expanded onPress={onPillPress} a11yLabel={v.pillA11y} palette={palette} />
       </View>
+      {noticeText != null && (
+        <Text style={[styles.notice, themedStyles.notice]} numberOfLines={2} accessibilityRole="text">
+          {noticeText}
+        </Text>
+      )}
     </>
   );
 
@@ -304,10 +319,9 @@ export default function Lantern({
             baseOpacity={v.baseOpacity} breathe={v.breathe} cycleMs={v.cycleMs} reduceMotion={reduceMotion}
           />
           <View style={styles.collapsedLabelRow}>
-            <Text style={[styles.collapsedLabel, { color: palette.text }]} numberOfLines={2}>
+            <Text style={[styles.collapsedLabel, themedStyles.collapsedLabel]} numberOfLines={2}>
               {v.label}
             </Text>
-            {offlineDot}
           </View>
         </View>
       </View>
@@ -406,10 +420,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flexShrink: 1,
   },
-  offlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 9999,
+  // KAN-349 — a quiet aside on the background, below the pill. Muted text, no
+  // icon, no warning colour, no surface of its own: it explains, it doesn't
+  // alarm. Sized and capped so it lives inside the zone's existing slack and
+  // never pushes Nearby down (see SECTION_H_REST).
+  notice: {
+    marginTop: 10,
+    maxWidth: 260,
+    fontSize: 13,
+    fontFamily: 'Geist-Regular',
+    fontWeight: '400',
+    lineHeight: 17,
+    textAlign: 'center',
   },
   // ── Pill (static layout; colours + press transform stay inline) ──
   pillBase: {

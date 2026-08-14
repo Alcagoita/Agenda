@@ -1,11 +1,12 @@
 /**
- * KAN-242 — ContextChip priority resolver.
+ * contextChip.ts — trip date predicates.
  *
- * Covers the AC directly: mall > trip > offline glyph > none, overlap
- * cases never render two indicators, and trip's date gating.
+ * The resolver this file was written for (resolveContextChipView) and its
+ * component are gone (KAN-349). What remains under test is the trip-date logic
+ * CalendarScreen, useWhereWeveBeen, usePlaces and utils/lantern still call.
  */
-import { isTodayWithinTripDates, isTripPast, resolveContextChipView } from '../../src/utils/contextChip';
-import type { MallSnapshot, Trip } from '../../src/types';
+import { isTodayWithinTripDates, isTripPast } from '../../src/utils/contextChip';
+import type { Trip } from '../../src/types';
 
 function makeTrip(overrides: Partial<Trip> = {}): Trip {
   return {
@@ -18,20 +19,6 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     cacheAreaId: 'area-1',
     expiresAt: Date.now() + 1_000_000,
     createdAt: {} as Trip['createdAt'],
-    ...overrides,
-  };
-}
-
-function makeMallSnapshot(overrides: Partial<MallSnapshot> = {}): MallSnapshot {
-  return {
-    placeId: 'mall-1',
-    name: 'Colombo',
-    centerLat: 0,
-    centerLng: 0,
-    radius: 300,
-    cacheAreaId: 'mall_snapshot',
-    expiresAt: Date.now() + 1_000_000,
-    createdAt: {} as MallSnapshot['createdAt'],
     ...overrides,
   };
 }
@@ -86,134 +73,5 @@ describe('isTripPast (KAN-257)', () => {
   it('is evaluated purely from endDate, regardless of kind (off-grid or otherwise) — kind filtering is the caller\'s job', () => {
     const trip = makeTrip({ kind: 'offgrid', startDate: '2026-06-01', endDate: '2026-06-10' });
     expect(isTripPast(trip, '2026-07-06')).toBe(true);
-  });
-});
-
-describe('resolveContextChipView — priority mall > trip > offline > none', () => {
-  const baseInput = { todayIso: '2026-07-06', offline: false, hasCache: false as boolean | null };
-
-  it('shows the mall chip when the place context is a mall', () => {
-    const view = resolveContextChipView({
-      ...baseInput,
-      placeContext: { kind: 'mall', snapshot: makeMallSnapshot({ name: 'Colombo' }) },
-    });
-    expect(view).toEqual({ kind: 'mall', name: 'Colombo', offlineDot: false });
-  });
-
-  it('shows the trip chip when inside an active trip within its dates', () => {
-    const trip = makeTrip({ destination: 'Faro', startDate: '2026-07-01', endDate: '2026-07-24' });
-    const view = resolveContextChipView({ ...baseInput, placeContext: { kind: 'trip', trip } });
-    expect(view).toEqual({
-      kind: 'trip', destination: 'Faro', startDate: '2026-07-01', endDate: '2026-07-24', offlineDot: false,
-    });
-  });
-
-  it('the resolved view is always exactly one kind — a mall view never carries trip fields', () => {
-    const view = resolveContextChipView({
-      ...baseInput,
-      placeContext: { kind: 'mall', snapshot: makeMallSnapshot({ name: 'Colombo' }) },
-    });
-    expect(view.kind).toBe('mall');
-    expect(view).not.toHaveProperty('destination');
-  });
-
-  it('falls through to offline glyph when the trip is outside its dates', () => {
-    const trip = makeTrip({ startDate: '2026-08-01', endDate: '2026-08-10' });
-    const view = resolveContextChipView({
-      todayIso: '2026-07-06', offline: true, hasCache: true,
-      placeContext: { kind: 'trip', trip },
-    });
-    expect(view).toEqual({ kind: 'offline' });
-  });
-
-  it('falls through to offline glyph when there is no place context', () => {
-    const view = resolveContextChipView({ ...baseInput, offline: true, hasCache: true, placeContext: null });
-    expect(view).toEqual({ kind: 'offline' });
-  });
-
-  it('shows nothing when offline but hasCache is null (not yet known)', () => {
-    const view = resolveContextChipView({ ...baseInput, offline: true, hasCache: null, placeContext: null });
-    expect(view).toEqual({ kind: 'none' });
-  });
-
-  it('shows nothing online with no place context', () => {
-    const view = resolveContextChipView({ ...baseInput, placeContext: null });
-    expect(view).toEqual({ kind: 'none' });
-  });
-
-  it('sets offlineDot on the mall chip when offline (modifier, not a separate indicator)', () => {
-    const view = resolveContextChipView({
-      todayIso: '2026-07-06', offline: true, hasCache: true,
-      placeContext: { kind: 'mall', snapshot: makeMallSnapshot() },
-    });
-    expect(view).toMatchObject({ kind: 'mall', offlineDot: true });
-  });
-
-  it('sets offlineDot on the trip chip when offline', () => {
-    const trip = makeTrip({ startDate: '2026-07-01', endDate: '2026-07-24' });
-    const view = resolveContextChipView({
-      todayIso: '2026-07-06', offline: true, hasCache: true,
-      placeContext: { kind: 'trip', trip },
-    });
-    expect(view).toMatchObject({ kind: 'trip', offlineDot: true });
-  });
-});
-
-describe('off-grid window priority (KAN-246)', () => {
-  const baseInput = { todayIso: '2026-07-06', offline: false, hasCache: false as boolean | null };
-  const offGridWindow = { destination: 'this area', expiresAt: 1_800_000_000_000 };
-
-  it('shows the off-grid view when a window is active and there is no place context', () => {
-    const view = resolveContextChipView({ ...baseInput, placeContext: null, offGridWindow });
-    expect(view).toEqual({ kind: 'offgrid', destination: 'this area', expiresAt: 1_800_000_000_000 });
-  });
-
-  it('mall still wins over an active off-grid window', () => {
-    const view = resolveContextChipView({
-      ...baseInput,
-      placeContext: { kind: 'mall', snapshot: makeMallSnapshot() },
-      offGridWindow,
-    });
-    expect(view.kind).toBe('mall');
-  });
-
-  it('a real trip still wins over an active off-grid window', () => {
-    const trip = makeTrip({ startDate: '2026-07-01', endDate: '2026-07-24' });
-    const view = resolveContextChipView({
-      ...baseInput,
-      todayIso: '2026-07-06',
-      placeContext: { kind: 'trip', trip },
-      offGridWindow,
-    });
-    expect(view.kind).toBe('trip');
-  });
-
-  it('off-grid wins over the plain offline glyph', () => {
-    const view = resolveContextChipView({
-      ...baseInput, offline: true, hasCache: true, placeContext: null, offGridWindow,
-    });
-    expect(view).toEqual({ kind: 'offgrid', destination: 'this area', expiresAt: 1_800_000_000_000 });
-  });
-
-  it('falls through to offline glyph when there is no active off-grid window', () => {
-    const view = resolveContextChipView({
-      ...baseInput, offline: true, hasCache: true, placeContext: null, offGridWindow: null,
-    });
-    expect(view).toEqual({ kind: 'offline' });
-  });
-
-  it('is unaffected by callers that omit offGridWindow entirely (defaults to null)', () => {
-    const view = resolveContextChipView({ ...baseInput, placeContext: null });
-    expect(view).toEqual({ kind: 'none' });
-  });
-
-  it('an off-grid trip inside its own geofence still resolves to the offgrid view, not the generic trip view', () => {
-    const offgridTrip = makeTrip({ kind: 'offgrid', destination: 'this area' });
-    const view = resolveContextChipView({
-      ...baseInput,
-      placeContext: { kind: 'trip', trip: offgridTrip },
-      offGridWindow,
-    });
-    expect(view).toEqual({ kind: 'offgrid', destination: 'this area', expiresAt: 1_800_000_000_000 });
   });
 });
