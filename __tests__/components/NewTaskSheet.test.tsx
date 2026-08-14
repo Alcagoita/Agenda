@@ -249,7 +249,7 @@ describe('KAN-232 POI inference auto-suggestion', () => {
     expect(screen.getByLabelText('Store').props.accessibilityState?.selected).toBe(true);
     expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
 
-    fireEvent.press(screen.getByLabelText('Specific store'));
+    fireEvent.press(screen.getByLabelText('Specific store?'));
     fireEvent.press(screen.getByLabelText('Specific type?'));
 
     expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
@@ -263,7 +263,7 @@ describe('KAN-232 POI inference auto-suggestion', () => {
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a FNAC');
     await act(async () => { await jest.advanceTimersByTimeAsync(400); });
 
-    expect(screen.getByLabelText('Specific store').props.accessibilityState?.selected).toBe(true);
+    expect(screen.getByLabelText('Specific store?').props.accessibilityState?.selected).toBe(true);
     expect(screen.getByLabelText('Search a store brand').props.value).toBe('Fnac');
   });
 
@@ -556,7 +556,7 @@ describe('addTask submission', () => {
     renderSheet();
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
     fireEvent.press(screen.getByLabelText('Store'));
-    fireEvent.press(screen.getByLabelText('Specific store'));
+    fireEvent.press(screen.getByLabelText('Specific store?'));
     fireEvent.changeText(screen.getByLabelText('Search a store brand'), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     await act(async () => {
@@ -716,7 +716,7 @@ describe('"More details" navigation', () => {
 
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
     fireEvent.press(screen.getByLabelText('Store'));
-    fireEvent.press(screen.getByLabelText('Specific store'));
+    fireEvent.press(screen.getByLabelText('Specific store?'));
     fireEvent.changeText(screen.getByLabelText('Search a store brand'), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     fireEvent.press(screen.getByLabelText('More details'));

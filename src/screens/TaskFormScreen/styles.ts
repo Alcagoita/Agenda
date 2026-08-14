@@ -220,15 +220,13 @@ export const styles = StyleSheet.create({
   },
   storeModeRow: {
     flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: radius.ctaBtn,
-    padding: 3,
-    gap: 3,
+    marginTop: spacing[2],
+    gap: spacing[2],
   },
   storeModeOption: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 9,
+    borderRadius: radius.ctaBtn,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

@@ -44,7 +44,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
-import { categories, fonts } from '../theme/tokens';
+import { categories, fonts, radius, spacing } from '../theme/tokens';
 import { PoiType, CategoryKey, Category, QUICK_ACTIONABLE_POI_TYPES, POI_CATALOG, poiCatalogLabel } from '../types';
 import { addTask } from '../services/firestore';
 import { inferPoiForQuickAdd, learnFromClassification, learnFromUserEdit } from '../services/poiLlm';
@@ -716,7 +716,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
               {poi === 'store' && (
                 <View style={styles.foodTypeSection}>
-                  <View style={[styles.storeModeRow, { borderColor: palette.line, backgroundColor: palette.surface2 }]} accessibilityRole="radiogroup">
+                  <View style={styles.storeModeRow} accessibilityRole="radiogroup">
                     <Pressable
                       accessibilityRole="radio"
                       accessibilityLabel={COPY.newTaskSheet.storeDetailType}
@@ -731,7 +731,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         setStoreSubtypeTouched(false);
                         setStoreSubtype(current => current ?? 'any');
                       }}
-                      style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'type' && { backgroundColor: palette.surface }]}
+                      style={[styles.storeModeOption, {
+                        borderColor: palette.line,
+                        backgroundColor: storeDetailMode === 'type' ? palette.surface : palette.surface2,
+                      }]}
                     >
                       <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailType}</Text>
                     </Pressable>
@@ -744,12 +747,15 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         setStoreSubtype(null);
                         setStoreSubtypeTouched(false);
                       }}
-                      style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'brand' && { backgroundColor: palette.surface }]}
+                      style={[styles.storeModeOption, {
+                        borderColor: palette.line,
+                        backgroundColor: storeDetailMode === 'brand' ? palette.surface : palette.surface2,
+                      }]}
                     >
                       <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
                     </Pressable>
                   </View>
-                  <View style={styles.foodTypePad}>
+                  <View style={[styles.foodTypePad, storeDetailMode === 'brand' && styles.storeBrandPad]}>
                     {storeDetailMode === 'type' ? (
                       <StoreSubtypeSelector
                         selected={storeSubtype}
@@ -1051,20 +1057,21 @@ const styles = StyleSheet.create({
   },
   storeModeRow: {
     flexDirection: 'row',
-    marginHorizontal: 22,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 3,
-    gap: 3,
+    marginHorizontal: spacing.page,
+    marginTop: spacing[2],
+    gap: spacing[2],
   },
   storeModeOption: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 9,
+    borderRadius: radius.ctaBtn,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
+  },
+  storeBrandPad: {
+    paddingRight: spacing.page,
   },
   storeModeLabel: {
     fontSize: 13,

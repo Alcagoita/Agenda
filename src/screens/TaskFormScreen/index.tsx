@@ -956,7 +956,7 @@ export default function TaskFormScreen() {
 
           {effectivePoi === 'store' && (
             <View style={styles.subtypeSection}>
-              <View style={[styles.storeModeRow, { borderColor: palette.line, backgroundColor: palette.surface2 }]} accessibilityRole="radiogroup">
+              <View style={styles.storeModeRow} accessibilityRole="radiogroup">
                 <Pressable
                   accessibilityRole="radio"
                   accessibilityLabel={COPY.newTaskSheet.storeDetailType}
@@ -971,7 +971,10 @@ export default function TaskFormScreen() {
                     setStoreSubtypeTouched(false);
                     setStoreSubtype(current => current ?? 'any');
                   }}
-                  style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'type' && { backgroundColor: palette.surface }]}
+                  style={[styles.storeModeOption, {
+                    borderColor: palette.line,
+                    backgroundColor: storeDetailMode === 'type' ? palette.surface : palette.surface2,
+                  }]}
                 >
                   <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailType}</Text>
                 </Pressable>
@@ -984,7 +987,10 @@ export default function TaskFormScreen() {
                     setStoreSubtype(null);
                     setStoreSubtypeTouched(false);
                   }}
-                  style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'brand' && { backgroundColor: palette.surface }]}
+                  style={[styles.storeModeOption, {
+                    borderColor: palette.line,
+                    backgroundColor: storeDetailMode === 'brand' ? palette.surface : palette.surface2,
+                  }]}
                 >
                   <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
                 </Pressable>
