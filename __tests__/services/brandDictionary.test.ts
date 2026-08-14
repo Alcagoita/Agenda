@@ -39,6 +39,13 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('gym', 'Pingo Doce')).toBeNull();
   });
 
+  it('resolves curated Store brands from aliases and title text', () => {
+    expect(getCanonicalBrand('store', 'Media Markt')).toBe('MediaMarkt');
+    expect(getCanonicalBrand('store', 'H & M')).toBe('H&M');
+    expect(findBrandInText('store', 'Buy a cable at Worten')).toBe('Worten');
+    expect(getBrandSuggestions('store', 'leroy')).toEqual(['Leroy Merlin']);
+  });
+
   it('resolves Portuguese Bank aliases and title text to one canonical value', () => {
     expect(getCanonicalBrand('bank', 'CGD')).toBe('Caixa Geral de Depósitos');
     expect(findBrandInText('bank', 'Visit Caixa Geral de Depositos Alcobaça')).toBe('Caixa Geral de Depósitos');
@@ -73,5 +80,16 @@ describe('brandDictionary', () => {
       { poi: 'gym', poiBrand: 'Solinca' },
       { poi: 'gym', poiBrand: 'Fitness Hut' },
     ])).toEqual([{ brand: 'Solinca' }, { brand: 'Fitness Hut' }]);
+  });
+
+  it('filters Store results only when the task selected a canonical brand', () => {
+    const places = [{ brand: 'Worten' }, { brand: 'Fnac' }];
+    expect(brandTaskMatchesPlace({ poi: 'store', poiBrand: 'Worten' }, { brand: 'Worten' })).toBe(true);
+    expect(brandTaskMatchesPlace({ poi: 'store', poiBrand: 'Worten' }, { brand: 'Fnac' })).toBe(false);
+    expect(brandTaskMatchesPlace({ poi: 'store' }, { brand: 'Fnac' })).toBe(true);
+    expect(filterBrandPlacesForTasks('store', places, [
+      { poi: 'store', poiBrand: 'Worten' },
+      { poi: 'store' },
+    ])).toEqual(places);
   });
 });

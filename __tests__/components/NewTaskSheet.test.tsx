@@ -523,6 +523,22 @@ describe('addTask submission', () => {
     );
   });
 
+  it('saves a selected Store brand without a Store subtype', async () => {
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText('Specific store'));
+    fireEvent.changeText(screen.getByLabelText('Search a store brand'), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Add it'));
+    });
+    expect(mockAddTask).toHaveBeenCalledWith('test-uid', expect.objectContaining({
+      poi: 'store', poiBrand: 'Worten',
+    }));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
+  });
+
   it('does not call addTask when POI is missing', async () => {
     renderSheet();
     fireEvent.changeText(

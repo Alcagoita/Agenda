@@ -226,8 +226,8 @@ service cloud.firestore {
 
     // KAN-364 — canonical values from src/constants/brandDictionary.json.
     // Firestore Rules cannot import JSON; keep this allowlist narrow so a
-    // direct client write cannot invent an unqueryable Gym/Bank brand.
-    function validRequiredPoiBrand(poi, brand) {
+    // direct client write cannot invent an unqueryable canonical brand.
+    function validPoiBrand(poi, brand) {
       return (poi == 'gym' && brand in [
         'Fitness Hut', 'Solinca', 'Holmes Place', 'Go Fit', 'Element',
         'Pump Fitness Spirit', 'Time to Fitness', 'Urban Sports Club',
@@ -242,13 +242,21 @@ service cloud.firestore {
         'Caja de Badajoz', 'BNI Europa', 'BANC Angolano', 'Crédito Agrícola',
         'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'La Caixa',
         'Banco Popular', 'Unicaja', 'Banque Populaire'
+      ]) || (poi == 'store' && brand in [
+        'Zara', 'H&M', 'Primark', 'Mango', 'Pull&Bear', 'Bershka',
+        'Stradivarius', 'Lefties', 'Massimo Dutti', 'C&A', 'Decathlon',
+        'JD Sports', 'Worten', 'Fnac', 'MediaMarkt', 'Radio Popular',
+        'iServices', 'IKEA', 'Leroy Merlin', 'JYSK', 'Conforama',
+        'Zara Home', 'Bertrand', 'Sephora', 'Douglas'
       ]);
     }
 
     function validTaskBrand(data) {
       return ((('poi' in data.keys()) && data.poi in ['gym', 'bank'])
-        ? ('poiBrand' in data.keys() && validRequiredPoiBrand(data.poi, data.poiBrand))
-        : !('poiBrand' in data.keys()));
+        ? ('poiBrand' in data.keys() && validPoiBrand(data.poi, data.poiBrand))
+        : (('poi' in data.keys()) && data.poi == 'store')
+          ? (!('poiBrand' in data.keys()) || validPoiBrand(data.poi, data.poiBrand))
+          : !('poiBrand' in data.keys()));
     }
 
     // KAN-364: old generic Gym/Bank records remain usable. A status-only
@@ -315,7 +323,8 @@ service cloud.firestore {
         && (!('time' in data.keys()) || validTimeString(data.time))
         && (!('source' in data.keys()) || validTaskSource(data.source))
         && (!('poi' in data.keys()) || validPoiType(data.poi))
-        && (!('storeSubtype' in data.keys()) || validString(data.storeSubtype, 50))
+        && (!('storeSubtype' in data.keys()) ||
+          (data.poi == 'store' && !('poiBrand' in data.keys()) && validString(data.storeSubtype, 50)))
         && (!('restaurantFoodType' in data.keys()) ||
           (data.poi == 'restaurant' && validRestaurantFoodType(data.restaurantFoodType)))
         && (!('financialServiceKind' in data.keys()) ||

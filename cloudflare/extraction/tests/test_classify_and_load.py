@@ -123,6 +123,14 @@ class ClassifyDeduplicationTest(unittest.TestCase):
             classify_and_load.find_brand('Finibanco em Abrantes', ['bank'], dictionary),
             'Montepio',
         )
+        self.assertEqual(
+            classify_and_load.find_brand('Worten Leiria', ['store'], dictionary),
+            'Worten',
+        )
+        self.assertEqual(
+            classify_and_load.find_brand('Media Markt Coimbra', ['store'], dictionary),
+            'MediaMarkt',
+        )
 
     def test_explicit_atm_name_rule_does_not_reclassify_a_bank_branch(self):
         rules = classify_and_load.load_financial_service_name_rules()

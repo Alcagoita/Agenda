@@ -71,7 +71,7 @@ const SUBTYPE_FILTER_VALUES: Record<NearbyAttributeInput['dimension'], readonly 
   financial_service_kind: Object.keys(financialServiceKindDictionary),
 };
 
-const BRAND_FILTER_TYPES = new Set(['gym', 'bank']);
+const BRAND_FILTER_TYPES = new Set(['gym', 'bank', 'store']);
 const CANONICAL_BRANDS = new Map(
   Object.entries(brandDictionary).map(([type, brands]) => [
     type,
@@ -141,7 +141,7 @@ function assertNearbyRequests(data: PoiAllInput): { requests: NearbyRequestInput
       typeof request.brand !== 'string' || !BRAND_FILTER_TYPES.has(request.type) ||
       !CANONICAL_BRANDS.get(request.type)?.has(request.brand)
     )) {
-      throw new HttpsError('invalid-argument', 'Each nearby brand filter needs one supported canonical Gym or Bank brand.');
+      throw new HttpsError('invalid-argument', 'Each nearby brand filter needs one supported canonical brand.');
     }
   }
   return { requests, limitPerRequest };

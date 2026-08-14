@@ -29,14 +29,22 @@ export function buildNearbySearchRequests(tasks: readonly Pick<Task, 'poi' | 'ti
       continue;
     }
     if (type === 'store') {
-      const subtypes = new Set(typeTasks.map(storeTaskSubtype).filter((value): value is NonNullable<typeof value> => value != null && value !== 'any'));
+      const brands = new Set(typeTasks.map(task => task.poiBrand).filter((brand): brand is string => typeof brand === 'string' && brand.length > 0));
+      const subtypes = new Set(typeTasks
+        .filter(task => !(typeof task.poiBrand === 'string' && task.poiBrand.length > 0))
+        .map(storeTaskSubtype)
+        .filter((value): value is NonNullable<typeof value> => value != null && value !== 'any'));
       const hasGenericTask = typeTasks.some(task => {
+        if (typeof task.poiBrand === 'string' && task.poiBrand.length > 0) return false;
         const subtype = storeTaskSubtype(task);
         return subtype == null || subtype === 'any';
       });
       if (hasGenericTask) requests.push({ key: type, type });
       for (const value of subtypes) {
         requests.push({ key: `${type}:store_kind:${value}`, type, attribute: { dimension: 'store_kind', values: [value] } });
+      }
+      for (const brand of brands) {
+        requests.push({ key: `${type}:brand:${brand}`, type, brand });
       }
       continue;
     }

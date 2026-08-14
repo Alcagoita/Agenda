@@ -171,6 +171,21 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     ]);
   });
 
+  it('accepts only the requested optional Store brand', async () => {
+    const stores: FakePoi[] = [
+      { fsq_place_id: 'worten', name: 'Worten Coimbra', raw_category_labels: '', category_label: '', primary_poi_type: 'store', brand: 'Worten' },
+      { fsq_place_id: 'fnac', name: 'Fnac Coimbra', raw_category_labels: '', category_label: '', primary_poi_type: 'store', brand: 'Fnac' },
+    ];
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'store:brand:Worten', type: 'store', brand: 'Worten' },
+    ]), env(stores), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ name: string; brand: string | null }>> };
+    expect(body.results['store:brand:Worten']).toEqual([
+      expect.objectContaining({ name: 'Worten Coimbra', brand: 'Worten' }),
+    ]);
+  });
+
   it('rejects an unknown brand and a brand on an unsupported POI type', async () => {
     const unknown = await worker.fetch(nearbyRequest([
       { key: 'gym:brand:nope', type: 'gym', brand: 'Nope Gym' },

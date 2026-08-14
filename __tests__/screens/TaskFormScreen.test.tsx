@@ -780,6 +780,18 @@ describe('TaskFormScreen — save (create)', () => {
     });
   });
 
+  it('infers and saves a Store brand without a Store subtype in create mode', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
+    mockAddTask.mockResolvedValueOnce('new-id');
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy headphones at Worten');
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      poi: 'store', poiBrand: 'Worten',
+    })));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
+  });
+
   it('saves a Financial service kind selected in More Details', async () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'financial_service', initialPoiExplicitlySelected: true });
     mockAddTask.mockResolvedValueOnce('new-id');

@@ -58,6 +58,7 @@ import FoodTypeSelector from './FoodTypeSelector';
 import FinancialServiceKindSelector from './FinancialServiceKindSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 import StoreSubtypeSelector from './StoreSubtypeSelector';
+import StoreBrandInput from './StoreBrandInput';
 import BrandSelector from './BrandSelector';
 import {
   inferStoreSubtype,
@@ -230,6 +231,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     const [financialServiceKindTouched, setFinancialServiceKindTouched] = useState(false);
     const [storeSubtype, setStoreSubtype] = useState<StoreSubtype | null>(null);
     const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(false);
+    const [storeDetailMode, setStoreDetailMode] = useState<'type' | 'brand'>('type');
     const [poiBrand, setPoiBrand] = useState<string | null>(null);
     const [poiBrandTouched, setPoiBrandTouched] = useState(false);
     const previousBrandPoiRef = useRef<string | null>(poi);
@@ -307,6 +309,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setFinancialServiceKindTouched(false);
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
+      setStoreDetailMode('type');
       setPoiBrand(null);
       setPoiBrandTouched(false);
       setSuggestedPoi(null);
@@ -436,8 +439,9 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       if (poi !== 'store') {
         setStoreSubtype(null);
         setStoreSubtypeTouched(false);
+        setStoreDetailMode('type');
       }
-      if (previousBrandPoiRef.current !== poi || !poiTypeRequiresBrand(poi)) {
+      if (previousBrandPoiRef.current !== poi || (!poiTypeRequiresBrand(poi) && poi !== 'store')) {
         setPoiBrand(null);
         setPoiBrandTouched(false);
       }
@@ -445,9 +449,9 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     }, [poi]);
 
     useEffect(() => {
-      if (poi !== 'store' || storeSubtypeTouched) { return; }
+      if (poi !== 'store' || storeDetailMode !== 'type' || storeSubtypeTouched) { return; }
       setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
-    }, [poi, storeSubtypeTouched, title]);
+    }, [poi, storeDetailMode, storeSubtypeTouched, title]);
 
     useEffect(() => {
       if (poi !== 'financial_service' || financialServiceKindTouched) return;
@@ -459,11 +463,15 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setFinancialServiceKind(kind);
     }, []);
 
-    const suggestedBrand = poiTypeRequiresBrand(poi) ? findBrandInText(poi, title) : null;
+    const suggestedBrand = (poiTypeRequiresBrand(poi) || poi === 'store') ? findBrandInText(poi, title) : null;
     useEffect(() => {
-      if (!poiTypeRequiresBrand(poi) || poiBrandTouched) { return; }
+      if ((!poiTypeRequiresBrand(poi) && poi !== 'store') || poiBrandTouched || (poi === 'store' && storeSubtypeTouched)) { return; }
       setPoiBrand(suggestedBrand);
-    }, [poi, poiBrandTouched, suggestedBrand]);
+      if (poi === 'store' && suggestedBrand) {
+        setStoreSubtype(null);
+        setStoreDetailMode('brand');
+      }
+    }, [poi, poiBrandTouched, storeSubtypeTouched, suggestedBrand]);
 
     // KAN-249 — the leading suggestion tile's content. `suggestionType` is
     // sticky once inference lands on something: replacing it with a
@@ -491,10 +499,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           category: category ?? 'personal',
           done:     false,
           poi,
-          ...(poi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
+          ...(poi === 'store' && !isCanonicalBrandForType('store', poiBrand) ? { storeSubtype: storeSubtype ?? 'any' } : {}),
           ...(poi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
           ...(poi === 'financial_service' && financialServiceKind ? { financialServiceKind } : {}),
-          ...(poiTypeRequiresBrand(poi) && isCanonicalBrandForType(poi, poiBrand) ? { poiBrand } : {}),
+          ...((poiTypeRequiresBrand(poi) || poi === 'store') && isCanonicalBrandForType(poi, poiBrand) ? { poiBrand: poiBrand! } : {}),
         });
         // KAN-249 learn-back — only meaningful when a suggestion actually
         // fired for THIS title. Inference is skipped once the carousel is
@@ -530,8 +538,8 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         initialCategory: category ?? undefined,
         initialPoi:      poi ?? undefined,
         ...(poi === 'store' ? {
-          initialStoreSubtype: storeSubtype ?? undefined,
-          initialStoreSubtypeExplicitlySelected: storeSubtypeTouched,
+          initialStoreSubtype: isCanonicalBrandForType('store', poiBrand) ? undefined : storeSubtype ?? undefined,
+          initialStoreSubtypeExplicitlySelected: !isCanonicalBrandForType('store', poiBrand) && storeSubtypeTouched,
         } : {}),
         ...(poi === 'restaurant' && restaurantFoodType ? {
           initialRestaurantFoodType: restaurantFoodType,
@@ -540,7 +548,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           initialFinancialServiceKind: financialServiceKind ?? undefined,
           initialFinancialServiceKindExplicitlySelected: financialServiceKindTouched,
         } : {}),
-        ...(poiTypeRequiresBrand(poi) && poiBrand ? { initialPoiBrand: poiBrand } : {}),
+        ...((poiTypeRequiresBrand(poi) || poi === 'store') && poiBrand ? { initialPoiBrand: poiBrand } : {}),
         initialPoiExplicitlySelected: poiTouched,
       }), 80);
     }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, financialServiceKind, financialServiceKindTouched, poiBrand, poiTouched]);
@@ -708,20 +716,64 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
               {poi === 'store' && (
                 <View style={styles.foodTypeSection}>
-                  <View style={styles.questionRow}>
-                    <Text style={[styles.questionLabel, { color: palette.text }]}>
-                      {COPY.newTaskSheet.subtypeQuestion}
-                    </Text>
+                  <View style={[styles.storeModeRow, { borderColor: palette.line, backgroundColor: palette.surface2 }]} accessibilityRole="radiogroup">
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityLabel={COPY.newTaskSheet.storeDetailType}
+                      accessibilityState={{ selected: storeDetailMode === 'type' }}
+                      onPress={() => {
+                        setStoreDetailMode('type');
+                        setPoiBrand(null);
+                        setPoiBrandTouched(false);
+                        setStoreSubtypeTouched(true);
+                        setStoreSubtype(current => current ?? 'any');
+                      }}
+                      style={[styles.storeModeOption, storeDetailMode === 'type' && { backgroundColor: palette.surface, borderColor: palette.line }]}
+                    >
+                      <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailType}</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityLabel={COPY.newTaskSheet.storeDetailBrand}
+                      accessibilityState={{ selected: storeDetailMode === 'brand' }}
+                      onPress={() => {
+                        setStoreDetailMode('brand');
+                        setStoreSubtype(null);
+                        setStoreSubtypeTouched(false);
+                      }}
+                      style={[styles.storeModeOption, storeDetailMode === 'brand' && { backgroundColor: palette.surface, borderColor: palette.line }]}
+                    >
+                      <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
+                    </Pressable>
                   </View>
                   <View style={styles.foodTypePad}>
-                    <StoreSubtypeSelector
-                      selected={storeSubtype}
-                      suggested={suggestedStoreSubtype}
-                      onSelect={subtype => {
-                        setStoreSubtypeTouched(true);
-                        setStoreSubtype(subtype ?? 'any');
-                      }}
-                    />
+                    {storeDetailMode === 'type' ? (
+                      <StoreSubtypeSelector
+                        selected={storeSubtype}
+                        suggested={suggestedStoreSubtype}
+                        onSelect={subtype => {
+                          setStoreSubtypeTouched(true);
+                          setPoiBrand(null);
+                          setPoiBrandTouched(false);
+                          setStoreSubtype(subtype ?? 'any');
+                        }}
+                      />
+                    ) : (
+                      <StoreBrandInput
+                        selected={poiBrand}
+                        placeholder={COPY.newTaskSheet.storeBrandPlaceholder}
+                        onClear={() => {
+                          setPoiBrand(null);
+                          setPoiBrandTouched(true);
+                        }}
+                        onSelect={brand => {
+                          setPoiBrandTouched(true);
+                          setPoiBrand(brand);
+                          setStoreSubtype(null);
+                          setStoreSubtypeTouched(false);
+                        }}
+                      />
+                    )}
                   </View>
                 </View>
               )}
@@ -993,6 +1045,29 @@ const styles = StyleSheet.create({
   },
   foodTypeSection: {
     paddingTop: 2,
+  },
+  storeModeRow: {
+    flexDirection: 'row',
+    marginHorizontal: 22,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 3,
+    gap: 3,
+  },
+  storeModeOption: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  storeModeLabel: {
+    fontSize: 13,
+    fontFamily: fonts.families.medium,
+    fontWeight: '500',
   },
   carouselMask: {
     // Soft fade on the trailing edge via paddingRight on the content and overflow

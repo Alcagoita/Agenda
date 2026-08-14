@@ -386,7 +386,7 @@ const SUBTYPE_FILTERS: Record<string, { dimension: string; values: readonly stri
     values: Object.keys(financialServiceKindDictionary),
   },
 };
-const BRAND_FILTER_TYPES = new Set(['gym', 'bank']);
+const BRAND_FILTER_TYPES = new Set(['gym', 'bank', 'store']);
 const CANONICAL_BRANDS = new Map(
   Object.entries(brandDictionary).map(([type, brands]) => [
     type,
@@ -541,7 +541,7 @@ function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
     let brand: string | null = null;
     if (request.brand !== undefined) {
       if (typeof request.brand !== 'string' || !BRAND_FILTER_TYPES.has(request.type) || !CANONICAL_BRANDS.get(request.type)?.has(request.brand)) {
-        return json({ error: 'brand is not a supported canonical Gym or Bank filter for this type' }, 400);
+        return json({ error: 'brand is not a supported canonical brand filter for this type' }, 400);
       }
       brand = request.brand;
     }
