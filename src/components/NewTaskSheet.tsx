@@ -733,10 +733,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                       }}
                       style={[styles.storeModeOption, {
                         borderColor: palette.line,
-                        backgroundColor: storeDetailMode === 'type' ? palette.surface : palette.surface2,
+                        backgroundColor: storeDetailMode === 'type' ? palette.surface : 'transparent',
                       }]}
                     >
-                      <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailType}</Text>
+                      <Text style={[styles.storeModeLabel, { color: storeDetailMode === 'type' ? palette.text : palette.muted }]}>{COPY.newTaskSheet.storeDetailType}</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="radio"
@@ -749,10 +749,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                       }}
                       style={[styles.storeModeOption, {
                         borderColor: palette.line,
-                        backgroundColor: storeDetailMode === 'brand' ? palette.surface : palette.surface2,
+                        backgroundColor: storeDetailMode === 'brand' ? palette.surface : 'transparent',
                       }]}
                     >
-                      <Text style={[styles.storeModeLabel, { color: palette.text }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
+                      <Text style={[styles.storeModeLabel, { color: storeDetailMode === 'brand' ? palette.text : palette.muted }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
                     </Pressable>
                   </View>
                   <View style={[styles.foodTypePad, storeDetailMode === 'brand' && styles.storeBrandPad]}>
