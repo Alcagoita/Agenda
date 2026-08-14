@@ -364,6 +364,7 @@ import {
   hasCachedPlaces,
   hasCachedPlacesNear,
   getCachedAreaName,
+  setWifiOnlyDownloads,
   getMostRecentHabitatUpdateAt,
   deleteTripAreaPlaces,
   deleteExpiredTripPlaces,
@@ -923,6 +924,50 @@ describe('refreshHabitatCacheIfStale', () => {
       await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['atm']);
 
       expect(mockSearchNearbyPlaces).toHaveBeenCalledTimes(1); // second call backed off
+    });
+  });
+
+  describe('"Only download on Wi-Fi" (AC5, AC6)', () => {
+    afterEach(() => setWifiOnlyDownloads(false)); // module-level: restore the default
+
+    it('runs on a cellular connection by default — the switch is off (AC6)', async () => {
+      mockNetInfoFetch.mockResolvedValue({ isConnected: true, type: 'cellular' });
+      mockSearchNearbyPlaces.mockResolvedValue(nearbyAnswer({ atm: [] }, 'osm'));
+
+      await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['atm']);
+
+      expect(mockSearchNearbyPlaces).toHaveBeenCalled();
+    });
+
+    it('does not run on cellular once enabled (AC5)', async () => {
+      setWifiOnlyDownloads(true);
+      mockNetInfoFetch.mockResolvedValue({ isConnected: true, type: 'cellular' });
+
+      await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['atm']);
+
+      expect(mockSearchNearbyPlaces).not.toHaveBeenCalled();
+    });
+
+    it('still runs on Wi-Fi when enabled — it defers the download, never cancels it', async () => {
+      setWifiOnlyDownloads(true);
+      mockNetInfoFetch.mockResolvedValue({ isConnected: true, type: 'wifi' });
+      mockSearchNearbyPlaces.mockResolvedValue(nearbyAnswer({ atm: [] }, 'osm'));
+
+      await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['atm']);
+
+      expect(mockSearchNearbyPlaces).toHaveBeenCalled();
+    });
+
+    it('downloads when the connection type is unknown rather than guessing cellular', async () => {
+      // Refusing on a guess would quietly leave the cache empty for someone
+      // who never asked for that.
+      setWifiOnlyDownloads(true);
+      mockNetInfoFetch.mockRejectedValue(new Error('netinfo unavailable'));
+      mockSearchNearbyPlaces.mockResolvedValue(nearbyAnswer({ atm: [] }, 'osm'));
+
+      await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['atm']);
+
+      expect(mockSearchNearbyPlaces).toHaveBeenCalled();
     });
   });
 

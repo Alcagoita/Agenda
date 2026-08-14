@@ -81,6 +81,22 @@ export const HABITAT_RADIUS_M = 5_000;
  */
 export const HABITAT_PREFETCH_RADIUS_M = 1_000;
 
+/**
+ * Whether the proactive download waits for Wi-Fi (KAN-366). Off by default:
+ * the download is how the app works, and at 21–36 KB per kilometre it is not
+ * a cost worth asking anyone to opt into. The switch exists for the one real
+ * concern — roaming or a metered plan — and only ever holds it back.
+ *
+ * Module-level and set from the app, matching how proximity.ts takes its own
+ * preferences: this file is reached from background/best-effort paths that
+ * have no user context to read Firestore with.
+ */
+let _wifiOnlyDownloads = false;
+
+export function setWifiOnlyDownloads(enabled: boolean): void {
+  _wifiOnlyDownloads = enabled;
+}
+
 /** Hard cap on total cached rows — keeps the on-device footprint small. */
 export const MAX_CACHED_PLACES = 2_000;
 
@@ -814,8 +830,18 @@ export async function refreshHabitatCacheIfStale(
 
   try {
     let isConnected: boolean | null = null;
-    try { isConnected = (await NetInfo.fetch()).isConnected; } catch { /* treat as unknown */ }
+    let connectionType: string | null = null;
+    try {
+      const netState = await NetInfo.fetch();
+      isConnected = netState.isConnected;
+      connectionType = netState.type;
+    } catch { /* treat as unknown */ }
     if (isConnected === false) { return; }
+    // KAN-366 — the user asked us to wait for Wi-Fi. An unknown connection
+    // type (the fetch threw) is not treated as cellular: refusing to download
+    // on a guess would quietly leave the cache empty for someone who never
+    // asked for that.
+    if (_wifiOnlyDownloads && connectionType != null && connectionType !== 'wifi') { return; }
 
     const now = Date.now();
     let typesToFetch: string[];

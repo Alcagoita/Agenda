@@ -25,6 +25,14 @@ export async function setLowBatteryPausePref(
   await updateDoc(userRef(uid), { 'poiPreferences.lowBatteryPause': enabled });
 }
 
+/** KAN-366 — defer the proactive download to Wi-Fi. Default false (any connection). */
+export async function setWifiOnlyDownloadsPref(
+  uid: string,
+  enabled: boolean,
+): Promise<void> {
+  await updateDoc(userRef(uid), { 'poiPreferences.wifiOnlyDownloads': enabled });
+}
+
 /**
  * Read the user's low-battery pause preference once.
  * Returns `false` if not yet set.

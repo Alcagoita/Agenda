@@ -499,6 +499,15 @@ const en = {
     darkModeToggleA11y: 'Dark mode toggle',
     pauseLowBattery: 'Pause nearby alerts on low battery',
     pauseLowBatteryToggleA11y: 'Pause nearby alerts on low battery toggle',
+    /**
+     * KAN-366 — restraint, not permission. The download itself has no switch;
+     * this only makes it wait. The size is stated because it is the one real
+     * concern behind the setting, and because knowing it is roughly 30 KB is
+     * what tells someone they can safely leave this off.
+     */
+    wifiOnlyDownloads: 'Only download on Wi-Fi',
+    wifiOnlyDownloadsSublabel: 'I learn the places around you before you need them — about 30 KB for an area. Leave this off and I do it on any connection.',
+    wifiOnlyDownloadsToggleA11y: 'Only download on Wi-Fi toggle',
     languageRowLabel: 'Language',
     languageSheetTitle: 'Choose a language',
     languageEnglish: 'English',
@@ -1615,6 +1624,9 @@ const ptPT: typeof en = {
     darkModeToggleA11y: 'Alternar modo escuro',
     pauseLowBattery: 'Pausar alertas próximos com bateria fraca',
     pauseLowBatteryToggleA11y: 'Alternar pausa de alertas com bateria fraca',
+    wifiOnlyDownloads: 'Só descarregar com Wi-Fi',
+    wifiOnlyDownloadsSublabel: 'Aprendo os sítios à tua volta antes de precisares deles — cerca de 30 KB por zona. Se deixares desligado, faço-o em qualquer ligação.',
+    wifiOnlyDownloadsToggleA11y: 'Alternar descarregar só com Wi-Fi',
     languageRowLabel: 'Idioma',
     languageSheetTitle: 'Escolhe um idioma',
     languageEnglish: 'English',

@@ -11,6 +11,7 @@
  * local state reverts (see useTaskCompletion).
  */
 
+import { setWifiOnlyDownloads } from '../../services/habitatCache';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import {
@@ -188,6 +189,7 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
           setSocialUnreadCount(bootData.socialUnreadCount ?? 0);
           if (bootData.userData) {
             setLowBatteryPausePref(bootData.userData.poiPreferences?.lowBatteryPause ?? false);
+            setWifiOnlyDownloads(bootData.userData.poiPreferences?.wifiOnlyDownloads ?? false);
             setStoreTuningEnabled(bootData.userData.poiPreferences?.storeTuningEnabled);
           }
           setTrips(bootData.trips);
@@ -303,6 +305,7 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
         const userData = userDataResult.value;
         setHomeLocation(userData?.home ?? null);
         setLowBatteryPausePref(userData?.poiPreferences?.lowBatteryPause ?? false);
+        setWifiOnlyDownloads(userData?.poiPreferences?.wifiOnlyDownloads ?? false);
         setStoreTuningEnabled(userData?.poiPreferences?.storeTuningEnabled);
       }
 
