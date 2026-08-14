@@ -1225,6 +1225,26 @@ function triggerBuild(
   if (ctx) ctx.waitUntil(startup);
 }
 
+/** Queue the metadata-only settlement registry exactly once per country run. */
+async function queueSettlementRegistry(
+  env: Env,
+  ctx: ExecutionContext | undefined,
+  countryCode: string,
+): Promise<'none' | 'mapping' | 'mapped' | 'failed'> {
+  const result = await env.REGISTRY_DB.prepare(
+    `INSERT INTO settlement_registry_import (country_code, status, started_at, completed_at, last_error)
+     VALUES (?, 'mapping', ?, NULL, NULL)
+     ON CONFLICT(country_code) DO UPDATE SET
+       status = 'mapping', started_at = excluded.started_at, completed_at = NULL, last_error = NULL
+     WHERE settlement_registry_import.status IN ('none', 'failed')`,
+  ).bind(countryCode, new Date().toISOString()).run();
+  if (result.meta.changes === 1) triggerBuild(env, ctx, 'settlements', countryCode);
+  const registry = await env.REGISTRY_DB.prepare(
+    'SELECT status FROM settlement_registry_import WHERE country_code = ?',
+  ).bind(countryCode).first<{ status: 'none' | 'mapping' | 'mapped' | 'failed' }>();
+  return registry?.status ?? 'none';
+}
+
 /**
  * Atomically promotes a 'none' Place to 'mapping' and fires the build
  * trigger exactly once — WHERE status = 'none' in the UPDATE is what makes
@@ -1637,18 +1657,7 @@ export default {
       if (country.status !== 'mapped') {
         return json({ error: `country '${countryCode}' must be mapped before settlement metadata is queued` }, 409);
       }
-      const result = await env.REGISTRY_DB.prepare(
-        `INSERT INTO settlement_registry_import (country_code, status, started_at, completed_at, last_error)
-         VALUES (?, 'mapping', ?, NULL, NULL)
-         ON CONFLICT(country_code) DO UPDATE SET
-           status = 'mapping', started_at = excluded.started_at, completed_at = NULL, last_error = NULL
-         WHERE settlement_registry_import.status IN ('none', 'failed')`,
-      ).bind(countryCode, new Date().toISOString()).run();
-      if (result.meta.changes === 1) triggerBuild(env, ctx, 'settlements', countryCode);
-      const registry = await env.REGISTRY_DB.prepare(
-        'SELECT status FROM settlement_registry_import WHERE country_code = ?',
-      ).bind(countryCode).first<{ status: string }>();
-      return json({ ok: true, status: registry?.status ?? 'none' });
+      return json({ ok: true, status: await queueSettlementRegistry(env, ctx, countryCode) });
     }
 
     // POST /internal/country-source — records the raw country extract as
@@ -1795,7 +1804,12 @@ export default {
       if (result.meta.changes !== 1) {
         return json({ error: `no mapping country with a valid audit matched '${body.countryCode}'` }, 409);
       }
-      return json({ ok: true });
+      // A Foursquare country run may have no locality field at all. Start
+      // the independent registry now so a green country import never masks
+      // a missing settlement/area-name backfill.
+      const countryCode = body.countryCode.toUpperCase();
+      const settlementRegistryStatus = await queueSettlementRegistry(env, ctx, countryCode);
+      return json({ ok: true, settlementRegistryStatus });
     }
 
     // POST /internal/country-failed  { countryCode }  — the whole run

@@ -121,7 +121,9 @@ deliberately narrow community-contribution routes listed below.
   country is `mapped`, starts the separate KAN-378 metadata-only job. It
   imports bounded OSM settlement areas into `place` for coverage and area
   naming; it never reloads Foursquare POIs. Repeating a completed job is a
-  no-op; a failed job is safely retryable.
+  no-op; a failed job is safely retryable. A successful future country import
+  queues this job automatically; this endpoint is the one-time backfill path
+  for a country already mapped before KAN-378.
 - `POST /internal/country-complete` `{countryCode, buildId}` — the whole
   country finished; sets `country.status` to `mapped`.
 - `POST /internal/country-failed` `{countryCode}` — the whole run errored;

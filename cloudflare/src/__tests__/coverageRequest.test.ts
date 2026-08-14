@@ -1066,7 +1066,7 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
     expect(fakeDb.countryRows.get('PT')?.place_count).toBe(4);
   });
 
-  it('marks a country mapped with its build id', async () => {
+  it('marks a country mapped with its build id and starts settlement metadata import', async () => {
     const env = makeEnv([], { countrySeed: [{ country_code: 'PT', name: 'Portugal', status: 'mapping', build_id: null, mapped_at: null, place_count: 300 }] });
 
     await worker.fetch(internalRequest('/internal/country-audit', {
@@ -1077,8 +1077,13 @@ describe('POST /internal/country-progress / country-complete / country-failed', 
     const res = await worker.fetch(internalRequest('/internal/country-complete', { countryCode: 'PT', runId: 'run-current', buildId: 'country-build-1' }), env);
 
     expect(res.status).toBe(200);
-    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow> };
+    expect(await res.json()).toEqual({ ok: true, settlementRegistryStatus: 'mapping' });
+    expect(mockContainerStart).toHaveBeenCalledWith({
+      envVars: { MODE: 'settlements', TARGET: 'PT', BUILD_TRIGGER_SECRET: BUILD_SECRET, FOURSQUARE_JWT: 'test-jwt' },
+    });
+    const fakeDb = env.REGISTRY_DB as unknown as { countryRows: Map<string, FakeCountryRow>; settlementRegistryRows: Map<string, FakeSettlementRegistryRow> };
     expect(fakeDb.countryRows.get('PT')).toMatchObject({ status: 'mapped', build_id: 'country-build-1' });
+    expect(fakeDb.settlementRegistryRows.get('PT')).toEqual({ country_code: 'PT', status: 'mapping' });
   });
 
   it('blocks completion without a matching valid audit', async () => {
