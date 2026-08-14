@@ -138,6 +138,7 @@
     { "name": "New Balance", "aliases": [] },
     { "name": "New Yorker", "aliases": [] },
     { "name": "Nike", "aliases": ["Nike Factory Store"] },
+    { "name": "Normal", "aliases": [] },
     { "name": "NOS", "aliases": ["Loja NOS"] },
     { "name": "NOWO", "aliases": ["Nowo"] },
     { "name": "O Boticário", "aliases": ["O Boticario", "Boticário", "Boticario"] },

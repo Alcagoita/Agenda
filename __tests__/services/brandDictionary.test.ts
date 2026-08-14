@@ -45,6 +45,7 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('store', 'Loja MEO')).toBe('MEO');
     expect(getCanonicalBrand('store', 'Media Markt')).toBe('Darty');
     expect(getCanonicalBrand('store', 'Kiwoko - Mundo Animal')).toBe('Kiwoko');
+    expect(getCanonicalBrand('store', 'Normal')).toBe('Normal');
     expect(findBrandInText('store', 'Buy a cable at Worten')).toBe('Worten');
     expect(getBrandSuggestions('store', 'leroy')).toEqual(['Leroy Merlin']);
   });
