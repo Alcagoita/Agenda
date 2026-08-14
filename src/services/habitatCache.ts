@@ -47,9 +47,8 @@
 import * as SQLite from 'expo-sqlite';
 import NetInfo from '@react-native-community/netinfo';
 import { normalize } from './poiInference';
-import { searchOsmPlaces } from './osmPlaces';
 import type { NearbyPlace } from './maps';
-import { getDistanceMeters } from './maps';
+import { getDistanceMeters, searchNearbyPlaces } from './maps';
 import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
 import {
   inferRestaurantFoodTypeFromPlaceName,
@@ -69,6 +68,18 @@ export const HABITAT_CACHE_STALE_MS = 14 * 24 * 60 * 60 * 1_000; // 14 days
 
 /** Default query/refresh radius around a search origin. */
 export const HABITAT_RADIUS_M = 5_000;
+
+/**
+ * How far around the user the proactive download reaches (KAN-366).
+ *
+ * Its own constant, deliberately not shared with HABITAT_RADIUS_M or any
+ * nearby radius even where the number happens to match: this one answers
+ * "how much do we pull down ahead of time", and it will move on its own
+ * evidence (data cost, testing) without dragging query or hero behaviour
+ * with it. 1 km is more than a walking user gets through before the next
+ * prefetch runs.
+ */
+export const HABITAT_PREFETCH_RADIUS_M = 1_000;
 
 /** Hard cap on total cached rows — keeps the on-device footprint small. */
 export const MAX_CACHED_PLACES = 2_000;
@@ -812,16 +823,23 @@ export async function refreshHabitatCacheIfStale(
       typesToFetch = mappableTypes;
     } else {
       const database = getDb();
-      const box = boundingBoxDeg(lat, lng, HABITAT_RADIUS_M);
+      // KAN-366: freshness is judged over the radius we actually fill. Asking
+      // about a wider area than was ever fetched reports stale forever and
+      // re-downloads on every tick.
+      const box = boundingBoxDeg(lat, lng, HABITAT_PREFETCH_RADIUS_M);
       const placeholders = mappableTypes.map(() => '?').join(',');
       const staleCutoff = now - HABITAT_CACHE_STALE_MS;
 
+      // A row counts as real coverage if EITHER source anchored it. Before
+      // KAN-366 only osm_id qualified, because OSM was the only thing that
+      // filled this cache; now that our API seeds it too, requiring osm_id
+      // would call a fully-stocked area stale and re-fetch it forever.
       const freshRows = database.getAllSync<{ poi_type: string }>(
         `SELECT poi_type FROM habitat_places
          WHERE poi_type IN (${placeholders})
            AND lat BETWEEN ? AND ?
            AND ${longitudeRangePredicate(box.lngRanges)}
-           AND osm_id IS NOT NULL
+           AND (osm_id IS NOT NULL OR fsq_place_id IS NOT NULL)
            AND osm_fetched_at >= ?`,
         [...mappableTypes, box.latMin, box.latMax, ...longitudeRangeParams(box.lngRanges), staleCutoff],
       );
@@ -836,24 +854,42 @@ export async function refreshHabitatCacheIfStale(
       if (typesToFetch.length === 0) { return; }
     }
 
-    const osmResults = await searchOsmPlaces(lat, lng, typesToFetch, HABITAT_RADIUS_M);
+    // KAN-366 — our API first, OSM second, mirroring the live chain. This used
+    // to call OSM directly, which inverted the migration: online the user got
+    // our Foursquare-backed data, offline they got whatever Overpass had, in
+    // exactly the areas OSM is thinnest. searchNearbyPlaces owns that ordering
+    // already and reports which source answered, which is what the cooldown
+    // below needs. It also returns the settlement name (KAN-377), so a
+    // proactively downloaded area is nameable offline, not just searchable.
+    const search = await searchNearbyPlaces(
+      lat, lng, typesToFetch, HABITAT_PREFETCH_RADIUS_M,
+      typesToFetch.map(type => ({ key: type, type })),
+    );
     let didUpsert = false;
     for (const poiType of typesToFetch) {
-      const places = osmResults[poiType] ?? [];
+      const places = search.results[poiType] ?? [];
       if (places.length === 0) {
-        _emptyResultAttempts.set(emptyResultAttemptKey(poiType, lat, lng), now);
+        // The cooldown exists for Overpass, which returns empty often and
+        // cheaply. An empty answer from OUR api means something else entirely
+        // — the Place isn't mapped yet, which is precisely what asks the
+        // extraction worker to map it (KAN-354). Backing off there would slow
+        // down the thing we want to happen, so the cooldown stays with the
+        // source it was built for.
+        if (search.source === 'osm') {
+          _emptyResultAttempts.set(emptyResultAttemptKey(poiType, lat, lng), now);
+        }
         continue;
       }
       for (const place of places) {
         upsertPlace({
           poiType,
           name:            place.name,
-          isGenericName:   place.isGenericName,
           lat:             place.lat,
           lng:             place.lng,
-          source:          { osm: place.osmId },
+          source:          search.source === 'osm' ? { osm: place.placeId } : { fsq: place.placeId },
           footprintAreaM2: place.footprintAreaM2,
           website:         place.website,
+          areaName:        search.areaName,
         });
         didUpsert = true;
       }
