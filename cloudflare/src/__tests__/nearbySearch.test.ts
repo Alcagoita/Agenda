@@ -47,6 +47,12 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGIS
         if (trimmed.startsWith('SELECT search_type, include_type FROM type_relation')) {
           return { results: [] };
         }
+        // KAN-377 — /poi/nearby resolves the settlement alongside the POI
+        // query so the client can name the area offline. These fixtures are
+        // about POI matching, so no place row: placeName comes back null.
+        if (trimmed.startsWith('SELECT * FROM place WHERE min_lat IS NOT NULL')) {
+          return { results: [] };
+        }
         if (trimmed.startsWith('SELECT poi.fsq_place_id')) {
           const results: unknown[] = [];
           for (const p of pois) {

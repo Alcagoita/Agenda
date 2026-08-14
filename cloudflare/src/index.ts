@@ -51,6 +51,8 @@ export interface Env {
 interface PlaceRow {
   place_id: string;
   country_code: string | null;
+  /** The settlement's own name (place_schema.sql — NOT NULL). */
+  name: string;
   status: 'none' | 'mapping' | 'mapped';
   place_kind: string | null;
   // The extent actually ingested — NULL until the worker (KAN-354) maps
@@ -562,6 +564,27 @@ function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
  * revisit with geohash bucketing on `place` itself once place count grows
  * (same accepted tradeoff as the pre-KAN-355 circle version).
  */
+/**
+ * The name to hand a client as "the area you are in", or null when the row we
+ * matched is not an area in any useful sense (KAN-377 follow-up).
+ *
+ * findPlace returns the smallest extent containing the point, which is right
+ * for coverage but not for naming: where no settlement row exists yet, the
+ * smallest match can be a country. Telling someone in Porto they are in
+ * "Portugal" is true and useless, and the client cannot tell the difference,
+ * so the judgement belongs here.
+ *
+ * This is the same rule the extraction pipeline already applies when it
+ * refuses country-kind localities (extraction/run_job.py) and gives the
+ * country-wide catch-all no extent. `place_kind` is documented in
+ * place_schema.sql as reporting-only; that comment predates run_job.py using
+ * it for exactly this decision, and this is the same decision.
+ */
+function areaNameForClient(place: PlaceRow | null): string | null {
+  if (!place || place.place_kind === 'country' || place.place_kind === 'generic') { return null; }
+  return place.name;
+}
+
 async function findPlace(env: Env, lat: number, lng: number): Promise<PlaceRow | null> {
   const { results } = await env.REGISTRY_DB.prepare(
     'SELECT * FROM place WHERE min_lat IS NOT NULL AND ? BETWEEN min_lat AND max_lat AND ? BETWEEN min_lng AND max_lng',
@@ -1810,7 +1833,7 @@ export default {
       const totalMs = performance.now() - startedAt;
       logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
       return jsonWithServerTiming(
-        { results, placeName: place?.name ?? null },
+        { results, placeName: areaNameForClient(place) },
         { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
       );
     }
