@@ -817,7 +817,7 @@ describe('TaskFormScreen — save (create)', () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
     mockAddTask.mockResolvedValueOnce('new-id');
     render(<TaskFormScreen />);
-    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy something');
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
     fireEvent.press(screen.getByLabelText('Clothing'));
     fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
     fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
@@ -834,11 +834,12 @@ describe('TaskFormScreen — save (create)', () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
     mockAddTask.mockResolvedValueOnce('new-id');
     render(<TaskFormScreen />);
-    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy something');
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
     fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
     fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailType));
+    await waitFor(() => expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true));
     fireEvent.press(screen.getByLabelText('Clothing'));
     await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
 

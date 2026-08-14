@@ -240,6 +240,7 @@ describe('inferPoiForQuickAdd', () => {
 
   it('keeps store subtype intent on the broad store type', async () => {
     expect(await inferPoiForQuickAdd('buy a t-shirt')).toBe('store');
+    expect(await inferPoiForQuickAdd('Buy a new shirt')).toBe('store');
     expect(await inferPoiForQuickAdd('comprar carregador')).toBe('store');
     expect(await inferPoiForQuickAdd('buy computer parts')).toBe('store');
     expect(await inferPoiForQuickAdd('buy furniture')).toBe('store');

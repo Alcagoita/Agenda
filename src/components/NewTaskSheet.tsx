@@ -725,7 +725,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         setStoreDetailMode('type');
                         setPoiBrand(null);
                         setPoiBrandTouched(false);
-                        setStoreSubtypeTouched(true);
+                        // Choosing the detail mode is not a subtype choice.
+                        // Keep title inference active until the user picks an
+                        // actual Store subtype below.
+                        setStoreSubtypeTouched(false);
                         setStoreSubtype(current => current ?? 'any');
                       }}
                       style={[styles.storeModeOption, { borderColor: palette.line }, storeDetailMode === 'type' && { backgroundColor: palette.surface }]}

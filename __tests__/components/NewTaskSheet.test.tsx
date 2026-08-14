@@ -238,6 +238,23 @@ describe('KAN-232 POI inference auto-suggestion', () => {
     expect(screen.getByLabelText('Pharmacy').props.accessibilityState?.selected).toBe(true);
   });
 
+  it('selects Clothing when a Store suggestion comes from a shirt task', async () => {
+    jest.useFakeTimers();
+    mockInferPoiForQuickAdd.mockResolvedValue('store');
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
+    await act(async () => { await jest.advanceTimersByTimeAsync(400); });
+
+    expect(screen.getByLabelText('Store').props.accessibilityState?.selected).toBe(true);
+    expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
+
+    fireEvent.press(screen.getByLabelText('Specific store'));
+    fireEvent.press(screen.getByLabelText('Specific type?'));
+
+    expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
+  });
+
   it('supports non-catalog suggestions like Police', async () => {
     jest.useFakeTimers();
     mockInferPoiForQuickAdd.mockResolvedValue('police');
