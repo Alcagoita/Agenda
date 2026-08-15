@@ -427,7 +427,12 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
 
-    const canSubmit = title.trim().length > 0 && poi !== null && (
+    const hasRequiredStoreDetail = poi !== 'store' || (
+      storeDetailMode === 'brand'
+        ? isCanonicalBrandForType('store', poiBrand)
+        : Boolean(storeSubtype && storeSubtype !== 'any')
+    );
+    const canSubmit = title.trim().length > 0 && poi !== null && hasRequiredStoreDetail && (
       !poiTypeRequiresBrand(poi) || isCanonicalBrandForType(poi, poiBrand)
     );
 
@@ -451,7 +456,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     useEffect(() => {
       if (poi !== 'store' || storeDetailMode !== 'type' || storeSubtypeTouched) { return; }
-      setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
+      setStoreSubtype(inferStoreSubtype(title.trim()));
     }, [poi, storeDetailMode, storeSubtypeTouched, title]);
 
     useEffect(() => {
@@ -495,7 +500,12 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
     const handleSubmit = useCallback(async () => {
       const trimmed = title.trim();
-      if (!trimmed || !poi || !uid || submitting || (poiTypeRequiresBrand(poi) && !isCanonicalBrandForType(poi, poiBrand))) { return; }
+      const canSaveStoreDetail = poi !== 'store' || (
+        storeDetailMode === 'brand'
+          ? isCanonicalBrandForType('store', poiBrand)
+          : Boolean(storeSubtype && storeSubtype !== 'any')
+      );
+      if (!trimmed || !poi || !uid || submitting || !canSaveStoreDetail || (poiTypeRequiresBrand(poi) && !isCanonicalBrandForType(poi, poiBrand))) { return; }
 
       setSubmitting(true);
       try {
@@ -504,7 +514,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           category: category ?? 'personal',
           done:     false,
           poi,
-          ...(poi === 'store' && !isCanonicalBrandForType('store', poiBrand) ? { storeSubtype: storeSubtype ?? 'any' } : {}),
+          ...(poi === 'store' && storeDetailMode === 'type' && storeSubtype && storeSubtype !== 'any' ? { storeSubtype } : {}),
           ...(poi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
           ...(poi === 'financial_service' && financialServiceKind ? { financialServiceKind } : {}),
           ...((poiTypeRequiresBrand(poi) || poi === 'store') && isCanonicalBrandForType(poi, poiBrand) ? { poiBrand: poiBrand! } : {}),
@@ -533,7 +543,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
         console.warn('[NewTaskSheet] addTask failed', err);
         setSubmitting(false);
       }
-    }, [title, category, poi, storeSubtype, restaurantFoodType, financialServiceKind, poiBrand, suggestedPoi, suggestedTitle, uid, submitting]);
+    }, [title, category, poi, storeDetailMode, storeSubtype, restaurantFoodType, financialServiceKind, poiBrand, suggestedPoi, suggestedTitle, uid, submitting]);
 
     const handleMoreDetails = useCallback(() => {
       handleClose();
@@ -725,32 +735,27 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                     <Text style={[styles.questionLabel, { color: palette.text }]}>
                       {COPY.newTaskSheet.storeDetailQuestion}
                     </Text>
-                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
-                      {COPY.newTaskSheet.catOptional}
-                    </Text>
                   </View>
-                  <StoreDetailModeSelector
-                    value={storeDetailMode}
-                    onSelect={mode => {
-                      if (mode === 'type') {
-                        setStoreDetailMode('type');
-                        setPoiBrand(null);
-                        setPoiBrandTouched(false);
-                        // Choosing the detail mode is not a subtype choice.
-                        // Keep title inference active until the user picks an
-                        // actual Store subtype below.
-                        setStoreSubtypeTouched(false);
-                        setStoreSubtype(current => current ?? 'any');
-                      } else {
-                        setStoreDetailMode('brand');
-                        setStoreSubtype(null);
-                        setStoreSubtypeTouched(false);
-                        // A deliberate mode change must not be overwritten by
-                        // the title's automatic brand inference.
-                        setPoiBrandTouched(true);
-                      }
-                    }}
-                  />
+                  <View style={styles.storeDetailModePad}>
+                    <StoreDetailModeSelector
+                      value={storeDetailMode}
+                      onSelect={mode => {
+                        if (mode === 'type') {
+                          setStoreDetailMode('type');
+                          setPoiBrand(null);
+                          setPoiBrandTouched(false);
+                          setStoreSubtypeTouched(false);
+                        } else {
+                          setStoreDetailMode('brand');
+                          setStoreSubtype(null);
+                          setStoreSubtypeTouched(false);
+                          // A deliberate mode change must not be overwritten by
+                          // the title's automatic brand inference.
+                          setPoiBrandTouched(true);
+                        }
+                      }}
+                    />
+                  </View>
                   <View style={[styles.foodTypePad, storeDetailMode === 'brand' && styles.storeBrandPad]}>
                     {storeDetailMode === 'type' ? (
                       <StoreSubtypeSelector
@@ -760,7 +765,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                           setStoreSubtypeTouched(true);
                           setPoiBrand(null);
                           setPoiBrandTouched(false);
-                          setStoreSubtype(subtype ?? 'any');
+                          setStoreSubtype(subtype);
                         }}
                       />
                     ) : (
@@ -1054,6 +1059,9 @@ const styles = StyleSheet.create({
   },
   storeBrandPad: {
     paddingRight: spacing.page,
+  },
+  storeDetailModePad: {
+    paddingHorizontal: spacing.page,
   },
   carouselMask: {
     // Soft fade on the trailing edge via paddingRight on the content and overflow
