@@ -224,32 +224,56 @@ service cloud.firestore {
       ];
     }
 
-    // KAN-364 — canonical values from src/constants/brandDictionary.json.
-    // Firestore Rules cannot import JSON; keep this allowlist narrow so a
-    // direct client write cannot invent an unqueryable canonical brand.
+    // BEGIN GENERATED POI BRAND ALLOWLIST
+    // Source: src/constants/brandDictionary.json. Run npm run rules:brands after editing it.
     function validPoiBrand(poi, brand) {
       return (poi == 'gym' && brand in [
         'Fitness Hut', 'Solinca', 'Holmes Place', 'Go Fit', 'Element',
-        'Pump Fitness Spirit', 'Time to Fitness', 'Urban Sports Club',
-        'Fitness Factory', 'Vivafit'
-      ]) || (poi == 'bank' && brand in [
+        'Pump Fitness Spirit', 'Time to Fitness', 'Urban Sports Club', 'Fitness Factory', 'Vivafit'
+      ]) ||
+        (poi == 'bank' && brand in [
         'Novo Banco', 'Millennium bcp', 'ActivoBank', 'Santander', 'Montepio',
-        'Banco do Brasil', 'Itaú BBA', 'ABANCA', 'Carregosa',
-        'Banco Português de Gestão', 'Bank of China', 'Credit Suisse',
-        'PrivatBank', 'Sabadell', 'Haitong Bank', 'Banco CTT', 'Bankinter',
-        'Banco BPI', 'Caixa Geral de Depósitos', 'CaixaBI', 'BBVA',
-        'Deutsche Bank', 'Banco Invest', 'Finantia', 'BNP Paribas', 'ATLANTICO',
-        'Caja de Badajoz', 'BNI Europa', 'BANC Angolano', 'Crédito Agrícola',
-        'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'La Caixa',
-        'Banco Popular', 'Unicaja', 'Banque Populaire'
-      ]) || (poi == 'store' && brand in [
-        'Zara', 'H&M', 'Primark', 'Mango', 'Pull&Bear', 'Bershka',
-        'Stradivarius', 'Lefties', 'Massimo Dutti', 'C&A', 'Decathlon',
-        'JD Sports', 'Worten', 'Fnac', 'MediaMarkt', 'Radio Popular',
-        'iServices', 'IKEA', 'Leroy Merlin', 'JYSK', 'Conforama',
-        'Zara Home', 'Bertrand', 'Sephora', 'Douglas'
+        'Banco do Brasil', 'Itaú BBA', 'ABANCA', 'Carregosa', 'Banco Português de Gestão',
+        'Bank of China', 'Credit Suisse', 'PrivatBank', 'Sabadell', 'Haitong Bank',
+        'Banco CTT', 'Bankinter', 'Banco BPI', 'Caixa Geral de Depósitos', 'CaixaBI',
+        'BBVA', 'Deutsche Bank', 'Banco Invest', 'Finantia', 'BNP Paribas',
+        'ATLANTICO', 'Caja de Badajoz', 'BNI Europa', 'BANC Angolano', 'Crédito Agrícola',
+        'Rothschild Europe', 'Banco BiG', 'Banco BEST', 'La Caixa', 'Banco Popular',
+        'Unicaja', 'Banque Populaire'
+      ]) ||
+        (poi == 'store' && brand in [
+        'Adidas', 'Adolfo Dominguez', 'Aldo', 'Antarte', 'Aromas',
+        'Auchan Tecnologia', 'Bang & Olufsen', 'Bata', 'Bershka', 'Bijou Brigitte',
+        'Bike Zone', 'Bimba y Lola', 'Bluebird', 'BOSS', 'Boutique dos Relógios',
+        'Bricomarché', 'H&M', 'C&A', 'Calçado Guimarães', 'Calzedonia',
+        'Camport', 'Cash Converters', 'CeX', 'Chicco', 'Chip7',
+        'Claire\'s', 'Clarks', 'Columbia', 'Conforama', 'Cortefiel',
+        'Darty', 'Decathlon', 'Decenio', 'Deichmann', 'Desigual',
+        'Diesel', 'Douglas', 'Equivalenza', 'Ericeira Surf & Skate', 'Espaço Casa',
+        'Eurekakids', 'Flormar', 'Fnac', 'Foot Locker', 'Fuxia',
+        'Gant', 'Gato Preto', 'Geox', 'Guess', 'Havaianas',
+        'Hôma', 'Hush Puppies', 'IKEA', 'iServices', 'iStore',
+        'Imaginarium', 'Intersport', 'Intimissimi', 'JD Sports', 'JOM',
+        'Juguettos', 'JYSK', 'Kiehl\'s', 'Kiabi', 'Kiko',
+        'Kiwoko', 'Lacoste', 'Lanidor', 'Worten', 'Leroy Merlin',
+        'Levi\'s', 'Lefties', 'Lion of Porches', 'Mango', 'Marypaz',
+        'Massimo Dutti', 'Maxmat', 'MEO', 'Merrell', 'Modalfa',
+        'Moviflor', 'Mr. Blue', 'New Balance', 'New Yorker', 'Nike',
+        'Normal', 'NOS', 'NOWO', 'O Boticário', 'Oro Vivo',
+        'Pandora', 'Parfois', 'Pedra Dura', 'Perfumes & Companhia', 'Pet Outlet',
+        'Pluricosmética', 'Pollux', 'Primark', 'Primor', 'Pull&Bear',
+        'Quebramar', 'Quiksilver', 'Radio Popular', 'Red Oak', 'Rituals',
+        'Sacoor Brothers', 'Salsa', 'Samsung', 'Scalpers', 'Science4you',
+        'Seaside', 'Sephora', 'Sfera', 'Skechers', 'Snipes',
+        'Sport Zone', 'Sports Direct', 'Sportino', 'Springfield', 'Staples',
+        'Stradivarius', 'Swarovski', 'Swatch', 'Tezenis', 'The Body Shop',
+        'The Phone House', 'Tiendanimal', 'Tiffosi', 'Timberland', 'Tintas CIN',
+        'Tommy Hilfiger', 'Toys"R"Us', 'United Colors of Benetton', 'Vans', 'Vilanova',
+        'Vista Alegre Atlantis', 'Vodafone', 'Wells', 'Xiaomi', 'Yves Rocher',
+        'Bertrand', 'Zara Home', 'Zara', 'Zippy', 'Zu'
       ]);
     }
+    // END GENERATED POI BRAND ALLOWLIST
 
     function validTaskBrand(data) {
       return ((('poi' in data.keys()) && data.poi in ['gym', 'bank'])

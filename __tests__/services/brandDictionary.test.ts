@@ -48,7 +48,16 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('store', 'Normal')).toBe('Normal');
     expect(findBrandInText('store', 'Buy a cable at Worten')).toBe('Worten');
     expect(findBrandInText('store', 'Visit Zara Home')).toBe('Zara Home');
+    expect(findBrandInText('store', 'Find a Fnac')).toBe('Fnac');
     expect(getBrandSuggestions('store', 'leroy')).toEqual(['Leroy Merlin']);
+  });
+
+  it('keeps ordinary-word Store brands available for explicit selection but out of title inference', () => {
+    expect(getCanonicalBrand('store', 'Mango')).toBe('Mango');
+    expect(getBrandSuggestions('store', 'mango')).toContain('Mango');
+    expect(findBrandInText('store', 'buy a mango')).toBeNull();
+    expect(findBrandInText('store', 'comprar diesel')).toBeNull();
+    expect(findBrandInText('store', 'levantar nos correios')).toBeNull();
   });
 
   it('resolves Portuguese Bank aliases and title text to one canonical value', () => {

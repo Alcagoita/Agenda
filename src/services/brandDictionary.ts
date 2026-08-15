@@ -6,6 +6,8 @@ export type BrandDefinition = {
   name: string;
   /** Recognised source/title variants. They always resolve to `name`. */
   aliases: string[];
+  /** Omit from free-form task-title inference, but keep available to pick. */
+  ambiguousInTitle?: boolean;
 };
 
 const BRAND_DICTIONARY = require('../constants/brandDictionary.json') as Partial<Record<PoiType, BrandDefinition[]>>;
@@ -96,6 +98,7 @@ export function findBrandInText(
   const haystack = ` ${normalizedText} `;
   let best: { name: string; length: number } | null = null;
   for (const brand of definitionsForType(poiType)) {
+    if (poiType === 'store' && brand.ambiguousInTitle) { continue; }
     for (const candidate of [brand.name, ...brand.aliases]) {
       const normalizedCandidate = normalize(candidate);
       if (!normalizedCandidate || !haystack.includes(` ${normalizedCandidate} `)) { continue; }

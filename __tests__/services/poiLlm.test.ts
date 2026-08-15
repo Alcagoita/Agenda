@@ -255,6 +255,13 @@ describe('inferPoiForQuickAdd', () => {
     },
   );
 
+  it.each(['buy a mango', 'comprar diesel', 'levantar nos correios'])(
+    'does not infer Store from ambiguous brand wording in %s',
+    async title => {
+      expect(await inferPoiForQuickAdd(title)).not.toBe('store');
+    },
+  );
+
   it('does not force ambiguous food shopping or preparation phrases to restaurant', async () => {
     await expect(inferPoiForQuickAdd('buy pasta')).resolves.not.toBe('restaurant');
     await expect(inferPoiForQuickAdd('buy meat')).resolves.not.toBe('restaurant');
