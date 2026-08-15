@@ -99,6 +99,14 @@ describe('storeSubtypes', () => {
     })).toBe('electronics');
   });
 
+  it('does not infer a subtype for a Store task with a selected brand', () => {
+    expect(storeTaskSubtype({
+      title: 'Buy electronics at Worten',
+      poi: 'store',
+      poiBrand: 'Worten',
+    })).toBeNull();
+  });
+
   it('groups simultaneous store subtype intents by matching task', () => {
     const places = [
       { placeId: 's1', name: 'Zara', distanceMeters: 30 },

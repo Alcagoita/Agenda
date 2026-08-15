@@ -7,7 +7,7 @@ type StoreSubtypeDictionary = Record<string, {
   stores: string[];
 }>;
 type StorePlaceLike = { name: string; storeSubtype?: StoreSubtype | null; storeSubtypes?: StoreSubtype[] | null };
-type StoreTaskLike = { poi?: string | null; title: string; storeSubtype?: StoreSubtype | null };
+type StoreTaskLike = { poi?: string | null; title: string; storeSubtype?: StoreSubtype | null; poiBrand?: string | null };
 type StoreTaskWithId = StoreTaskLike & { id: string };
 type StoreSubtypeMatch = { key: StoreSubtype; alias: string };
 
@@ -197,6 +197,10 @@ export function inferStoreSubtypeFromPlaceName(placeName: string): StoreSubtype 
 }
 
 export function storeTaskSubtype(task: StoreTaskLike): StoreSubtype | null {
+  // A Store task has exactly one second-level intent: subtype or brand. A
+  // title such as "Buy electronics at Worten" must be matched by Worten,
+  // not widened/narrowed again by the incidental "electronics" wording.
+  if (task.poiBrand) { return null; }
   return task.poi === 'store' ? task.storeSubtype ?? inferStoreSubtype(task.title) : null;
 }
 

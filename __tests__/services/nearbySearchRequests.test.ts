@@ -27,6 +27,19 @@ describe('buildNearbySearchRequests', () => {
     ]);
   });
 
+  it('uses one Store brand request per canonical brand and keeps generic Store tasks broad', () => {
+    expect(buildNearbySearchRequests([
+      { poi: 'store', title: 'Buy a cable', poiBrand: 'Worten' },
+      { poi: 'store', title: 'Buy headphones', poiBrand: 'Worten' },
+      { poi: 'store', title: 'Browse Fnac', poiBrand: 'Fnac' },
+      { poi: 'store', title: 'Any shop', storeSubtype: 'any' },
+    ])).toEqual([
+      { key: 'store', type: 'store' },
+      { key: 'store:brand:Worten', type: 'store', brand: 'Worten' },
+      { key: 'store:brand:Fnac', type: 'store', brand: 'Fnac' },
+    ]);
+  });
+
   it('uses the persisted restaurant subtype before inferring from the task title', () => {
     expect(buildNearbySearchRequests([
       { poi: 'restaurant', title: 'Book an Italian table', restaurantFoodType: 'sushi' },

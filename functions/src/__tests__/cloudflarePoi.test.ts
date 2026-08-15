@@ -115,12 +115,19 @@ describe('nearby-search validation', () => {
       .rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
-  it('accepts canonical Gym/Bank brand requests and rejects unknown or mismatched values', async () => {
+  it('accepts canonical Gym/Bank/Store brand requests and rejects unknown or mismatched values', async () => {
     await expect(cloudflarePoiAllProxy.run({
       auth: AUTH,
       data: {
         lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
         requests: [{ key: 'gym:brand:Solinca', type: 'gym', brand: 'Solinca' }],
+      },
+    } as never)).resolves.toBeDefined();
+    await expect(cloudflarePoiAllProxy.run({
+      auth: AUTH,
+      data: {
+        lat: 38.7, lng: -9.1, radiusMeters: 200, limitPerRequest: 20,
+        requests: [{ key: 'store:brand:Worten', type: 'store', brand: 'Worten' }],
       },
     } as never)).resolves.toBeDefined();
     await expect(cloudflarePoiAllProxy.run({

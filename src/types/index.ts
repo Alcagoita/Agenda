@@ -229,7 +229,7 @@ export interface Task {
   restaurantFoodType?: RestaurantFoodType;
   /** Optional specific financial service selected for Financial service tasks. */
   financialServiceKind?: FinancialServiceKind;
-  /** Canonical Gym/Bank brand required for actionable nearby matching (KAN-364). */
+  /** Canonical Gym/Bank brand required for matching, or an optional Store brand. */
   poiBrand?: string;
   /**
    * Google Places ID of the hero/nearby place the user was next to when this

@@ -58,6 +58,28 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     expect(result.coverageStatus).toBe('ready');
   });
 
+  it('splits more than 32 nearby buckets so a large Store-brand task list stays searchable', async () => {
+    const requests = Array.from({ length: 33 }, (_, index) => ({
+      key: `store:brand:Brand ${index + 1}`,
+      type: 'store',
+      brand: `Brand ${index + 1}`,
+    }));
+    mockPoiAll
+      .mockResolvedValueOnce({ results: { 'store:brand:Brand 1': [
+        { poi_id: 'one', fsq_place_id: 'one', name: 'Brand 1', lat: LAT, lng: LNG, primary_poi_type: 'store', brand: 'Brand 1', category_label: null, address: null, distanceMeters: 20 },
+      ] } })
+      .mockResolvedValueOnce({ results: { 'store:brand:Brand 33': [
+        { poi_id: 'thirty-three', fsq_place_id: 'thirty-three', name: 'Brand 33', lat: LAT, lng: LNG, primary_poi_type: 'store', brand: 'Brand 33', category_label: null, address: null, distanceMeters: 30 },
+      ] } });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['store'], RADIUS, requests);
+
+    expect(mockPoiAll.mock.calls.map(call => call[3])).toHaveLength(2);
+    expect(mockPoiAll.mock.calls.map(call => call[3].length)).toEqual([32, 1]);
+    expect(result.results.store.map(place => place.name)).toEqual(['Brand 1', 'Brand 33']);
+    expect(mockOsmSearch).not.toHaveBeenCalled();
+  });
+
   it('uses the explicit community POI identity when a moderated record has no Foursquare id', async () => {
     mockPoiAll.mockResolvedValue({
       results: { restaurant: [
@@ -136,6 +158,17 @@ describe('searchNearbyPlaces — Cloudflare-first, OSM-failsafe routing', () => 
     expect(result.results.cafe.map(p => p.placeId)).toEqual(['node/1']);
     expect(result.source).toBe('osm');
     expect(result.coverageStatus).toBeUndefined();
+  });
+
+  it('carries an OSM canonical brand through the fallback result', async () => {
+    mockPoiAll.mockResolvedValue({ results: { store: [] } });
+    mockOsmSearch.mockResolvedValue({
+      store: [{ osmId: 'node/zara', name: 'Zara', isGenericName: false, lat: LAT, lng: LNG, distanceMeters: 30, footprintAreaM2: 0, brand: 'Zara' }],
+    });
+
+    const result = await searchNearbyPlaces(LAT, LNG, ['store'], RADIUS);
+
+    expect(result.results.store).toMatchObject([{ placeId: 'node/zara', brand: 'Zara' }]);
   });
 
   it('falls through to OSM when the Cloudflare request throws', async () => {

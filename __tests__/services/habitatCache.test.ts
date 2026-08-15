@@ -70,6 +70,8 @@ interface MockHabitatRow {
   store_subtype?: string | null;
   /** KAN-377 — settlement name carried by the POI source. */
   area_name?: string | null;
+  /** KAN-368 follow-up — canonical chain retained for offline matching. */
+  brand?: string | null;
 }
 
 // ─── In-memory expo-sqlite mock ────────────────────────────────────────────────
@@ -109,7 +111,7 @@ const mockDb = {
         { name: 'lat' }, { name: 'lng' }, { name: 'google_place_id' }, { name: 'osm_id' }, { name: 'fsq_place_id' },
         { name: 'osm_fetched_at' }, { name: 'last_matched_at' }, { name: 'cache_area_id' }, { name: 'expires_at' },
         { name: 'footprint_area_m2' }, { name: 'website' }, { name: 'restaurant_food_type' }, { name: 'store_subtype' },
-        { name: 'area_name' },
+        { name: 'area_name' }, { name: 'brand' },
       ] as unknown as T[];
     }
     if (s.startsWith('SELECT MAX(last_matched_at) as maxTs FROM habitat_places WHERE cache_area_id IS NULL')) {
@@ -192,23 +194,23 @@ const mockDb = {
     const s = sql.replace(/\s+/g, ' ').trim();
 
     if (s.startsWith('INSERT INTO habitat_places')) {
-      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, area_name] =
-        params as [string, string, string, number, number, number, string | null, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null, string | null];
-      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, area_name });
+      const [id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, brand, area_name] =
+        params as [string, string, string, number, number, number, string | null, string | null, string | null, number, number, string | null, number | null, number | null, string | null, string | null, string | null, string | null, string | null];
+      rows.push({ id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, brand, area_name });
       return {} as any;
     }
     if (s.startsWith('UPDATE habitat_places')) {
       const [
         google, osm, fsq, osmFlag1, lat, osmFlag2, lng, osmFlag3, osmFetchedAt,
         footprintAreaM2, website,
-        restaurantFoodType, storeSubtype,
+        restaurantFoodType, storeSubtype, brand,
         areaName,
         tripCacheAreaId, tripExpiresAtA, tripExpiresAtB, tripExpiresAtC,
         lastMatchedAt, id,
       ] = params as [
         string | null, string | null, string | null, number, number, number, number, number, number,
         number | null, string | null,
-        string | null, string | null,
+        string | null, string | null, string | null,
         string | null,
         string | null, number | null, number | null, number | null,
         number, string,
@@ -229,6 +231,7 @@ const mockDb = {
         row.website = website ?? row.website ?? null;
         row.restaurant_food_type = restaurantFoodType ?? row.restaurant_food_type ?? null;
         row.store_subtype = storeSubtype ?? row.store_subtype ?? null;
+        row.brand = brand ?? row.brand ?? null;
         // COALESCE(?, area_name) — a Cloudflare sighting names an OSM-seeded
         // row, and a row that already has a name is never cleared (KAN-377).
         row.area_name = areaName ?? row.area_name ?? null;
@@ -705,6 +708,16 @@ describe('queryHabitatCache', () => {
     expect(rows.find(r => r.name === 'Zara')?.store_subtype).toBe('clothing');
     expect(result.restaurant[0]).toEqual(expect.objectContaining({ restaurantFoodType: 'sushi' }));
     expect(result.store[0]).toEqual(expect.objectContaining({ storeSubtype: 'clothing' }));
+  });
+
+  it('retains canonical brands for offline matching and derives one from a legacy exact-name row', () => {
+    upsertPlace({ poiType: 'store', name: 'Zara', lat: 0.0004, lng: 0, source: { osm: 'node/store' }, brand: 'Zara' });
+    upsertPlace({ poiType: 'store', name: 'Fnac', lat: 0.0005, lng: 0, source: { osm: 'node/fnac' } });
+
+    const result = queryHabitatCache(ORIGIN.lat, ORIGIN.lng, ['store'], 500);
+
+    expect(rows.find(row => row.name === 'Zara')?.brand).toBe('Zara');
+    expect(result.store.map(place => place.brand)).toEqual(['Zara', 'Fnac']);
   });
 
   it('drops stale cached subtype keys at the read boundary', () => {

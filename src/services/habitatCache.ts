@@ -47,6 +47,7 @@
 import * as SQLite from 'expo-sqlite';
 import NetInfo from '@react-native-community/netinfo';
 import { normalize } from './poiInference';
+import { getCanonicalBrand } from './brandDictionary';
 import type { NearbyPlace } from './maps';
 import { getDistanceMeters, searchNearbyPlaces } from './maps';
 import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
@@ -188,6 +189,7 @@ function getDb(): SQLite.SQLiteDatabase {
         lng REAL NOT NULL,
         google_place_id TEXT,
         osm_id TEXT,
+        brand TEXT,
         osm_fetched_at INTEGER NOT NULL,
         last_matched_at INTEGER NOT NULL
       );
@@ -259,6 +261,12 @@ function getDb(): SQLite.SQLiteDatabase {
     if (!existingColumns.has('area_name')) {
       database.execSync('ALTER TABLE habitat_places ADD COLUMN area_name TEXT');
     }
+    // KAN-368 follow-up — specific Store/Gym/Bank tasks match a canonical
+    // brand. Keep it in the offline cache just like subtype metadata so a
+    // cache-served tick does not erase a live match.
+    if (!existingColumns.has('brand')) {
+      database.execSync('ALTER TABLE habitat_places ADD COLUMN brand TEXT');
+    }
     database.execSync('CREATE INDEX IF NOT EXISTS idx_habitat_cache_area ON habitat_places(cache_area_id);');
     db = database;
   }
@@ -299,6 +307,8 @@ export interface HabitatRow {
   restaurant_food_type: RestaurantFoodType | null;
   /** Store subtype inferred at cache-write time (KAN-317). */
   store_subtype: StoreSubtype | null;
+  /** Canonical Store/Gym/Bank brand when known from a live source. */
+  brand: string | null;
 }
 
 function generateId(): string {
@@ -336,6 +346,8 @@ export interface PlaceCandidate {
   restaurantFoodType?: RestaurantFoodType | null;
   /** Optional subtype metadata for store rows (KAN-317). */
   storeSubtype?: StoreSubtype | null;
+  /** Canonical brand supplied by the source; never a free-form guess. */
+  brand?: string | null;
 }
 
 function candidateRestaurantFoodType(candidate: PlaceCandidate): RestaurantFoodType | null {
@@ -479,6 +491,7 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
            website           = COALESCE(?, website),
            restaurant_food_type = COALESCE(?, restaurant_food_type),
            store_subtype        = COALESCE(?, store_subtype),
+           brand                = COALESCE(?, brand),
            -- KAN-377: an OSM-seeded row later matched by a Cloudflare result
            -- picks up the settlement name here. Without this the name only ever
            -- reached rows Cloudflare created, and the prefetch seeds from OSM
@@ -499,6 +512,7 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
         candidate.website ?? null,
         restaurantFoodType,
         storeSubtype,
+        candidate.brand ?? null,
         candidate.areaName ?? null,
         tripCacheAreaId,
         tripExpiresAt, tripExpiresAt, tripExpiresAt,
@@ -518,12 +532,12 @@ function upsertPlaceCore(candidate: PlaceCandidate, trip?: TripStamp): string {
   const storeSubtype = candidateStoreSubtype(candidate);
   database.runSync(
     `INSERT INTO habitat_places
-       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, area_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, poi_type, name, is_generic_name, lat, lng, google_place_id, osm_id, fsq_place_id, osm_fetched_at, last_matched_at, cache_area_id, expires_at, footprint_area_m2, website, restaurant_food_type, store_subtype, brand, area_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, candidate.poiType, candidate.name, candidate.isGenericName === true ? 1 : 0, candidate.lat, candidate.lng,
       candidate.source.google ?? null, candidate.source.osm ?? null, candidate.source.fsq ?? null, now, now,
       trip?.cacheAreaId ?? null, trip?.expiresAt ?? null, candidate.footprintAreaM2 ?? null,
-      candidate.website ?? null, restaurantFoodType, storeSubtype, candidate.areaName ?? null],
+      candidate.website ?? null, restaurantFoodType, storeSubtype, candidate.brand ?? null, candidate.areaName ?? null],
   );
   return id;
 }
@@ -610,6 +624,8 @@ export function recordLiveResult(candidate: {
   source: { osm?: string; fsq?: string };
   /** Settlement name from the same live answer (KAN-377). */
   areaName?: string | null;
+  /** Canonical brand returned by the same live source. */
+  brand?: string | null;
 }): void {
   upsertPlace({
     poiType: candidate.poiType,
@@ -617,6 +633,8 @@ export function recordLiveResult(candidate: {
     lat:     candidate.lat,
     lng:     candidate.lng,
     source:  candidate.source,
+    brand:   candidate.brand,
+    areaName: candidate.areaName,
   });
 }
 
@@ -673,6 +691,7 @@ export function queryHabitatCache(
         website:         row.website ?? undefined,
         restaurantFoodType: normalizeCachedRestaurantFoodType(row.restaurant_food_type),
         storeSubtype:       normalizeCachedStoreSubtype(row.store_subtype),
+        brand:              row.brand ?? getCanonicalBrand(row.poi_type, row.name) ?? undefined,
       });
     }
 
@@ -720,6 +739,7 @@ export function getHabitatPlaceById(id: string): NearbyPlace | null {
       website:         row.website ?? undefined,
       restaurantFoodType: normalizeCachedRestaurantFoodType(row.restaurant_food_type),
       storeSubtype:       normalizeCachedStoreSubtype(row.store_subtype),
+      brand:              row.brand ?? getCanonicalBrand(row.poi_type, row.name) ?? undefined,
     };
   } catch (err) {
     console.warn('[habitatCache] getHabitatPlaceById failed', err);
@@ -915,6 +935,7 @@ export async function refreshHabitatCacheIfStale(
           source:          search.source === 'osm' ? { osm: place.placeId } : { fsq: place.placeId },
           footprintAreaM2: place.footprintAreaM2,
           website:         place.website,
+          brand:           place.brand,
           areaName:        search.areaName,
         });
         didUpsert = true;

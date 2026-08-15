@@ -16,6 +16,7 @@ import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import NewTaskSheet from '../../src/components/NewTaskSheet';
 import type { Category } from '../../src/types';
+import { COPY } from '../../src/constants/copy';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,35 @@ describe('KAN-232 POI inference auto-suggestion', () => {
 
     expect(mockInferPoiForQuickAdd).toHaveBeenCalledWith('buy aspirin');
     expect(screen.getByLabelText('Pharmacy').props.accessibilityState?.selected).toBe(true);
+  });
+
+  it('selects Clothing when a Store suggestion comes from a shirt task', async () => {
+    jest.useFakeTimers();
+    mockInferPoiForQuickAdd.mockResolvedValue('store');
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
+    await act(async () => { await jest.advanceTimersByTimeAsync(400); });
+
+    expect(screen.getByLabelText('Store').props.accessibilityState?.selected).toBe(true);
+    expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
+
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailType));
+
+    expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
+  });
+
+  it('uses a recognised Store brand as the specific Store detail', async () => {
+    jest.useFakeTimers();
+    mockInferPoiForQuickAdd.mockResolvedValue('store');
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a FNAC');
+    await act(async () => { await jest.advanceTimersByTimeAsync(400); });
+
+    expect(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y).props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder).props.value).toBe('Fnac');
   });
 
   it('supports non-catalog suggestions like Police', async () => {
@@ -523,6 +553,31 @@ describe('addTask submission', () => {
     );
   });
 
+  it('saves a selected Store brand without a Store subtype', async () => {
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Add it'));
+    });
+    expect(mockAddTask).toHaveBeenCalledWith('test-uid', expect.objectContaining({
+      poi: 'store', poiBrand: 'Worten',
+    }));
+    expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
+  });
+
+  it('explains that an unmatched typed Store brand will remain a generic Store task', () => {
+    renderSheet();
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Adidas Kids');
+
+    expect(screen.getByText(COPY.newTaskSheet.storeBrandUnknown)).toBeTruthy();
+  });
+
   it('does not call addTask when POI is missing', async () => {
     renderSheet();
     fireEvent.changeText(
@@ -663,6 +718,26 @@ describe('"More details" navigation', () => {
         initialStoreSubtypeExplicitlySelected: true,
         initialPoiExplicitlySelected: true,
       });
+    }, { timeout: 500 });
+  });
+
+  it('passes a selected Store brand through More details', async () => {
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
+    fireEvent.press(screen.getByLabelText('Worten'));
+    fireEvent.press(screen.getByLabelText('More details'));
+
+    await waitFor(() => {
+      expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', expect.objectContaining({
+        uid: 'test-uid',
+        initialPoi: 'store',
+        initialPoiBrand: 'Worten',
+        initialStoreSubtype: undefined,
+      }));
     }, { timeout: 500 });
   });
 

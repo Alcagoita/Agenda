@@ -6,6 +6,8 @@ export type BrandDefinition = {
   name: string;
   /** Recognised source/title variants. They always resolve to `name`. */
   aliases: string[];
+  /** Omit from free-form task-title inference, but keep available to pick. */
+  ambiguousInTitle?: boolean;
 };
 
 const BRAND_DICTIONARY = require('../constants/brandDictionary.json') as Partial<Record<PoiType, BrandDefinition[]>>;
@@ -96,6 +98,7 @@ export function findBrandInText(
   const haystack = ` ${normalizedText} `;
   let best: { name: string; length: number } | null = null;
   for (const brand of definitionsForType(poiType)) {
+    if (poiType === 'store' && brand.ambiguousInTitle) { continue; }
     for (const candidate of [brand.name, ...brand.aliases]) {
       const normalizedCandidate = normalize(candidate);
       if (!normalizedCandidate || !haystack.includes(` ${normalizedCandidate} `)) { continue; }
@@ -112,6 +115,11 @@ export function poiTypeRequiresBrand(poiType: string | null | undefined): poiTyp
   return poiType === 'gym' || poiType === 'bank';
 }
 
+/** Store brands are optional, unlike the required Gym/Bank choices. */
+export function poiTypeSupportsBrand(poiType: string | null | undefined): poiType is 'gym' | 'bank' | 'store' {
+  return poiTypeRequiresBrand(poiType) || poiType === 'store';
+}
+
 /** Detects a Gym/Bank brand title and returns both the type and canonical value. */
 export function findRequiredBrandInText(text: string): { poiType: 'gym' | 'bank'; brand: string } | null {
   for (const poiType of ['gym', 'bank'] as const) {
@@ -126,8 +134,11 @@ type BrandPlaceLike = { brand?: string | null };
 
 /** Uses the canonical value already returned by the Worker; never guesses from a place name. */
 export function brandTaskMatchesPlace(task: BrandTaskLike, place: BrandPlaceLike): boolean {
-  if (!poiTypeRequiresBrand(task.poi)) { return true; }
-  return typeof task.poiBrand === 'string' && task.poiBrand.length > 0 && task.poiBrand === place.brand;
+  if (!poiTypeSupportsBrand(task.poi)) { return true; }
+  if (typeof task.poiBrand === 'string' && task.poiBrand.length > 0) {
+    return task.poiBrand === place.brand;
+  }
+  return !poiTypeRequiresBrand(task.poi);
 }
 
 export function filterBrandPlacesForTasks<T extends BrandPlaceLike>(
@@ -135,7 +146,7 @@ export function filterBrandPlacesForTasks<T extends BrandPlaceLike>(
   places: T[],
   tasks: readonly BrandTaskLike[],
 ): T[] {
-  if (!poiTypeRequiresBrand(poiType)) { return places; }
+  if (!poiTypeSupportsBrand(poiType)) { return places; }
   const relevantTasks = tasks.filter(task => task.poi === poiType);
   return places.filter(place => relevantTasks.some(task => brandTaskMatchesPlace(task, place)));
 }

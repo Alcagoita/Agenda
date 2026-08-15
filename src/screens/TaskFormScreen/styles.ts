@@ -218,7 +218,6 @@ export const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 2,
   },
-
   // ── Category ──
   categoryRow: {
     flexDirection: 'row',

@@ -240,11 +240,27 @@ describe('inferPoiForQuickAdd', () => {
 
   it('keeps store subtype intent on the broad store type', async () => {
     expect(await inferPoiForQuickAdd('buy a t-shirt')).toBe('store');
+    expect(await inferPoiForQuickAdd('Buy a new shirt')).toBe('store');
     expect(await inferPoiForQuickAdd('comprar carregador')).toBe('store');
     expect(await inferPoiForQuickAdd('buy computer parts')).toBe('store');
     expect(await inferPoiForQuickAdd('buy furniture')).toBe('store');
     expect(mockLoad).not.toHaveBeenCalled();
   });
+
+  it.each(['Go to the nearest FNAC', 'Find a FNAC'])(
+    'uses a recognised Store brand for %s without calling the LLM classifier',
+    async title => {
+      expect(await inferPoiForQuickAdd(title)).toBe('store');
+      expect(mockLoad).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['buy a mango', 'comprar diesel', 'levantar nos correios'])(
+    'does not infer Store from ambiguous brand wording in %s',
+    async title => {
+      expect(await inferPoiForQuickAdd(title)).not.toBe('store');
+    },
+  );
 
   it('does not force ambiguous food shopping or preparation phrases to restaurant', async () => {
     await expect(inferPoiForQuickAdd('buy pasta')).resolves.not.toBe('restaurant');

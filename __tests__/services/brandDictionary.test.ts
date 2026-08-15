@@ -39,6 +39,27 @@ describe('brandDictionary', () => {
     expect(getCanonicalBrand('gym', 'Pingo Doce')).toBeNull();
   });
 
+  it('resolves curated Store brands from aliases and title text', () => {
+    expect(getCanonicalBrand('store', 'Worten')).toBe('Worten');
+    expect(getCanonicalBrand('store', 'H & M')).toBe('H&M');
+    expect(getCanonicalBrand('store', 'Loja MEO')).toBe('MEO');
+    expect(getCanonicalBrand('store', 'Media Markt')).toBe('Darty');
+    expect(getCanonicalBrand('store', 'Kiwoko - Mundo Animal')).toBe('Kiwoko');
+    expect(getCanonicalBrand('store', 'Normal')).toBe('Normal');
+    expect(findBrandInText('store', 'Buy a cable at Worten')).toBe('Worten');
+    expect(findBrandInText('store', 'Visit Zara Home')).toBe('Zara Home');
+    expect(findBrandInText('store', 'Find a Fnac')).toBe('Fnac');
+    expect(getBrandSuggestions('store', 'leroy')).toEqual(['Leroy Merlin']);
+  });
+
+  it('keeps ordinary-word Store brands available for explicit selection but out of title inference', () => {
+    expect(getCanonicalBrand('store', 'Mango')).toBe('Mango');
+    expect(getBrandSuggestions('store', 'mango')).toContain('Mango');
+    expect(findBrandInText('store', 'buy a mango')).toBeNull();
+    expect(findBrandInText('store', 'comprar diesel')).toBeNull();
+    expect(findBrandInText('store', 'levantar nos correios')).toBeNull();
+  });
+
   it('resolves Portuguese Bank aliases and title text to one canonical value', () => {
     expect(getCanonicalBrand('bank', 'CGD')).toBe('Caixa Geral de Depósitos');
     expect(findBrandInText('bank', 'Visit Caixa Geral de Depositos Alcobaça')).toBe('Caixa Geral de Depósitos');
@@ -73,5 +94,16 @@ describe('brandDictionary', () => {
       { poi: 'gym', poiBrand: 'Solinca' },
       { poi: 'gym', poiBrand: 'Fitness Hut' },
     ])).toEqual([{ brand: 'Solinca' }, { brand: 'Fitness Hut' }]);
+  });
+
+  it('filters Store results only when the task selected a canonical brand', () => {
+    const places = [{ brand: 'Worten' }, { brand: 'Fnac' }];
+    expect(brandTaskMatchesPlace({ poi: 'store', poiBrand: 'Worten' }, { brand: 'Worten' })).toBe(true);
+    expect(brandTaskMatchesPlace({ poi: 'store', poiBrand: 'Worten' }, { brand: 'Fnac' })).toBe(false);
+    expect(brandTaskMatchesPlace({ poi: 'store' }, { brand: 'Fnac' })).toBe(true);
+    expect(filterBrandPlacesForTasks('store', places, [
+      { poi: 'store', poiBrand: 'Worten' },
+      { poi: 'store' },
+    ])).toEqual(places);
   });
 });

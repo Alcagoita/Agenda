@@ -55,6 +55,8 @@ import { POI_TILE_WIDTH, styles } from './styles';
 import { localPoiLabel } from '../../services/poiTypeCache';
 import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
 import StoreSubtypeSelector from '../../components/StoreSubtypeSelector';
+import StoreBrandInput from '../../components/StoreBrandInput';
+import StoreDetailModeSelector from '../../components/StoreDetailModeSelector';
 import BrandSelector from '../../components/BrandSelector';
 import {
   inferStoreSubtype,
@@ -199,9 +201,14 @@ export default function TaskFormScreen() {
   const [storeSubtypeTouched, setStoreSubtypeTouched] = useState(
     Boolean(existingTask?.storeSubtype || initialStoreSubtypeExplicitlySelected),
   );
+  const [storeDetailMode, setStoreDetailMode] = useState<'type' | 'brand'>(() =>
+    (existingTask?.poi === 'store' && Boolean(existingTask.poiBrand))
+      || (initialPoi === 'store' && Boolean(initialPoiBrand))
+      ? 'brand' : 'type',
+  );
   const [poiBrand, setPoiBrand] = useState<string | null>(() =>
-    poiTypeRequiresBrand(existingTask?.poi) ? existingTask?.poiBrand ?? null
-      : poiTypeRequiresBrand(initialPoi) ? initialPoiBrand ?? null : null,
+    poiTypeRequiresBrand(existingTask?.poi) || existingTask?.poi === 'store' ? existingTask?.poiBrand ?? null
+      : poiTypeRequiresBrand(initialPoi) || initialPoi === 'store' ? initialPoiBrand ?? null : null,
   );
   const [poiBrandTouched, setPoiBrandTouched] = useState(Boolean(existingTask?.poiBrand || initialPoiBrand));
   const previousBrandPoiRef = useRef<string | null>(poiKey ?? customPoiType);
@@ -416,8 +423,9 @@ export default function TaskFormScreen() {
     if (effectivePoi !== 'store') {
       setStoreSubtype(null);
       setStoreSubtypeTouched(false);
+      setStoreDetailMode('type');
     }
-    if (previousBrandPoiRef.current !== effectivePoi || !poiTypeRequiresBrand(effectivePoi)) {
+    if (previousBrandPoiRef.current !== effectivePoi || (!poiTypeRequiresBrand(effectivePoi) && effectivePoi !== 'store')) {
       setPoiBrand(null);
       setPoiBrandTouched(false);
     }
@@ -425,9 +433,9 @@ export default function TaskFormScreen() {
   }, [effectivePoi]);
 
   useEffect(() => {
-    if (effectivePoi !== 'store' || storeSubtypeTouched) { return; }
+    if (effectivePoi !== 'store' || storeDetailMode !== 'type' || storeSubtypeTouched) { return; }
     setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
-  }, [effectivePoi, storeSubtypeTouched, title]);
+  }, [effectivePoi, storeDetailMode, storeSubtypeTouched, title]);
 
   useEffect(() => {
     if (effectivePoi !== 'financial_service' || financialServiceKindTouched) return;
@@ -439,11 +447,19 @@ export default function TaskFormScreen() {
     setFinancialServiceKind(kind);
   }, []);
 
-  const suggestedBrand = poiTypeRequiresBrand(effectivePoi) ? findBrandInText(effectivePoi, title) : null;
-  useEffect(() => {
-    if (!poiTypeRequiresBrand(effectivePoi) || poiBrandTouched) { return; }
-    setPoiBrand(suggestedBrand);
-  }, [effectivePoi, poiBrandTouched, suggestedBrand]);
+  const suggestedBrand = (poiTypeRequiresBrand(effectivePoi) || effectivePoi === 'store') ? findBrandInText(effectivePoi, title) : null;
+    useEffect(() => {
+      if ((!poiTypeRequiresBrand(effectivePoi) && effectivePoi !== 'store') || poiBrandTouched || (effectivePoi === 'store' && storeSubtypeTouched)) { return; }
+      setPoiBrand(suggestedBrand);
+      if (effectivePoi === 'store') {
+        if (suggestedBrand) {
+          setStoreSubtype(null);
+          setStoreDetailMode('brand');
+        } else {
+          setStoreDetailMode('type');
+        }
+      }
+  }, [effectivePoi, poiBrandTouched, storeSubtypeTouched, suggestedBrand]);
 
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
   const suggestions = !customPoiType && query.trim() ? getTypeSuggestions(query) : [];
@@ -483,10 +499,10 @@ export default function TaskFormScreen() {
         } : {}),
         ...(time.trim() ? { time: time.trim() } : {}),
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
-        ...(!isBirthday && effectivePoi === 'store' ? { storeSubtype: storeSubtype ?? 'any' } : {}),
+        ...(!isBirthday && effectivePoi === 'store' && !isCanonicalBrandForType('store', poiBrand) ? { storeSubtype: storeSubtype ?? 'any' } : {}),
         ...(!isBirthday && effectivePoi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
         ...(!isBirthday && effectivePoi === 'financial_service' && financialServiceKind ? { financialServiceKind } : {}),
-        ...(!isBirthday && poiTypeRequiresBrand(effectivePoi) && isCanonicalBrandForType(effectivePoi, poiBrand) ? { poiBrand } : {}),
+        ...(!isBirthday && (poiTypeRequiresBrand(effectivePoi) || effectivePoi === 'store') && isCanonicalBrandForType(effectivePoi, poiBrand) ? { poiBrand: poiBrand! } : {}),
       };
 
       if (notes.trim()) {
@@ -508,7 +524,7 @@ export default function TaskFormScreen() {
         } else if (existingTask.kind === 'birthday') {
           updateData.kind = deleteField();
         }
-        if (!isBirthday && effectivePoi !== 'store') {
+        if (!isBirthday && (effectivePoi !== 'store' || isCanonicalBrandForType('store', poiBrand))) {
           updateData.storeSubtype = deleteField();
         }
         if (!isBirthday && (effectivePoi !== 'restaurant' || !restaurantFoodType)) {
@@ -517,7 +533,7 @@ export default function TaskFormScreen() {
         if (!isBirthday && (effectivePoi !== 'financial_service' || !financialServiceKind)) {
           updateData.financialServiceKind = deleteField();
         }
-        if (!isBirthday && !poiTypeRequiresBrand(effectivePoi)) {
+        if (!isBirthday && (!poiTypeRequiresBrand(effectivePoi) && (effectivePoi !== 'store' || !isCanonicalBrandForType('store', poiBrand)))) {
           updateData.poiBrand = deleteField();
         }
         if (!date) {
@@ -947,17 +963,62 @@ export default function TaskFormScreen() {
             <View style={styles.subtypeSection}>
               <View style={styles.questionRow}>
                 <Text style={[styles.questionLabel, { color: palette.text }]}>
-                  {COPY.newTaskSheet.subtypeQuestion}
+                  {COPY.newTaskSheet.storeDetailQuestion}
+                </Text>
+                <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                  {COPY.newTaskSheet.catOptional}
                 </Text>
               </View>
-              <StoreSubtypeSelector
-                selected={storeSubtype}
-                suggested={suggestedStoreSubtype}
-                onSelect={subtype => {
-                  setStoreSubtypeTouched(true);
-                  setStoreSubtype(subtype ?? 'any');
+              <StoreDetailModeSelector
+                value={storeDetailMode}
+                onSelect={mode => {
+                  if (mode === 'type') {
+                    setStoreDetailMode('type');
+                    setPoiBrand(null);
+                    setPoiBrandTouched(false);
+                    // Choosing the detail mode is not a subtype choice.
+                    // Keep title inference active until the user picks an
+                    // actual Store subtype below.
+                    setStoreSubtypeTouched(false);
+                    setStoreSubtype(current => current ?? 'any');
+                  } else {
+                    setStoreDetailMode('brand');
+                    setStoreSubtype(null);
+                    setStoreSubtypeTouched(false);
+                    // A deliberate mode change must not be overwritten by
+                    // the title's automatic brand inference.
+                    setPoiBrandTouched(true);
+                  }
                 }}
               />
+              {storeDetailMode === 'type' ? (
+                <StoreSubtypeSelector
+                  selected={storeSubtype}
+                  suggested={suggestedStoreSubtype}
+                  onSelect={subtype => {
+                    setStoreSubtypeTouched(true);
+                    setPoiBrand(null);
+                    setPoiBrandTouched(false);
+                    setStoreSubtype(subtype ?? 'any');
+                  }}
+                />
+              ) : (
+                <StoreBrandInput
+                  selected={poiBrand}
+                  placeholder={COPY.newTaskSheet.storeBrandPlaceholder}
+                  unmatchedLabel={COPY.newTaskSheet.storeBrandUnknown}
+                  onClear={() => {
+                    setPoiBrand(null);
+                    setPoiBrandTouched(true);
+                  }}
+                  onSelect={brand => {
+                    setPoiBrandTouched(true);
+                    setPoiBrand(brand);
+                    setStoreSubtype(null);
+                    setStoreSubtypeTouched(false);
+                  }}
+                />
+              )}
             </View>
           )}
 

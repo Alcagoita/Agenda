@@ -42,7 +42,7 @@ import { persistLearnedKeyword } from './firestore';
 import { isSuggestedPoiType, searchPlaceTypesLocal } from './poiTypeCache';
 import { inferRestaurantFoodTypeForPoiInference } from './restaurantFoodTypes';
 import { inferStoreSubtypeForPoiInference } from './storeSubtypes';
-import { findRequiredBrandInText } from './brandDictionary';
+import { findBrandInText, findRequiredBrandInText } from './brandDictionary';
 import vocabJson from '../../assets/poi-model/vocab.json';
 import labelsJson from '../../assets/poi-model/labels.json';
 
@@ -205,6 +205,10 @@ export async function inferPoiForQuickAdd(title: string): Promise<PoiResolution 
   const requiredBrand = findRequiredBrandInText(title);
   if (requiredBrand) { return requiredBrand.poiType; }
   if (inferRestaurantFoodTypeForPoiInference(title)) { return 'restaurant'; }
+  // Store brands are optional, but a recognised chain is still an unambiguous
+  // Store signal. The form resolves the same canonical brand from the title
+  // once this broad type is selected.
+  if (findBrandInText('store', title)) { return 'store'; }
 
   const localSuggestion = searchPlaceTypesLocal(title)[0]?.type ?? null;
   if (localSuggestion) {
