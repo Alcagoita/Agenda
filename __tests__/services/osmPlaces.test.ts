@@ -90,6 +90,16 @@ describe('searchOsmPlaces', () => {
     expect(result.cafe[0].distanceMeters).toBeLessThan(result.cafe[1].distanceMeters);
   });
 
+  it('maps an explicit OSM brand tag to a canonical local Store brand', async () => {
+    mockOverpassResponse([
+      { id: 10, lat: 0.0002, lon: 0, tags: { shop: 'convenience', name: 'Zara Colombo', brand: 'Zara' } },
+    ]);
+
+    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['store'], 5000);
+
+    expect(result.store[0]).toMatchObject({ name: 'Zara Colombo', brand: 'Zara' });
+  });
+
   it('falls back to the human-readable POI type label (not the raw lowercase tag) when OSM has no name tag', async () => {
     mockOverpassResponse([
       { id: 3, lat: 0.0001, lon: 0, tags: { amenity: 'pharmacy' } },

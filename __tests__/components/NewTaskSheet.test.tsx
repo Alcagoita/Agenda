@@ -16,6 +16,7 @@ import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import NewTaskSheet from '../../src/components/NewTaskSheet';
 import type { Category } from '../../src/types';
+import { COPY } from '../../src/constants/copy';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -249,8 +250,8 @@ describe('KAN-232 POI inference auto-suggestion', () => {
     expect(screen.getByLabelText('Store').props.accessibilityState?.selected).toBe(true);
     expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
 
-    fireEvent.press(screen.getByLabelText('Specific store?'));
-    fireEvent.press(screen.getByLabelText('Specific type?'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailType));
 
     expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
   });
@@ -263,8 +264,8 @@ describe('KAN-232 POI inference auto-suggestion', () => {
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a FNAC');
     await act(async () => { await jest.advanceTimersByTimeAsync(400); });
 
-    expect(screen.getByLabelText('Specific store?').props.accessibilityState?.selected).toBe(true);
-    expect(screen.getByLabelText('Search a store brand').props.value).toBe('Fnac');
+    expect(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y).props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder).props.value).toBe('Fnac');
   });
 
   it('supports non-catalog suggestions like Police', async () => {
@@ -556,8 +557,8 @@ describe('addTask submission', () => {
     renderSheet();
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
     fireEvent.press(screen.getByLabelText('Store'));
-    fireEvent.press(screen.getByLabelText('Specific store?'));
-    fireEvent.changeText(screen.getByLabelText('Search a store brand'), 'Wor');
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Add it'));
@@ -566,6 +567,15 @@ describe('addTask submission', () => {
       poi: 'store', poiBrand: 'Worten',
     }));
     expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
+  });
+
+  it('explains that an unmatched typed Store brand will remain a generic Store task', () => {
+    renderSheet();
+    fireEvent.press(screen.getByLabelText('Store'));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Adidas Kids');
+
+    expect(screen.getByText(COPY.newTaskSheet.storeBrandUnknown)).toBeTruthy();
   });
 
   it('does not call addTask when POI is missing', async () => {
@@ -716,8 +726,8 @@ describe('"More details" navigation', () => {
 
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a charging cable');
     fireEvent.press(screen.getByLabelText('Store'));
-    fireEvent.press(screen.getByLabelText('Specific store?'));
-    fireEvent.changeText(screen.getByLabelText('Search a store brand'), 'Wor');
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
+    fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     fireEvent.press(screen.getByLabelText('More details'));
 

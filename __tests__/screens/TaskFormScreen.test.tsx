@@ -793,6 +793,21 @@ describe('TaskFormScreen — save (create)', () => {
     expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
   });
 
+  it('returns to Store type inference when an automatically detected brand is removed from the title', async () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
+    render(<TaskFormScreen />);
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a shirt at Zara');
+    await waitFor(() => expect(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y).props.accessibilityState?.checked).toBe(true));
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(COPY.newTaskSheet.storeDetailType).props.accessibilityState?.checked).toBe(true);
+      expect(screen.getByLabelText('Clothing').props.accessibilityState?.selected).toBe(true);
+    });
+  });
+
   it('saves the Store brand received from quick create in More Details', async () => {
     setRouteParams({
       uid: 'user-123',
@@ -819,7 +834,7 @@ describe('TaskFormScreen — save (create)', () => {
     render(<TaskFormScreen />);
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
     fireEvent.press(screen.getByLabelText('Clothing'));
-    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
     fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
@@ -835,7 +850,7 @@ describe('TaskFormScreen — save (create)', () => {
     mockAddTask.mockResolvedValueOnce('new-id');
     render(<TaskFormScreen />);
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Buy a new shirt');
-    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
     fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailType));
@@ -982,7 +997,7 @@ describe('TaskFormScreen — save (edit)', () => {
     });
     mockUpdateTask.mockResolvedValueOnce(undefined);
     render(<TaskFormScreen />);
-    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrand));
+    fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
     fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Wor');
     fireEvent.press(screen.getByLabelText('Worten'));
     await act(async () => { fireEvent.press(screen.getByLabelText('Save changes')); });

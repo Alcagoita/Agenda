@@ -413,7 +413,21 @@ async function searchNearbyPlacesCloudflare(
   try {
     const result: Record<string, NearbyPlace[]> = {};
     for (const poiType of poiTypes) { result[poiType] = []; }
-    const data = await cloudflarePoiAllProxy(lat, lng, radiusMeters, requests);
+    // The Worker accepts at most 32 independent request buckets. A user can
+    // legitimately have more distinct Store brands than that, so split the
+    // request rather than allowing one oversized batch to discard every type.
+    const MAX_NEARBY_REQUESTS_PER_CALL = 32;
+    const data = { results: {} as Awaited<ReturnType<typeof cloudflarePoiAllProxy>>['results'], placeName: null as string | null };
+    for (let start = 0; start < requests.length; start += MAX_NEARBY_REQUESTS_PER_CALL) {
+      const response = await cloudflarePoiAllProxy(
+        lat,
+        lng,
+        radiusMeters,
+        requests.slice(start, start + MAX_NEARBY_REQUESTS_PER_CALL),
+      );
+      Object.assign(data.results, response.results);
+      data.placeName ??= response.placeName ?? null;
+    }
     const placesByType = new Map<string, Map<string, NearbyPlace>>();
     for (const request of requests) {
       const places = placesByType.get(request.type) ?? new Map<string, NearbyPlace>();
@@ -555,6 +569,7 @@ export async function searchNearbyPlaces(
       distanceMeters:  place.distanceMeters,
       footprintAreaM2: place.footprintAreaM2,
       website:         place.website,
+      brand:           place.brand,
     }));
   }
 

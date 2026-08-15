@@ -28,6 +28,7 @@
 import type { PoiType } from '../types';
 import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS, poiCatalogLabel } from '../types';
 import { getDistanceMeters } from './geoDistance';
+import { getCanonicalBrand } from './brandDictionary';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,9 @@ export interface OsmPlace {
    *  it costs no extra request. Undefined when OSM has no such tag; we never
    *  go looking for one. */
   website?: string;
+  /** Canonical chain inferred from OSM's explicit `brand` tag, when it is in
+   * the local catalogue. This is intentionally not guessed from the name. */
+  brand?: string;
 }
 
 interface OverpassElement {
@@ -342,6 +346,7 @@ async function fetchOsmPlaces(
           footprintAreaM2,
           // `contact:website` is the other common OSM spelling for the same thing.
           website:        el.tags.website ?? el.tags['contact:website'],
+          brand:          getCanonicalBrand(poiType, el.tags.brand ?? '') ?? undefined,
           distanceMeters: getDistanceMeters(lat, lng, elLat, elLon),
         });
         break;

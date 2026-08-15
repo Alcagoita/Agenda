@@ -44,7 +44,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
-import { categories, fonts, radius, spacing } from '../theme/tokens';
+import { categories, fonts, spacing } from '../theme/tokens';
 import { PoiType, CategoryKey, Category, QUICK_ACTIONABLE_POI_TYPES, POI_CATALOG, poiCatalogLabel } from '../types';
 import { addTask } from '../services/firestore';
 import { inferPoiForQuickAdd, learnFromClassification, learnFromUserEdit } from '../services/poiLlm';
@@ -59,6 +59,7 @@ import FinancialServiceKindSelector from './FinancialServiceKindSelector';
 import type { RestaurantFoodType } from '../services/restaurantFoodTypes';
 import StoreSubtypeSelector from './StoreSubtypeSelector';
 import StoreBrandInput from './StoreBrandInput';
+import StoreDetailModeSelector from './StoreDetailModeSelector';
 import BrandSelector from './BrandSelector';
 import {
   inferStoreSubtype,
@@ -467,9 +468,13 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     useEffect(() => {
       if ((!poiTypeRequiresBrand(poi) && poi !== 'store') || poiBrandTouched || (poi === 'store' && storeSubtypeTouched)) { return; }
       setPoiBrand(suggestedBrand);
-      if (poi === 'store' && suggestedBrand) {
-        setStoreSubtype(null);
-        setStoreDetailMode('brand');
+      if (poi === 'store') {
+        if (suggestedBrand) {
+          setStoreSubtype(null);
+          setStoreDetailMode('brand');
+        } else {
+          setStoreDetailMode('type');
+        }
       }
     }, [poi, poiBrandTouched, storeSubtypeTouched, suggestedBrand]);
 
@@ -716,12 +721,18 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
 
               {poi === 'store' && (
                 <View style={styles.foodTypeSection}>
-                  <View style={styles.storeModeRow} accessibilityRole="radiogroup">
-                    <Pressable
-                      accessibilityRole="radio"
-                      accessibilityLabel={COPY.newTaskSheet.storeDetailType}
-                      accessibilityState={{ selected: storeDetailMode === 'type' }}
-                      onPress={() => {
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.storeDetailQuestion}
+                    </Text>
+                    <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                      {COPY.newTaskSheet.catOptional}
+                    </Text>
+                  </View>
+                  <StoreDetailModeSelector
+                    value={storeDetailMode}
+                    onSelect={mode => {
+                      if (mode === 'type') {
                         setStoreDetailMode('type');
                         setPoiBrand(null);
                         setPoiBrandTouched(false);
@@ -730,31 +741,16 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                         // actual Store subtype below.
                         setStoreSubtypeTouched(false);
                         setStoreSubtype(current => current ?? 'any');
-                      }}
-                      style={[styles.storeModeOption, {
-                        borderColor: palette.line,
-                        backgroundColor: storeDetailMode === 'type' ? palette.surface : 'transparent',
-                      }]}
-                    >
-                      <Text style={[styles.storeModeLabel, { color: storeDetailMode === 'type' ? palette.text : palette.muted }]}>{COPY.newTaskSheet.storeDetailType}</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="radio"
-                      accessibilityLabel={COPY.newTaskSheet.storeDetailBrand}
-                      accessibilityState={{ selected: storeDetailMode === 'brand' }}
-                      onPress={() => {
+                      } else {
                         setStoreDetailMode('brand');
                         setStoreSubtype(null);
                         setStoreSubtypeTouched(false);
-                      }}
-                      style={[styles.storeModeOption, {
-                        borderColor: palette.line,
-                        backgroundColor: storeDetailMode === 'brand' ? palette.surface : 'transparent',
-                      }]}
-                    >
-                      <Text style={[styles.storeModeLabel, { color: storeDetailMode === 'brand' ? palette.text : palette.muted }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
-                    </Pressable>
-                  </View>
+                        // A deliberate mode change must not be overwritten by
+                        // the title's automatic brand inference.
+                        setPoiBrandTouched(true);
+                      }
+                    }}
+                  />
                   <View style={[styles.foodTypePad, storeDetailMode === 'brand' && styles.storeBrandPad]}>
                     {storeDetailMode === 'type' ? (
                       <StoreSubtypeSelector
@@ -771,6 +767,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                       <StoreBrandInput
                         selected={poiBrand}
                         placeholder={COPY.newTaskSheet.storeBrandPlaceholder}
+                        unmatchedLabel={COPY.newTaskSheet.storeBrandUnknown}
                         onClear={() => {
                           setPoiBrand(null);
                           setPoiBrandTouched(true);
@@ -1055,28 +1052,8 @@ const styles = StyleSheet.create({
   foodTypeSection: {
     paddingTop: 2,
   },
-  storeModeRow: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.page,
-    marginTop: spacing[2],
-    gap: spacing[2],
-  },
-  storeModeOption: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: radius.ctaBtn,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
   storeBrandPad: {
     paddingRight: spacing.page,
-  },
-  storeModeLabel: {
-    fontSize: 13,
-    fontFamily: fonts.families.medium,
-    fontWeight: '500',
   },
   carouselMask: {
     // Soft fade on the trailing edge via paddingRight on the content and overflow

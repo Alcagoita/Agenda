@@ -7,6 +7,7 @@ import { getBrandSuggestions } from '../services/brandDictionary';
 interface StoreBrandInputProps {
   selected: string | null;
   placeholder: string;
+  unmatchedLabel: string;
   onSelect: (brand: string) => void;
   onClear: () => void;
 }
@@ -15,14 +16,20 @@ interface StoreBrandInputProps {
  * Store has a deliberately compact brand picker: users search the curated
  * catalogue instead of scrolling an unbounded chain carousel.
  */
-export default function StoreBrandInput({ selected, placeholder, onSelect, onClear }: StoreBrandInputProps) {
+export default function StoreBrandInput({ selected, placeholder, unmatchedLabel, onSelect, onClear }: StoreBrandInputProps) {
   const { palette } = useTheme();
   const [query, setQuery] = useState(selected ?? '');
+  const queryChangedByUser = React.useRef(false);
 
   useEffect(() => {
     // Clearing a selected brand is normally caused by the first edit in this
     // very field. Keep that typed query visible so the user can refine it.
-    if (selected) setQuery(selected);
+    if (selected) {
+      queryChangedByUser.current = false;
+      setQuery(selected);
+    } else if (!queryChangedByUser.current) {
+      setQuery('');
+    }
   }, [selected]);
 
   const suggestions = useMemo(
@@ -36,6 +43,7 @@ export default function StoreBrandInput({ selected, placeholder, onSelect, onCle
         value={query}
         onChangeText={value => {
           setQuery(value);
+          queryChangedByUser.current = true;
           if (selected && value !== selected) onClear();
         }}
         placeholder={placeholder}
@@ -62,6 +70,11 @@ export default function StoreBrandInput({ selected, placeholder, onSelect, onCle
             </Pressable>
           ))}
         </View>
+      )}
+      {query.trim().length > 0 && !selected && suggestions.length === 0 && (
+        <Text accessibilityLiveRegion="polite" style={[styles.unmatched, { color: palette.muted }]}>
+          {unmatchedLabel}
+        </Text>
       )}
     </View>
   );
@@ -90,5 +103,10 @@ const styles = StyleSheet.create({
   suggestionLabel: {
     fontSize: 14,
     fontFamily: fonts.families.regular,
+  },
+  unmatched: {
+    fontSize: 13,
+    fontFamily: fonts.families.regular,
+    lineHeight: 18,
   },
 });

@@ -56,6 +56,7 @@ import { localPoiLabel } from '../../services/poiTypeCache';
 import type { RestaurantFoodType } from '../../services/restaurantFoodTypes';
 import StoreSubtypeSelector from '../../components/StoreSubtypeSelector';
 import StoreBrandInput from '../../components/StoreBrandInput';
+import StoreDetailModeSelector from '../../components/StoreDetailModeSelector';
 import BrandSelector from '../../components/BrandSelector';
 import {
   inferStoreSubtype,
@@ -447,13 +448,17 @@ export default function TaskFormScreen() {
   }, []);
 
   const suggestedBrand = (poiTypeRequiresBrand(effectivePoi) || effectivePoi === 'store') ? findBrandInText(effectivePoi, title) : null;
-  useEffect(() => {
-    if ((!poiTypeRequiresBrand(effectivePoi) && effectivePoi !== 'store') || poiBrandTouched || (effectivePoi === 'store' && storeSubtypeTouched)) { return; }
-    setPoiBrand(suggestedBrand);
-    if (effectivePoi === 'store' && suggestedBrand) {
-      setStoreSubtype(null);
-      setStoreDetailMode('brand');
-    }
+    useEffect(() => {
+      if ((!poiTypeRequiresBrand(effectivePoi) && effectivePoi !== 'store') || poiBrandTouched || (effectivePoi === 'store' && storeSubtypeTouched)) { return; }
+      setPoiBrand(suggestedBrand);
+      if (effectivePoi === 'store') {
+        if (suggestedBrand) {
+          setStoreSubtype(null);
+          setStoreDetailMode('brand');
+        } else {
+          setStoreDetailMode('type');
+        }
+      }
   }, [effectivePoi, poiBrandTouched, storeSubtypeTouched, suggestedBrand]);
 
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
@@ -956,12 +961,18 @@ export default function TaskFormScreen() {
 
           {effectivePoi === 'store' && (
             <View style={styles.subtypeSection}>
-              <View style={styles.storeModeRow} accessibilityRole="radiogroup">
-                <Pressable
-                  accessibilityRole="radio"
-                  accessibilityLabel={COPY.newTaskSheet.storeDetailType}
-                  accessibilityState={{ selected: storeDetailMode === 'type' }}
-                  onPress={() => {
+              <View style={styles.questionRow}>
+                <Text style={[styles.questionLabel, { color: palette.text }]}>
+                  {COPY.newTaskSheet.storeDetailQuestion}
+                </Text>
+                <Text style={[styles.questionOptional, { color: palette.faint }]}>
+                  {COPY.newTaskSheet.catOptional}
+                </Text>
+              </View>
+              <StoreDetailModeSelector
+                value={storeDetailMode}
+                onSelect={mode => {
+                  if (mode === 'type') {
                     setStoreDetailMode('type');
                     setPoiBrand(null);
                     setPoiBrandTouched(false);
@@ -970,31 +981,16 @@ export default function TaskFormScreen() {
                     // actual Store subtype below.
                     setStoreSubtypeTouched(false);
                     setStoreSubtype(current => current ?? 'any');
-                  }}
-                  style={[styles.storeModeOption, {
-                    borderColor: palette.line,
-                    backgroundColor: storeDetailMode === 'type' ? palette.surface : 'transparent',
-                  }]}
-                >
-                  <Text style={[styles.storeModeLabel, { color: storeDetailMode === 'type' ? palette.text : palette.muted }]}>{COPY.newTaskSheet.storeDetailType}</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="radio"
-                  accessibilityLabel={COPY.newTaskSheet.storeDetailBrand}
-                  accessibilityState={{ selected: storeDetailMode === 'brand' }}
-                  onPress={() => {
+                  } else {
                     setStoreDetailMode('brand');
                     setStoreSubtype(null);
                     setStoreSubtypeTouched(false);
-                  }}
-                  style={[styles.storeModeOption, {
-                    borderColor: palette.line,
-                    backgroundColor: storeDetailMode === 'brand' ? palette.surface : 'transparent',
-                  }]}
-                >
-                  <Text style={[styles.storeModeLabel, { color: storeDetailMode === 'brand' ? palette.text : palette.muted }]}>{COPY.newTaskSheet.storeDetailBrand}</Text>
-                </Pressable>
-              </View>
+                    // A deliberate mode change must not be overwritten by
+                    // the title's automatic brand inference.
+                    setPoiBrandTouched(true);
+                  }
+                }}
+              />
               {storeDetailMode === 'type' ? (
                 <StoreSubtypeSelector
                   selected={storeSubtype}
@@ -1010,6 +1006,7 @@ export default function TaskFormScreen() {
                 <StoreBrandInput
                   selected={poiBrand}
                   placeholder={COPY.newTaskSheet.storeBrandPlaceholder}
+                  unmatchedLabel={COPY.newTaskSheet.storeBrandUnknown}
                   onClear={() => {
                     setPoiBrand(null);
                     setPoiBrandTouched(true);

@@ -218,26 +218,6 @@ export const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 2,
   },
-  storeModeRow: {
-    flexDirection: 'row',
-    marginTop: spacing[2],
-    gap: spacing[2],
-  },
-  storeModeOption: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: radius.ctaBtn,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  storeModeLabel: {
-    fontSize: 13,
-    fontFamily: fonts.families.medium,
-    fontWeight: '500',
-  },
-
   // ── Category ──
   categoryRow: {
     flexDirection: 'row',

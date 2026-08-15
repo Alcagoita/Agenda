@@ -804,6 +804,7 @@ async function runProximitySearch(
                 lat:    place.lat,
                 lng:    place.lng,
                 source: tickSource === 'osm' ? { osm: place.placeId } : { fsq: place.placeId },
+                brand: place.brand,
                 // KAN-377 — the settlement name rides along with the places it
                 // came with, so this area stays nameable offline everywhere we
                 // hold POIs. Undefined on an OSM tick: that source doesn't name
