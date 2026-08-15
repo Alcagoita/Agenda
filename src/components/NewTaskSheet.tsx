@@ -277,6 +277,11 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     // containers) — leaves a permanent gap. Driven explicitly off Keyboard
     // events instead, so hide always forces this back to 0.
     const kbOffset      = useSharedValue(0);
+    // The transform above keeps the sheet's bottom edge above Android's
+    // keyboard. Its height must be constrained to that same visible viewport:
+    // otherwise an expanded inline picker (such as Store brands) can make the
+    // title field travel above the top of the screen with the sheet.
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     const sheetStyle = useAnimatedStyle(() => ({
       transform: [{ translateY: translateY.value + dragOffset.value + kbOffset.value }],
@@ -290,10 +295,13 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
     useEffect(() => {
       if (Platform.OS !== 'android') return;
       const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-        kbOffset.value = withTiming(-e.endCoordinates.height, { duration: 200 });
+        const height = Math.max(e.endCoordinates.height, 0);
+        kbOffset.value = withTiming(-height, { duration: 200 });
+        setKeyboardHeight(height);
       });
       const hideSub = Keyboard.addListener('keyboardDidHide', () => {
         kbOffset.value = withTiming(0, { duration: 200 });
+        setKeyboardHeight(0);
       });
       return () => {
         showSub.remove();
@@ -318,6 +326,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       setPoiTouched(false);
       setSubmitting(false);
       setTitleFocused(false);
+      setKeyboardHeight(0);
       dragOffset.value = 0;
       kbOffset.value = 0;
       userTouchedPoiRef.current = false;
@@ -568,6 +577,10 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
       }), 80);
     }, [handleClose, uid, title, category, poi, storeSubtype, storeSubtypeTouched, restaurantFoodType, financialServiceKind, financialServiceKindTouched, poiBrand, poiTouched]);
 
+    const keyboardSafeSheetHeight = keyboardHeight > 0
+      ? Math.max(SCREEN_H - keyboardHeight - insets.top, 0)
+      : undefined;
+
     // Always mounted — built once, shown/hidden via transform. `pointerEvents`
     // goes inert when closed so the off-screen sheet never blocks the screen.
     return (
@@ -590,7 +603,12 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
           pointerEvents="box-none">
 
           <Animated.View
-            style={[styles.sheet, { backgroundColor: palette.bg, borderTopColor: palette.line }, sheetStyle]}>
+            style={[
+              styles.sheet,
+              keyboardSafeSheetHeight != null && { maxHeight: keyboardSafeSheetHeight },
+              { backgroundColor: palette.bg, borderTopColor: palette.line },
+              sheetStyle,
+            ]}>
 
             {/* Drag handle */}
             <View style={styles.handleWrap} {...panResponder.panHandlers}>
@@ -987,6 +1005,7 @@ const styles = StyleSheet.create({
   },
   formScroll: {
     flexGrow: 0,
+    flexShrink: 1,
   },
   fieldPad: {
     paddingHorizontal: 22,
