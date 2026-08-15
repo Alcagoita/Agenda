@@ -48,9 +48,27 @@ small/rural cities (see project memory `project_poi_backend_migration_plan`).
 
 ## Endpoints
 
-All require `X-Api-Key: <API_KEY>` header except `/internal/*`, which uses a
-separate `X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead, and the
-deliberately narrow community-contribution routes listed below.
+All require authentication except `/internal/*`, which uses a separate
+`X-Build-Secret: <BUILD_TRIGGER_SECRET>` header instead, and the deliberately
+narrow community-contribution routes listed below. Two credentials are
+accepted:
+
+- `Authorization: Bearer <Firebase ID token>` — how the app calls this API
+  (KAN-367). The Worker verifies the token itself against Google's published
+  signing keys (`firebaseAuth.ts`): RS256 only, issuer and audience pinned to
+  `FIREBASE_PROJECT_ID`, and the uid taken from the verified `sub` and
+  nowhere else. Signing keys are cached for the max-age Google publishes, so
+  no per-request round trip. These requests are rate-limited per uid by the
+  `ratelimits` bindings in `wrangler.jsonc` (30/min on reads, 5/min on
+  `/coverage/request`), replacing the Firestore counters the retired Firebase
+  proxy kept.
+- `X-Api-Key: <API_KEY>` — server-side callers, including the Firebase POI
+  proxy that remains deployed as the rollback path until the direct-call app
+  build is verified in production. Not rate-limited here: there is no user to
+  key on.
+
+A request carrying a bearer token that fails verification is rejected with
+401 outright — it never falls back to the API key.
 
 - `GET /poi?lat=&lng=&radius=&type=&attribute=&value=` — POIs of one type
   within a radius, optionally narrowed to 1-2 `poi_attribute` values (e.g.

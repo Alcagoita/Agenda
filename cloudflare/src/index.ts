@@ -2,6 +2,7 @@ import { encodeGeohash, haversineMeters, neighborPrefixes, precisionForRadius, r
 import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
 import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManualPoiInput, isManualPoiInput, type ManualPoiAttribute } from './manualPoi';
+import { bearerToken, verifyFirebaseIdToken } from './firebaseAuth';
 import brandDictionary from '../../src/constants/brandDictionary.json';
 import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
 
@@ -37,6 +38,20 @@ export interface Env {
   /** Access audience for the same-origin reviewer route on brushaway.app. */
   ACCESS_REVIEW_AUD?: string;
   MANUAL_POI_ADMIN_EMAILS?: string;
+  /**
+   * KAN-367 — the Firebase project whose ID tokens this Worker accepts. A
+   * plain var, not a secret: it is the public project id, and it must be
+   * wrong-project-proof by comparison, not by concealment.
+   */
+  FIREBASE_PROJECT_ID?: string;
+  /** Per-uid limits, replacing the Firestore counters the removed Firebase proxy kept. */
+  POI_RATE_LIMITER?: RateLimit;
+  COVERAGE_REQUEST_RATE_LIMITER?: RateLimit;
+}
+
+/** Shape of a Workers `ratelimits` binding (no ambient type ships with workers-types yet). */
+interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
 }
 
 /**
@@ -341,12 +356,59 @@ function manualPoiAdminPathname(pathname: string): string {
     : pathname;
 }
 
-function authenticate(request: Request, env: Env): Response | null {
-  const key = request.headers.get('X-Api-Key');
-  if (key !== env.API_KEY) {
+/**
+ * A caller that passed the gate below. `uid` is set only for a verified
+ * Firebase ID token — never for the X-Api-Key path, and never from anything
+ * the client can assert about itself (KAN-367).
+ */
+interface Caller { uid: string | null; }
+
+/**
+ * Two accepted credentials, in priority order:
+ *
+ *   Authorization: Bearer <Firebase ID token>  — the app (KAN-367)
+ *   X-Api-Key: <API_KEY>                       — the Firebase POI proxy,
+ *                                                kept as the rollback path
+ *                                                until the direct build is
+ *                                                verified in production, plus
+ *                                                server-side/ops callers.
+ *
+ * A bearer token that fails verification is rejected outright rather than
+ * falling through to the key check: a client sending a bad token is a client
+ * whose token expired or was forged, and silently downgrading it would hide
+ * exactly the case this gate exists to catch.
+ */
+async function authenticate(request: Request, env: Env): Promise<Caller | Response> {
+  const token = bearerToken(request);
+  if (token) {
+    const uid = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID ?? '');
+    if (!uid) return json({ error: 'unauthorized' }, 401);
+    return { uid };
+  }
+
+  if (request.headers.get('X-Api-Key') !== env.API_KEY) {
     return json({ error: 'unauthorized' }, 401);
   }
-  return null;
+  return { uid: null };
+}
+
+/**
+ * Per-user rate limiting on the verified uid, replacing the Firestore
+ * transaction the removed Firebase proxy ran per request. Same budgets as
+ * that proxy: 30/min for the read-only POI paths, 5/min for coverage demand
+ * (which can make the Worker reverse-geocode a brand new municipality).
+ *
+ * Key-authenticated callers are not limited here — they are our own server
+ * side, already limited upstream, and there is no user to key on. Skipping is
+ * also the honest failure mode when the binding is absent (local `wrangler
+ * dev` without the binding configured): rate limiting is a guard rail, not
+ * the authentication boundary.
+ */
+async function enforceUserRateLimit(caller: Caller, limiter: RateLimit | undefined, action: string): Promise<Response | null> {
+  if (!caller.uid || !limiter) return null;
+  const { success } = await limiter.limit({ key: `${caller.uid}:${action}` });
+  if (success) return null;
+  return json({ error: 'rate limit exceeded' }, 429);
 }
 
 /** All /internal/* routes use this instead of authenticate() — a stronger, separate secret, never the public X-Api-Key. */
@@ -1839,13 +1901,15 @@ export default {
       return json({ ok: true });
     }
 
-    const authError = authenticate(request, env);
-    if (authError) return authError;
+    const caller = await authenticate(request, env);
+    if (caller instanceof Response) return caller;
 
     // GET /poi/nearby?lat=&lng=&radius=&types=cafe,pharmacy&limitPerType=20
     // Backwards-compatible KAN-347 hot path. Coverage/Place resolution is
     // intentionally absent and happens only after a settled zero result.
     if (url.pathname === '/poi/nearby' && request.method === 'GET') {
+      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'poiAll');
+      if (limited) return limited;
       const parsed = parseNearbySearch(url);
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius, types, limitPerType } = parsed;
@@ -1860,10 +1924,13 @@ export default {
       );
     }
 
-    // POST /poi/nearby — structured, request-keyed subtype search for the
-    // authenticated Firebase proxy. Each request has its own limit, so a
-    // broad restaurant bucket cannot crowd out a requested cuisine.
+    // POST /poi/nearby — structured, request-keyed subtype search, called
+    // directly by the app with its Firebase ID token (KAN-367). Each request
+    // has its own limit, so a broad restaurant bucket cannot crowd out a
+    // requested cuisine.
     if (url.pathname === '/poi/nearby' && request.method === 'POST') {
+      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'poiAll');
+      if (limited) return limited;
       const body = await request.json().catch(() => null);
       const parsed = parseNearbySearchBody(body);
       if (parsed instanceof Response) return parsed;
@@ -1926,6 +1993,8 @@ export default {
     // download's build_id and skip re-downloading /export/:cityId when
     // nothing changed, without fetching the export file just to check.
     if (url.pathname === '/coverage' && request.method === 'GET') {
+      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'coverage');
+      if (limited) return limited;
       const parsed = parseCoords(url);
       if (parsed instanceof Response) return parsed;
       const { lat, lng } = parsed;
@@ -1987,6 +2056,8 @@ export default {
     // leaves the row correctly marked 'mapping', just with nothing yet to
     // move it forward — see triggerBuild).
     if (url.pathname === '/coverage/request' && request.method === 'POST') {
+      const limited = await enforceUserRateLimit(caller, env.COVERAGE_REQUEST_RATE_LIMITER, 'requestCoverage');
+      if (limited) return limited;
       const body = await request.json<{ lat: number; lng: number }>().catch(() => null);
       if (!body || typeof body.lat !== 'number' || typeof body.lng !== 'number') {
         return json({ error: 'lat/lng required' }, 400);

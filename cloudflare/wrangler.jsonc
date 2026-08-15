@@ -11,6 +11,30 @@
   // the Cloudflare dashboard (Zone > Workers Routes), not here — this token's
   // permissions don't cover Zone:Workers Routes, so wrangler can't sync a
   // "routes" block without failing every deploy. Not lost, just not IaC yet.
+  // KAN-367 — the Firebase project whose ID tokens this Worker accepts on
+  // Authorization: Bearer. Public by nature (it is in the app's
+  // google-services.json); it is a var, not a secret, because its job is to
+  // reject tokens minted for any OTHER project, not to stay hidden.
+  "vars": {
+    "FIREBASE_PROJECT_ID": "brush-away"
+  },
+  // Per-uid rate limits, carrying over the exact budgets the retired Firebase
+  // proxy enforced in Firestore: 30/min on the read paths, 5/min on coverage
+  // demand (which can trigger a server-side Nominatim reverse-geocode).
+  // Counted per Cloudflare location and eventually consistent by design —
+  // fine for a guard rail, and cheaper than a D1 write per POI request.
+  "ratelimits": [
+    {
+      "name": "POI_RATE_LIMITER",
+      "namespace_id": "3670",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "COVERAGE_REQUEST_RATE_LIMITER",
+      "namespace_id": "3671",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "REGISTRY_DB",
