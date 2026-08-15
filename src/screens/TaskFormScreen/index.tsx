@@ -434,7 +434,7 @@ export default function TaskFormScreen() {
 
   useEffect(() => {
     if (effectivePoi !== 'store' || storeDetailMode !== 'type' || storeSubtypeTouched) { return; }
-    setStoreSubtype(inferStoreSubtype(title.trim()) ?? 'any');
+    setStoreSubtype(inferStoreSubtype(title.trim()));
   }, [effectivePoi, storeDetailMode, storeSubtypeTouched, title]);
 
   useEffect(() => {
@@ -464,8 +464,15 @@ export default function TaskFormScreen() {
   // Suggestions shown while the user is actively typing (hidden once a suggestion is selected)
   const suggestions = !customPoiType && query.trim() ? getTypeSuggestions(query) : [];
   // Birthday tasks are exempt from the POI requirement (KAN-248) — date-shaped, not place-shaped.
+  const hasRequiredStoreDetail = effectivePoi !== 'store' || (
+    storeDetailMode === 'brand'
+      ? isCanonicalBrandForType('store', poiBrand)
+      : Boolean(storeSubtype && storeSubtype !== 'any')
+  );
   const canSubmit = title.trim().length > 0 && (isBirthday || (
-    effectivePoi !== null && (!poiTypeRequiresBrand(effectivePoi) || isCanonicalBrandForType(effectivePoi, poiBrand))
+    effectivePoi !== null
+      && hasRequiredStoreDetail
+      && (!poiTypeRequiresBrand(effectivePoi) || isCanonicalBrandForType(effectivePoi, poiBrand))
   ));
   const suggestionType = suggestedTitle === title.trim() ? suggestedPoi : null;
   const suggestionLabel = suggestionType
@@ -485,7 +492,12 @@ export default function TaskFormScreen() {
 
   const handleSave = useCallback(async () => {
     const trimmed = title.trim();
-    if (!trimmed || (!isBirthday && (!effectivePoi || (poiTypeRequiresBrand(effectivePoi) && !isCanonicalBrandForType(effectivePoi, poiBrand))))) { return; }
+    const canSaveStoreDetail = effectivePoi !== 'store' || (
+      storeDetailMode === 'brand'
+        ? isCanonicalBrandForType('store', poiBrand)
+        : Boolean(storeSubtype && storeSubtype !== 'any')
+    );
+    if (!trimmed || (!isBirthday && (!effectivePoi || !canSaveStoreDetail || (poiTypeRequiresBrand(effectivePoi) && !isCanonicalBrandForType(effectivePoi, poiBrand))))) { return; }
 
     setSubmitting(true);
     try {
@@ -499,7 +511,7 @@ export default function TaskFormScreen() {
         } : {}),
         ...(time.trim() ? { time: time.trim() } : {}),
         ...(isBirthday ? { kind: 'birthday' as const } : { poi: effectivePoi! }),
-        ...(!isBirthday && effectivePoi === 'store' && !isCanonicalBrandForType('store', poiBrand) ? { storeSubtype: storeSubtype ?? 'any' } : {}),
+        ...(!isBirthday && effectivePoi === 'store' && storeDetailMode === 'type' && storeSubtype && storeSubtype !== 'any' ? { storeSubtype } : {}),
         ...(!isBirthday && effectivePoi === 'restaurant' && restaurantFoodType ? { restaurantFoodType } : {}),
         ...(!isBirthday && effectivePoi === 'financial_service' && financialServiceKind ? { financialServiceKind } : {}),
         ...(!isBirthday && (poiTypeRequiresBrand(effectivePoi) || effectivePoi === 'store') && isCanonicalBrandForType(effectivePoi, poiBrand) ? { poiBrand: poiBrand! } : {}),
@@ -595,7 +607,7 @@ export default function TaskFormScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [title, category, effectivePoi, storeSubtype, restaurantFoodType, financialServiceKind, poiBrand, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
+  }, [title, category, effectivePoi, storeDetailMode, storeSubtype, restaurantFoodType, financialServiceKind, poiBrand, time, date, notes, uid, isEdit, existingTask, isBirthday, navigation]);
 
   // ── Delete (edit mode only) ─────────────────────────────────────────────────
 
@@ -965,9 +977,6 @@ export default function TaskFormScreen() {
                 <Text style={[styles.questionLabel, { color: palette.text }]}>
                   {COPY.newTaskSheet.storeDetailQuestion}
                 </Text>
-                <Text style={[styles.questionOptional, { color: palette.faint }]}>
-                  {COPY.newTaskSheet.catOptional}
-                </Text>
               </View>
               <StoreDetailModeSelector
                 value={storeDetailMode}
@@ -976,11 +985,7 @@ export default function TaskFormScreen() {
                     setStoreDetailMode('type');
                     setPoiBrand(null);
                     setPoiBrandTouched(false);
-                    // Choosing the detail mode is not a subtype choice.
-                    // Keep title inference active until the user picks an
-                    // actual Store subtype below.
                     setStoreSubtypeTouched(false);
-                    setStoreSubtype(current => current ?? 'any');
                   } else {
                     setStoreDetailMode('brand');
                     setStoreSubtype(null);
@@ -999,7 +1004,7 @@ export default function TaskFormScreen() {
                     setStoreSubtypeTouched(true);
                     setPoiBrand(null);
                     setPoiBrandTouched(false);
-                    setStoreSubtype(subtype ?? 'any');
+                    setStoreSubtype(subtype);
                   }}
                 />
               ) : (

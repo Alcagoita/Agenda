@@ -569,13 +569,26 @@ describe('addTask submission', () => {
     expect(mockAddTask.mock.calls.at(-1)?.[1]).not.toHaveProperty('storeSubtype');
   });
 
-  it('explains that an unmatched typed Store brand will remain a generic Store task', () => {
+  it('requires a recognised Store brand instead of falling back to a generic Store task', () => {
     renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a shop');
     fireEvent.press(screen.getByLabelText('Store'));
     fireEvent.press(screen.getByLabelText(COPY.newTaskSheet.storeDetailBrandA11y));
     fireEvent.changeText(screen.getByLabelText(COPY.newTaskSheet.storeBrandPlaceholder), 'Adidas Kids');
 
     expect(screen.getByText(COPY.newTaskSheet.storeBrandUnknown)).toBeTruthy();
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('requires a specific Store subtype before quick create can submit', () => {
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a shop');
+    fireEvent.press(screen.getByLabelText('Store'));
+
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(false);
   });
 
   it('does not call addTask when POI is missing', async () => {

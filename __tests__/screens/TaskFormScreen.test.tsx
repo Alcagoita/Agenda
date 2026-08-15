@@ -781,6 +781,17 @@ describe('TaskFormScreen — save (create)', () => {
     });
   });
 
+  it('requires a Store subtype or a recognised Store brand in create mode', () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Find a shop');
+
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(false);
+  });
+
   it('infers and saves a Store brand without a Store subtype in create mode', async () => {
     setRouteParams({ uid: 'user-123', initialPoi: 'store', initialPoiExplicitlySelected: true });
     mockAddTask.mockResolvedValueOnce('new-id');
@@ -988,6 +999,19 @@ describe('TaskFormScreen — save (edit)', () => {
         }),
       );
     });
+  });
+
+  it('requires an existing generic Store task to gain a specific detail before saving', () => {
+    setRouteParams({
+      uid: 'user-123',
+      task: makeTask({ poi: 'store', storeSubtype: 'any' }),
+    });
+    render(<TaskFormScreen />);
+
+    expect(screen.getByLabelText('Save changes').props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.press(screen.getByLabelText('Clothing'));
+    expect(screen.getByLabelText('Save changes').props.accessibilityState?.disabled).toBe(false);
   });
 
   it('switches a Store from type to brand in edit mode and deletes the old subtype', async () => {

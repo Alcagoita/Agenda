@@ -127,12 +127,11 @@ function StoreSubtypeIcon({ type, color, size = 16 }: { type: StoreSubtype; colo
 }
 
 function orderSubtypes(suggested: StoreSubtype | null | undefined): StoreSubtype[] {
-  const subtypes = listStoreSubtypes();
+  const subtypes = listStoreSubtypes().filter(type => type !== 'any');
   if (!suggested || suggested === 'any') { return subtypes; }
   return [
-    'any',
     suggested,
-    ...subtypes.filter(type => type !== 'any' && type !== suggested),
+    ...subtypes.filter(type => type !== suggested),
   ] as StoreSubtype[];
 }
 
