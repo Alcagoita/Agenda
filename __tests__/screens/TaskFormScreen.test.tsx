@@ -936,14 +936,22 @@ describe('TaskFormScreen — save (create)', () => {
     render(<TaskFormScreen />);
     fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Visit my bank');
     expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
-    // BrandSelector is a virtualized FlatList. Select a canonical Bank from
-    // its initial render window; a later row such as CGD is intentionally not
-    // mounted until the user scrolls.
+    fireEvent.changeText(screen.getByLabelText('Search a bank'), 'novo');
     fireEvent.press(screen.getByLabelText('Novo Banco'));
     await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
     await waitFor(() => expect(mockAddTask).toHaveBeenCalledWith('user-123', expect.objectContaining({
       poi: 'bank', poiBrand: 'Novo Banco',
     })));
+  });
+
+  it('keeps Bank saving disabled for an unknown typed brand', () => {
+    setRouteParams({ uid: 'user-123', initialPoi: 'bank', initialPoiExplicitlySelected: true });
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Visit my bank');
+    fireEvent.changeText(screen.getByLabelText('Search a bank'), 'A made-up bank');
+
+    expect(screen.getByText("I don't know that bank yet — choose one from the list.")).toBeTruthy();
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
   });
 });
 
@@ -999,6 +1007,24 @@ describe('TaskFormScreen — save (edit)', () => {
         }),
       );
     });
+  });
+
+  it('hydrates and updates a canonical Bank brand in edit mode', async () => {
+    setRouteParams({
+      uid: 'user-123',
+      task: makeTask({ poi: 'bank', poiBrand: 'Novo Banco' }),
+    });
+    mockUpdateTask.mockResolvedValueOnce(undefined);
+    render(<TaskFormScreen />);
+
+    expect(screen.getByLabelText('Search a bank').props.value).toBe('Novo Banco');
+    fireEvent.changeText(screen.getByLabelText('Search a bank'), 'sant');
+    fireEvent.press(screen.getByLabelText('Santander'));
+    await act(async () => { fireEvent.press(screen.getByLabelText('Save changes')); });
+
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('user-123', 'task-1', expect.objectContaining({
+      poi: 'bank', poiBrand: 'Santander',
+    })));
   });
 
   it('requires an existing generic Store task to gain a specific detail before saving', () => {

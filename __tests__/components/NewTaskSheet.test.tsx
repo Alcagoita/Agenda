@@ -175,6 +175,23 @@ describe('canSubmit: requires title AND POI', () => {
       poi: 'gym', poiBrand: 'Solinca',
     }));
   });
+
+  it('selects a canonical Bank from type-ahead before adding', async () => {
+    mockInferPoiForQuickAdd.mockResolvedValue('bank');
+    renderSheet();
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Visit my bank');
+    await waitFor(() => expect(screen.getByLabelText('Search a bank')).toBeTruthy());
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.changeText(screen.getByLabelText('Search a bank'), 'novo');
+    fireEvent.press(screen.getByLabelText('Novo Banco'));
+    expect(screen.getByLabelText('Add it').props.accessibilityState?.disabled).toBe(false);
+
+    await act(async () => { fireEvent.press(screen.getByLabelText('Add it')); });
+    expect(mockAddTask).toHaveBeenCalledWith('test-uid', expect.objectContaining({
+      poi: 'bank', poiBrand: 'Novo Banco',
+    }));
+  });
 });
 
 describe('POI carousel toggle', () => {
@@ -750,6 +767,24 @@ describe('"More details" navigation', () => {
         initialPoi: 'store',
         initialPoiBrand: 'Worten',
         initialStoreSubtype: undefined,
+      }));
+    }, { timeout: 500 });
+  });
+
+  it('passes an inferred Bank brand through More details', async () => {
+    mockInferPoiForQuickAdd.mockResolvedValue('bank');
+    renderSheet();
+
+    fireEvent.changeText(screen.getByLabelText('What do you need?'), 'Visit my bank');
+    await waitFor(() => expect(screen.getByLabelText('Search a bank')).toBeTruthy());
+    fireEvent.changeText(screen.getByLabelText('Search a bank'), 'novo');
+    fireEvent.press(screen.getByLabelText('Novo Banco'));
+    fireEvent.press(screen.getByLabelText('More details'));
+
+    await waitFor(() => {
+      expect(mockNavigateTo).toHaveBeenCalledWith('TaskForm', expect.objectContaining({
+        initialPoi: 'bank',
+        initialPoiBrand: 'Novo Banco',
       }));
     }, { timeout: 500 });
   });

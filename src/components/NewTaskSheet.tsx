@@ -788,6 +788,7 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                       />
                     ) : (
                       <StoreBrandInput
+                        poiType="store"
                         selected={poiBrand}
                         placeholder={COPY.newTaskSheet.storeBrandPlaceholder}
                         unmatchedLabel={COPY.newTaskSheet.storeBrandUnknown}
@@ -823,7 +824,31 @@ const NewTaskSheet = forwardRef<NewTaskSheetHandle, NewTaskSheetProps>(
                 </View>
               )}
 
-              {poiTypeRequiresBrand(poi) && (
+              {poi === 'bank' ? (
+                <View style={styles.foodTypeSection}>
+                  <View style={styles.questionRow}>
+                    <Text style={[styles.questionLabel, { color: palette.text }]}>
+                      {COPY.newTaskSheet.brandQuestion}
+                    </Text>
+                  </View>
+                  <View style={[styles.foodTypePad, styles.storeBrandPad]}>
+                    <StoreBrandInput
+                      poiType="bank"
+                      selected={poiBrand}
+                      placeholder={COPY.newTaskSheet.bankBrandPlaceholder}
+                      unmatchedLabel={COPY.newTaskSheet.bankBrandUnknown}
+                      onClear={() => {
+                        setPoiBrand(null);
+                        setPoiBrandTouched(true);
+                      }}
+                      onSelect={brand => {
+                        setPoiBrandTouched(true);
+                        setPoiBrand(brand);
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : poiTypeRequiresBrand(poi) && (
                 <View style={styles.foodTypeSection}>
                   <View style={styles.questionRow}>
                     <Text style={[styles.questionLabel, { color: palette.text }]}>
