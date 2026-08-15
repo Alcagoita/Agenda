@@ -1009,6 +1009,7 @@ export default function TaskFormScreen() {
                 />
               ) : (
                 <StoreBrandInput
+                  poiType="store"
                   selected={poiBrand}
                   placeholder={COPY.newTaskSheet.storeBrandPlaceholder}
                   unmatchedLabel={COPY.newTaskSheet.storeBrandUnknown}
@@ -1041,7 +1042,29 @@ export default function TaskFormScreen() {
             </View>
           )}
 
-          {poiTypeRequiresBrand(effectivePoi) && (
+          {effectivePoi === 'bank' ? (
+            <View style={styles.subtypeSection}>
+              <View style={styles.questionRow}>
+                <Text style={[styles.questionLabel, { color: palette.text }]}>
+                  {COPY.newTaskSheet.brandQuestion}
+                </Text>
+              </View>
+              <StoreBrandInput
+                poiType="bank"
+                selected={poiBrand}
+                placeholder={COPY.newTaskSheet.bankBrandPlaceholder}
+                unmatchedLabel={COPY.newTaskSheet.bankBrandUnknown}
+                onClear={() => {
+                  setPoiBrand(null);
+                  setPoiBrandTouched(true);
+                }}
+                onSelect={brand => {
+                  setPoiBrandTouched(true);
+                  setPoiBrand(brand);
+                }}
+              />
+            </View>
+          ) : poiTypeRequiresBrand(effectivePoi) && (
             <View style={styles.subtypeSection}>
               <View style={styles.questionRow}>
                 <Text style={[styles.questionLabel, { color: palette.text }]}>

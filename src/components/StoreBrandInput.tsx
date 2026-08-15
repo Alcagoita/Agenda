@@ -5,6 +5,7 @@ import { useTheme } from '../theme';
 import { getBrandSuggestions } from '../services/brandDictionary';
 
 interface StoreBrandInputProps {
+  poiType: 'store' | 'bank';
   selected: string | null;
   placeholder: string;
   unmatchedLabel: string;
@@ -13,10 +14,10 @@ interface StoreBrandInputProps {
 }
 
 /**
- * Store has a deliberately compact brand picker: users search the curated
- * catalogue instead of scrolling an unbounded chain carousel.
+ * A compact brand picker for catalogues too large for a useful carousel.
+ * Users search the curated local catalogue instead of scrolling every chain.
  */
-export default function StoreBrandInput({ selected, placeholder, unmatchedLabel, onSelect, onClear }: StoreBrandInputProps) {
+export default function StoreBrandInput({ poiType, selected, placeholder, unmatchedLabel, onSelect, onClear }: StoreBrandInputProps) {
   const { palette } = useTheme();
   const [query, setQuery] = useState(selected ?? '');
   const queryChangedByUser = React.useRef(false);
@@ -33,8 +34,8 @@ export default function StoreBrandInput({ selected, placeholder, unmatchedLabel,
   }, [selected]);
 
   const suggestions = useMemo(
-    () => query.trim() && query !== selected ? getBrandSuggestions('store', query) : [],
-    [query, selected],
+    () => query.trim() && query !== selected ? getBrandSuggestions(poiType, query) : [],
+    [poiType, query, selected],
   );
 
   return (
