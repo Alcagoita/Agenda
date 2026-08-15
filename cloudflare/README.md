@@ -209,6 +209,21 @@ this, see that file's own caveat).
 already-extracted CSV — useful for debugging a single Place's
 classification without going through the whole Job.
 
+### Country-source count diagnostic
+
+Before investigating a country-import coverage discrepancy, run this
+read-only local diagnostic with a current Foursquare Places Portal JWT:
+
+```bash
+export FOURSQUARE_JWT='<Places Portal JWT>'
+python3 cloudflare/extraction/count_country.py PT
+```
+
+It reports all open Foursquare OS Places rows for the country and the subset
+in Brush's supported category IDs. It neither writes to Foursquare nor D1;
+compare the supported count with the durable country-import audit when
+reconciling source coverage.
+
 Source: [Foursquare OS Places](https://opensource.foursquare.com/os-places/)
 (Apache 2.0, bulk-storable — unlike the live Foursquare Search API, which
 explicitly forbids caching on a Pay-as-you-go key). Queried via DuckDB
