@@ -476,6 +476,39 @@ describe('GET /poi/nearby', () => {
 });
 
 describe('POST /poi/nearby', () => {
+  it('prefers a typed settlement over an overlapping legacy extent for the client area name', async () => {
+    const env = makeEnv([
+      {
+        place_id: 'odivelas-legacy', name: 'Odivelas', country_code: 'PT', place_kind: null,
+        min_lat: 38.74614, max_lat: 38.83598885373364, min_lng: -9.243274052382205, max_lng: -9.128014129747571,
+        status: 'mapped', build_id: 'legacy-build', mapped_at: '2026-08-06T09:34:37.000Z',
+        request_count: 0, first_requested_at: null, last_requested_at: null,
+      },
+      {
+        place_id: 'lisboa-city', name: 'Lisboa', country_code: 'PT', place_kind: 'city',
+        min_lat: 38.6913994, max_lat: 38.7967584, min_lng: -9.2298356, max_lng: -9.0863328,
+        status: 'mapped', build_id: null, mapped_at: null,
+        request_count: 0, first_requested_at: null, last_requested_at: null,
+      },
+      {
+        place_id: 'odivelas-municipality', name: 'Odivelas', country_code: 'PT', place_kind: 'municipality',
+        min_lat: 38.7602212, max_lat: 38.8305301, min_lng: -9.24112, max_lng: -9.1498877,
+        status: 'mapped', build_id: null, mapped_at: null,
+        request_count: 0, first_requested_at: null, last_requested_at: null,
+      },
+    ], {
+      poiSeed: [{ fsq_place_id: 'store', name: 'Store', lat: 38.7549, lng: -9.1887, geohash: 'eyc', primary_poi_type: 'store', brand: null, category_label: null, address: null }],
+      poiTypeSeed: [{ fsq_place_id: 'store', poi_type: 'store' }],
+    });
+    const request = { radius: 200, limitPerRequest: 20, requests: [{ key: 'store', type: 'store' }] };
+
+    const colombo = await worker.fetch(nearbyPost({ ...request, lat: 38.75491047589586, lng: -9.18866205879351 }), env);
+    const odivelas = await worker.fetch(nearbyPost({ ...request, lat: 38.79899158671335, lng: -9.177509102206896 }), env);
+
+    expect((await colombo.json() as { placeName: string | null }).placeName).toBe('Lisboa');
+    expect((await odivelas.json() as { placeName: string | null }).placeName).toBe('Odivelas');
+  });
+
   it('returns independently limited subtype buckets and the stored subtype attribute', async () => {
     const env = makeEnv([], {
       poiSeed: [
