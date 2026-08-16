@@ -559,7 +559,10 @@ function parseNearbySearchBody(body: unknown): NearbySearchBody | Response {
  * POST /coverage/request). Places can legitimately overlap (a suburb inside
  * a wider neighbour) — picks the smallest-area match among all containing
  * rows, not just the first, so a point inside a suburb's own tighter extent
- * resolves to the suburb. Linear scan — fine while the place table is small;
+ * resolves to the suburb. A typed settlement always outranks an untyped
+ * legacy row: old extraction records have rectangular Foursquare extents,
+ * which can overlap a real settlement far beyond its actual boundary.
+ * Linear scan — fine while the place table is small;
  * revisit with geohash bucketing on `place` itself once place count grows
  * (same accepted tradeoff as the pre-KAN-355 circle version).
  */
@@ -589,11 +592,21 @@ async function findPlace(env: Env, lat: number, lng: number): Promise<PlaceRow |
     'SELECT * FROM place WHERE min_lat IS NOT NULL AND ? BETWEEN min_lat AND max_lat AND ? BETWEEN min_lng AND max_lng',
   ).bind(lat, lng).all<PlaceRow>();
   let best: PlaceRow | null = null;
+  let bestKindRank = Infinity;
   let bestAreaDeg2 = Infinity;
   for (const row of results) {
+    // Country/generic rows are coverage fallbacks. Untyped rows are retained
+    // for historical builds, but must not win over a real settlement because
+    // their coarse rectangular extent can overlap neighbouring municipalities.
+    const kindRank = row.place_kind === 'country' || row.place_kind === 'generic'
+      ? 2
+      : row.place_kind === null
+        ? 1
+        : 0;
     const areaDeg2 = (row.max_lat! - row.min_lat!) * (row.max_lng! - row.min_lng!);
-    if (areaDeg2 < bestAreaDeg2) {
+    if (kindRank < bestKindRank || (kindRank === bestKindRank && areaDeg2 < bestAreaDeg2)) {
       best = row;
+      bestKindRank = kindRank;
       bestAreaDeg2 = areaDeg2;
     }
   }
