@@ -42,6 +42,16 @@ BUILD_DIR = os.path.join(CLOUDFLARE_DIR, 'build')
 GRID_LAT_DEG = MATCH_RADIUS_METERS / 111_000
 SQL_BATCH_SIZE = 250
 
+# Venue categories and grammatical particles do not identify a business.
+# Ignoring them lets a trustworthy reordered name such as "Café Ala Sul" /
+# "Ala Sul Café" match, without treating unrelated nearby mall shops as
+# duplicates.
+NON_IDENTITY_NAME_TOKENS = frozenset({
+    'a', 'as', 'bar', 'cafe', 'cafeteria', 'da', 'das', 'de', 'do', 'dos',
+    'e', 'hamburgueria', 'loja', 'o', 'os', 'pastelaria', 'pizzeria', 'pub',
+    'restaurant', 'restaurante', 'shop', 'store',
+})
+
 # The public app's OSM tag policy, made explicit for server import.  ``shop``
 # needs special treatment: most concrete shop values are useful generic stores,
 # while these values describe an area/empty unit rather than a shop the user can
@@ -172,6 +182,13 @@ def name_similarity(left: str, right: str) -> float:
     shorter, longer = sorted((left, right), key=len)
     if (len(shorter) >= MIN_CONTAINED_NAME_LENGTH and
             (longer.startswith(shorter + ' ') or longer.endswith(' ' + shorter))):
+        return 0.9
+    left_core = {token for token in left.split() if token not in NON_IDENTITY_NAME_TOKENS}
+    right_core = {token for token in right.split() if token not in NON_IDENTITY_NAME_TOKENS}
+    # One shared word is not enough (for example, a café can share an owner's
+    # surname with the adjacent business). Two or more exact identity terms,
+    # however, are a stable match even when source word order differs.
+    if len(left_core) >= 2 and left_core == right_core:
         return 0.9
     return difflib.SequenceMatcher(None, left, right).ratio()
 

@@ -72,6 +72,33 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertEqual(stats['matched_skipped'], 1)
         self.assertEqual(stats['inserted'], 1)
 
+    def test_reordered_identity_terms_match_but_a_shared_surname_does_not(self):
+        self.assertGreaterEqual(
+            supplement.name_similarity('cafe ala sul', 'ala sul cafe'),
+            supplement.NAME_SIMILARITY_THRESHOLD,
+        )
+        self.assertLess(
+            supplement.name_similarity('cafe rosa', 'alberto rosa filhos'),
+            supplement.NAME_SIMILARITY_THRESHOLD,
+        )
+        self.assertLess(
+            supplement.name_similarity('calzedonia intimissimi', 'lefties'),
+            supplement.NAME_SIMILARITY_THRESHOLD,
+        )
+
+    def test_reordered_identity_name_is_skipped_but_shared_surname_is_imported(self):
+        existing = [
+            supplement.Candidate('foursquare', 'ala-sul', 'Ala Sul Café', 'ala sul cafe', 39.80345, -8.10126, 'cafe'),
+            supplement.Candidate('foursquare', 'rosa-family', 'Alberto Rosa & Filhos', 'alberto rosa filhos', 39.80355, -8.10126, 'cafe'),
+        ]
+        imports, stats = supplement.classify_scope([
+            element(1, 'Café Ala Sul', amenity='cafe'),
+            element(2, 'Café Rosa', lat=39.80355, amenity='cafe'),
+        ], existing, 39.80345)
+
+        self.assertEqual([poi.name for poi in imports], ['Café Rosa'])
+        self.assertEqual(stats['matched_skipped'], 1)
+
     def test_differently_named_same_location_is_reported_but_still_admitted(self):
         existing = [
             supplement.Candidate('foursquare', 'fsq-lagar', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
