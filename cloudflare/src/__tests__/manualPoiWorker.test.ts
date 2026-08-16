@@ -32,6 +32,7 @@ function submissionDb() {
       async all() {
         if (trimmed.startsWith('SELECT fsq_place_id AS poi_id')) return { results: [] };
         if (trimmed.startsWith('SELECT poi_id, name, lat, lng FROM curated_poi')) return { results: [] };
+        if (trimmed.startsWith('SELECT osm_element_id AS poi_id, name, lat, lng FROM osm_poi')) return { results: [] };
         throw new Error(`unhandled all(): ${trimmed}`);
       },
       async run() {

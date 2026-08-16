@@ -400,6 +400,22 @@ already-run passes — but real, verified live, and recovers cases neither
 of the other two passes can (a place whose name gives no cuisine hint at
 all, and whose Foursquare row was never tagged with one either).
 
+### OSM-only supplementary POIs
+
+KAN-383 keeps OSM-only venues in `osm_poi`/`osm_poi_type`/`osm_poi_attribute`,
+separate from both Foursquare `poi` rows and moderated `curated_poi` rows. An
+OSM element is added only when no same-type, similar normalized-name candidate
+exists within 75m; ambiguous candidates are skipped rather than guessed. The
+stable `node/<id>` / `way/<id>` / `relation/<id>` identity makes reruns and
+overlapping municipality bboxes idempotent.
+
+Start every new source with a read-only settlement or bbox dry-run. For
+example, `python3 extraction/supplement_osm_pois.py --dry-run --bbox 39.794
+39.813 -8.113 -8.090` inspects Sertã without writing D1. The country operation
+uses bounded municipality scopes instead of one Portugal-wide Overpass query;
+it is queued with `POST /internal/osm-supplement/queue` only after the
+country's Foursquare data and settlement registry are mapped.
+
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL
 files write to a relative `build/` path and the Python script resolves
