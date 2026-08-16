@@ -82,7 +82,11 @@ class SupplementOsmPoisTest(unittest.TestCase):
             supplement.NAME_SIMILARITY_THRESHOLD,
         )
         self.assertLess(
-            supplement.name_similarity('calzedonia intimissimi', 'lefties'),
+            supplement.name_similarity('cafe rosa', 'rosa cafe'),
+            supplement.NAME_SIMILARITY_THRESHOLD,
+        )
+        self.assertLess(
+            supplement.name_similarity('cafe ala sul', 'cafe ala norte'),
             supplement.NAME_SIMILARITY_THRESHOLD,
         )
 
@@ -98,6 +102,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
 
         self.assertEqual([poi.name for poi in imports], ['Café Rosa'])
         self.assertEqual(stats['matched_skipped'], 1)
+        self.assertEqual(stats['normalized_identity_matched_skipped'], 1)
 
     def test_differently_named_same_location_is_reported_but_still_admitted(self):
         existing = [

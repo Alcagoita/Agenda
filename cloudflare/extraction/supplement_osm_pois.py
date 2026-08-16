@@ -21,7 +21,7 @@ import os
 import re
 import subprocess
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from typing import Iterable
 
@@ -43,9 +43,9 @@ GRID_LAT_DEG = MATCH_RADIUS_METERS / 111_000
 SQL_BATCH_SIZE = 250
 
 # Venue categories and grammatical particles do not identify a business.
-# Ignoring them lets a trustworthy reordered name such as "Café Ala Sul" /
-# "Ala Sul Café" match, without treating unrelated nearby mall shops as
-# duplicates.
+# This deliberately small, evidence-led list supports trustworthy normalized
+# identities such as "Café Ala Sul" / "Ala Sul Café". It is not a Portuguese
+# venue taxonomy: expand it only from reviewed dry-run evidence.
 NON_IDENTITY_NAME_TOKENS = frozenset({
     'a', 'as', 'bar', 'cafe', 'cafeteria', 'da', 'das', 'de', 'do', 'dos',
     'e', 'hamburgueria', 'loja', 'o', 'os', 'pastelaria', 'pizzeria', 'pub',
@@ -174,6 +174,17 @@ def run_d1_query(sql: str) -> list[dict]:
     return json.loads(result.stdout)[0]['results']
 
 
+def normalized_identity_terms_match(left: str, right: str) -> bool:
+    """Match reordered multi-term business identities, never a shared word."""
+    if left == right:
+        return False
+    left_core = Counter(token for token in left.split() if token not in NON_IDENTITY_NAME_TOKENS)
+    right_core = Counter(token for token in right.split() if token not in NON_IDENTITY_NAME_TOKENS)
+    # A one-term identity is too weak: Café Rosa and Alberto Rosa & Filhos can
+    # be separate venues. Counter equality also preserves repeated terms.
+    return sum(left_core.values()) >= 2 and left_core == right_core
+
+
 def name_similarity(left: str, right: str) -> float:
     if not left or not right:
         return 0.0
@@ -183,12 +194,7 @@ def name_similarity(left: str, right: str) -> float:
     if (len(shorter) >= MIN_CONTAINED_NAME_LENGTH and
             (longer.startswith(shorter + ' ') or longer.endswith(' ' + shorter))):
         return 0.9
-    left_core = {token for token in left.split() if token not in NON_IDENTITY_NAME_TOKENS}
-    right_core = {token for token in right.split() if token not in NON_IDENTITY_NAME_TOKENS}
-    # One shared word is not enough (for example, a café can share an owner's
-    # surname with the adjacent business). Two or more exact identity terms,
-    # however, are a stable match even when source word order differs.
-    if len(left_core) >= 2 and left_core == right_core:
+    if normalized_identity_terms_match(left, right):
         return 0.9
     return difflib.SequenceMatcher(None, left, right).ratio()
 
@@ -452,6 +458,8 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
             stats['ambiguous_skipped'] += 1
         elif match is not None:
             stats['matched_skipped'] += 1
+            if normalized_identity_terms_match(poi.dedupe_name, match.dedupe_name):
+                stats['normalized_identity_matched_skipped'] += 1
         else:
             imports.append(poi)
             stats['inserted'] += 1
