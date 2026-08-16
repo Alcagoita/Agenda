@@ -416,6 +416,13 @@ uses bounded municipality scopes instead of one Portugal-wide Overpass query;
 it is queued with `POST /internal/osm-supplement/queue` only after the
 country's Foursquare data and settlement registry are mapped.
 
+Each dry-run also writes a local `build/*_possible_renames.json` review report.
+It lists candidates that would otherwise be added when a Foursquare or active
+community POI of the same type has a materially different normalized name
+within 75m. `same_location` means within 20m; `nearby` means 21–75m. These are
+not removed or merged automatically: review the report before applying the
+generated SQL.
+
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL
 files write to a relative `build/` path and the Python script resolves
