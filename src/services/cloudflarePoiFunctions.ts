@@ -1,5 +1,16 @@
-import { httpsCallable } from '@react-native-firebase/functions';
-import { functionsService } from './firebase';
+/**
+ * cloudflarePoiFunctions.ts — typed calls against Brush's Cloudflare POI API.
+ *
+ * KAN-367: these three used to go through Firebase callables of the same
+ * names; they now call poi-api.brushaway.app directly with the user's
+ * Firebase ID token (see poiApi.ts). The exported names keep the `Proxy`
+ * suffix on purpose — they are load-bearing across ~20 test files' module
+ * mocks and every call site in maps.ts, and renaming them is churn this
+ * ticket does not need. The Firebase functions themselves stay deployed as
+ * the rollback path until this build is verified in production.
+ */
+
+import { poiApiGet, poiApiPost } from './poiApi';
 
 interface CoverageResponse {
   status: 'none' | 'building' | 'ready';
@@ -55,38 +66,28 @@ interface PoiAllResponse {
   }>>;
 }
 
-export async function cloudflareCoverageProxy(lat: number, lng: number): Promise<CoverageResponse> {
-  const callable = httpsCallable<{ lat: number; lng: number }, CoverageResponse>(
-    functionsService,
-    'cloudflareCoverageProxy',
+export function cloudflareCoverageProxy(lat: number, lng: number): Promise<CoverageResponse> {
+  return poiApiGet<CoverageResponse>(
+    `/coverage?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
   );
-  const result = await callable({ lat, lng });
-  return result.data;
 }
 
-/** KAN-347 global typed nearby-search proxy. The callable name is retained
- * for a backwards-compatible Firebase deployment; it now calls /poi/nearby. */
-export async function cloudflarePoiAllProxy(
+/** KAN-347 global typed nearby search — POST /poi/nearby. */
+export function cloudflarePoiAllProxy(
   lat: number,
   lng: number,
   radiusMeters: number,
   requests: CloudflareNearbyRequest[],
   limitPerRequest = 20,
 ): Promise<PoiAllResponse> {
-  const callable = httpsCallable<{ lat: number; lng: number; radiusMeters: number; requests: CloudflareNearbyRequest[]; limitPerRequest: number }, PoiAllResponse>(
-    functionsService,
-    'cloudflarePoiAllProxy',
-  );
-  const result = await callable({ lat, lng, radiusMeters, requests, limitPerRequest });
-  return result.data;
+  // `radius`, not `radiusMeters` — the Worker's own field name, which the
+  // retired Firebase proxy used to translate.
+  return poiApiPost<PoiAllResponse>('/poi/nearby', {
+    lat, lng, radius: radiusMeters, requests, limitPerRequest,
+  });
 }
 
 /** KAN-346 — records demand for an uncovered location. See searchNearbyPlacesCloudflare (maps.ts) for the deduped fire-and-forget caller. */
-export async function cloudflareRequestCoverageProxy(lat: number, lng: number): Promise<RequestCoverageResponse> {
-  const callable = httpsCallable<{ lat: number; lng: number }, RequestCoverageResponse>(
-    functionsService,
-    'cloudflareRequestCoverageProxy',
-  );
-  const result = await callable({ lat, lng });
-  return result.data;
+export function cloudflareRequestCoverageProxy(lat: number, lng: number): Promise<RequestCoverageResponse> {
+  return poiApiPost<RequestCoverageResponse>('/coverage/request', { lat, lng });
 }
