@@ -100,3 +100,17 @@ CREATE TABLE IF NOT EXISTS osm_supplement_import (
   ambiguous_skipped     INTEGER NOT NULL DEFAULT 0,
   last_error            TEXT
 );
+
+-- KAN-386: reviewed source decisions are applied at read time so a later
+-- Foursquare reload cannot reintroduce a venue that was replaced by a more
+-- accurate OSM record. Raw source rows remain available for audit.
+CREATE TABLE IF NOT EXISTS poi_source_correction (
+  source                TEXT NOT NULL CHECK (source IN ('foursquare', 'openstreetmap')),
+  source_id             TEXT NOT NULL,
+  visible               INTEGER NOT NULL CHECK (visible IN (0, 1)),
+  name_override         TEXT,
+  dedupe_name_override  TEXT,
+  review_note           TEXT NOT NULL,
+  created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (source, source_id)
+);

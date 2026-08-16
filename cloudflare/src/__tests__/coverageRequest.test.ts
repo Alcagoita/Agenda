@@ -164,6 +164,9 @@ function createFakeDb(
           if (trimmed.startsWith('SELECT osm_poi.osm_element_id')) {
             return { results: [] as T[] };
           }
+          if (trimmed.startsWith('SELECT source, source_id, visible, name_override, dedupe_name_override')) {
+            return { results: [] as T[] };
+          }
           if (trimmed.startsWith('SELECT * FROM place WHERE min_lat IS NOT NULL')) {
             const [lat, lng] = args as [number, number];
             const matches = [...rows.values()].filter(r =>

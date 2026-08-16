@@ -1119,11 +1119,25 @@ async function queryNearbyPoiDb(
     open_min: number | null; close_min: number | null; matched_type: string;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
+  // This registry holds only deliberate, human-reviewed source decisions.
+  // Read it once per request rather than baking exceptions into the Worker, so
+  // a later Foursquare re-import cannot make a retired source row visible.
+  const { results: sourceCorrections } = await db.prepare(
+    `SELECT source, source_id, visible, name_override, dedupe_name_override
+     FROM poi_source_correction`,
+  ).all<{
+    source: 'foursquare' | 'openstreetmap'; source_id: string; visible: number;
+    name_override: string | null; dedupe_name_override: string | null;
+  }>();
   const d1Ms = performance.now() - d1StartedAt;
 
   const filteringStartedAt = performance.now();
+  const correctionBySourceId = new Map(
+    sourceCorrections.map(correction => [`${correction.source}:${correction.source_id}`, correction]),
+  );
   const candidates = new Map<string, NearbyPoi & { dedupeName: string; matchedTypes: Set<string>; rawCategoryLabels: string | null }>();
   for (const row of rows) {
+    if (correctionBySourceId.get(`foursquare:${row.fsq_place_id}`)?.visible === 0) continue;
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
     const candidateKey = `foursquare:${row.fsq_place_id}`;
@@ -1176,6 +1190,8 @@ async function queryNearbyPoiDb(
   }
 
   for (const row of osmRows) {
+    const correction = correctionBySourceId.get(`openstreetmap:${row.osm_element_id}`);
+    if (correction?.visible === 0) continue;
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
     const candidateKey = `openstreetmap:${row.osm_element_id}`;
@@ -1188,10 +1204,10 @@ async function queryNearbyPoiDb(
       }
     } else {
       candidates.set(candidateKey, {
-        poi_id: row.osm_element_id, fsq_place_id: null, name: row.name, lat: row.lat, lng: row.lng,
+        poi_id: row.osm_element_id, fsq_place_id: null, name: correction?.name_override ?? row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
         address: row.address, open_min: row.open_min, close_min: row.close_min,
-        source: 'openstreetmap', dedupeName: row.dedupe_name,
+        source: 'openstreetmap', dedupeName: correction?.dedupe_name_override ?? row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
