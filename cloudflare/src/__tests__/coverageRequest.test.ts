@@ -159,6 +159,11 @@ function createFakeDb(
           if (trimmed.startsWith('SELECT curated_poi.poi_id')) {
             return { results: [] as T[] };
           }
+          // KAN-383 adds OSM-only supplementary POIs. These fixtures seed
+          // only Foursquare rows, so this source is intentionally empty.
+          if (trimmed.startsWith('SELECT osm_poi.osm_element_id')) {
+            return { results: [] as T[] };
+          }
           if (trimmed.startsWith('SELECT * FROM place WHERE min_lat IS NOT NULL')) {
             const [lat, lng] = args as [number, number];
             const matches = [...rows.values()].filter(r =>
@@ -220,7 +225,7 @@ function createFakeDb(
             return { meta: { changes: 1 } };
           }
           if (trimmed.startsWith("UPDATE build_log SET status = 'ready'")) {
-            const [finishedAt, rowsLoaded, rowsSkipped, , buildId, placeId] = args as [
+            const [finishedAt, _rowsLoaded, _rowsSkipped, , buildId, placeId] = args as [
               string, number | null, number | null, string | null, string, string,
             ];
             const row = buildLogRows.get(buildId);

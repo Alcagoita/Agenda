@@ -164,7 +164,7 @@ interface ManualPoiSubmissionRow {
 
 interface ManualPoiDuplicate {
   poiId: string;
-  source: 'foursquare' | 'community';
+  source: 'foursquare' | 'community' | 'openstreetmap';
   name: string;
   lat: number;
   lng: number;
@@ -191,13 +191,15 @@ async function findManualPoiDuplicate(
   lat: number,
   lng: number,
 ): Promise<ManualPoiDuplicate | null> {
-  const [{ results: foursquareRows }, { results: curatedRows }] = await Promise.all([
+  const [{ results: foursquareRows }, { results: curatedRows }, { results: osmRows }] = await Promise.all([
     db.prepare('SELECT fsq_place_id AS poi_id, name, lat, lng FROM poi WHERE dedupe_name = ?').bind(dedupeName).all<{ poi_id: string; name: string; lat: number; lng: number }>(),
     db.prepare("SELECT poi_id, name, lat, lng FROM curated_poi WHERE dedupe_name = ? AND status = 'active'").bind(dedupeName).all<{ poi_id: string; name: string; lat: number; lng: number }>(),
+    db.prepare('SELECT osm_element_id AS poi_id, name, lat, lng FROM osm_poi WHERE dedupe_name = ?').bind(dedupeName).all<{ poi_id: string; name: string; lat: number; lng: number }>(),
   ]);
   const candidates: ManualPoiDuplicate[] = [
     ...foursquareRows.map(row => ({ poiId: row.poi_id, source: 'foursquare' as const, name: row.name, lat: row.lat, lng: row.lng })),
     ...curatedRows.map(row => ({ poiId: row.poi_id, source: 'community' as const, name: row.name, lat: row.lat, lng: row.lng })),
+    ...osmRows.map(row => ({ poiId: row.poi_id, source: 'openstreetmap' as const, name: row.name, lat: row.lat, lng: row.lng })),
   ];
   return candidates.find(candidate => haversineMeters(lat, lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS) ?? null;
 }
@@ -987,7 +989,7 @@ async function queryPoiDb(
 }
 
 type NearbyPoi = {
-  /** Stable API identity. Foursquare rows use their real fsq_place_id; curated rows use community:<uuid>. */
+  /** Stable API identity. Foursquare rows use their real fsq_place_id; curated and OSM rows use their source identity. */
   poi_id: string;
   /** Present only when Foursquare supplied this POI. Never contains a generated id. */
   fsq_place_id: string | null;
@@ -996,7 +998,7 @@ type NearbyPoi = {
   category_label: string | null; address: string | null;
   /** KAN-318: default opening window, minutes from local midnight; null = always open. */
   open_min: number | null; close_min: number | null;
-  source?: 'foursquare' | 'community' | 'manual';
+  source?: 'foursquare' | 'community' | 'manual' | 'openstreetmap';
   distanceMeters: number;
   attributes: Record<string, string[]>;
 };
@@ -1048,6 +1050,7 @@ async function queryNearbyPoiDb(
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
   const geohashClauses = prefixes.map(() => '(poi.geohash >= ? AND poi.geohash < ?)');
   const curatedGeohashClauses = prefixes.map(() => '(curated_poi.geohash >= ? AND curated_poi.geohash < ?)');
+  const osmGeohashClauses = prefixes.map(() => '(osm_poi.geohash >= ? AND osm_poi.geohash < ?)');
   // Keep a brand-only Gym/Bank request in D1's predicate. A generic request
   // for the same type legitimately broadens its own bucket, but a sole
   // branded request never materialises unrelated candidates in Worker memory.
@@ -1055,6 +1058,8 @@ async function queryNearbyPoiDb(
   const poiRequestBinds: unknown[] = [];
   const curatedRequestClauses: string[] = [];
   const curatedRequestBinds: unknown[] = [];
+  const osmRequestClauses: string[] = [];
+  const osmRequestBinds: unknown[] = [];
   for (let index = 0; index < requestedSearches.length; index++) {
     const request = requestedSearches[index];
     const types = relatedTypes[index];
@@ -1063,6 +1068,8 @@ async function queryNearbyPoiDb(
     poiRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
     curatedRequestClauses.push(`(curated_poi.primary_poi_type IN (${placeholders})${request.brand ? ' AND curated_poi.brand = ?' : ''})`);
     curatedRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
+    osmRequestClauses.push(`(osm_poi_type.poi_type IN (${placeholders})${request.brand ? ' AND osm_poi.brand = ?' : ''})`);
+    osmRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
   }
   const d1StartedAt = performance.now();
   const { results: rows } = await db.prepare(
@@ -1094,6 +1101,22 @@ async function queryNearbyPoiDb(
   ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...curatedRequestBinds).all<{
     poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
     primary_poi_type: string; brand: string | null; address: string | null;
+    attribute_dimension: string | null; attribute_value: string | null;
+  }>();
+  const { results: osmRows } = await db.prepare(
+    `SELECT osm_poi.osm_element_id, osm_poi.dedupe_name, osm_poi.name, osm_poi.lat, osm_poi.lng,
+            osm_poi.primary_poi_type, osm_poi.brand, osm_poi.address, osm_poi.open_min, osm_poi.close_min,
+            osm_poi_type.poi_type AS matched_type,
+            osm_poi_attribute.dimension AS attribute_dimension, osm_poi_attribute.value AS attribute_value
+     FROM osm_poi
+     INNER JOIN osm_poi_type ON osm_poi_type.osm_element_id = osm_poi.osm_element_id
+     LEFT JOIN osm_poi_attribute ON osm_poi_attribute.osm_element_id = osm_poi.osm_element_id
+       AND osm_poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
+     WHERE (${osmGeohashClauses.join(' OR ')}) AND (${osmRequestClauses.join(' OR ')})`,
+  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...osmRequestBinds).all<{
+    osm_element_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+    primary_poi_type: string; brand: string | null; address: string | null;
+    open_min: number | null; close_min: number | null; matched_type: string;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
   const d1Ms = performance.now() - d1StartedAt;
@@ -1152,14 +1175,45 @@ async function queryNearbyPoiDb(
     }
   }
 
-  // A later Foursquare import may use coordinates a few metres away from the
-  // approved community correction. Suppress the curated twin at read time so
-  // the user never gets duplicate nearby results; Foursquare wins as the
-  // primary data source while the curated audit history stays intact.
+  for (const row of osmRows) {
+    const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
+    if (distanceMeters > radiusMeters) continue;
+    const candidateKey = `openstreetmap:${row.osm_element_id}`;
+    const existing = candidates.get(candidateKey);
+    if (existing) {
+      existing.matchedTypes.add(row.matched_type);
+      if (row.attribute_dimension && row.attribute_value) {
+        const values = existing.attributes[row.attribute_dimension] ??= [];
+        if (!values.includes(row.attribute_value)) values.push(row.attribute_value);
+      }
+    } else {
+      candidates.set(candidateKey, {
+        poi_id: row.osm_element_id, fsq_place_id: null, name: row.name, lat: row.lat, lng: row.lng,
+        primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
+        address: row.address, open_min: row.open_min, close_min: row.close_min,
+        source: 'openstreetmap', dedupeName: row.dedupe_name,
+        distanceMeters, attributes: row.attribute_dimension && row.attribute_value
+          ? { [row.attribute_dimension]: [row.attribute_value] }
+          : {},
+        matchedTypes: new Set([row.matched_type]), rawCategoryLabels: null,
+      });
+    }
+  }
+
+  // A later Foursquare import may use coordinates a few metres away from a
+  // supplemental/community row. Suppress that twin at read time so the user
+  // never gets duplicate nearby results. Foursquare wins, then a curated
+  // correction, while the source records remain available for audit.
   const foursquareCandidates = [...candidates.values()].filter(candidate => candidate.source === 'foursquare');
+  const curatedCandidates = [...candidates.values()].filter(candidate => candidate.source === 'community');
   for (const [key, candidate] of candidates) {
     if (candidate.source === 'foursquare') continue;
-    if (foursquareCandidates.some(foursquare => foursquare.dedupeName === candidate.dedupeName && haversineMeters(foursquare.lat, foursquare.lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS)) {
+    // Preserve the established Foursquare-over-community precedence. An OSM
+    // supplement is lower priority than either existing source.
+    const suppressors = candidate.source === 'community'
+      ? foursquareCandidates
+      : [...foursquareCandidates, ...curatedCandidates];
+    if (suppressors.some(primary => primary.dedupeName === candidate.dedupeName && haversineMeters(primary.lat, primary.lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS)) {
       candidates.delete(key);
     }
   }
@@ -1258,7 +1312,7 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
-  mode: 'place' | 'country' | 'country-reconcile' | 'settlements',
+  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country',
   target: string,
   countrySourceR2Key?: string,
   countryRunId?: string,
@@ -1273,6 +1327,7 @@ function triggerBuild(
       FOURSQUARE_JWT: env.FOURSQUARE_JWT ?? '',
       ...(countrySourceR2Key ? { COUNTRY_SOURCE_R2_KEY: countrySourceR2Key } : {}),
       ...(countryRunId ? { COUNTRY_RUN_ID: countryRunId } : {}),
+      ...(mode === 'osm-country' ? { D1_INTERNAL: '1', OSM_SUPPLEMENT_RUN_ID: countryRunId ?? '' } : {}),
     },
   }).catch(async (error) => {
     // A detached promise is cancelled when the Worker finishes the request.
@@ -1287,6 +1342,10 @@ function triggerBuild(
       await env.REGISTRY_DB.prepare(
         "UPDATE settlement_registry_import SET status = 'failed', completed_at = ?, last_error = ? WHERE country_code = ? AND status = 'mapping'",
       ).bind(new Date().toISOString(), 'container start failed', target).run();
+    } else if (mode === 'osm-country') {
+      await env.REGISTRY_DB.prepare(
+        "UPDATE osm_supplement_import SET status = 'failed', completed_at = ?, last_error = ? WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?",
+      ).bind(new Date().toISOString(), 'container start failed', target, countryRunId ?? '').run();
     } else {
       await env.REGISTRY_DB.prepare(
         "UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'",
@@ -1682,6 +1741,79 @@ export default {
       const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
         .bind(body.placeId).first<PlaceRow>();
       return json({ ok: true, status: place ? toApiStatus(place.status) : 'none' });
+    }
+
+    // KAN-383 — operational queue for the supplementary OSM source. This is
+    // intentionally separate from a Foursquare country rebuild: OSM is slow
+    // and retryable, and the country's existing nearby data remains live
+    // while this work runs.
+    if (url.pathname === '/internal/osm-supplement/queue' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
+        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const country = await env.REGISTRY_DB.prepare('SELECT status FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (!country) return json({ error: `no country row for '${countryCode}'` }, 404);
+      if (country.status !== 'mapped') return json({ error: 'country must be mapped before OSM supplementation' }, 409);
+      const runId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const started = await env.REGISTRY_DB.prepare(
+        `INSERT INTO osm_supplement_import
+           (country_code, status, active_run_id, started_at, completed_at, source_elements, inserted_rows, matched_skipped, ambiguous_skipped, last_error)
+         VALUES (?, 'mapping', ?, ?, NULL, 0, 0, 0, 0, NULL)
+         ON CONFLICT(country_code) DO UPDATE SET
+           status = 'mapping', active_run_id = excluded.active_run_id, started_at = excluded.started_at,
+           completed_at = NULL, source_elements = 0, inserted_rows = 0, matched_skipped = 0,
+           ambiguous_skipped = 0, last_error = NULL
+         WHERE osm_supplement_import.status IN ('none', 'failed', 'mapped')`,
+      ).bind(countryCode, runId, now).run();
+      if (started.meta.changes === 1) triggerBuild(env, ctx, 'osm-country', countryCode, undefined, runId);
+      const state = await env.REGISTRY_DB.prepare('SELECT status, active_run_id FROM osm_supplement_import WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string; active_run_id: string | null }>();
+      return json({ ok: true, status: state?.status ?? 'none', started: started.meta.changes === 1 });
+    }
+
+    if (url.pathname === '/internal/osm-supplement/complete' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      const integerFields = ['sourceElements', 'insertedRows', 'matchedSkipped', 'ambiguousSkipped'] as const;
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.runId !== 'string' || !body.runId ||
+          integerFields.some(field => typeof body[field] !== 'number' || !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
+        return json({ error: 'invalid OSM supplement completion payload' }, 400);
+      }
+      const result = await env.REGISTRY_DB.prepare(
+        `UPDATE osm_supplement_import
+         SET status = 'mapped', completed_at = ?, source_elements = ?, inserted_rows = ?,
+             matched_skipped = ?, ambiguous_skipped = ?, last_error = NULL
+         WHERE country_code = ? AND active_run_id = ? AND status = 'mapping'`,
+      ).bind(new Date().toISOString(), body.sourceElements, body.insertedRows, body.matchedSkipped, body.ambiguousSkipped,
+        body.countryCode.toUpperCase(), body.runId).run();
+      if (result.meta.changes !== 1) return json({ error: 'stale or unknown OSM supplement run' }, 409);
+      return json({ ok: true });
+    }
+
+    if (url.pathname === '/internal/osm-supplement/failed' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.runId !== 'string' || !body.runId) {
+        return json({ error: 'invalid OSM supplement failure payload' }, 400);
+      }
+      const result = await env.REGISTRY_DB.prepare(
+        `UPDATE osm_supplement_import
+         SET status = 'failed', completed_at = ?, last_error = ?
+         WHERE country_code = ? AND active_run_id = ? AND status = 'mapping'`,
+      ).bind(new Date().toISOString(), typeof body.error === 'string' ? body.error.slice(0, 1_000) : 'unknown',
+        body.countryCode.toUpperCase(), body.runId).run();
+      if (result.meta.changes !== 1) return json({ error: 'stale or unknown OSM supplement run' }, 409);
+      return json({ ok: true });
     }
 
     // POST /internal/country/queue  { countryCode }  — KAN-354's country

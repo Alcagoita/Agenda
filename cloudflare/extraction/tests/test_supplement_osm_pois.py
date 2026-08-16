@@ -1,0 +1,72 @@
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import supplement_osm_pois as supplement
+
+
+def element(element_id, name, lat=39.8034492, lng=-8.1012644, **tags):
+    return {
+        'type': 'node', 'id': element_id, 'lat': lat, 'lon': lng,
+        'tags': {'name': name, **tags},
+    }
+
+
+class SupplementOsmPoisTest(unittest.TestCase):
+    def test_classifies_named_restaurant_with_stable_osm_identity(self):
+        poi = supplement.osm_poi_from_element(
+            element(5335674113, 'Santo Amaro', amenity='restaurant', cuisine='portuguese'),
+            {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.osm_element_id, 'node/5335674113')
+        self.assertEqual(poi.poi_types, ('restaurant',))
+        self.assertEqual(poi.attributes, (('food_cuisine', 'portuguese'),))
+
+    def test_confident_nearby_same_name_is_skipped_but_different_name_is_admitted(self):
+        existing = [
+            supplement.Candidate('foursquare', 'fsq-santo', 'Santo Amaro', 'santo amaro', 39.80345, -8.10126, 'restaurant'),
+        ]
+        imports, stats = supplement.classify_scope([
+            element(1, 'Santo Amaro', amenity='restaurant'),
+            element(2, 'Lagar Restaurante', lat=39.80346, lng=-8.10127, amenity='restaurant'),
+        ], existing, 39.80345)
+        self.assertEqual([poi.name for poi in imports], ['Lagar Restaurante'])
+        self.assertEqual(stats['matched_skipped'], 1)
+        self.assertEqual(stats['inserted'], 1)
+
+    def test_ambiguous_nearby_candidates_are_not_imported(self):
+        existing = [
+            supplement.Candidate('foursquare', 'one', 'Casa Verde', 'casa verde', 39.80345, -8.10126, 'restaurant'),
+            supplement.Candidate('foursquare', 'two', 'Casa Verde', 'casa verde', 39.80346, -8.10127, 'restaurant'),
+        ]
+        imports, stats = supplement.classify_scope([
+            element(1, 'Casa Verde', amenity='restaurant'),
+        ], existing, 39.80345)
+        self.assertEqual(imports, [])
+        self.assertEqual(stats['ambiguous_skipped'], 1)
+
+    def test_reimport_uses_osm_element_identity_as_an_update(self):
+        existing = [
+            supplement.Candidate('openstreetmap', 'node/5335674113', 'Santo Amaro', 'santo amaro', 39.80345, -8.10126, 'restaurant'),
+        ]
+        imports, stats = supplement.classify_scope([
+            element(5335674113, 'Santo Amaro', amenity='restaurant'),
+        ], existing, 39.80345)
+        self.assertEqual([poi.osm_element_id for poi in imports], ['node/5335674113'])
+        self.assertEqual(stats['updated'], 1)
+        self.assertNotIn('inserted', stats)
+
+    def test_sql_is_idempotent_and_does_not_fabricate_a_foursquare_id(self):
+        poi = supplement.osm_poi_from_element(element(5335674113, 'Santo Amaro', amenity='restaurant'), {})
+        assert poi is not None
+        sql = supplement.sql_for_pois([poi])
+        self.assertIn('INSERT INTO osm_poi', sql)
+        self.assertIn('node/5335674113', sql)
+        self.assertIn('ON CONFLICT(osm_element_id) DO UPDATE', sql)
+        self.assertNotIn('fsq_place_id', sql)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -30,6 +30,7 @@ import nominatim_client
 import extract
 from classify_and_load import classify
 import settlement_registry
+import supplement_osm_pois
 
 def map_place(place_id):
     """The sole Foursquare -> global-POI loader, used by both modes."""
@@ -230,6 +231,26 @@ def run_settlement_registry(country_code):
         traceback.print_exc()
         sys.exit(1)
 
+
+def run_osm_supplement(country_code, run_id):
+    """Country-scale, retry-safe OSM supplement run.
+
+    The generated SQL is idempotent on each OSM element id, so retrying a
+    failed Container does not duplicate POIs. The Worker owns the durable
+    run state and only accepts a callback for this exact run id.
+    """
+    os.environ['D1_INTERNAL'] = '1'
+    try:
+        _imports, stats, sql_path = supplement_osm_pois.import_country(country_code, dry_run=False)
+        if sql_path:
+            d1_client.execute_sql_file(sql_path)
+        worker_client.osm_supplement_complete(country_code, run_id, stats)
+        print(f"[run_job] OSM supplement {country_code} complete: {stats.get('unique_rows_to_write', 0)} rows")
+    except BaseException as error:
+        traceback.print_exc()
+        worker_client.osm_supplement_failed(country_code, run_id, type(error).__name__)
+        sys.exit(1)
+
 if __name__ == '__main__':
     os.makedirs(extract.BUILD_DIR, exist_ok=True)
     mode = os.environ.get('MODE')
@@ -258,6 +279,12 @@ if __name__ == '__main__':
         run_country_reconcile(target.upper(), run_id, source_key)
     elif mode == 'settlements':
         run_settlement_registry(target.upper())
+    elif mode == 'osm-country':
+        run_id = os.environ.get('OSM_SUPPLEMENT_RUN_ID')
+        if not run_id:
+            print('OSM_SUPPLEMENT_RUN_ID is required for osm-country mode', file=sys.stderr)
+            sys.exit(2)
+        run_osm_supplement(target.upper(), run_id)
     else:
-        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', or 'settlements'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', or 'osm-country'")
         sys.exit(2)

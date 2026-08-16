@@ -104,3 +104,20 @@ def country_failed(country_code, run_id, stage=None, error=None):
     if error:
         body['error'] = str(error)[:1_000]
     return _post('/internal/country-failed', body)
+
+
+def osm_supplement_complete(country_code, run_id, stats):
+    return _post('/internal/osm-supplement/complete', {
+        'countryCode': country_code, 'runId': run_id,
+        'sourceElements': stats.get('source_elements', 0),
+        'insertedRows': stats.get('unique_rows_to_write', stats.get('inserted', 0)),
+        'matchedSkipped': stats.get('matched_skipped', 0),
+        'ambiguousSkipped': stats.get('ambiguous_skipped', 0),
+    })
+
+
+def osm_supplement_failed(country_code, run_id, error):
+    return _post('/internal/osm-supplement/failed', {
+        'countryCode': country_code, 'runId': run_id,
+        'error': str(error)[:1_000],
+    })

@@ -35,10 +35,17 @@ interface FakeCuratedPoi {
   food_cuisine?: string[];
 }
 
+interface FakeOsmPoi {
+  osm_element_id: string;
+  name: string;
+  primary_poi_type: string;
+  food_cuisine?: string[];
+}
+
 const LAT = 38.72;
 const LNG = -9.14;
 
-function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGISTRY_DB'] {
+function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = []): Env['REGISTRY_DB'] {
   const prepare = (sql: string) => {
     const trimmed = sql.trim();
     const stmt = {
@@ -57,7 +64,7 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGIS
           const results: unknown[] = [];
           for (const p of pois) {
             const base = {
-              fsq_place_id: p.fsq_place_id, name: p.name, lat: LAT, lng: LNG,
+              fsq_place_id: p.fsq_place_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
               primary_poi_type: p.primary_poi_type ?? 'restaurant', brand: p.brand ?? null,
               category_label: p.category_label, raw_category_labels: p.raw_category_labels,
               address: null, matched_type: p.primary_poi_type ?? 'restaurant',
@@ -82,6 +89,25 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = []): Env['REGIS
             const base = {
               poi_id: p.poi_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
               primary_poi_type: p.primary_poi_type, address: null,
+            };
+            const cuisines = p.food_cuisine ?? [];
+            if (cuisines.length === 0) {
+              results.push({ ...base, attribute_dimension: null, attribute_value: null });
+            } else {
+              for (const value of cuisines) {
+                results.push({ ...base, attribute_dimension: 'food_cuisine', attribute_value: value });
+              }
+            }
+          }
+          return { results };
+        }
+        if (trimmed.startsWith('SELECT osm_poi.osm_element_id')) {
+          const results: unknown[] = [];
+          for (const p of osmPois) {
+            const base = {
+              osm_element_id: p.osm_element_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
+              primary_poi_type: p.primary_poi_type, brand: null, address: null,
+              open_min: null, close_min: null, matched_type: p.primary_poi_type,
             };
             const cuisines = p.food_cuisine ?? [];
             if (cuisines.length === 0) {
@@ -119,8 +145,8 @@ function nearbyRequest(requests: unknown[]) {
   });
 }
 
-function env(pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = []): Env {
-  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois) } as unknown as Env;
+function env(pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = []): Env {
+  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois) } as unknown as Env;
 }
 
 const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
@@ -128,6 +154,32 @@ const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as Execut
 const names = (bucket: Array<{ name: string }> | undefined) => (bucket ?? []).map(p => p.name).sort();
 
 describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
+  it('returns an OSM-only POI through the same nearby response', async () => {
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'restaurant', type: 'restaurant' },
+    ]), env([], [], [{ osm_element_id: 'node/5335674113', name: 'Santo Amaro', primary_poi_type: 'restaurant' }]), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ poi_id: string; fsq_place_id: string | null; source: string }>> };
+    expect(body.results.restaurant).toEqual([
+      expect.objectContaining({ poi_id: 'node/5335674113', fsq_place_id: null, source: 'openstreetmap' }),
+    ]);
+  });
+
+  it('keeps the Foursquare record when it duplicates an OSM supplement', async () => {
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'restaurant', type: 'restaurant' },
+    ]), env([
+      { fsq_place_id: 'fsq-santo-amaro', name: 'Santo Amaro', raw_category_labels: '', category_label: '' },
+    ], [], [
+      { osm_element_id: 'node/5335674113', name: 'Santo Amaro', primary_poi_type: 'restaurant' },
+    ]), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ poi_id: string; source: string }>> };
+    expect(body.results.restaurant).toEqual([
+      expect.objectContaining({ poi_id: 'fsq-santo-amaro', source: 'foursquare' }),
+    ]);
+  });
+
   it('returns only pizza matches for a pizza subtype request, all for the broad bucket', async () => {
     const res = await worker.fetch(nearbyRequest([
       { key: 'restaurant', type: 'restaurant' },
@@ -135,7 +187,7 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     ]), env(), CTX);
     expect(res.status).toBe(200);
     const body = await res.json() as { results: Record<string, Array<{ name: string }>> };
-    expect(names(body.results['restaurant'])).toEqual(['Aron Sushi', 'Portugália', 'Tutto Pizza']);
+    expect(names(body.results.restaurant)).toEqual(['Aron Sushi', 'Portugália', 'Tutto Pizza']);
     // Pizzeria matched via raw_category_labels despite having no classified cuisine.
     expect(names(body.results['restaurant:food_cuisine:pizza'])).toEqual(['Tutto Pizza']);
   });
