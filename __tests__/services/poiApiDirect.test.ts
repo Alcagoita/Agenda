@@ -106,12 +106,63 @@ describe('direct POI API transport', () => {
     expect(JSON.parse(init.body as string)).toEqual({ lat: 38.7, lng: -9.1 });
   });
 
+  it('aborts a request that outlives the timeout', async () => {
+    jest.useFakeTimers();
+    try {
+      // Resolves only if the signal fires — mirrors fetch's real abort
+      // behaviour, which is the only thing that ends a hung POI request.
+      mockFetch.mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+      }));
+
+      // Captured as a value rather than asserted inline: the rejection only
+      // happens after the clock is advanced below, and an un-handled pending
+      // rejection in between is its own noise.
+      const pending = cloudflareCoverageProxy(38.7, -9.1).then(() => null, (err: Error) => err);
+      // getIdToken is awaited before fetch, so the request is several
+      // microtasks away from being in flight — advancing the clock before it
+      // starts would arm nothing.
+      for (let i = 0; i < 10 && mockFetch.mock.calls.length === 0; i++) { await Promise.resolve(); }
+      expect(mockFetch).toHaveBeenCalled();
+
+      jest.advanceTimersByTime(8_000);
+      expect(await pending).toMatchObject({ message: 'Aborted' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('clears the abort timer once a response arrives', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', cityId: 'lisboa', buildId: 'b1' }));
+      await cloudflareCoverageProxy(38.7, -9.1);
+      // A leaked timer would keep the JS thread waking up per request — and
+      // on RN, fire an abort against an AbortController nothing is reading.
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('throws PoiApiError on a non-2xx response', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     mockFetch.mockResolvedValue(jsonResponse({ error: 'rate limit exceeded' }, 429));
 
     await expect(cloudflarePoiAllProxy(38.7, -9.1, 1_000, [{ key: 'cafe', type: 'cafe' }]))
       .rejects.toBeInstanceOf(PoiApiError);
+  });
+
+  it('keeps the user\'s coordinates out of logs and error messages', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockFetch.mockResolvedValue(jsonResponse({ error: 'unauthorized' }, 401));
+
+    // The query string on these endpoints IS the user's position, and a
+    // thrown Error message can reach a crash reporter.
+    await expect(cloudflareCoverageProxy(38.7, -9.1)).rejects.toThrow('POI API /coverage failed with 401');
+    for (const arg of warn.mock.calls.flat()) {
+      expect(String(arg)).not.toMatch(/38\.7|-9\.1|lat=|lng=/);
+    }
   });
 
   it('surfaces a 401 rather than returning an empty result', async () => {

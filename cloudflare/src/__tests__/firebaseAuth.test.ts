@@ -119,6 +119,22 @@ describe('verifyFirebaseIdToken', () => {
     await expect(verifyFirebaseIdToken(await mintToken({ payload: { sub: '' } }), PROJECT_ID)).resolves.toBeNull();
   });
 
+  it('rejects a token whose signature is not valid Base64URL', async () => {
+    // Header and payload are well-formed and every claim passes, so this
+    // reaches the signature decode — where atob throws on characters outside
+    // the alphabet. It must come back as a rejection, not an exception
+    // escaping to a 500 from the gate.
+    const [header, payload] = (await mintToken()).split('.');
+    for (const junk of ['!!!!', 'not valid base64!', '@@', '你好']) {
+      await expect(verifyFirebaseIdToken(`${header}.${payload}.${junk}`, PROJECT_ID)).resolves.toBeNull();
+    }
+  });
+
+  it('rejects a token whose payload is not valid Base64URL', async () => {
+    const [header, , signature] = (await mintToken()).split('.');
+    await expect(verifyFirebaseIdToken(`${header}.!!!!.${signature}`, PROJECT_ID)).resolves.toBeNull();
+  });
+
   it('rejects malformed tokens without fetching keys', async () => {
     for (const malformed of ['', 'not-a-jwt', 'a.b', 'a.b.c.d', 'header.payload.signature']) {
       await expect(verifyFirebaseIdToken(malformed, PROJECT_ID)).resolves.toBeNull();

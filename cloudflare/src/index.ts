@@ -1958,6 +1958,8 @@ export default {
     // within a radius, optionally narrowed to 1-2 attribute values (e.g.
     // type=restaurant&attribute=food_cuisine&value=sushi)
     if (url.pathname === '/poi' && request.method === 'GET') {
+      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'poi');
+      if (limited) return limited;
       const poiType = url.searchParams.get('type');
       if (!poiType) return json({ error: 'type is required' }, 400);
       const parsed = parseCoordsAndRadius(url);
@@ -1976,6 +1978,8 @@ export default {
 
     // GET /poi/all?lat=&lng=&radius=  — all cached POI types within a radius
     if (url.pathname === '/poi/all' && request.method === 'GET') {
+      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'poiAll');
+      if (limited) return limited;
       const parsed = parseCoordsAndRadius(url);
       if (parsed instanceof Response) return parsed;
       const { lat, lng, radius } = parsed;
@@ -2011,6 +2015,11 @@ export default {
     // -> /export/:placeId rename is explicitly KAN-343's scope, not this
     // ticket's.
     if (url.pathname.startsWith('/export/') && request.method === 'GET') {
+      // Its own budget rather than the shared read one: each hit streams a
+      // multi-megabyte R2 object, by far the most expensive thing a token
+      // holder can ask for repeatedly.
+      const limited = await enforceUserRateLimit(caller, env.COVERAGE_REQUEST_RATE_LIMITER, 'export');
+      if (limited) return limited;
       let cityId: string;
       try {
         cityId = decodeURIComponent(url.pathname.slice('/export/'.length));

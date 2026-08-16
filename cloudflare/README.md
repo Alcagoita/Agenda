@@ -59,9 +59,20 @@ accepted:
   `FIREBASE_PROJECT_ID`, and the uid taken from the verified `sub` and
   nowhere else. Signing keys are cached for the max-age Google publishes, so
   no per-request round trip. These requests are rate-limited per uid by the
-  `ratelimits` bindings in `wrangler.jsonc` (30/min on reads, 5/min on
-  `/coverage/request`), replacing the Firestore counters the retired Firebase
-  proxy kept.
+  `ratelimits` bindings in `wrangler.jsonc`, replacing the Firestore counters
+  the retired Firebase proxy kept:
+
+  | Routes | Budget |
+  |---|---|
+  | `/poi`, `/poi/all`, `/poi/nearby` (GET + POST), `/coverage` | 30/min |
+  | `/coverage/request`, `/export/:cityId` | 5/min |
+
+  `/export` shares the tighter budget rather than the read one because each
+  hit streams a multi-megabyte R2 object. Counted per Cloudflare location and
+  eventually consistent by design — a guard rail against a leaked token being
+  replayed, not an accounting system. The app itself cannot approach these
+  limits: proximity searches are gated behind a 200 m movement threshold and a
+  re-entrancy lock, and one search issues one request covering every POI type.
 - `X-Api-Key: <API_KEY>` — server-side callers, including the Firebase POI
   proxy that remains deployed as the rollback path until the direct-call app
   build is verified in production. Not rate-limited here: there is no user to

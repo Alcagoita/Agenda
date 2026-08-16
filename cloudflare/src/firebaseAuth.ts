@@ -143,17 +143,30 @@ async function getSigningKey(kid: string, now: number): Promise<CryptoKey | null
   return keyCache.keys.get(kid) ?? null;
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+/**
+ * Returns null rather than throwing on invalid Base64URL. `atob` throws on
+ * any character outside the alphabet, and every caller here is decoding an
+ * attacker-supplied token segment — junk must answer "this token does not
+ * verify", not escape as an exception the gate never catches.
+ */
+function base64UrlToBytes(value: string): Uint8Array | null {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  let binary: string;
+  try {
+    binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  } catch {
+    return null;
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
 
 function decodeJson(segment: string): Record<string, unknown> | null {
+  const bytes = base64UrlToBytes(segment);
+  if (!bytes) return null;
   try {
-    return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as Record<string, unknown>;
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -197,6 +210,9 @@ export async function verifyFirebaseIdToken(
   if (typeof iat !== 'number' || iat > nowSeconds + CLOCK_SKEW_SECONDS) return null;
   if (typeof sub !== 'string' || sub.trim() === '') return null;
 
+  const signature = base64UrlToBytes(signatureSegment);
+  if (!signature) return null;
+
   const key = await getSigningKey(header.kid, now);
   if (!key) return null;
 
@@ -206,7 +222,7 @@ export async function verifyFirebaseIdToken(
   const verified = await crypto.subtle.verify(
     'RSASSA-PKCS1-v1_5',
     key,
-    base64UrlToBytes(signatureSegment),
+    signature,
     new TextEncoder().encode(`${headerSegment}.${payloadSegment}`),
   );
   return verified ? sub : null;

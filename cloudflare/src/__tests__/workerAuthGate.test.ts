@@ -157,6 +157,32 @@ describe('per-uid rate limiting', () => {
     expect(limitCalls).toEqual([{ key: 'uid-abc:poiAll' }]);
   });
 
+  it('limits the remaining read routes a token holder can reach', async () => {
+    mockVerify.mockResolvedValue('uid-abc');
+    const env = makeEnv();
+    for (const [path, action] of [
+      ['/poi?lat=38.7&lng=-9.1&radius=500&type=cafe', 'poi'],
+      ['/poi/all?lat=38.7&lng=-9.1&radius=500', 'poiAll'],
+    ] as const) {
+      await worker.fetch(
+        new Request(`https://poi-api.brushaway.app${path}`, { headers: { Authorization: 'Bearer good.token' } }),
+        env,
+      );
+      expect(limitCalls.at(-1)).toEqual({ key: `uid-abc:${action}` });
+    }
+  });
+
+  it('limits /export on the tighter budget — each hit streams megabytes', async () => {
+    mockVerify.mockResolvedValue('uid-abc');
+    limitAllows = false;
+    const response = await worker.fetch(
+      new Request('https://poi-api.brushaway.app/export/lisboa', { headers: { Authorization: 'Bearer good.token' } }),
+      makeEnv(),
+    );
+    expect(response.status).toBe(429);
+    expect(limitCalls).toEqual([{ key: 'uid-abc:export' }]);
+  });
+
   it('does not rate-limit key-authenticated callers — there is no user to key on', async () => {
     await worker.fetch(coverageRequest({ 'X-Api-Key': API_KEY }), makeEnv());
     expect(limitCalls).toEqual([]);

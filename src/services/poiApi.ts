@@ -59,9 +59,15 @@ async function request<T>(path: string, init: { method: 'GET' } | { method: 'POS
       // Body is read for the log only — the Worker's error JSON is for
       // diagnosis, never for the user (callers map failures to their own
       // copy).
+      //
+      // The route is logged without its query string: on these endpoints the
+      // query IS the user's coordinates, and neither a console log nor a
+      // thrown Error message (which can reach a crash reporter) is a place
+      // for someone's position. The route alone is what diagnosis needs.
       const text = await response.text().catch(() => '');
-      console.warn('[poiApi] request failed', path, response.status, text.slice(0, 200));
-      throw new PoiApiError(response.status, `POI API ${path} failed with ${response.status}`);
+      const route = path.split('?')[0];
+      console.warn('[poiApi] request failed', route, response.status, text.slice(0, 200));
+      throw new PoiApiError(response.status, `POI API ${route} failed with ${response.status}`);
     }
     return (await response.json()) as T;
   } finally {
