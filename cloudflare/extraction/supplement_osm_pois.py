@@ -7,7 +7,8 @@ already-imported OSM counterpart.  OSM element ids are stable source ids, so
 overlapping settlement scopes and repeated runs are idempotent.
 
 The first operational use is always ``--dry-run --place <id>``.  It writes no
-D1 data and prints a deterministic audit plus the candidate names.
+D1 data and prints a deterministic audit plus the candidate names and a local
+JSON report of nearby, differently named source rows for human review.
 """
 from __future__ import annotations
 
@@ -94,6 +95,38 @@ class OsmPoi:
     brand: str | None
     address: str | None
     attributes: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class PossibleRename:
+    osm_element_id: str
+    osm_name: str
+    osm_lat: float
+    osm_lng: float
+    poi_type: str
+    source: str
+    source_id: str
+    source_name: str
+    source_lat: float
+    source_lng: float
+    distance_meters: float
+    severity: str
+
+    def as_dict(self) -> dict:
+        return {
+            'osm_element_id': self.osm_element_id,
+            'osm_name': self.osm_name,
+            'osm_lat': self.osm_lat,
+            'osm_lng': self.osm_lng,
+            'poi_type': self.poi_type,
+            'source': self.source,
+            'source_id': self.source_id,
+            'source_name': self.source_name,
+            'source_lat': self.source_lat,
+            'source_lng': self.source_lng,
+            'distance_meters': round(self.distance_meters, 1),
+            'severity': self.severity,
+        }
 
 
 def sql_quote(value: str | None) -> str:
@@ -360,6 +393,58 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
     return imports, dict(stats)
 
 
+def possible_renames(imports: Iterable[OsmPoi], candidates: Iterable[Candidate]) -> list[PossibleRename]:
+    """Report nearby, differently named source rows without excluding either.
+
+    A name disagreement is useful human-review evidence, not an automatic
+    duplicate rule. Existing confident same-name matches have already been
+    removed by ``classify_scope``; this only sees new OSM candidates.
+    """
+    imported = list(imports)
+    if not imported:
+        return []
+    source_candidates = [candidate for candidate in candidates if candidate.source in {'foursquare', 'community'}]
+    # Keep this audit bounded for country imports. The source registry can be
+    # large, but only same-type rows within the 75m matching neighborhood can
+    # produce a review item.
+    center_lat = imported[0].lat
+    source_grid = grid_for(source_candidates, center_lat)
+    grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
+    rows: list[PossibleRename] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for poi in imported:
+        for poi_type in poi.poi_types:
+            bucket = grid_key(poi_type, poi.lat, poi.lng, grid_lng_deg)
+            for dlat in (-1, 0, 1):
+                for dlng in (-1, 0, 1):
+                    for candidate in source_grid.get((poi_type, bucket[1] + dlat, bucket[2] + dlng), ()):
+                        distance = haversine_m(poi.lat, poi.lng, candidate.lat, candidate.lng)
+                        if distance > MATCH_RADIUS_METERS or name_similarity(poi.dedupe_name, candidate.dedupe_name) >= NAME_SIMILARITY_THRESHOLD:
+                            continue
+                        key = (poi.osm_element_id, candidate.source, candidate.source_id, candidate.poi_type)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        rows.append(PossibleRename(
+                            osm_element_id=poi.osm_element_id, osm_name=poi.name, osm_lat=poi.lat, osm_lng=poi.lng,
+                            poi_type=candidate.poi_type, source=candidate.source, source_id=candidate.source_id,
+                            source_name=candidate.name, source_lat=candidate.lat, source_lng=candidate.lng,
+                            distance_meters=distance, severity='same_location' if distance <= 20 else 'nearby',
+                        ))
+    severity_rank = {'same_location': 0, 'nearby': 1}
+    return sorted(rows, key=lambda row: (severity_rank[row.severity], row.distance_meters, row.osm_element_id, row.source_id))
+
+
+def write_possible_rename_report(label: str, rows: Iterable[PossibleRename]) -> str:
+    """Write a local, reviewable report; never writes D1."""
+    os.makedirs(BUILD_DIR, exist_ok=True)
+    path = os.path.join(BUILD_DIR, f'osm_supplement_{label}_{datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")}_possible_renames.json')
+    with open(path, 'w') as output:
+        json.dump({'label': label, 'possible_renames': [row.as_dict() for row in rows]}, output, indent=2)
+        output.write('\n')
+    return path
+
+
 def chunks(items: list, size: int = SQL_BATCH_SIZE):
     for start in range(0, len(items), size):
         yield items[start:start + size]
@@ -404,28 +489,41 @@ ON CONFLICT(osm_element_id) DO UPDATE SET
     return '\n'.join(statements) + ('\n' if statements else '')
 
 
-def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max_lng: float, *, dry_run: bool = False, candidates: list[Candidate] | None = None, show_candidates: bool = True) -> tuple[list[OsmPoi], dict[str, int], str | None]:
+def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max_lng: float, *, dry_run: bool = False, candidates: list[Candidate] | None = None, show_candidates: bool = True, write_rename_report: bool = True) -> tuple[list[OsmPoi], dict[str, int], str | None, list[PossibleRename]]:
     print(f'[{label}] querying OSM within bbox=({min_lat},{min_lng})-({max_lat},{max_lng})')
     elements = fetch_overpass(osm_query(min_lat, max_lat, min_lng, max_lng)).get('elements', [])
-    imports, stats = classify_scope(elements, candidates if candidates is not None else existing_candidates(), (min_lat + max_lat) / 2)
+    scope_candidates = candidates if candidates is not None else existing_candidates()
+    imports, stats = classify_scope(elements, scope_candidates, (min_lat + max_lat) / 2)
+    # Existing OSM ids are source refreshes, not new additions. The report is
+    # specifically for OSM candidates that could otherwise be newly imported.
+    existing_osm_ids = {candidate.source_id for candidate in scope_candidates if candidate.source == 'openstreetmap'}
+    renames = possible_renames(
+        (poi for poi in imports if poi.osm_element_id not in existing_osm_ids),
+        scope_candidates,
+    )
     stats['overpass_elements'] = len(elements)
+    stats['possible_rename_same_location'] = sum(row.severity == 'same_location' for row in renames)
+    stats['possible_rename_nearby'] = sum(row.severity == 'nearby' for row in renames)
     print(f'[{label}] OSM audit: ' + ', '.join(f'{key}={value}' for key, value in sorted(stats.items())))
     if show_candidates:
         for poi in imports[:50]:
             print(f'[{label}] candidate {poi.primary_poi_type}: {poi.name} ({poi.osm_element_id})')
         if len(imports) > 50:
             print(f'[{label}] ... {len(imports) - 50} more candidates')
+    if write_rename_report:
+        report_path = write_possible_rename_report(label, renames)
+        print(f'[{label}] possible rename report: {report_path} ({len(renames)} rows)')
     if dry_run:
-        return imports, stats, None
+        return imports, stats, None, renames
     os.makedirs(BUILD_DIR, exist_ok=True)
     path = os.path.join(BUILD_DIR, f'osm_supplement_{label}_{datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")}.sql')
     with open(path, 'w') as output:
         output.write(sql_for_pois(imports))
     print(f'[{label}] wrote {path}; apply only after reviewing the dry-run')
-    return imports, stats, path
+    return imports, stats, path, renames
 
 
-def import_place(place_id: str, *, dry_run: bool = False) -> tuple[list[OsmPoi], dict[str, int], str | None]:
+def import_place(place_id: str, *, dry_run: bool = False) -> tuple[list[OsmPoi], dict[str, int], str | None, list[PossibleRename]]:
     rows = run_d1_query(
         'SELECT min_lat, max_lat, min_lng, max_lng FROM place WHERE place_id = ' + sql_quote(place_id),
     )
@@ -460,14 +558,15 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
         raise ValueError(f"country '{code}' has no bounded municipality registry; import settlement metadata first")
     candidates = existing_candidates()
     imports_by_id: dict[str, OsmPoi] = {}
+    renames_by_key: dict[tuple[str, str, str, str], PossibleRename] = {}
     totals: dict[str, int] = defaultdict(int)
     for index, scope in enumerate(scopes, start=1):
         label = scope['place_id']
         print(f'[{code}] scope {index}/{len(scopes)}: {label}')
         try:
-            imports, stats, _ = import_scope(
+            imports, stats, _, renames = import_scope(
                 label, float(scope['min_lat']), float(scope['max_lat']), float(scope['min_lng']), float(scope['max_lng']),
-                dry_run=True, candidates=candidates, show_candidates=False,
+                dry_run=True, candidates=candidates, show_candidates=False, write_rename_report=False,
             )
         except Exception as error:
             raise RuntimeError(f'OSM supplement scope {label} failed: {error}') from error
@@ -477,10 +576,16 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
             imports_by_id[poi.osm_element_id] = poi
             for poi_type in poi.poi_types:
                 candidates.append(Candidate('openstreetmap', poi.osm_element_id, poi.name, poi.dedupe_name, poi.lat, poi.lng, poi_type))
+        for row in renames:
+            renames_by_key[(row.osm_element_id, row.source, row.source_id, row.poi_type)] = row
     imports = [imports_by_id[element_id] for element_id in sorted(imports_by_id)]
     totals['scopes'] = len(scopes)
     totals['unique_rows_to_write'] = len(imports)
+    totals['possible_rename_same_location'] = sum(row.severity == 'same_location' for row in renames_by_key.values())
+    totals['possible_rename_nearby'] = sum(row.severity == 'nearby' for row in renames_by_key.values())
     print(f'[{code}] country OSM audit: ' + ', '.join(f'{key}={value}' for key, value in sorted(totals.items())))
+    report_path = write_possible_rename_report(code, renames_by_key.values())
+    print(f'[{code}] possible rename report: {report_path} ({len(renames_by_key)} rows)')
     if dry_run:
         return imports, dict(totals), None
     os.makedirs(BUILD_DIR, exist_ok=True)

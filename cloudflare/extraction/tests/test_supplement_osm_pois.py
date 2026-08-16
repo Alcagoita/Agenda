@@ -1,5 +1,7 @@
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -69,6 +71,63 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertEqual([poi.name for poi in imports], ['Lagar Restaurante'])
         self.assertEqual(stats['matched_skipped'], 1)
         self.assertEqual(stats['inserted'], 1)
+
+    def test_differently_named_same_location_is_reported_but_still_admitted(self):
+        existing = [
+            supplement.Candidate('foursquare', 'fsq-lagar', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
+        ]
+        imports, _ = supplement.classify_scope([
+            element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
+        ], existing, 39.80345)
+
+        rows = supplement.possible_renames(imports, existing)
+
+        self.assertEqual([poi.name for poi in imports], ['O Lagar'])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].severity, 'same_location')
+        self.assertEqual(rows[0].source, 'foursquare')
+        self.assertEqual(rows[0].source_name, 'Lagar Restaurante')
+
+    def test_possible_renames_only_calculates_distance_for_nearby_same_type_rows(self):
+        poi = supplement.osm_poi_from_element(
+            element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'), {},
+        )
+        assert poi is not None
+        candidates = [
+            supplement.Candidate('foursquare', 'nearby', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
+            supplement.Candidate('foursquare', 'far-away', 'Other Restaurant', 'other restaurant', 40.80345, -8.10126, 'restaurant'),
+            supplement.Candidate('community', 'wrong-type', 'Other Cafe', 'other cafe', 39.80345, -8.10126, 'cafe'),
+        ]
+        calls = []
+        original_haversine = supplement.haversine_m
+        try:
+            supplement.haversine_m = lambda *args: (calls.append(args), original_haversine(*args))[1]
+            rows = supplement.possible_renames([poi], candidates)
+        finally:
+            supplement.haversine_m = original_haversine
+
+        self.assertEqual([row.source_id for row in rows], ['nearby'])
+        self.assertEqual(len(calls), 1)
+
+    def test_possible_rename_report_is_machine_readable(self):
+        row = supplement.PossibleRename(
+            'node/1', 'O Lagar', 39.80346, -8.10127, 'restaurant',
+            'community', 'curated-1', 'Lagar Restaurante', 39.80345, -8.10126,
+            1.5, 'same_location',
+        )
+        original_build_dir = supplement.BUILD_DIR
+        try:
+            with tempfile.TemporaryDirectory() as temporary_dir:
+                supplement.BUILD_DIR = temporary_dir
+                path = supplement.write_possible_rename_report('test-place', [row])
+                with open(path) as report:
+                    payload = json.load(report)
+        finally:
+            supplement.BUILD_DIR = original_build_dir
+
+        self.assertEqual(payload['label'], 'test-place')
+        self.assertEqual(payload['possible_renames'][0]['severity'], 'same_location')
+        self.assertEqual(payload['possible_renames'][0]['source_id'], 'curated-1')
 
     def test_ambiguous_nearby_candidates_are_not_imported(self):
         existing = [
