@@ -151,6 +151,20 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertEqual(stats['updated'], 1)
         self.assertNotIn('inserted', stats)
 
+    def test_reviewed_osm_correction_excludes_closed_poi_and_overrides_name(self):
+        corrections = {
+            ('openstreetmap', 'node/5381704191'): supplement.SourceCorrection('openstreetmap', 'node/5381704191', False, None, None),
+            ('openstreetmap', 'node/5381704211'): supplement.SourceCorrection('openstreetmap', 'node/5381704211', True, 'Lagar', 'lagar'),
+        }
+        imports, stats = supplement.classify_scope([
+            element(5381704191, 'O Vilaça', amenity='restaurant'),
+            element(5381704211, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
+        ], [], 39.80345, corrections)
+
+        self.assertEqual([poi.name for poi in imports], ['Lagar'])
+        self.assertEqual(imports[0].dedupe_name, 'lagar')
+        self.assertEqual(stats['operator_excluded'], 1)
+
     def test_sql_is_idempotent_and_does_not_fabricate_a_foursquare_id(self):
         poi = supplement.osm_poi_from_element(element(5335674113, 'Santo Amaro', amenity='restaurant'), {})
         assert poi is not None

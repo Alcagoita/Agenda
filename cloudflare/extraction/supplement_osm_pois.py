@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -81,6 +81,15 @@ class Candidate:
     lat: float
     lng: float
     poi_type: str
+
+
+@dataclass(frozen=True)
+class SourceCorrection:
+    source: str
+    source_id: str
+    visible: bool
+    name_override: str | None
+    dedupe_name_override: str | None
 
 
 @dataclass(frozen=True)
@@ -292,12 +301,47 @@ def paged_query(sql_for_after):
         after = page[-1]['source_id']
 
 
-def existing_candidates() -> list[Candidate]:
+def source_corrections() -> dict[tuple[str, str], SourceCorrection]:
+    """Read the small, reviewed exception registry without blocking pre-migration dry-runs."""
+    try:
+        rows = run_d1_query('''
+            SELECT source, source_id, visible, name_override, dedupe_name_override
+            FROM poi_source_correction
+        ''')
+    except Exception as error:
+        details = ' '.join((str(error), str(getattr(error, 'stdout', '')), str(getattr(error, 'stderr', ''))))
+        if 'no such table: poi_source_correction' not in details:
+            raise
+        return {}
+    return {
+        (row['source'], row['source_id']): SourceCorrection(
+            source=row['source'], source_id=row['source_id'], visible=bool(row['visible']),
+            name_override=row['name_override'], dedupe_name_override=row['dedupe_name_override'],
+        )
+        for row in rows
+    }
+
+
+def apply_osm_correction(poi: OsmPoi, correction: SourceCorrection | None) -> OsmPoi | None:
+    if correction is None:
+        return poi
+    if not correction.visible:
+        return None
+    name = correction.name_override or poi.name
+    return replace(
+        poi,
+        name=name,
+        dedupe_name=correction.dedupe_name_override or normalize_text(name),
+    )
+
+
+def existing_candidates(corrections: dict[tuple[str, str], SourceCorrection] | None = None) -> list[Candidate]:
     """Load current identities once per import, not once per OSM element.
 
     The country's source table is too large for one Container→Worker response;
     these pages bound both D1 response size and container memory spikes.
     """
+    corrections = corrections if corrections is not None else source_corrections()
     rows: list[Candidate] = []
     for row in paged_query(lambda after: '''
         WITH page AS (
@@ -308,7 +352,8 @@ def existing_candidates() -> list[Candidate]:
         FROM page LEFT JOIN poi_type ON poi_type.fsq_place_id = page.fsq_place_id
         ORDER BY page.fsq_place_id
     ''' % sql_quote(after)):
-        if row['poi_type'] is not None:
+        correction = corrections.get(('foursquare', row['source_id']))
+        if row['poi_type'] is not None and (correction is None or correction.visible):
             rows.append(Candidate('foursquare', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
     for row in paged_query(lambda after: """
         SELECT poi_id AS source_id, name, dedupe_name, lat, lng, primary_poi_type AS poi_type
@@ -336,8 +381,11 @@ def existing_candidates() -> list[Candidate]:
             raise
         osm_rows = []
     for row in osm_rows:
-        if row['poi_type'] is not None:
-            rows.append(Candidate('openstreetmap', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
+        correction = corrections.get(('openstreetmap', row['source_id']))
+        if row['poi_type'] is not None and (correction is None or correction.visible):
+            name = correction.name_override if correction and correction.name_override else row['name']
+            dedupe_name = correction.dedupe_name_override if correction and correction.dedupe_name_override else normalize_text(name)
+            rows.append(Candidate('openstreetmap', row['source_id'], name, dedupe_name, row['lat'], row['lng'], row['poi_type']))
     return rows
 
 
@@ -356,7 +404,7 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
     return f'[out:json][timeout:170];({"".join(selector + bbox + ";" for selector in selectors)});out center;'
 
 
-def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center_lat: float) -> tuple[list[OsmPoi], dict[str, int]]:
+def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center_lat: float, corrections: dict[tuple[str, str], SourceCorrection] | None = None) -> tuple[list[OsmPoi], dict[str, int]]:
     brand_dictionary = load_brand_dictionary()
     grid = grid_for(candidates, center_lat)
     grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
@@ -364,6 +412,7 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
     imports: list[OsmPoi] = []
     stats: dict[str, int] = defaultdict(int)
     seen_elements: set[str] = set()
+    corrections = corrections or {}
     for element in elements:
         poi = osm_poi_from_element(element, brand_dictionary)
         if poi is None:
@@ -372,6 +421,10 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
         if poi.osm_element_id in seen_elements:
             continue
         seen_elements.add(poi.osm_element_id)
+        poi = apply_osm_correction(poi, corrections.get(('openstreetmap', poi.osm_element_id)))
+        if poi is None:
+            stats['operator_excluded'] += 1
+            continue
         stats['classified'] += 1
         if poi.osm_element_id in existing_osm_ids:
             imports.append(poi)  # source refresh, not a duplicate
@@ -489,11 +542,12 @@ ON CONFLICT(osm_element_id) DO UPDATE SET
     return '\n'.join(statements) + ('\n' if statements else '')
 
 
-def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max_lng: float, *, dry_run: bool = False, candidates: list[Candidate] | None = None, show_candidates: bool = True, write_rename_report: bool = True) -> tuple[list[OsmPoi], dict[str, int], str | None, list[PossibleRename]]:
+def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max_lng: float, *, dry_run: bool = False, candidates: list[Candidate] | None = None, corrections: dict[tuple[str, str], SourceCorrection] | None = None, show_candidates: bool = True, write_rename_report: bool = True) -> tuple[list[OsmPoi], dict[str, int], str | None, list[PossibleRename]]:
     print(f'[{label}] querying OSM within bbox=({min_lat},{min_lng})-({max_lat},{max_lng})')
     elements = fetch_overpass(osm_query(min_lat, max_lat, min_lng, max_lng)).get('elements', [])
-    scope_candidates = candidates if candidates is not None else existing_candidates()
-    imports, stats = classify_scope(elements, scope_candidates, (min_lat + max_lat) / 2)
+    corrections = corrections if corrections is not None else source_corrections()
+    scope_candidates = candidates if candidates is not None else existing_candidates(corrections)
+    imports, stats = classify_scope(elements, scope_candidates, (min_lat + max_lat) / 2, corrections)
     # Existing OSM ids are source refreshes, not new additions. The report is
     # specifically for OSM candidates that could otherwise be newly imported.
     existing_osm_ids = {candidate.source_id for candidate in scope_candidates if candidate.source == 'openstreetmap'}
@@ -556,7 +610,8 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
     ''' % sql_quote(code))
     if not scopes:
         raise ValueError(f"country '{code}' has no bounded municipality registry; import settlement metadata first")
-    candidates = existing_candidates()
+    corrections = source_corrections()
+    candidates = existing_candidates(corrections)
     imports_by_id: dict[str, OsmPoi] = {}
     renames_by_key: dict[tuple[str, str, str, str], PossibleRename] = {}
     totals: dict[str, int] = defaultdict(int)
@@ -566,7 +621,7 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
         try:
             imports, stats, _, renames = import_scope(
                 label, float(scope['min_lat']), float(scope['max_lat']), float(scope['min_lng']), float(scope['max_lng']),
-                dry_run=True, candidates=candidates, show_candidates=False, write_rename_report=False,
+                dry_run=True, candidates=candidates, corrections=corrections, show_candidates=False, write_rename_report=False,
             )
         except Exception as error:
             raise RuntimeError(f'OSM supplement scope {label} failed: {error}') from error

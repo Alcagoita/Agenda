@@ -423,6 +423,13 @@ within 75m. `same_location` means within 20m; `nearby` means 21–75m. These are
 not removed or merged automatically: review the report before applying the
 generated SQL.
 
+When review confirms that a nearby differently named Foursquare row is stale,
+record the decision in `poi_source_correction` rather than rewriting raw source
+data. The nearby Worker hides a reviewed retired source row and can apply an
+approved OSM display-name override. The importer reads the same registry, so
+an excluded OSM element is not reintroduced and a later Foursquare reload does
+not recreate a user-visible duplicate.
+
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL
 files write to a relative `build/` path and the Python script resolves

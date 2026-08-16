@@ -42,10 +42,18 @@ interface FakeOsmPoi {
   food_cuisine?: string[];
 }
 
+interface FakeSourceCorrection {
+  source: 'foursquare' | 'openstreetmap';
+  source_id: string;
+  visible: number;
+  name_override?: string | null;
+  dedupe_name_override?: string | null;
+}
+
 const LAT = 38.72;
 const LNG = -9.14;
 
-function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = []): Env['REGISTRY_DB'] {
+function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [], sourceCorrections: FakeSourceCorrection[] = []): Env['REGISTRY_DB'] {
   const prepare = (sql: string) => {
     const trimmed = sql.trim();
     const stmt = {
@@ -120,6 +128,9 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: Fa
           }
           return { results };
         }
+        if (trimmed.startsWith('SELECT source, source_id, visible, name_override, dedupe_name_override')) {
+          return { results: sourceCorrections };
+        }
         throw new Error(`fake D1 unhandled all(): ${trimmed}`);
       },
     };
@@ -145,8 +156,8 @@ function nearbyRequest(requests: unknown[]) {
   });
 }
 
-function env(pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = []): Env {
-  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois) } as unknown as Env;
+function env(pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [], sourceCorrections: FakeSourceCorrection[] = []): Env {
+  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois, sourceCorrections) } as unknown as Env;
 }
 
 const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
@@ -177,6 +188,24 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     const body = await res.json() as { results: Record<string, Array<{ poi_id: string; source: string }>> };
     expect(body.results.restaurant).toEqual([
       expect.objectContaining({ poi_id: 'fsq-santo-amaro', source: 'foursquare' }),
+    ]);
+  });
+
+  it('uses a reviewed OSM replacement instead of its suppressed Foursquare source', async () => {
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'restaurant', type: 'restaurant' },
+    ]), env([
+      { fsq_place_id: 'stale-lagar', name: 'Lagar Restaurante', raw_category_labels: '', category_label: '' },
+    ], [], [
+      { osm_element_id: 'way/lagar', name: 'O Lagar', primary_poi_type: 'restaurant' },
+    ], [
+      { source: 'foursquare', source_id: 'stale-lagar', visible: 0 },
+      { source: 'openstreetmap', source_id: 'way/lagar', visible: 1, name_override: 'Lagar', dedupe_name_override: 'lagar' },
+    ]), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ name: string; source: string }>> };
+    expect(body.results.restaurant).toEqual([
+      expect.objectContaining({ name: 'Lagar', source: 'openstreetmap' }),
     ]);
   });
 
