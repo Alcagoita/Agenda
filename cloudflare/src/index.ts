@@ -1759,6 +1759,9 @@ export default {
         .bind(countryCode).first<{ status: string }>();
       if (!country) return json({ error: `no country row for '${countryCode}'` }, 404);
       if (country.status !== 'mapped') return json({ error: 'country must be mapped before OSM supplementation' }, 409);
+      const registry = await env.REGISTRY_DB.prepare('SELECT status FROM settlement_registry_import WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (registry?.status !== 'mapped') return json({ error: 'settlement registry must be mapped before OSM supplementation' }, 409);
       const runId = crypto.randomUUID();
       const now = new Date().toISOString();
       const started = await env.REGISTRY_DB.prepare(

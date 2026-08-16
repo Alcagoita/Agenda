@@ -248,7 +248,7 @@ def run_osm_supplement(country_code, run_id):
         print(f"[run_job] OSM supplement {country_code} complete: {stats.get('unique_rows_to_write', 0)} rows")
     except BaseException as error:
         traceback.print_exc()
-        worker_client.osm_supplement_failed(country_code, run_id, type(error).__name__)
+        worker_client.osm_supplement_failed(country_code, run_id, f'{type(error).__name__}: {error}')
         sys.exit(1)
 
 if __name__ == '__main__':

@@ -14,6 +14,40 @@ def element(element_id, name, lat=39.8034492, lng=-8.1012644, **tags):
 
 
 class SupplementOsmPoisTest(unittest.TestCase):
+    def test_excluded_shop_values_are_not_admitted(self):
+        for value in ('mall', 'vacant', 'yes'):
+            with self.subTest(shop=value):
+                self.assertIsNone(
+                    supplement.osm_poi_from_element(element(1, 'Some Unit', shop=value), {}),
+                )
+
+    def test_generic_shop_becomes_a_store_and_mapped_shop_keeps_its_type(self):
+        generic = supplement.osm_poi_from_element(element(2, 'Papelaria', shop='stationery'), {})
+        self.assertIsNotNone(generic)
+        self.assertEqual(generic.poi_types, ('store',))
+        bakery = supplement.osm_poi_from_element(element(3, 'Padaria', shop='bakery'), {})
+        self.assertIsNotNone(bakery)
+        self.assertEqual(bakery.poi_types, ('bakery',))
+
+    def test_sql_quote_removes_statement_control_characters(self):
+        self.assertEqual(supplement.sql_quote("A;\nB\x00's"), "'A B ''s'")
+
+    def test_paged_query_continues_through_a_driver_row_without_a_type(self):
+        responses = [
+            [{'source_id': 'one', 'poi_type': None}],
+            [{'source_id': 'two', 'poi_type': 'restaurant'}],
+            [],
+        ]
+        calls = []
+        original = supplement.run_d1_query
+        try:
+            supplement.run_d1_query = lambda after: (calls.append(after), responses.pop(0))[1]
+            rows = list(supplement.paged_query(lambda after: after))
+        finally:
+            supplement.run_d1_query = original
+        self.assertEqual([row['source_id'] for row in rows], ['one', 'two'])
+        self.assertEqual(calls, ['', 'one', 'two'])
+
     def test_classifies_named_restaurant_with_stable_osm_identity(self):
         poi = supplement.osm_poi_from_element(
             element(5335674113, 'Santo Amaro', amenity='restaurant', cuisine='portuguese'),

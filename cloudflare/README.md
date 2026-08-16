@@ -389,6 +389,17 @@ Usage: `python3 extraction/enrich_osm_cuisine.py <place_id>` (after the
 regular pipeline has already loaded that place), then run the printed
 `wrangler d1 execute --file=...` command.
 
+Real yield, measured live against Lisboa/Odivelas/Sertã (most OSM elements
+simply don't share a listing with Foursquare at all — most of a Place's
+Overpass results never match anything): Lisboa +50 `food_cuisine` / +10
+`store_kind`, Odivelas +15 `food_cuisine` / +2 `store_kind`, Sertã +0/+0
+(town too small — only 55 Overpass elements total, none overlapping the 9
+restaurant + 3 store candidates). Smaller than the keyword pass's yield, as
+expected for a third, supplementary source layered on top of two
+already-run passes — but real, verified live, and recovers cases neither
+of the other two passes can (a place whose name gives no cuisine hint at
+all, and whose Foursquare row was never tagged with one either).
+
 ### OSM-only supplementary POIs
 
 KAN-383 keeps OSM-only venues in `osm_poi`/`osm_poi_type`/`osm_poi_attribute`,
@@ -404,17 +415,6 @@ example, `python3 extraction/supplement_osm_pois.py --dry-run --bbox 39.794
 uses bounded municipality scopes instead of one Portugal-wide Overpass query;
 it is queued with `POST /internal/osm-supplement/queue` only after the
 country's Foursquare data and settlement registry are mapped.
-
-Real yield, measured live against Lisboa/Odivelas/Sertã (most OSM elements
-simply don't share a listing with Foursquare at all — most of a Place's
-Overpass results never match anything): Lisboa +50 `food_cuisine` / +10
-`store_kind`, Odivelas +15 `food_cuisine` / +2 `store_kind`, Sertã +0/+0
-(town too small — only 55 Overpass elements total, none overlapping the 9
-restaurant + 3 store candidates). Smaller than the keyword pass's yield, as
-expected for a third, supplementary source layered on top of two
-already-run passes — but real, verified live, and recovers cases neither
-of the other two passes can (a place whose name gives no cuisine hint at
-all, and whose Foursquare row was never tagged with one either).
 
 **Steps** (see `extraction/extract_*.sql`, `extraction/classify_and_load.py`
 — both must be run with `cloudflare/` as the working directory; the SQL

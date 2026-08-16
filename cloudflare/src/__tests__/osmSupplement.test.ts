@@ -10,7 +10,7 @@ import worker, { type Env } from '../index';
 
 type ImportRow = { status: 'none' | 'mapping' | 'mapped' | 'failed'; active_run_id: string | null };
 
-function fakeDb(countryStatus: string = 'mapped') {
+function fakeDb(countryStatus: string = 'mapped', registryStatus: string = 'mapped') {
   let row: ImportRow | null = null;
   const prepare = (sql: string) => {
     const trimmed = sql.trim();
@@ -18,6 +18,7 @@ function fakeDb(countryStatus: string = 'mapped') {
       bind: (...next: unknown[]) => statement(next),
       async first<T>() {
         if (trimmed.startsWith('SELECT status FROM country')) return { status: countryStatus } as T;
+        if (trimmed.startsWith('SELECT status FROM settlement_registry_import')) return { status: registryStatus } as T;
         if (trimmed.startsWith('SELECT status, active_run_id FROM osm_supplement_import')) return row as T | null;
         throw new Error(`unhandled first: ${trimmed}`);
       },
@@ -30,6 +31,11 @@ function fakeDb(countryStatus: string = 'mapped') {
         if (trimmed.startsWith('UPDATE osm_supplement_import\n         SET status = \'mapped\'')) {
           if (!row || row.status !== 'mapping' || row.active_run_id !== args[6]) return { meta: { changes: 0 } };
           row.status = 'mapped';
+          return { meta: { changes: 1 } };
+        }
+        if (trimmed.startsWith('UPDATE osm_supplement_import\n         SET status = \'failed\'')) {
+          if (!row || row.status !== 'mapping' || row.active_run_id !== args[3]) return { meta: { changes: 0 } };
+          row.status = 'failed';
           return { meta: { changes: 1 } };
         }
         throw new Error(`unhandled run: ${trimmed}`);
@@ -70,5 +76,32 @@ describe('KAN-383 OSM supplement queue', () => {
       countryCode: 'PT', runId: 'stale', sourceElements: 1, insertedRows: 1, matchedSkipped: 0, ambiguousSkipped: 0,
     }), env, CTX);
     expect(response.status).toBe(409);
+  });
+
+  it('accepts failure only from the active run', async () => {
+    mockStart.mockClear();
+    const env = { BUILD_TRIGGER_SECRET: 'secret', REGISTRY_DB: fakeDb(), EXTRACTION_CONTAINER: {} } as unknown as Env;
+    await worker.fetch(request('/internal/osm-supplement/queue', { countryCode: 'PT' }), env, CTX);
+    const runId = (mockStart.mock.calls[0][0] as { envVars: { OSM_SUPPLEMENT_RUN_ID: string } }).envVars.OSM_SUPPLEMENT_RUN_ID;
+
+    const failed = await worker.fetch(request('/internal/osm-supplement/failed', {
+      countryCode: 'PT', runId, error: 'scope osm-relation-1 timed out',
+    }), env, CTX);
+    expect(failed.status).toBe(200);
+
+    const stale = await worker.fetch(request('/internal/osm-supplement/failed', {
+      countryCode: 'PT', runId: 'stale', error: 'old failure',
+    }), env, CTX);
+    expect(stale.status).toBe(409);
+  });
+
+  it('requires mapped country and settlement registry state before queueing', async () => {
+    const countryNotMapped = { BUILD_TRIGGER_SECRET: 'secret', REGISTRY_DB: fakeDb('mapping'), EXTRACTION_CONTAINER: {} } as unknown as Env;
+    const blockedCountry = await worker.fetch(request('/internal/osm-supplement/queue', { countryCode: 'PT' }), countryNotMapped, CTX);
+    expect(blockedCountry.status).toBe(409);
+
+    const registryNotMapped = { BUILD_TRIGGER_SECRET: 'secret', REGISTRY_DB: fakeDb('mapped', 'mapping'), EXTRACTION_CONTAINER: {} } as unknown as Env;
+    const blockedRegistry = await worker.fetch(request('/internal/osm-supplement/queue', { countryCode: 'PT' }), registryNotMapped, CTX);
+    expect(blockedRegistry.status).toBe(409);
   });
 });

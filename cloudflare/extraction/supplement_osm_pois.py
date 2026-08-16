@@ -17,6 +17,7 @@ import difflib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 from collections import defaultdict
@@ -98,7 +99,10 @@ class OsmPoi:
 def sql_quote(value: str | None) -> str:
     if value is None:
         return 'NULL'
-    return "'" + value.replace("'", "''") + "'"
+    # OSM tags are external input. Keep generated statement boundaries out of
+    # values as an additional defence around the normal SQL literal escaping.
+    sanitized = re.sub(r'[\x00-\x1f\x7f;]+', ' ', value).strip()
+    return "'" + sanitized.replace("'", "''") + "'"
 
 
 def run_d1_query(sql: str) -> list[dict]:
@@ -197,11 +201,15 @@ def osm_poi_from_element(element: dict, brand_dictionary: dict) -> OsmPoi | None
     )
 
 
+def grid_key(poi_type: str, lat: float, lng: float, grid_lng_deg: float) -> tuple[str, int, int]:
+    return poi_type, int(lat / GRID_LAT_DEG), int(lng / grid_lng_deg)
+
+
 def grid_for(candidates: Iterable[Candidate], center_lat: float) -> dict[tuple[str, int, int], list[Candidate]]:
     grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
     grid: dict[tuple[str, int, int], list[Candidate]] = defaultdict(list)
     for candidate in candidates:
-        grid[(candidate.poi_type, int(candidate.lat / GRID_LAT_DEG), int(candidate.lng / grid_lng_deg))].append(candidate)
+        grid[grid_key(candidate.poi_type, candidate.lat, candidate.lng, grid_lng_deg)].append(candidate)
     return grid
 
 
@@ -216,10 +224,10 @@ def confident_match(poi: OsmPoi, grid: dict[tuple[str, int, int], list[Candidate
     scored: list[tuple[float, float, Candidate]] = []
     seen_ids: set[tuple[str, str]] = set()
     for poi_type in poi.poi_types:
-        bucket = (int(poi.lat / GRID_LAT_DEG), int(poi.lng / grid_lng_deg))
+        bucket = grid_key(poi_type, poi.lat, poi.lng, grid_lng_deg)
         for dlat in (-1, 0, 1):
             for dlng in (-1, 0, 1):
-                for candidate in grid.get((poi_type, bucket[0] + dlat, bucket[1] + dlng), ()):
+                for candidate in grid.get((poi_type, bucket[1] + dlat, bucket[2] + dlng), ()):
                     candidate_key = (candidate.source, candidate.source_id)
                     if candidate_key in seen_ids:
                         continue
@@ -264,10 +272,11 @@ def existing_candidates() -> list[Candidate]:
           FROM poi WHERE fsq_place_id > %s ORDER BY fsq_place_id LIMIT 5000
         )
         SELECT page.fsq_place_id AS source_id, page.name, page.dedupe_name, page.lat, page.lng, poi_type.poi_type
-        FROM page INNER JOIN poi_type ON poi_type.fsq_place_id = page.fsq_place_id
+        FROM page LEFT JOIN poi_type ON poi_type.fsq_place_id = page.fsq_place_id
         ORDER BY page.fsq_place_id
     ''' % sql_quote(after)):
-        rows.append(Candidate('foursquare', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
+        if row['poi_type'] is not None:
+            rows.append(Candidate('foursquare', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
     for row in paged_query(lambda after: """
         SELECT poi_id AS source_id, name, dedupe_name, lat, lng, primary_poi_type AS poi_type
         FROM curated_poi WHERE status = 'active' AND poi_id > %s
@@ -282,7 +291,7 @@ def existing_candidates() -> list[Candidate]:
               FROM osm_poi WHERE osm_element_id > %s ORDER BY osm_element_id LIMIT 5000
             )
             SELECT page.osm_element_id AS source_id, page.name, page.dedupe_name, page.lat, page.lng, osm_poi_type.poi_type
-            FROM page INNER JOIN osm_poi_type ON osm_poi_type.osm_element_id = page.osm_element_id
+            FROM page LEFT JOIN osm_poi_type ON osm_poi_type.osm_element_id = page.osm_element_id
             ORDER BY page.osm_element_id
         ''' % sql_quote(after)))
     except Exception as error:
@@ -294,7 +303,8 @@ def existing_candidates() -> list[Candidate]:
             raise
         osm_rows = []
     for row in osm_rows:
-        rows.append(Candidate('openstreetmap', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
+        if row['poi_type'] is not None:
+            rows.append(Candidate('openstreetmap', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
     return rows
 
 
@@ -316,6 +326,7 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
 def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center_lat: float) -> tuple[list[OsmPoi], dict[str, int]]:
     brand_dictionary = load_brand_dictionary()
     grid = grid_for(candidates, center_lat)
+    grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
     existing_osm_ids = {candidate.source_id for candidate in candidates if candidate.source == 'openstreetmap'}
     imports: list[OsmPoi] = []
     stats: dict[str, int] = defaultdict(int)
@@ -342,7 +353,7 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
             imports.append(poi)
             stats['inserted'] += 1
             for poi_type in poi.poi_types:
-                grid.setdefault((poi_type, int(poi.lat / GRID_LAT_DEG), int(poi.lng / (GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)))), []).append(
+                grid.setdefault(grid_key(poi_type, poi.lat, poi.lng, grid_lng_deg), []).append(
                     Candidate('openstreetmap', poi.osm_element_id, poi.name, poi.dedupe_name, poi.lat, poi.lng, poi_type),
                 )
     stats['source_elements'] = len(seen_elements)
@@ -453,10 +464,13 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
     for index, scope in enumerate(scopes, start=1):
         label = scope['place_id']
         print(f'[{code}] scope {index}/{len(scopes)}: {label}')
-        imports, stats, _ = import_scope(
-            label, float(scope['min_lat']), float(scope['max_lat']), float(scope['min_lng']), float(scope['max_lng']),
-            dry_run=True, candidates=candidates, show_candidates=False,
-        )
+        try:
+            imports, stats, _ = import_scope(
+                label, float(scope['min_lat']), float(scope['max_lat']), float(scope['min_lng']), float(scope['max_lng']),
+                dry_run=True, candidates=candidates, show_candidates=False,
+            )
+        except Exception as error:
+            raise RuntimeError(f'OSM supplement scope {label} failed: {error}') from error
         for key, value in stats.items():
             totals[key] += value
         for poi in imports:
