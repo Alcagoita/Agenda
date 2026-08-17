@@ -98,8 +98,43 @@ CREATE TABLE IF NOT EXISTS osm_supplement_import (
   inserted_rows         INTEGER NOT NULL DEFAULT 0,
   matched_skipped       INTEGER NOT NULL DEFAULT 0,
   ambiguous_skipped     INTEGER NOT NULL DEFAULT 0,
-  last_error            TEXT
+  last_error            TEXT,
+  -- KAN-387. One batch lock per country (leased, so a dead holder frees it),
+  -- one country-wide Overpass backoff, and a cooperative cancel flag.
+  batch_worker_id        TEXT,
+  batch_lease_expires_at TEXT,
+  backoff_until          TEXT,
+  backoff_seconds        INTEGER NOT NULL DEFAULT 0,
+  failed_scopes          INTEGER NOT NULL DEFAULT 0,
+  cancel_requested       INTEGER NOT NULL DEFAULT 0
 );
+
+-- KAN-387: one durable checkpoint per municipality scope. Identity is
+-- (country_code, place_id), never the run id — otherwise every new run
+-- redoes the whole country. `last_completed_at` is the refresh authority.
+CREATE TABLE IF NOT EXISTS osm_supplement_scope (
+  country_code         TEXT NOT NULL,
+  place_id             TEXT NOT NULL,
+  status               TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  last_run_id          TEXT,
+  last_completed_at    TEXT,
+  consecutive_attempts INTEGER NOT NULL DEFAULT 0,
+  total_attempts       INTEGER NOT NULL DEFAULT 0,
+  lease_expires_at     TEXT,
+  work_started_at      TEXT,
+  lease_expiries       INTEGER NOT NULL DEFAULT 0,
+  worker_id            TEXT,
+  inserted             INTEGER NOT NULL DEFAULT 0,
+  matched_skipped      INTEGER NOT NULL DEFAULT 0,
+  ambiguous_skipped    INTEGER NOT NULL DEFAULT 0,
+  overpass_elements    INTEGER NOT NULL DEFAULT 0,
+  rename_report_r2_key TEXT,
+  last_error           TEXT,
+  last_error_class     TEXT,
+  PRIMARY KEY (country_code, place_id)
+);
+CREATE INDEX IF NOT EXISTS idx_osm_supplement_scope_claim
+  ON osm_supplement_scope (country_code, status, lease_expires_at);
 
 -- KAN-386: reviewed source decisions are applied at read time so a later
 -- Foursquare reload cannot reintroduce a venue that was replaced by a more

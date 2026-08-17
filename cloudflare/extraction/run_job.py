@@ -31,6 +31,13 @@ import extract
 from classify_and_load import classify
 import settlement_registry
 import supplement_osm_pois
+import enrich_osm_cuisine
+
+# KAN-387. Municipalities per container invocation, processed serially —
+# Overpass politeness, and small enough that a dead instance loses little.
+# The Worker caps this too (OSM_SCOPE_BATCH_SIZE in osmSupplement.ts); it is
+# the authority, this is the request.
+OSM_SCOPE_BATCH_SIZE = 8
 
 def map_place(place_id):
     """The sole Foursquare -> global-POI loader, used by both modes."""
@@ -233,23 +240,84 @@ def run_settlement_registry(country_code):
 
 
 def run_osm_supplement(country_code, run_id):
-    """Country-scale, retry-safe OSM supplement run.
+    """One bounded batch of municipality scopes, then exit (KAN-387).
 
-    The generated SQL is idempotent on each OSM element id, so retrying a
-    failed Container does not duplicate POIs. The Worker owns the durable
-    run state and only accepts a callback for this exact run id.
+    KAN-383 ran every municipality in one container and wrote D1 only at the
+    end; PT's 307 scopes could not finish inside a container lifetime, and
+    the run that died left no checkpoint and no error. Here the container
+    claims a few scopes, persists after each one, releases the country lock
+    and exits. The Worker's cron starts the next batch while claimable
+    scopes remain, so an instance dying costs at most one batch.
+
+    Writes stay idempotent on the OSM element id, so re-running a scope that
+    died mid-write cannot duplicate a POI.
     """
     os.environ['D1_INTERNAL'] = '1'
-    try:
-        _imports, stats, sql_path = supplement_osm_pois.import_country(country_code, dry_run=False)
-        if sql_path:
-            d1_client.execute_sql_file(sql_path)
-        worker_client.osm_supplement_complete(country_code, run_id, stats)
-        print(f"[run_job] OSM supplement {country_code} complete: {stats.get('unique_rows_to_write', 0)} rows")
-    except BaseException as error:
-        traceback.print_exc()
-        worker_client.osm_supplement_failed(country_code, run_id, f'{type(error).__name__}: {error}')
-        sys.exit(1)
+    worker_id = str(uuid.uuid4())
+    print(f'[run_job] OSM supplement {country_code} batch, worker {worker_id}')
+    claim = worker_client.osm_claim_batch(country_code, run_id, worker_id, OSM_SCOPE_BATCH_SIZE)
+    scopes = claim.get('scopes') or []
+    if not claim.get('locked'):
+        # Another batch holds the country lock, the country is backing off
+        # from a 429, or a cancel is pending. None of them is a failure, and
+        # there is no lock of ours to give back.
+        print(f'[run_job] no country lock for {country_code} — another batch owns it')
+        return
+    if not scopes:
+        # Locked but nothing to claim: the run is finished. Releasing is what
+        # finalizes it — returning here without releasing would hold the
+        # country lock until its lease expired and stall the cron.
+        released = worker_client.osm_batch_release(country_code, run_id, worker_id, 'done')
+        print(f"[run_job] no claimable scopes for {country_code}; finalized={released.get('finalized')}")
+        return
+
+    corrections = supplement_osm_pois.source_corrections()
+    outcome = 'done'
+    for index, scope in enumerate(scopes, start=1):
+        place_id = scope['placeId']
+        print(f"[run_job] scope {index}/{len(scopes)}: {place_id}")
+        try:
+            worker_client.osm_scope_start(country_code, place_id, worker_id)
+            imports, stats, renames = supplement_osm_pois.supplement_scope(
+                place_id, scope['minLat'], scope['maxLat'], scope['minLng'], scope['maxLng'], corrections,
+            )
+            # D1 first, then the checkpoint: a crash between them re-runs the
+            # scope, which the element-id upsert makes harmless. The reverse
+            # order could mark a scope done that wrote nothing.
+            if imports:
+                for statement in supplement_osm_pois.sql_for_pois(imports).split(';\n'):
+                    if statement.strip():
+                        d1_client.execute(statement.strip() + ';')
+            report_key = f'osm-rename-reports/{country_code}/{run_id}/{place_id}.json'
+            r2_client.upload_bytes(supplement_osm_pois.rename_report_json(place_id, renames), report_key)
+            worker_client.osm_scope_completed(country_code, place_id, worker_id, stats, report_key)
+            print(f"[run_job] {place_id}: {stats.get('unique_rows_to_write', 0)} rows written")
+        except enrich_osm_cuisine.OverpassRateLimited as error:
+            # Country-wide stop. Every scope this worker holds goes back
+            # unpenalised — the limit is on us, not on the municipality, and
+            # spending retry budget on it would eventually park good scopes.
+            traceback.print_exc()
+            print(f'[run_job] Overpass rate limited on {place_id} — backing off the whole country')
+            outcome = 'rate_limited'
+            break
+        except Exception as error:
+            traceback.print_exc()
+            error_class = 'd1' if isinstance(error, d1_client.D1Error) else 'overpass_failed'
+            try:
+                worker_client.osm_scope_failed(country_code, place_id, worker_id, f'{type(error).__name__}: {error}', error_class)
+            except Exception:
+                # The Worker rejects a result for a scope we no longer hold —
+                # our lease expired and someone else owns this work now.
+                # Stop the batch rather than fight over the rest of it; the
+                # lease is the authority, not this process.
+                traceback.print_exc()
+                print(f'[run_job] lost the lease on {place_id} — abandoning the batch')
+                return
+
+    released = worker_client.osm_batch_release(country_code, run_id, worker_id, outcome)
+    counts = released.get('counts') or {}
+    print(f"[run_job] batch done ({outcome}): {counts.get('completed')}/{counts.get('total')} scopes, "
+          f"finalized={released.get('finalized')}")
 
 if __name__ == '__main__':
     os.makedirs(extract.BUILD_DIR, exist_ok=True)

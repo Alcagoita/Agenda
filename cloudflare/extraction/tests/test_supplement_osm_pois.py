@@ -207,5 +207,128 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertNotIn('fsq_place_id', sql)
 
 
+class ScopedCandidateTest(unittest.TestCase):
+    """KAN-387 — a scope reads its own neighbourhood, not the whole country."""
+
+    def test_bounds_widen_by_the_matching_radius_and_scale_longitude(self):
+        min_lat, max_lat, min_lng, max_lng = supplement.candidate_bounds(38.7, 38.8, -9.2, -9.1)
+        # A Foursquare venue just outside the municipality boundary must still
+        # be able to suppress an OSM element just inside it.
+        self.assertAlmostEqual(38.7 - min_lat, supplement.MATCH_RADIUS_METERS / 111_000, places=9)
+        self.assertAlmostEqual(max_lat - 38.8, supplement.MATCH_RADIUS_METERS / 111_000, places=9)
+        # Longitude degrees are shorter this far north, so the east/west
+        # margin must be wider in degrees to cover the same metres.
+        self.assertGreater(max_lng - -9.1, max_lat - 38.8)
+        self.assertGreater(-9.2 - min_lng, 38.7 - min_lat)
+
+    def test_candidate_query_is_restricted_to_the_widened_box(self):
+        queries = []
+
+        def fake_query(sql):
+            queries.append(sql)
+            return []
+
+        original = supplement.run_d1_query
+        supplement.run_d1_query = fake_query
+        try:
+            rows = supplement.existing_candidates_in_bbox(38.7, 38.8, -9.2, -9.1, {})
+        finally:
+            supplement.run_d1_query = original
+
+        self.assertEqual(rows, [])
+        # poi, curated_poi and osm_poi — the last is what keeps overlapping
+        # municipality bboxes harmless now that each scope writes as it ends.
+        self.assertTrue(any('FROM poi ' in sql for sql in queries))
+        self.assertTrue(any('curated_poi' in sql for sql in queries))
+        self.assertTrue(any('osm_poi ' in sql for sql in queries))
+        for sql in queries:
+            self.assertIn('lat BETWEEN', sql)
+            self.assertIn('lng BETWEEN', sql)
+
+
+class OverpassRateLimitTest(unittest.TestCase):
+    """KAN-387 — 429 is a stop, and must not be retried across mirrors."""
+
+    def test_rate_limit_raises_immediately_without_trying_other_endpoints(self):
+        import io
+        import urllib.error
+        import enrich_osm_cuisine
+
+        attempts = []
+
+        def fake_urlopen(req, timeout=None):
+            attempts.append(req.full_url)
+            raise urllib.error.HTTPError(req.full_url, 429, 'Too Many Requests', {}, io.BytesIO(b''))
+
+        original = enrich_osm_cuisine.urllib.request.urlopen
+        enrich_osm_cuisine.urllib.request.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(enrich_osm_cuisine.OverpassRateLimited):
+                enrich_osm_cuisine.fetch_overpass('[out:json];node;out;')
+        finally:
+            enrich_osm_cuisine.urllib.request.urlopen = original
+        # The limit is on us, so moving to a different mirror is still abuse.
+        self.assertEqual(len(attempts), 1)
+
+    def test_transport_failure_still_falls_back_and_then_raises_plain_runtime_error(self):
+        import urllib.error
+        import enrich_osm_cuisine
+
+        attempts = []
+
+        def fake_urlopen(req, timeout=None):
+            attempts.append(req.full_url)
+            raise urllib.error.URLError('connection reset')
+
+        original_open = enrich_osm_cuisine.urllib.request.urlopen
+        original_sleep = enrich_osm_cuisine.time.sleep
+        enrich_osm_cuisine.urllib.request.urlopen = fake_urlopen
+        enrich_osm_cuisine.time.sleep = lambda _seconds: None
+        try:
+            with self.assertRaises(RuntimeError) as raised:
+                enrich_osm_cuisine.fetch_overpass('[out:json];node;out;')
+        finally:
+            enrich_osm_cuisine.urllib.request.urlopen = original_open
+            enrich_osm_cuisine.time.sleep = original_sleep
+        self.assertNotIsInstance(raised.exception, enrich_osm_cuisine.OverpassRateLimited)
+        self.assertEqual(len(attempts), 2 * len(enrich_osm_cuisine.OVERPASS_ENDPOINTS))
+
+
+class ScopeCheckpointTest(unittest.TestCase):
+    """KAN-387 — the unit the container claims, persists and checkpoints."""
+
+    def test_supplement_scope_reports_its_own_counts_and_writes_nothing(self):
+        calls = {}
+
+        def fake_fetch(query):
+            calls['query'] = query
+            return {'elements': [
+                element(5335674113, 'Santo Amaro', amenity='restaurant'),
+                element(5381704191, 'O Vilaça', lat=39.9, lng=-8.2, amenity='restaurant'),
+            ]}
+
+        original_fetch = supplement.fetch_overpass
+        original_candidates = supplement.existing_candidates_in_bbox
+        supplement.fetch_overpass = fake_fetch
+        supplement.existing_candidates_in_bbox = lambda *args, **kwargs: []
+        try:
+            imports, stats, renames = supplement.supplement_scope('osm-relation-1', 39.8, 40.0, -8.3, -8.0, {})
+        finally:
+            supplement.fetch_overpass = original_fetch
+            supplement.existing_candidates_in_bbox = original_candidates
+
+        self.assertEqual(len(imports), 2)
+        # The counts are per scope: the Worker replaces the scope row with
+        # them rather than adding them to a running total.
+        self.assertEqual(stats['overpass_elements'], 2)
+        self.assertEqual(stats['inserted'], 2)
+        self.assertEqual(renames, [])
+        self.assertIn('39.8', calls['query'])
+
+    def test_rename_report_serializes_without_touching_local_disk(self):
+        report = json.loads(supplement.rename_report_json('osm-relation-1', []))
+        self.assertEqual(report, {'label': 'osm-relation-1', 'possible_renames': []})
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -4,7 +4,12 @@
     "lib": ["ES2022"],
     "module": "ES2022",
     "moduleResolution": "Bundler",
-    "types": ["@cloudflare/workers-types"],
+    // @types/node is for the test files only — KAN-387's suites run the real
+    // conditional UPDATEs against node:sqlite loaded from the project's own
+    // schema files, because the state machine IS the SQL. The Worker source
+    // itself must keep using Workers types, which shadow the Node ones where
+    // the two disagree.
+    "types": ["@cloudflare/workers-types", "node"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,

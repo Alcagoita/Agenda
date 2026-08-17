@@ -106,18 +106,58 @@ def country_failed(country_code, run_id, stage=None, error=None):
     return _post('/internal/country-failed', body)
 
 
-def osm_supplement_complete(country_code, run_id, stats):
-    return _post('/internal/osm-supplement/complete', {
+# KAN-387. The country OSM supplement is a claim/checkpoint loop, not one
+# long run with a single completion callback. The Worker owns all durable
+# state; these are the container's only writes to it.
+
+def osm_claim_batch(country_code, run_id, worker_id, batch_size):
+    """Take the country batch lock and claim up to batch_size municipalities.
+
+    `locked: False` or an empty `scopes` both mean the same thing to the
+    caller — there is nothing to do, exit and let the cron decide when to
+    start another container.
+    """
+    return _post('/internal/osm-supplement/claim', {
         'countryCode': country_code, 'runId': run_id,
-        'sourceElements': stats.get('source_elements', 0),
-        'insertedRows': stats.get('unique_rows_to_write', stats.get('inserted', 0)),
-        'matchedSkipped': stats.get('matched_skipped', 0),
-        'ambiguousSkipped': stats.get('ambiguous_skipped', 0),
+        'workerId': worker_id, 'batchSize': batch_size,
     })
 
 
-def osm_supplement_failed(country_code, run_id, error):
-    return _post('/internal/osm-supplement/failed', {
+def osm_scope_start(country_code, place_id, worker_id):
+    """Record that this scope's work really began.
+
+    Without it an expired lease cannot tell a container that died doing the
+    work (charge an attempt) from one that never started (charge nothing).
+    """
+    return _post('/internal/osm-supplement/scope-start', {
+        'countryCode': country_code, 'placeId': place_id, 'workerId': worker_id,
+    })
+
+
+def osm_scope_completed(country_code, place_id, worker_id, stats, rename_report_r2_key=None):
+    return _post('/internal/osm-supplement/scope-result', {
+        'countryCode': country_code, 'placeId': place_id, 'workerId': worker_id,
+        'status': 'completed',
+        'inserted': stats.get('unique_rows_to_write', stats.get('inserted', 0)),
+        'matchedSkipped': stats.get('matched_skipped', 0),
+        'ambiguousSkipped': stats.get('ambiguous_skipped', 0),
+        'overpassElements': stats.get('overpass_elements', 0),
+        'renameReportR2Key': rename_report_r2_key,
+    })
+
+
+def osm_scope_failed(country_code, place_id, worker_id, error, error_class='overpass_failed'):
+    return _post('/internal/osm-supplement/scope-result', {
+        'countryCode': country_code, 'placeId': place_id, 'workerId': worker_id,
+        'status': 'failed', 'error': str(error)[:1_000], 'errorClass': error_class,
+    })
+
+
+def osm_batch_release(country_code, run_id, worker_id, outcome='done'):
+    """Drop the country lock. `outcome='rate_limited'` also sets the
+    country-wide Overpass backoff and returns every held scope free of
+    charge — a 429 is about us, not about the municipality."""
+    return _post('/internal/osm-supplement/batch-release', {
         'countryCode': country_code, 'runId': run_id,
-        'error': str(error)[:1_000],
+        'workerId': worker_id, 'outcome': outcome,
     })

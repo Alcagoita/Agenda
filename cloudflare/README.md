@@ -416,6 +416,42 @@ uses bounded municipality scopes instead of one Portugal-wide Overpass query;
 it is queued with `POST /internal/osm-supplement/queue` only after the
 country's Foursquare data and settlement registry are mapped.
 
+#### Country runs are checkpointed per municipality (KAN-387)
+
+A country run is not one long container. Queuing seeds one durable
+`osm_supplement_scope` row per bounded municipality; each container invocation
+claims a small batch (8), processes them serially, writes each municipality's
+POIs to D1 and records that scope's result before moving on, then exits. A
+five-minute cron starts the next batch while claimable scopes remain. PT's 307
+scopes cannot finish inside one container — the run that proved it sat in
+`mapping` for eight hours, wrote nothing and recorded no error.
+
+Consequences worth knowing before operating it:
+
+- **Scope identity is `(country_code, place_id)`, not the run id.** Re-queuing
+  a country resumes rather than restarting: completed scopes are re-done only
+  once `last_completed_at` is older than 30 days, which makes the same endpoint
+  the monthly refresh.
+- **Retry only the failures** with `POST /internal/osm-supplement/queue`
+  `{ countryCode, retryFailed: true }`. A scope parks as `failed` after 3
+  attempts that actually ran.
+- **A 429 stops the whole country**, with an exponential, jittered backoff, and
+  returns every held scope unpenalised — the limit is on us, not on the town.
+- **A dead container costs at most one batch.** Its scope leases expire and are
+  reclaimed; a lease that expires before any work began charges no attempt but
+  is counted, so a container that never starts parks the scope as
+  `container_never_started` rather than looping.
+- **`GET /internal/osm-supplement/status?countryCode=PT`** reports
+  completed/total, what is running, elapsed time and the failures.
+  `POST /internal/osm-supplement/cancel` stops a run cooperatively.
+- The country finalizes as `mapped` even with permanently failed scopes, with
+  `failed_scopes` recording the gap. A few unreachable municipalities do not
+  block national coverage; they stay visible and individually re-runnable.
+
+Per-scope review reports go to R2 at
+`osm-rename-reports/{country}/{run_id}/{place_id}.json` as each municipality
+finishes, so a partial run still produces reviewable audit output.
+
 Each dry-run also writes a local `build/*_possible_renames.json` review report.
 It lists candidates that would otherwise be added when a Foursquare or active
 community POI of the same type has a materially different normalized name

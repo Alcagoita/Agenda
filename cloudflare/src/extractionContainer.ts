@@ -14,10 +14,15 @@ import type { Env } from './index';
  * so this class never sets `defaultPort` and the Worker always calls
  * `.start()` (fire-and-forget), never `.fetch()`/`startAndWaitForPorts()`.
  *
- * `sleepAfter` is generous (country mode can run up to ~an hour, no latency
- * target per docs/poi-coverage-model.md) — this bounds how long an
- * unexpectedly-hung process gets before Cloudflare kills the instance, not
- * a normal-case timeout.
+ * `sleepAfter` is an IDLE timeout — it stops an instance that has stopped
+ * doing anything. It does not cap a running process and is not a batch-job
+ * timeout, so it can neither rescue nor bound a job that hangs. KAN-387's
+ * eight-hour country run sat well past this value without being stopped.
+ *
+ * What actually bounds abandoned work is the per-scope lease in
+ * osmSupplement.ts: an expired lease makes the scope claimable again, and
+ * the cron starts a fresh container for it. Left at 90m because country
+ * mode's Foursquare pass legitimately runs long and is never idle.
  */
 export class ExtractionContainer extends Container<Env> {
   sleepAfter = '90m';
