@@ -5,8 +5,8 @@ import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManual
 import { bearerToken, verifyFirebaseIdToken } from './firebaseAuth';
 import {
   OSM_SCOPE_BATCH_SIZE, claimBatch, completeScope, countriesAwaitingBatch, failScope,
-  releaseBatch, requestCancel, retryFailedScopes, scopeCounts, seedScopes, startScope,
-  supplementStatus, type OsmScopeErrorClass,
+  parkExhaustedScopes, releaseBatch, requestCancel, retryFailedScopes, scopeCounts,
+  seedScopes, startScope, supplementStatus, type OsmScopeErrorClass,
 } from './osmSupplement';
 import brandDictionary from '../../src/constants/brandDictionary.json';
 import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
@@ -1451,6 +1451,12 @@ export default {
     const now = Date.now();
     for (const country of await countriesAwaitingBatch(env, now)) {
       if (!country.active_run_id) continue;
+      // Before counting: a scope left 'running' with an expired lease and no
+      // budget left is claimable by nobody and finished by nobody, so
+      // without this the run would sit at running > 0 forever and never
+      // finalize. claimBatch parks these too, but a run in exactly this
+      // state never reaches a claim.
+      await parkExhaustedScopes(env, country.country_code, now);
       const counts = await scopeCounts(env, country.country_code, now);
       if (counts.claimable === 0) {
         // Nothing claimable and nothing in flight means the run is over —
@@ -1845,9 +1851,13 @@ export default {
       ).bind(countryCode, runId, now).run();
       let seeded = 0;
       let retried = 0;
+      // Un-parking failures is useful mid-run too — a run already mapping is
+      // the most likely moment to notice them — so it is not gated on having
+      // started a new run. The scopes simply become claimable and the next
+      // cron tick picks them up.
+      if (body.retryFailed === true) retried = await retryFailedScopes(env, countryCode);
       if (started.meta.changes === 1) {
         seeded = await seedScopes(env, countryCode);
-        if (body.retryFailed === true) retried = await retryFailedScopes(env, countryCode);
         const counts = await scopeCounts(env, countryCode, Date.now());
         if (counts.total === 0) {
           // Refuse rather than silently "map" a country with no bounded

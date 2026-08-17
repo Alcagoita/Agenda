@@ -1,7 +1,7 @@
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+import { d1Binding, schemaDb } from './d1TestDb';
 
 import {
   OSM_SCOPE_MAX_ATTEMPTS, OSM_SCOPE_MAX_LEASE_EXPIRIES, OSM_SCOPE_REFRESH_DAYS,
@@ -9,43 +9,6 @@ import {
   requestCancel, retryFailedScopes, scopeCounts, seedScopes, startScope, supplementStatus,
 } from '../osmSupplement';
 import type { Env } from '../index';
-
-/**
- * KAN-387's state machine lives entirely in conditional UPDATEs whose
- * `meta.changes` is the atomicity primitive, so a string-matching fake would
- * assert nothing about the behaviour that matters (does a second claimant
- * really lose the race? does SQLite's SET-clause really see pre-update
- * values?). These run the real statements against real SQLite, loading the
- * project's own schema files so a schema change that breaks them fails here.
- */
-function testDb() {
-  const db = new DatabaseSync(':memory:');
-  const root = join(__dirname, '..', '..');
-  for (const file of ['country_schema.sql', 'place_schema.sql', 'schema.sql']) {
-    db.exec(readFileSync(join(root, file), 'utf8'));
-  }
-  return db;
-}
-
-function d1(db: DatabaseSync): Env['REGISTRY_DB'] {
-  const prepare = (sql: string) => {
-    const statement = (args: unknown[]) => ({
-      bind: (...next: unknown[]) => statement(next),
-      async run() {
-        const result = db.prepare(sql).run(...(args as never[]));
-        return { meta: { changes: Number(result.changes) } };
-      },
-      async first<T>() {
-        return (db.prepare(sql).get(...(args as never[])) ?? null) as T | null;
-      },
-      async all<T>() {
-        return { results: db.prepare(sql).all(...(args as never[])) as T[] };
-      },
-    });
-    return statement([]);
-  };
-  return { prepare } as unknown as Env['REGISTRY_DB'];
-}
 
 const COUNTRY = 'PT';
 const RUN = 'run-1';
@@ -78,8 +41,8 @@ function claim(workerId: string, now = NOW, batchSize = 8) {
 }
 
 beforeEach(() => {
-  db = testDb();
-  env = { REGISTRY_DB: d1(db) } as unknown as Env;
+  db = schemaDb();
+  env = { REGISTRY_DB: d1Binding(db) } as unknown as Env;
 });
 
 describe('KAN-387 scope seeding', () => {
@@ -94,12 +57,11 @@ describe('KAN-387 scope seeding', () => {
 
     expect(await seedScopes(env, COUNTRY)).toBe(3);
 
+    await claim('worker-a', NOW, 1);
     await completeScope(env, {
-      countryCode: COUNTRY, placeId: 'osm-relation-100', workerId: 'w', now: NOW,
+      countryCode: COUNTRY, placeId: 'osm-relation-100', workerId: 'worker-a', now: NOW,
       inserted: 5, matchedSkipped: 1, ambiguousSkipped: 0, overpassElements: 9, renameReportR2Key: null,
     });
-    db.prepare("UPDATE osm_supplement_scope SET status = 'completed', last_completed_at = ? WHERE place_id = 'osm-relation-100'")
-      .run(new Date(NOW).toISOString());
 
     // Re-queuing must not redo the country: the completed scope keeps its
     // timestamp, which is the whole point of keying on (country, place).
@@ -277,6 +239,24 @@ describe('KAN-387 rate limiting', () => {
       expect(row.consecutive_attempts).toBe(0);
       expect(row.lease_expiries).toBe(0);
     }
+  });
+
+  it('does not drop a lock it no longer holds', async () => {
+    seedCountry(2);
+    await seedScopes(env, COUNTRY);
+    await claim('worker-a', NOW, 1);
+
+    // worker-a's own lease lapsed and worker-b took the country. A late 429
+    // report from worker-a must set the backoff without freeing worker-b's
+    // lock — doing so would put a second container on an Overpass that just
+    // rate-limited us.
+    const later = NOW + 60 * 60_000;
+    await claim('worker-b', later, 1);
+    await releaseBatch(env, { countryCode: COUNTRY, runId: RUN, workerId: 'worker-a', outcome: 'rate_limited', now: later });
+
+    const run = db.prepare('SELECT * FROM osm_supplement_import').get() as Record<string, unknown>;
+    expect(run.batch_worker_id).toBe('worker-b');
+    expect(run.backoff_until).not.toBe(null);
   });
 
   it('escalates the delay per consecutive 429 and clears it after a clean batch', async () => {

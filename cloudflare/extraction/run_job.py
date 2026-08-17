@@ -284,12 +284,18 @@ def run_osm_supplement(country_code, run_id):
             # D1 first, then the checkpoint: a crash between them re-runs the
             # scope, which the element-id upsert makes harmless. The reverse
             # order could mark a scope done that wrote nothing.
-            if imports:
-                for statement in supplement_osm_pois.sql_for_pois(imports).split(';\n'):
-                    if statement.strip():
-                        d1_client.execute(statement.strip() + ';')
+            for statement in supplement_osm_pois.statements_for_pois(imports):
+                d1_client.execute(statement)
             report_key = f'osm-rename-reports/{country_code}/{run_id}/{place_id}.json'
-            r2_client.upload_bytes(supplement_osm_pois.rename_report_json(place_id, renames), report_key)
+            try:
+                r2_client.upload_bytes(supplement_osm_pois.rename_report_json(place_id, renames), report_key)
+            except Exception:
+                # The report is a review artifact, not the deliverable. Its
+                # POIs are already in D1, so failing the scope here would
+                # spend a retry attempt re-doing work that is done.
+                traceback.print_exc()
+                print(f'[run_job] rename report upload failed for {place_id} — keeping the scope complete')
+                report_key = None
             worker_client.osm_scope_completed(country_code, place_id, worker_id, stats, report_key)
             print(f"[run_job] {place_id}: {stats.get('unique_rows_to_write', 0)} rows written")
         except enrich_osm_cuisine.OverpassRateLimited as error:
@@ -306,12 +312,19 @@ def run_osm_supplement(country_code, run_id):
             try:
                 worker_client.osm_scope_failed(country_code, place_id, worker_id, f'{type(error).__name__}: {error}', error_class)
             except Exception:
-                # The Worker rejects a result for a scope we no longer hold —
-                # our lease expired and someone else owns this work now.
-                # Stop the batch rather than fight over the rest of it; the
-                # lease is the authority, not this process.
+                # Either our lease is gone (the Worker rejects a result for a
+                # scope we no longer hold) or the callback itself could not be
+                # delivered. Both mean stop — the lease is the authority, not
+                # this process. Still offer the lock back: if we do hold it,
+                # returning without releasing would stall the cron for the
+                # rest of the lease. Best-effort, and never allowed to mask
+                # the failure that got us here.
                 traceback.print_exc()
-                print(f'[run_job] lost the lease on {place_id} — abandoning the batch')
+                try:
+                    worker_client.osm_batch_release(country_code, run_id, worker_id, 'done')
+                except Exception:
+                    traceback.print_exc()
+                print(f'[run_job] could not record {place_id} — abandoning the batch')
                 return
 
     released = worker_client.osm_batch_release(country_code, run_id, worker_id, outcome)

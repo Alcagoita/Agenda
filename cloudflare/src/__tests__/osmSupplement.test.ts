@@ -1,7 +1,7 @@
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { d1Binding, schemaDb } from './d1TestDb';
 
 const { mockStart } = vi.hoisted(() => ({ mockStart: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('@cloudflare/containers', () => ({
@@ -19,11 +19,7 @@ import worker, { type Env } from '../index';
  * the guards actually hold.
  */
 function testDb(countryStatus = 'mapped', registryStatus = 'mapped', municipalities = 3) {
-  const db = new DatabaseSync(':memory:');
-  const root = join(__dirname, '..', '..');
-  for (const file of ['country_schema.sql', 'place_schema.sql', 'schema.sql']) {
-    db.exec(readFileSync(join(root, file), 'utf8'));
-  }
+  const db = schemaDb();
   db.exec(`CREATE TABLE IF NOT EXISTS settlement_registry_import (
     country_code TEXT PRIMARY KEY, status TEXT NOT NULL, started_at TEXT, completed_at TEXT, last_error TEXT)`);
   db.prepare('INSERT INTO country (country_code, name, status) VALUES (?, ?, ?)').run('PT', 'Portugal', countryStatus);
@@ -38,24 +34,9 @@ function testDb(countryStatus = 'mapped', registryStatus = 'mapped', municipalit
 }
 
 function envFor(db: DatabaseSync): Env {
-  const prepare = (sql: string) => {
-    const statement = (args: unknown[]) => ({
-      bind: (...next: unknown[]) => statement(next),
-      async run() {
-        return { meta: { changes: Number(db.prepare(sql).run(...(args as never[])).changes) } };
-      },
-      async first<T>() {
-        return (db.prepare(sql).get(...(args as never[])) ?? null) as T | null;
-      },
-      async all<T>() {
-        return { results: db.prepare(sql).all(...(args as never[])) as T[] };
-      },
-    });
-    return statement([]);
-  };
   return {
     BUILD_TRIGGER_SECRET: 'secret',
-    REGISTRY_DB: { prepare } as unknown as Env['REGISTRY_DB'],
+    REGISTRY_DB: d1Binding(db),
     EXTRACTION_CONTAINER: {},
   } as unknown as Env;
 }
@@ -218,7 +199,47 @@ describe('KAN-387 OSM supplement batch routes', () => {
   });
 });
 
+describe('KAN-387 retrying failures', () => {
+  it('un-parks failed scopes even while a run is already mapping', async () => {
+    const db = testDb();
+    const env = envFor(db);
+    await worker.fetch(post('/internal/osm-supplement/queue', { countryCode: 'PT' }), env, CTX);
+    db.prepare("UPDATE osm_supplement_scope SET status = 'failed', consecutive_attempts = 3").run();
+
+    // The most likely moment to notice failures is mid-run, so the retry
+    // must not be silently ignored just because no new run was started.
+    const response = await worker.fetch(
+      post('/internal/osm-supplement/queue', { countryCode: 'PT', retryFailed: true }), env, CTX);
+    expect(await response.json()).toEqual(expect.objectContaining({ started: false, retried: 3 }));
+    const pending = db.prepare("SELECT COUNT(*) AS n FROM osm_supplement_scope WHERE status = 'pending'")
+      .get() as { n: number };
+    expect(pending.n).toBe(3);
+  });
+});
+
 describe('KAN-387 cron driver', () => {
+  it('finalizes a run whose last scopes are stuck running with no budget left', async () => {
+    const db = testDb();
+    const env = envFor(db);
+    await worker.fetch(post('/internal/osm-supplement/queue', { countryCode: 'PT' }), env, CTX);
+    mockStart.mockClear();
+    // Claimable by nobody (no attempts left) and finished by nobody: without
+    // the cron parking these, the run sits at running > 0 forever.
+    db.prepare(
+      `UPDATE osm_supplement_scope
+       SET status = 'running', lease_expires_at = ?, consecutive_attempts = 3, work_started_at = ?`,
+    ).run(new Date(Date.now() - 60 * 60_000).toISOString(), new Date(Date.now() - 90 * 60_000).toISOString());
+    db.prepare('UPDATE osm_supplement_import SET batch_lease_expires_at = NULL').run();
+
+    await worker.scheduled({} as ScheduledController, env, CTX);
+
+    expect(mockStart).not.toHaveBeenCalled();
+    const run = db.prepare('SELECT status, failed_scopes FROM osm_supplement_import').get() as Record<string, unknown>;
+    expect(run.status).toBe('mapped');
+    expect(run.failed_scopes).toBe(3);
+  });
+
+
   it('starts the next batch only while claimable scopes remain', async () => {
     const db = testDb();
     const env = envFor(db);

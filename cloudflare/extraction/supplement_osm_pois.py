@@ -566,8 +566,13 @@ def chunks(items: list, size: int = SQL_BATCH_SIZE):
         yield items[start:start + size]
 
 
-def sql_for_pois(pois: list[OsmPoi]) -> str:
-    """Generate bounded idempotent D1 writes for a reviewed dry-run output."""
+def statements_for_pois(pois: list[OsmPoi]) -> list[str]:
+    """Bounded idempotent D1 writes, one complete statement per item.
+
+    The container executes these directly (KAN-387). Returning the list is
+    what lets it do so without splitting a joined blob back apart on a
+    separator that also has to be legal inside the SQL it delimits.
+    """
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     statements: list[str] = []
     for group in chunks(pois):
@@ -602,6 +607,12 @@ ON CONFLICT(osm_element_id) DO UPDATE SET
                 '(' + ','.join((sql_quote(element_id), sql_quote(dimension), sql_quote(value))) + ')'
                 for element_id, dimension, value in attributes
             ) + ';')
+    return statements
+
+
+def sql_for_pois(pois: list[OsmPoi]) -> str:
+    """The same writes as one reviewable .sql file for an operator dry-run."""
+    statements = statements_for_pois(pois)
     return '\n'.join(statements) + ('\n' if statements else '')
 
 

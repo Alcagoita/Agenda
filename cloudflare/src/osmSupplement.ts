@@ -161,7 +161,7 @@ export async function scopeCounts(env: Env, countryCode: string, now: number): P
  * their attempts while running. Without this they stay 'running' forever:
  * the claim predicate excludes them, so nothing else would ever move them.
  */
-async function parkExhaustedScopes(env: Env, countryCode: string, now: number): Promise<void> {
+export async function parkExhaustedScopes(env: Env, countryCode: string, now: number): Promise<void> {
   await env.REGISTRY_DB.prepare(
     `UPDATE osm_supplement_scope
      SET status = 'failed', lease_expires_at = NULL, worker_id = NULL, work_started_at = NULL,
@@ -370,11 +370,17 @@ export async function releaseBatch(
     // lockstep and reproduce the burst that caused the 429.
     const seconds = Math.round(base * (0.75 + Math.random() * 0.5));
     backoffUntil = iso(now + seconds * 1000);
+    // The backoff itself is country-wide, but the lock is only ours to drop
+    // if we still hold it: our lease may have lapsed and another batch taken
+    // it, and clearing that would put a second container on an Overpass that
+    // just rate-limited us. Same guard as the 'done' branch.
     await env.REGISTRY_DB.prepare(
       `UPDATE osm_supplement_import
-       SET backoff_until = ?, backoff_seconds = ?, batch_worker_id = NULL, batch_lease_expires_at = NULL
+       SET backoff_until = ?, backoff_seconds = ?,
+           batch_worker_id = CASE WHEN batch_worker_id = ? THEN NULL ELSE batch_worker_id END,
+           batch_lease_expires_at = CASE WHEN batch_worker_id = ? THEN NULL ELSE batch_lease_expires_at END
        WHERE country_code = ? AND active_run_id = ?`,
-    ).bind(backoffUntil, base, countryCode, runId).run();
+    ).bind(backoffUntil, base, workerId, workerId, countryCode, runId).run();
   } else {
     // A clean batch clears the backoff ladder — the next 429, if any, starts
     // from the base delay rather than inheriting an hour-long penalty.
