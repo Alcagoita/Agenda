@@ -21,7 +21,7 @@ import os
 import re
 import subprocess
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from typing import Iterable
 
@@ -41,6 +41,16 @@ CLOUDFLARE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_DIR = os.path.join(CLOUDFLARE_DIR, 'build')
 GRID_LAT_DEG = MATCH_RADIUS_METERS / 111_000
 SQL_BATCH_SIZE = 250
+
+# Venue categories and grammatical particles do not identify a business.
+# This deliberately small, evidence-led list supports trustworthy normalized
+# identities such as "Café Ala Sul" / "Ala Sul Café". It is not a Portuguese
+# venue taxonomy: expand it only from reviewed dry-run evidence.
+NON_IDENTITY_NAME_TOKENS = frozenset({
+    'a', 'as', 'bar', 'cafe', 'cafeteria', 'da', 'das', 'de', 'do', 'dos',
+    'e', 'hamburgueria', 'loja', 'o', 'os', 'pastelaria', 'pizzeria', 'pub',
+    'restaurant', 'restaurante', 'shop', 'store',
+})
 
 # The public app's OSM tag policy, made explicit for server import.  ``shop``
 # needs special treatment: most concrete shop values are useful generic stores,
@@ -164,6 +174,17 @@ def run_d1_query(sql: str) -> list[dict]:
     return json.loads(result.stdout)[0]['results']
 
 
+def normalized_identity_terms_match(left: str, right: str) -> bool:
+    """Match reordered multi-term business identities, never a shared word."""
+    if left == right:
+        return False
+    left_core = Counter(token for token in left.split() if token not in NON_IDENTITY_NAME_TOKENS)
+    right_core = Counter(token for token in right.split() if token not in NON_IDENTITY_NAME_TOKENS)
+    # A one-term identity is too weak: Café Rosa and Alberto Rosa & Filhos can
+    # be separate venues. Counter equality also preserves repeated terms.
+    return sum(left_core.values()) >= 2 and left_core == right_core
+
+
 def name_similarity(left: str, right: str) -> float:
     if not left or not right:
         return 0.0
@@ -172,6 +193,8 @@ def name_similarity(left: str, right: str) -> float:
     shorter, longer = sorted((left, right), key=len)
     if (len(shorter) >= MIN_CONTAINED_NAME_LENGTH and
             (longer.startswith(shorter + ' ') or longer.endswith(' ' + shorter))):
+        return 0.9
+    if normalized_identity_terms_match(left, right):
         return 0.9
     return difflib.SequenceMatcher(None, left, right).ratio()
 
@@ -435,6 +458,8 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
             stats['ambiguous_skipped'] += 1
         elif match is not None:
             stats['matched_skipped'] += 1
+            if normalized_identity_terms_match(poi.dedupe_name, match.dedupe_name):
+                stats['normalized_identity_matched_skipped'] += 1
         else:
             imports.append(poi)
             stats['inserted'] += 1
