@@ -1,0 +1,11 @@
+{
+  // The test files import the Worker source but also run on Node — they read
+  // the project's schema files off disk and drive real SQLite. They therefore
+  // need both type sets, which the Worker config deliberately refuses.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": []
+}

@@ -358,43 +358,71 @@ def apply_osm_correction(poi: OsmPoi, correction: SourceCorrection | None) -> Os
     )
 
 
-def existing_candidates(corrections: dict[tuple[str, str], SourceCorrection] | None = None) -> list[Candidate]:
-    """Load current identities once per import, not once per OSM element.
+def candidate_bounds(min_lat: float, max_lat: float, min_lng: float, max_lng: float) -> tuple[float, float, float, float]:
+    """Widen a scope bbox by the matching radius.
 
-    The country's source table is too large for one Container→Worker response;
-    these pages bound both D1 response size and container memory spikes.
+    A Foursquare venue just outside the municipality boundary must still be
+    able to suppress an OSM element just inside it, or every boundary would
+    quietly import duplicates.  Longitude degrees shrink with latitude, so
+    the east/west margin is scaled by cos(lat) — the same correction
+    ``grid_for`` applies.
+    """
+    lat_margin = MATCH_RADIUS_METERS / 111_000
+    mid_lat = (min_lat + max_lat) / 2
+    lng_margin = lat_margin / max(math.cos(math.radians(mid_lat)), 0.01)
+    return min_lat - lat_margin, max_lat + lat_margin, min_lng - lng_margin, max_lng + lng_margin
+
+
+def existing_candidates_in_bbox(
+    min_lat: float, max_lat: float, min_lng: float, max_lng: float,
+    corrections: dict[tuple[str, str], SourceCorrection] | None = None,
+) -> list[Candidate]:
+    """Identities near one scope, instead of the whole country (KAN-387).
+
+    The loader this replaced read every POI in the country before the first
+    municipality was touched — hundreds of thousands of rows through the
+    Worker binding, held in container memory for the entire run.  A scope
+    can only ever match something within ``MATCH_RADIUS_METERS``, so reading
+    that neighbourhood is both far cheaper and exactly as correct.
+
+    Already-imported ``osm_poi`` rows are included, which is what keeps
+    overlapping municipality bboxes harmless now that each scope writes to
+    D1 as it finishes: the overlap is re-read from D1 rather than carried
+    between scopes in memory.
     """
     corrections = corrections if corrections is not None else source_corrections()
+    lo_lat, hi_lat, lo_lng, hi_lng = candidate_bounds(min_lat, max_lat, min_lng, max_lng)
+    box = f'lat BETWEEN {lo_lat} AND {hi_lat} AND lng BETWEEN {lo_lng} AND {hi_lng}'
     rows: list[Candidate] = []
     for row in paged_query(lambda after: '''
         WITH page AS (
           SELECT fsq_place_id, name, dedupe_name, lat, lng
-          FROM poi WHERE fsq_place_id > %s ORDER BY fsq_place_id LIMIT 5000
+          FROM poi WHERE %s AND fsq_place_id > %s ORDER BY fsq_place_id LIMIT 5000
         )
         SELECT page.fsq_place_id AS source_id, page.name, page.dedupe_name, page.lat, page.lng, poi_type.poi_type
         FROM page LEFT JOIN poi_type ON poi_type.fsq_place_id = page.fsq_place_id
         ORDER BY page.fsq_place_id
-    ''' % sql_quote(after)):
+    ''' % (box, sql_quote(after))):
         correction = corrections.get(('foursquare', row['source_id']))
         if row['poi_type'] is not None and (correction is None or correction.visible):
             rows.append(Candidate('foursquare', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
     for row in paged_query(lambda after: """
         SELECT poi_id AS source_id, name, dedupe_name, lat, lng, primary_poi_type AS poi_type
-        FROM curated_poi WHERE status = 'active' AND poi_id > %s
+        FROM curated_poi WHERE status = 'active' AND %s AND poi_id > %s
         ORDER BY poi_id
         LIMIT 5000
-    """ % sql_quote(after)):
+    """ % (box, sql_quote(after))):
         rows.append(Candidate('community', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
     try:
         osm_rows = list(paged_query(lambda after: '''
             WITH page AS (
               SELECT osm_element_id, name, dedupe_name, lat, lng
-              FROM osm_poi WHERE osm_element_id > %s ORDER BY osm_element_id LIMIT 5000
+              FROM osm_poi WHERE %s AND osm_element_id > %s ORDER BY osm_element_id LIMIT 5000
             )
             SELECT page.osm_element_id AS source_id, page.name, page.dedupe_name, page.lat, page.lng, osm_poi_type.poi_type
             FROM page LEFT JOIN osm_poi_type ON osm_poi_type.osm_element_id = page.osm_element_id
             ORDER BY page.osm_element_id
-        ''' % sql_quote(after)))
+        ''' % (box, sql_quote(after))))
     except Exception as error:
         # A dry-run is intentionally useful *before* the migration is applied.
         # Do not hide any other D1 failure: only the expected absent new table
@@ -513,13 +541,23 @@ def possible_renames(imports: Iterable[OsmPoi], candidates: Iterable[Candidate])
     return sorted(rows, key=lambda row: (severity_rank[row.severity], row.distance_meters, row.osm_element_id, row.source_id))
 
 
+def rename_report_json(label: str, rows: Iterable[PossibleRename]) -> str:
+    """Serialize one scope's review report.
+
+    Separate from writing it so the container can put a per-scope report in
+    R2 as each municipality finishes (KAN-387) instead of accumulating a
+    country-sized report in memory or on container-local disk that dies with
+    the instance.
+    """
+    return json.dumps({'label': label, 'possible_renames': [row.as_dict() for row in rows]}, indent=2) + '\n'
+
+
 def write_possible_rename_report(label: str, rows: Iterable[PossibleRename]) -> str:
-    """Write a local, reviewable report; never writes D1."""
+    """Write a local, reviewable report for an operator dry-run; never writes D1."""
     os.makedirs(BUILD_DIR, exist_ok=True)
     path = os.path.join(BUILD_DIR, f'osm_supplement_{label}_{datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")}_possible_renames.json')
     with open(path, 'w') as output:
-        json.dump({'label': label, 'possible_renames': [row.as_dict() for row in rows]}, output, indent=2)
-        output.write('\n')
+        output.write(rename_report_json(label, rows))
     return path
 
 
@@ -528,8 +566,13 @@ def chunks(items: list, size: int = SQL_BATCH_SIZE):
         yield items[start:start + size]
 
 
-def sql_for_pois(pois: list[OsmPoi]) -> str:
-    """Generate bounded idempotent D1 writes for a reviewed dry-run output."""
+def statements_for_pois(pois: list[OsmPoi]) -> list[str]:
+    """Bounded idempotent D1 writes, one complete statement per item.
+
+    The container executes these directly (KAN-387). Returning the list is
+    what lets it do so without splitting a joined blob back apart on a
+    separator that also has to be legal inside the SQL it delimits.
+    """
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     statements: list[str] = []
     for group in chunks(pois):
@@ -564,6 +607,12 @@ ON CONFLICT(osm_element_id) DO UPDATE SET
                 '(' + ','.join((sql_quote(element_id), sql_quote(dimension), sql_quote(value))) + ')'
                 for element_id, dimension, value in attributes
             ) + ';')
+    return statements
+
+
+def sql_for_pois(pois: list[OsmPoi]) -> str:
+    """The same writes as one reviewable .sql file for an operator dry-run."""
+    statements = statements_for_pois(pois)
     return '\n'.join(statements) + ('\n' if statements else '')
 
 
@@ -571,7 +620,7 @@ def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max
     print(f'[{label}] querying OSM within bbox=({min_lat},{min_lng})-({max_lat},{max_lng})')
     elements = fetch_overpass(osm_query(min_lat, max_lat, min_lng, max_lng)).get('elements', [])
     corrections = corrections if corrections is not None else source_corrections()
-    scope_candidates = candidates if candidates is not None else existing_candidates(corrections)
+    scope_candidates = candidates if candidates is not None else existing_candidates_in_bbox(min_lat, max_lat, min_lng, max_lng, corrections)
     imports, stats = classify_scope(elements, scope_candidates, (min_lat + max_lat) / 2, corrections)
     # Existing OSM ids are source refreshes, not new additions. The report is
     # specifically for OSM candidates that could otherwise be newly imported.
@@ -616,14 +665,47 @@ def import_place(place_id: str, *, dry_run: bool = False) -> tuple[list[OsmPoi],
     return import_scope(place_id, min_lat, max_lat, min_lng, max_lng, dry_run=dry_run)
 
 
+def supplement_scope(
+    place_id: str, min_lat: float, max_lat: float, min_lng: float, max_lng: float,
+    corrections: dict[tuple[str, str], SourceCorrection] | None = None,
+) -> tuple[list[OsmPoi], dict[str, int], list[PossibleRename]]:
+    """One municipality, start to finish, writing nothing (KAN-387).
+
+    This is the unit the container claims, persists and checkpoints. It
+    deliberately holds no state between scopes: candidates come from the
+    scope's own neighbourhood in D1, so the previous scope's imports are
+    visible because they were already written, not because they were kept
+    in memory.
+    """
+    corrections = corrections if corrections is not None else source_corrections()
+    elements = fetch_overpass(osm_query(min_lat, max_lat, min_lng, max_lng)).get('elements', [])
+    candidates = existing_candidates_in_bbox(min_lat, max_lat, min_lng, max_lng, corrections)
+    imports, stats = classify_scope(elements, candidates, (min_lat + max_lat) / 2, corrections)
+    existing_osm_ids = {candidate.source_id for candidate in candidates if candidate.source == 'openstreetmap'}
+    renames = possible_renames(
+        (poi for poi in imports if poi.osm_element_id not in existing_osm_ids),
+        candidates,
+    )
+    stats['overpass_elements'] = len(elements)
+    stats['possible_rename_same_location'] = sum(row.severity == 'same_location' for row in renames)
+    stats['possible_rename_nearby'] = sum(row.severity == 'nearby' for row in renames)
+    print(f'[{place_id}] OSM audit: ' + ', '.join(f'{key}={value}' for key, value in sorted(stats.items())))
+    return imports, stats, renames
+
+
 def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[OsmPoi], dict[str, int], str | None]:
-    """Supplement a country through municipality bboxes, never one giant query.
+    """Audit a whole country locally, one municipality bbox at a time.
 
     Municipality rows are the settlement-registry layer that covers the whole
     country.  Their individual bboxes keep every Overpass request bounded;
     stable OSM ids make their edge overlap harmless.  A country without those
     registry rows is intentionally refused rather than silently importing a
     partial arbitrary set of towns.
+
+    KAN-387: this is now the *operator dry-run* path only. Production runs go
+    through the container's claim/checkpoint loop in run_job.py, because a
+    single serial pass over 307 municipalities cannot finish inside one
+    container and leaves nothing behind when it dies.
     """
     code = country_code.upper()
     scopes = run_d1_query('''
@@ -636,7 +718,6 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
     if not scopes:
         raise ValueError(f"country '{code}' has no bounded municipality registry; import settlement metadata first")
     corrections = source_corrections()
-    candidates = existing_candidates(corrections)
     imports_by_id: dict[str, OsmPoi] = {}
     renames_by_key: dict[tuple[str, str, str, str], PossibleRename] = {}
     totals: dict[str, int] = defaultdict(int)
@@ -644,18 +725,19 @@ def import_country(country_code: str, *, dry_run: bool = False) -> tuple[list[Os
         label = scope['place_id']
         print(f'[{code}] scope {index}/{len(scopes)}: {label}')
         try:
-            imports, stats, _, renames = import_scope(
-                label, float(scope['min_lat']), float(scope['max_lat']), float(scope['min_lng']), float(scope['max_lng']),
-                dry_run=True, candidates=candidates, corrections=corrections, show_candidates=False, write_rename_report=False,
+            imports, stats, renames = supplement_scope(
+                label, float(scope['min_lat']), float(scope['max_lat']),
+                float(scope['min_lng']), float(scope['max_lng']), corrections,
             )
         except Exception as error:
             raise RuntimeError(f'OSM supplement scope {label} failed: {error}') from error
         for key, value in stats.items():
             totals[key] += value
+        # Deduplicating on the element id is what keeps overlapping bboxes
+        # honest in a dry-run, where nothing has been written to D1 yet and
+        # the next scope's candidate query therefore cannot see these.
         for poi in imports:
             imports_by_id[poi.osm_element_id] = poi
-            for poi_type in poi.poi_types:
-                candidates.append(Candidate('openstreetmap', poi.osm_element_id, poi.name, poi.dedupe_name, poi.lat, poi.lng, poi_type))
         for row in renames:
             renames_by_key[(row.osm_element_id, row.source, row.source_id, row.poi_type)] = row
     imports = [imports_by_id[element_id] for element_id in sorted(imports_by_id)]

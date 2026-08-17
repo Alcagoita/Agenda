@@ -35,6 +35,14 @@
       "simple": { "limit": 5, "period": 60 }
     }
   ],
+  // KAN-387. Drives the OSM supplement's batches: each container invocation
+  // does 5-10 municipalities and exits, so the cron is what starts the next
+  // one and what reclaims scopes whose container died. Five minutes is well
+  // inside the 20m scope lease, so a tick never races a live batch — the
+  // country batch lock is the actual guard, this is just its cadence.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "d1_databases": [
     {
       "binding": "REGISTRY_DB",

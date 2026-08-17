@@ -3,6 +3,11 @@ import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
 import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManualPoiInput, isManualPoiInput, type ManualPoiAttribute } from './manualPoi';
 import { bearerToken, verifyFirebaseIdToken } from './firebaseAuth';
+import {
+  OSM_SCOPE_BATCH_SIZE, claimBatch, completeScope, countriesAwaitingBatch, failScope,
+  parkExhaustedScopes, releaseBatch, requestCancel, retryFailedScopes, scopeCounts,
+  seedScopes, startScope, supplementStatus, type OsmScopeErrorClass,
+} from './osmSupplement';
 import brandDictionary from '../../src/constants/brandDictionary.json';
 import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
 
@@ -1325,6 +1330,15 @@ function respondCoverageRequest(place: PlaceRow | null): Response {
  * job, never resumed, so there's no reason to route repeat calls for the
  * same Place/country to the same instance.
  */
+/**
+ * KAN-387. Only the container reports these, but an unrecognised value must
+ * not become a stored error class — the class decides operator action, so an
+ * unknown one degrades to the ordinary retryable failure.
+ */
+const OSM_SCOPE_ERROR_CLASSES = new Set<OsmScopeErrorClass>([
+  'overpass_failed', 'rate_limited', 'container_never_started', 'data', 'd1',
+]) as Set<string>;
+
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
@@ -1423,6 +1437,42 @@ async function startPlaceMapping(env: Env, ctx: ExecutionContext | undefined, pl
 }
 
 export default {
+  /**
+   * KAN-387. The OSM supplement's driver. Each container invocation does a
+   * bounded batch and exits, so something outside it has to start the next
+   * one — and a cron is the piece that also makes the job self-healing: a
+   * container that dies takes at most one batch with it, and the expired
+   * leases are simply reclaimed on the next tick.
+   *
+   * Deliberately not a loop inside the container. A long-lived process is
+   * exactly what produced the eight-hour run with no checkpoint.
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const now = Date.now();
+    for (const country of await countriesAwaitingBatch(env, now)) {
+      if (!country.active_run_id) continue;
+      // Before counting: a scope left 'running' with an expired lease and no
+      // budget left is claimable by nobody and finished by nobody, so
+      // without this the run would sit at running > 0 forever and never
+      // finalize. claimBatch parks these too, but a run in exactly this
+      // state never reaches a claim.
+      await parkExhaustedScopes(env, country.country_code, now);
+      const counts = await scopeCounts(env, country.country_code, now);
+      if (counts.claimable === 0) {
+        // Nothing claimable and nothing in flight means the run is over —
+        // the last batch may have exited before it could finalize.
+        if (counts.running === 0) {
+          await releaseBatch(env, {
+            countryCode: country.country_code, runId: country.active_run_id,
+            workerId: 'cron', outcome: 'done', now,
+          });
+        }
+        continue;
+      }
+      triggerBuild(env, ctx, 'osm-country', country.country_code, undefined, country.active_run_id);
+    }
+  },
+
   async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const manualAdminPath = manualPoiAdminPathname(url.pathname);
@@ -1763,10 +1813,17 @@ export default {
     // intentionally separate from a Foursquare country rebuild: OSM is slow
     // and retryable, and the country's existing nearby data remains live
     // while this work runs.
+    //
+    // KAN-387 — queuing now seeds one durable scope row per municipality and
+    // starts only the FIRST batch. The cron below starts the rest. Re-queuing
+    // a country is cheap and safe: completed scopes keep their timestamps and
+    // are re-done only once stale, so this is also the monthly refresh entry
+    // point. `retryFailed: true` additionally un-parks permanently failed
+    // scopes — the explicit "retry only the failures" act.
     if (url.pathname === '/internal/osm-supplement/queue' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      const body = await request.json<{ countryCode?: unknown; retryFailed?: unknown }>().catch(() => null);
       if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
         return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
       }
@@ -1787,51 +1844,158 @@ export default {
          ON CONFLICT(country_code) DO UPDATE SET
            status = 'mapping', active_run_id = excluded.active_run_id, started_at = excluded.started_at,
            completed_at = NULL, source_elements = 0, inserted_rows = 0, matched_skipped = 0,
-           ambiguous_skipped = 0, last_error = NULL
+           ambiguous_skipped = 0, failed_scopes = 0, last_error = NULL,
+           batch_worker_id = NULL, batch_lease_expires_at = NULL,
+           backoff_until = NULL, backoff_seconds = 0, cancel_requested = 0
          WHERE osm_supplement_import.status IN ('none', 'failed', 'mapped')`,
       ).bind(countryCode, runId, now).run();
-      if (started.meta.changes === 1) triggerBuild(env, ctx, 'osm-country', countryCode, undefined, runId);
+      let seeded = 0;
+      let retried = 0;
+      // Un-parking failures is useful mid-run too — a run already mapping is
+      // the most likely moment to notice them — so it is not gated on having
+      // started a new run. The scopes simply become claimable and the next
+      // cron tick picks them up.
+      if (body.retryFailed === true) retried = await retryFailedScopes(env, countryCode);
+      if (started.meta.changes === 1) {
+        seeded = await seedScopes(env, countryCode);
+        const counts = await scopeCounts(env, countryCode, Date.now());
+        if (counts.total === 0) {
+          // Refuse rather than silently "map" a country with no bounded
+          // municipalities — the same refusal import_country made, moved to
+          // where it can still be reported to the caller.
+          await env.REGISTRY_DB.prepare(
+            `UPDATE osm_supplement_import SET status = 'failed', completed_at = ?, last_error = ?
+             WHERE country_code = ? AND active_run_id = ?`,
+          ).bind(now, 'no bounded municipality registry; import settlement metadata first', countryCode, runId).run();
+          return json({ error: `country '${countryCode}' has no bounded municipality scopes` }, 409);
+        }
+        triggerBuild(env, ctx, 'osm-country', countryCode, undefined, runId);
+      }
       const state = await env.REGISTRY_DB.prepare('SELECT status, active_run_id FROM osm_supplement_import WHERE country_code = ?')
         .bind(countryCode).first<{ status: string; active_run_id: string | null }>();
-      return json({ ok: true, status: state?.status ?? 'none', started: started.meta.changes === 1 });
+      return json({ ok: true, status: state?.status ?? 'none', started: started.meta.changes === 1, seeded, retried });
     }
 
-    if (url.pathname === '/internal/osm-supplement/complete' && request.method === 'POST') {
+    // The container's batch loop. Each call takes the country lock and hands
+    // back up to `batchSize` municipality bboxes; an empty `scopes` (or
+    // locked:false) means "nothing to do, exit" — the cron decides when to
+    // start the next container.
+    if (url.pathname === '/internal/osm-supplement/claim' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
       const body = await request.json<Record<string, unknown>>().catch(() => null);
-      const integerFields = ['sourceElements', 'insertedRows', 'matchedSkipped', 'ambiguousSkipped'] as const;
       if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
           typeof body.runId !== 'string' || !body.runId ||
-          integerFields.some(field => typeof body[field] !== 'number' || !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
-        return json({ error: 'invalid OSM supplement completion payload' }, 400);
+          typeof body.workerId !== 'string' || !body.workerId) {
+        return json({ error: 'invalid OSM supplement claim payload' }, 400);
       }
-      const result = await env.REGISTRY_DB.prepare(
-        `UPDATE osm_supplement_import
-         SET status = 'mapped', completed_at = ?, source_elements = ?, inserted_rows = ?,
-             matched_skipped = ?, ambiguous_skipped = ?, last_error = NULL
-         WHERE country_code = ? AND active_run_id = ? AND status = 'mapping'`,
-      ).bind(new Date().toISOString(), body.sourceElements, body.insertedRows, body.matchedSkipped, body.ambiguousSkipped,
-        body.countryCode.toUpperCase(), body.runId).run();
-      if (result.meta.changes !== 1) return json({ error: 'stale or unknown OSM supplement run' }, 409);
+      const batchSize = Number.isSafeInteger(body.batchSize) ? body.batchSize as number : OSM_SCOPE_BATCH_SIZE;
+      const claim = await claimBatch(env, {
+        countryCode: body.countryCode.toUpperCase(), runId: body.runId,
+        workerId: body.workerId, batchSize, now: Date.now(),
+      });
+      return json({ ok: true, ...claim });
+    }
+
+    // Proof that Overpass work really began for this scope. Without it an
+    // expired lease cannot tell "the container died mid-scope" (charge an
+    // attempt) from "the container never started" (charge nothing).
+    if (url.pathname === '/internal/osm-supplement/scope-start' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.placeId !== 'string' || !body.placeId ||
+          typeof body.workerId !== 'string' || !body.workerId) {
+        return json({ error: 'invalid OSM supplement scope-start payload' }, 400);
+      }
+      const ok = await startScope(env, {
+        countryCode: body.countryCode.toUpperCase(), placeId: body.placeId,
+        workerId: body.workerId, now: Date.now(),
+      });
+      if (!ok) return json({ error: 'scope is not leased by this worker' }, 409);
       return json({ ok: true });
     }
 
-    if (url.pathname === '/internal/osm-supplement/failed' && request.method === 'POST') {
+    // One municipality's durable result. The POI rows are already in D1 by
+    // the time this lands — this only records the checkpoint.
+    if (url.pathname === '/internal/osm-supplement/scope-result' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
       const body = await request.json<Record<string, unknown>>().catch(() => null);
       if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
-          typeof body.runId !== 'string' || !body.runId) {
-        return json({ error: 'invalid OSM supplement failure payload' }, 400);
+          typeof body.placeId !== 'string' || !body.placeId ||
+          typeof body.workerId !== 'string' || !body.workerId ||
+          (body.status !== 'completed' && body.status !== 'failed')) {
+        return json({ error: 'invalid OSM supplement scope-result payload' }, 400);
       }
-      const result = await env.REGISTRY_DB.prepare(
-        `UPDATE osm_supplement_import
-         SET status = 'failed', completed_at = ?, last_error = ?
-         WHERE country_code = ? AND active_run_id = ? AND status = 'mapping'`,
-      ).bind(new Date().toISOString(), typeof body.error === 'string' ? body.error.slice(0, 1_000) : 'unknown',
-        body.countryCode.toUpperCase(), body.runId).run();
-      if (result.meta.changes !== 1) return json({ error: 'stale or unknown OSM supplement run' }, 409);
+      const countryCode = body.countryCode.toUpperCase();
+      let ok: boolean;
+      if (body.status === 'completed') {
+        const counts = ['inserted', 'matchedSkipped', 'ambiguousSkipped', 'overpassElements'] as const;
+        if (counts.some(field => typeof body[field] !== 'number' || !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
+          return json({ error: 'scope counts must be non-negative integers' }, 400);
+        }
+        ok = await completeScope(env, {
+          countryCode, placeId: body.placeId, workerId: body.workerId, now: Date.now(),
+          inserted: body.inserted as number, matchedSkipped: body.matchedSkipped as number,
+          ambiguousSkipped: body.ambiguousSkipped as number, overpassElements: body.overpassElements as number,
+          renameReportR2Key: typeof body.renameReportR2Key === 'string' ? body.renameReportR2Key : null,
+        });
+      } else {
+        ok = await failScope(env, {
+          countryCode, placeId: body.placeId, workerId: body.workerId,
+          error: typeof body.error === 'string' ? body.error : 'unknown',
+          errorClass: OSM_SCOPE_ERROR_CLASSES.has(body.errorClass as string)
+            ? body.errorClass as OsmScopeErrorClass : 'overpass_failed',
+        });
+      }
+      if (!ok) return json({ error: 'scope is not leased by this worker' }, 409);
+      return json({ ok: true });
+    }
+
+    // End of a batch: drop the country lock and, if nothing claimable
+    // remains, finalize the run. `outcome: 'rate_limited'` instead sets the
+    // country-wide Overpass backoff and hands every held scope back free of
+    // charge — a 429 says nothing about the municipality.
+    if (url.pathname === '/internal/osm-supplement/batch-release' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.runId !== 'string' || !body.runId ||
+          typeof body.workerId !== 'string' || !body.workerId ||
+          (body.outcome !== 'done' && body.outcome !== 'rate_limited')) {
+        return json({ error: 'invalid OSM supplement batch-release payload' }, 400);
+      }
+      const released = await releaseBatch(env, {
+        countryCode: body.countryCode.toUpperCase(), runId: body.runId,
+        workerId: body.workerId, outcome: body.outcome, now: Date.now(),
+      });
+      return json({ ok: true, ...released });
+    }
+
+    if (url.pathname === '/internal/osm-supplement/status' && request.method === 'GET') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const countryCode = (url.searchParams.get('countryCode') ?? '').toUpperCase();
+      if (!/^[A-Z]{2}$/.test(countryCode)) {
+        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      }
+      const status = await supplementStatus(env, countryCode, Date.now());
+      if (!status) return json({ error: `no OSM supplement run for '${countryCode}'` }, 404);
+      return json(status);
+    }
+
+    if (url.pathname === '/internal/osm-supplement/cancel' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
+        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      }
+      const cancelled = await requestCancel(env, body.countryCode.toUpperCase(), Date.now());
+      if (!cancelled) return json({ error: 'no run is mapping for that country' }, 409);
       return json({ ok: true });
     }
 

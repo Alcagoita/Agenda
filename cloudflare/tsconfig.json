@@ -4,11 +4,16 @@
     "lib": ["ES2022"],
     "module": "ES2022",
     "moduleResolution": "Bundler",
+    // Worker source only. Node's types must NOT be visible here: where the
+    // two disagree (setTimeout's return, Buffer, process), Node's would type
+    // -check code that the Workers runtime cannot run. The tests get their
+    // own config — see tsconfig.test.json.
     "types": ["@cloudflare/workers-types"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/__tests__/**"]
 }

@@ -94,9 +94,23 @@ def run_d1_query(sql):
     return json.loads(result.stdout)[0]['results']
 
 
+class OverpassRateLimited(RuntimeError):
+    """Overpass said 429 — the client is over its budget, not the query wrong.
+
+    KAN-387 separates this from ordinary transport failure. Retrying harder
+    is exactly the wrong response (CLAUDE.md: treat 429 as *stop*), and at
+    country scale it must stop the whole batch rather than have 307
+    municipalities each discover the block for themselves.
+    """
+
+
 def fetch_overpass(query):
     """Same endpoint-fallback + explicit UA convention as osmPlaces.ts's
-    fetchOverpass — tries each endpoint in turn, returns the first success."""
+    fetchOverpass — tries each endpoint in turn, returns the first success.
+
+    Raises OverpassRateLimited on 429 without touching the other endpoints:
+    the limit is on us, so moving to a different mirror is still abuse.
+    """
     last_error = None
     for endpoint in OVERPASS_ENDPOINTS:
         for attempt in range(2):  # one retry per endpoint — ~40-60% single-attempt failure rate per KAN-322
@@ -109,7 +123,12 @@ def fetch_overpass(query):
                 )
                 with urllib.request.urlopen(req, timeout=OVERPASS_TIMEOUT_S) as resp:
                     return json.loads(resp.read())
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as e:
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    raise OverpassRateLimited(f'Overpass rate limited at {endpoint}') from e
+                last_error = e
+                time.sleep(2)
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
                 last_error = e
                 time.sleep(2)
     raise RuntimeError(f"all Overpass endpoints failed: {last_error}")
