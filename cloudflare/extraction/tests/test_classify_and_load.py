@@ -475,5 +475,59 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                 classify_and_load.BUILD_DIR = previous_build_dir
 
 
+class TypesFromNameTest(unittest.TestCase):
+    """KAN-391 — recover types the venue's own name states."""
+
+    def test_adds_a_type_the_name_states_but_nobody_tagged(self):
+        # 682 PT rows looked exactly like this: a real pastelaria filed as a
+        # generic store, invisible to a "buy bread" task tagged bakery.
+        self.assertEqual(
+            classify_and_load.types_from_name('Belo Horizonte - Padaria Pastelaria', ['store']),
+            ['bakery'],
+        )
+
+    def test_returns_nothing_when_the_type_is_already_present(self):
+        self.assertEqual(classify_and_load.types_from_name('Padaria Central', ['bakery']), [])
+
+    def test_a_compound_name_yields_every_applicable_type(self):
+        # Stopping at the first match would silently drop one of the two.
+        self.assertEqual(
+            sorted(classify_and_load.types_from_name('Talho e mercearia "Ti Leonor"', ['store'])),
+            ['supermarket'],
+        )
+        self.assertEqual(
+            sorted(classify_and_load.types_from_name('Restaurante e Pastelaria do Cais', [])),
+            ['bakery', 'restaurant'],
+        )
+
+    def test_snack_bar_is_a_cafe_and_never_a_bar(self):
+        # A Portuguese snack-bar is a daytime eatery. Mapping it to `bar`
+        # would surface it for "grab a beer tonight", which is wrong.
+        for name in ('Snack-Bar Martinik', 'Snack Bar O Túnel', 'Dutchy Snackbar'):
+            with self.subTest(name=name):
+                inferred = classify_and_load.types_from_name(name, [])
+                self.assertIn('cafe', inferred)
+                self.assertNotIn('bar', inferred)
+
+    def test_respects_word_boundaries(self):
+        self.assertEqual(classify_and_load.types_from_name('Empadaria do Porto', []), [])
+        self.assertEqual(classify_and_load.types_from_name('Tascalicious', []), [])
+
+    def test_matches_plurals_and_accented_forms(self):
+        self.assertEqual(classify_and_load.types_from_name('Guânson Cabeleireiros', ['store']), ['salon'])
+        self.assertEqual(classify_and_load.types_from_name('Ginásio Central', []), ['gym'])
+        self.assertEqual(classify_and_load.types_from_name('Farmácias Reunidas', []), ['pharmacy'])
+
+    def test_ambiguous_terms_are_deliberately_absent(self):
+        # Usually a seafood restaurant, sometimes a drinking bar — left out
+        # rather than guessed. See NAME_TYPE_KEYWORDS' comment.
+        self.assertEqual(classify_and_load.types_from_name('Cervejaria Ramiro', []), [])
+
+    def test_an_empty_or_unmatched_name_adds_nothing(self):
+        self.assertEqual(classify_and_load.types_from_name('', ['store']), [])
+        self.assertEqual(classify_and_load.types_from_name(None, ['store']), [])
+        self.assertEqual(classify_and_load.types_from_name('Casa do Benfica', ['store']), [])
+
+
 if __name__ == '__main__':
     unittest.main()

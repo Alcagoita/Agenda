@@ -26,7 +26,7 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from classify_and_load import encode_geohash, find_brand, load_brand_dictionary, normalize_text
+from classify_and_load import encode_geohash, find_brand, load_brand_dictionary, normalize_text, types_from_name
 from enrich_osm_cuisine import (
     MATCH_RADIUS_METERS,
     MIN_CONTAINED_NAME_LENGTH,
@@ -252,6 +252,11 @@ def osm_poi_from_element(element: dict, brand_dictionary: dict) -> OsmPoi | None
     poi_types = types_for(tags)
     if not poi_types:
         return None
+    # KAN-391. Appended after the tag-derived types, never before: the first
+    # entry becomes primary_poi_type, and what the mapper tagged outranks
+    # what the name merely says. Guarded by the check above, so a name alone
+    # still cannot conjure a POI out of an untyped element.
+    poi_types.extend(types_from_name(name, poi_types))
     dedupe_name = normalize_text(name)
     if not dedupe_name:
         return None

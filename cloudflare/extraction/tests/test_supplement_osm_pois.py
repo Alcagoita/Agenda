@@ -207,6 +207,36 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertNotIn('fsq_place_id', sql)
 
 
+class NameInferredTypeTest(unittest.TestCase):
+    """KAN-391 — the OSM classifier picks up types stated only in the name."""
+
+    def test_a_pastelaria_tagged_as_a_shop_also_becomes_a_bakery(self):
+        poi = supplement.osm_poi_from_element(
+            element(11, 'Padaria Pastelaria Belo Horizonte', shop='convenience'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertIn('bakery', poi.poi_types)
+        # The tag decides what the place primarily is; the name only adds.
+        self.assertEqual(poi.primary_poi_type, 'store')
+
+    def test_snack_bar_tagged_as_a_cafe_gains_nothing_and_never_a_bar(self):
+        poi = supplement.osm_poi_from_element(element(12, 'Snack-Bar Martinik', amenity='cafe'), {})
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.poi_types, ('cafe',))
+
+    def test_a_name_alone_cannot_conjure_a_poi_from_an_untyped_element(self):
+        # `shop=yes` is excluded as an empty unit. A promising name must not
+        # be enough to import something nobody classified.
+        self.assertIsNone(supplement.osm_poi_from_element(element(13, 'Papelaria Universal', shop='yes'), {}))
+
+    def test_inferred_types_are_deduplicated_and_ordered_after_the_tagged_one(self):
+        poi = supplement.osm_poi_from_element(
+            element(14, 'Restaurante e Churrasqueira do Cais', amenity='cafe'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.poi_types, ('cafe', 'restaurant'))
+
+
 class ScopedCandidateTest(unittest.TestCase):
     """KAN-387 — a scope reads its own neighbourhood, not the whole country."""
 

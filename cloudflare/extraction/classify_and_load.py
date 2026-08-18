@@ -35,6 +35,66 @@ def normalize_text(s):
     s = re.sub(r'[^a-z0-9\s]', ' ', s)
     return re.sub(r'\s+', ' ', s).strip()
 
+# KAN-391. What a venue calls itself is type information neither source
+# reliably tags. 2,808 of the 75,490 OSM POIs imported for PT (3.7%) were
+# missing a type their own name states — roughly 840 real bakeries sitting
+# as generic `store`, which a "buy bread" task tagged `bakery` walks past.
+#
+# Deliberately conservative: only terms whose meaning is unambiguous in
+# pt-PT. Two decided exclusions worth not relitigating:
+#   - `snack bar` is a cafe here, NOT a bar. A Portuguese snack-bar is a
+#     daytime eatery; mapping it to `bar` would surface it for "grab a beer
+#     tonight", which is wrong.
+#   - `cervejaria` is omitted entirely. Usually a seafood restaurant,
+#     sometimes a drinking bar — genuinely ambiguous, so it stays out.
+NAME_TYPE_KEYWORDS = {
+    'pastelaria': 'bakery', 'padaria': 'bakery', 'confeitaria': 'bakery',
+    'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
+    'cabeleireiro': 'salon', 'barbearia': 'salon',
+    'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',
+    'restaurante': 'restaurant', 'churrasqueira': 'restaurant', 'marisqueira': 'restaurant',
+    'pizzaria': 'restaurant', 'hamburgueria': 'restaurant', 'tasca': 'restaurant',
+    'farmacia': 'pharmacy',
+    'ginasio': 'gym',
+    'florista': 'florist', 'floricultura': 'florist',
+    'talho': 'store', 'papelaria': 'store', 'livraria': 'store', 'drogaria': 'store',
+}
+
+# Portuguese venue names pluralize freely ("Cabeleireiros Sofia"), so each
+# term matches an optional trailing s. Word boundaries keep `padaria` from
+# firing inside `empadaria`.
+_NAME_TYPE_PATTERNS = tuple(
+    (re.compile(rf'\b{re.escape(term)}s?\b'), poi_type)
+    for term, poi_type in NAME_TYPE_KEYWORDS.items()
+)
+
+
+def types_from_name(name, existing=()):
+    """Types the venue's own name states that nobody tagged.
+
+    Additive only, and never the sole basis for a POI: a row with no
+    tag-derived type at all is still skipped by both classifiers. This
+    recovers detail from names, it does not invent places.
+
+    Every matching term counts, not just the first — `Talho e mercearia
+    "Ti Leonor"` is a butcher AND a grocer, and stopping at the first hit
+    would silently drop one of them.
+    """
+    if not name:
+        return []
+    normalized = normalize_text(name)
+    if not normalized:
+        return []
+    have = set(existing)
+    found = []
+    for pattern, poi_type in _NAME_TYPE_PATTERNS:
+        if poi_type in have or poi_type in found:
+            continue
+        if pattern.search(normalized):
+            found.append(poi_type)
+    return found
+
+
 def load_brand_dictionary():
     # One canonical app/import/API catalogue. Every item has a persisted
     # `name` and source/title aliases that must resolve to that same value.
@@ -475,6 +535,12 @@ def classify(place_id, csv_path, out_sql_path):
             if not matched_types:
                 skipped_no_type += 1
                 continue
+
+            # KAN-391. Only for rows Foursquare's own categories already
+            # classified — same restraint as the keyword subtype fallback
+            # above. A name is evidence about a known place, never grounds
+            # for inventing one.
+            matched_types.update(types_from_name(row['name'], matched_types))
 
             ranked_types = sorted(matched_types, key=lambda t: type_priority.get(t, len(type_priority)))
             primary_poi_type = ranked_types[0]
