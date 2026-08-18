@@ -57,8 +57,12 @@ NAME_TYPE_KEYWORDS = {
     'farmacia': 'pharmacy',
     'ginasio': 'gym',
     'florista': 'florist', 'floricultura': 'florist',
-    'talho': 'store', 'papelaria': 'store', 'livraria': 'store', 'drogaria': 'store',
+    'papelaria': 'store', 'livraria': 'store', 'drogaria': 'store',
 }
+# Deliberately absent: `talho` and `peixaria`. A butcher and a fishmonger are
+# their own kind of errand, not a subtype of "shop" — they are getting proper
+# POI types of their own, so mapping them to `store` here would only have to
+# be reversed. See the butcher/fishmonger ticket.
 
 # Portuguese venue names pluralize freely ("Cabeleireiros Sofia"), so each
 # term matches an optional trailing s. Word boundaries keep `padaria` from
@@ -93,6 +97,29 @@ def types_from_name(name, existing=()):
         if pattern.search(normalized):
             found.append(poi_type)
     return found
+
+
+def replaces_generic_store(tag_types, inferred, has_store_kind):
+    """Should the name's verdict replace a generic `store`, not join it?
+
+    `store` is the catch-all both sources fall back to — OSM for any
+    unmapped `shop=*`, Foursquare for a bare Retail category. When it is the
+    ONLY thing the tags said and the name names something specific, the tag
+    was a shrug and the name is the actual answer: "Guanabara - Pizzaria
+    Padaria Pastelaria" is a lot of things, but a store is not one of them.
+
+    Both guards matter. If the tags produced any other type, they knew
+    something and are not overridden. If a store_kind was matched, the
+    source positively identified a kind of shop, which outranks a name —
+    and dropping `store` would orphan that attribute anyway, since
+    store_kind only exists on a record typed `store`.
+    """
+    return (
+        set(tag_types) == {'store'}
+        and bool(inferred)
+        and 'store' not in inferred
+        and not has_store_kind
+    )
 
 
 def load_brand_dictionary():
@@ -540,7 +567,11 @@ def classify(place_id, csv_path, out_sql_path):
             # classified — same restraint as the keyword subtype fallback
             # above. A name is evidence about a known place, never grounds
             # for inventing one.
-            matched_types.update(types_from_name(row['name'], matched_types))
+            inferred_types = types_from_name(row['name'], matched_types)
+            if replaces_generic_store(matched_types, inferred_types, bool(store_kinds)):
+                matched_types = set(inferred_types)
+            else:
+                matched_types.update(inferred_types)
 
             ranked_types = sorted(matched_types, key=lambda t: type_priority.get(t, len(type_priority)))
             primary_poi_type = ranked_types[0]

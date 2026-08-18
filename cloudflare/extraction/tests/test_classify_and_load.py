@@ -495,6 +495,11 @@ class TypesFromNameTest(unittest.TestCase):
             sorted(classify_and_load.types_from_name('Talho e mercearia "Ti Leonor"', ['store'])),
             ['supermarket'],
         )
+        # `talho` and `peixaria` are intentionally unmapped — a butcher and a
+        # fishmonger are their own errand, not a flavour of "shop", and are
+        # getting real POI types rather than being folded into `store`.
+        self.assertEqual(classify_and_load.types_from_name('Talho Silva', []), [])
+        self.assertEqual(classify_and_load.types_from_name('Peixaria Central', []), [])
         self.assertEqual(
             sorted(classify_and_load.types_from_name('Restaurante e Pastelaria do Cais', [])),
             ['bakery', 'restaurant'],
