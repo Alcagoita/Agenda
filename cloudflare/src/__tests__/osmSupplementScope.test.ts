@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { d1Binding, schemaDb } from './d1TestDb';
 
 import {
-  OSM_SCOPE_MAX_ATTEMPTS, OSM_SCOPE_MAX_LEASE_EXPIRIES, OSM_SCOPE_REFRESH_DAYS,
-  claimBatch, completeScope, countriesAwaitingBatch, failScope, releaseBatch,
-  requestCancel, retryFailedScopes, scopeCounts, seedScopes, startScope, supplementStatus,
+  OSM_BACKOFF_BASE_S, OSM_BACKOFF_MAX_S, OSM_SCOPE_MAX_ATTEMPTS,
+  OSM_SCOPE_MAX_LEASE_EXPIRIES, OSM_SCOPE_REFRESH_DAYS,
+  claimBatch, completeScope, countriesAwaitingBatch, failScope, nextBackoffSeconds,
+  releaseBatch, requestCancel, retryFailedScopes, scopeCounts, seedScopes, startScope,
+  supplementStatus,
 } from '../osmSupplement';
 import type { Env } from '../index';
 
@@ -259,25 +261,58 @@ describe('KAN-387 rate limiting', () => {
     expect(run.backoff_until).not.toBe(null);
   });
 
-  it('escalates the delay per consecutive 429 and clears it after a clean batch', async () => {
+  it('escalates only while batches achieve nothing, and clears after a clean one', async () => {
     seedCountry(2);
     await seedScopes(env, COUNTRY);
     const seconds = () => (db.prepare('SELECT backoff_seconds AS s FROM osm_supplement_import').get() as { s: number }).s;
 
     await claim('worker-a', NOW, 1);
-    await releaseBatch(env, { countryCode: COUNTRY, runId: RUN, workerId: 'worker-a', outcome: 'rate_limited', now: NOW });
+    await releaseBatch(env, {
+      countryCode: COUNTRY, runId: RUN, workerId: 'worker-a', outcome: 'rate_limited', completedScopes: 0, now: NOW,
+    });
     const first = seconds();
     expect(first).toBeGreaterThan(0);
 
+    // Still blocked: nothing finished, so back further off.
     const later = NOW + 2 * 60 * 60_000;
     await claim('worker-b', later, 1);
-    await releaseBatch(env, { countryCode: COUNTRY, runId: RUN, workerId: 'worker-b', outcome: 'rate_limited', now: later });
+    await releaseBatch(env, {
+      countryCode: COUNTRY, runId: RUN, workerId: 'worker-b', outcome: 'rate_limited', completedScopes: 0, now: later,
+    });
     expect(seconds()).toBe(first * 2);
 
     const evenLater = later + 4 * 60 * 60_000;
     await claim('worker-c', evenLater, 1);
     await releaseBatch(env, { countryCode: COUNTRY, runId: RUN, workerId: 'worker-c', outcome: 'done', now: evenLater });
     expect(seconds()).toBe(0);
+  });
+
+  it('recovers the delay when a throttled batch still finished municipalities', async () => {
+    seedCountry(2);
+    await seedScopes(env, COUNTRY);
+    const seconds = () => (db.prepare('SELECT backoff_seconds AS s FROM osm_supplement_import').get() as { s: number }).s;
+
+    // Drive the ladder to the ceiling the way the first PT run did.
+    db.prepare('UPDATE osm_supplement_import SET backoff_seconds = ?').run(OSM_BACKOFF_MAX_S);
+
+    await claim('worker-a', NOW, 1);
+    await releaseBatch(env, {
+      countryCode: COUNTRY, runId: RUN, workerId: 'worker-a', outcome: 'rate_limited', completedScopes: 7, now: NOW,
+    });
+    // Throttled but still working is not the same as blocked: the delay must
+    // come back down, or a job that is succeeding starves at the cap.
+    expect(seconds()).toBe(OSM_BACKOFF_MAX_S / 2);
+  });
+
+  it('never recovers below the base delay, however much progress is made', () => {
+    // Pure function: the decay must not walk the delay down to nothing and
+    // turn a 429 into no backoff at all.
+    let delay = OSM_BACKOFF_MAX_S;
+    for (let i = 0; i < 20; i += 1) delay = nextBackoffSeconds(delay, 8);
+    expect(delay).toBe(OSM_BACKOFF_BASE_S);
+
+    expect(nextBackoffSeconds(0, 8)).toBe(OSM_BACKOFF_BASE_S);
+    expect(nextBackoffSeconds(OSM_BACKOFF_MAX_S, 0)).toBe(OSM_BACKOFF_MAX_S);
   });
 });
 

@@ -342,18 +342,39 @@ async function releaseHeldScopes(env: Env, countryCode: string, workerId: string
 }
 
 /**
+ * The country-wide Overpass delay after a throttled batch (KAN-389).
+ *
+ * The signal that matters is whether we are *making progress*, not whether
+ * a 429 happened at all. A batch that finished seven municipalities and was
+ * throttled on the eighth is being rate-limited while still working; one
+ * throttled on its first request is blocked. The first PT run escalated
+ * identically for both, so the delay ratcheted to the hour cap and stayed
+ * there, starving a job that was otherwise succeeding.
+ *
+ * Never gets more aggressive than the base delay: this decides how fast we
+ * recover, never whether we respect the 429.
+ */
+export function nextBackoffSeconds(previous: number, completedScopes: number): number {
+  if (previous <= 0) return OSM_BACKOFF_BASE_S;
+  if (completedScopes > 0) return Math.max(Math.round(previous / 2), OSM_BACKOFF_BASE_S);
+  return Math.min(previous * 2, OSM_BACKOFF_MAX_S);
+}
+
+/**
  * Close out a batch: drop the country lock, and either finalize the run (no
  * claimable work and nothing still running) or leave it for the next cron.
  *
  * `outcome: 'rate_limited'` additionally sets a country-wide backoff with
- * exponential delay and jitter — CLAUDE.md's rule is that 429 means stop,
- * and 307 municipalities each retrying independently is the opposite.
+ * jitter — CLAUDE.md's rule is that 429 means stop, and 307 municipalities
+ * each retrying independently is the opposite.
  */
 export async function releaseBatch(
   env: Env,
   options: {
     countryCode: string; runId: string; workerId: string; now: number;
     outcome: 'done' | 'rate_limited';
+    /** Scopes this batch finished before it was throttled. */
+    completedScopes?: number;
   },
 ): Promise<{ finalized: boolean; backoffUntil: string | null; counts: ScopeCounts }> {
   const { countryCode, runId, workerId, now } = options;
@@ -365,7 +386,7 @@ export async function releaseBatch(
       'SELECT backoff_seconds FROM osm_supplement_import WHERE country_code = ?',
     ).bind(countryCode).first<{ backoff_seconds: number }>();
     const previous = current?.backoff_seconds ?? 0;
-    const base = Math.min(previous > 0 ? previous * 2 : OSM_BACKOFF_BASE_S, OSM_BACKOFF_MAX_S);
+    const base = nextBackoffSeconds(previous, options.completedScopes ?? 0);
     // Jitter so several countries backing off together do not resume in
     // lockstep and reproduce the burst that caused the 429.
     const seconds = Math.round(base * (0.75 + Math.random() * 0.5));
