@@ -435,8 +435,12 @@ Consequences worth knowing before operating it:
 - **Retry only the failures** with `POST /internal/osm-supplement/queue`
   `{ countryCode, retryFailed: true }`. A scope parks as `failed` after 3
   attempts that actually ran.
-- **A 429 stops the whole country**, with an exponential, jittered backoff, and
-  returns every held scope unpenalised — the limit is on us, not on the town.
+- **A 429 stops the whole country**, with a jittered backoff, and returns every
+  held scope unpenalised — the limit is on us, not on the town. The delay
+  escalates only when a batch finished *nothing*; a batch throttled after
+  completing municipalities halves it instead, floored at the base delay
+  (KAN-389 — the first PT run ratcheted to the one-hour cap and stayed there,
+  starving a job that was otherwise succeeding). A clean batch resets it.
 - **A dead container costs at most one batch.** Its scope leases expire and are
   reclaimed; a lease that expires before any work began charges no attempt but
   is counted, so a container that never starts parks the scope as

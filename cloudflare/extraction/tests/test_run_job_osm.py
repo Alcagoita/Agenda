@@ -60,8 +60,8 @@ class FakeWorkerClient:
     def osm_scope_failed(self, country_code, place_id, worker_id, error, error_class='overpass_failed'):
         self.failed.append((place_id, error_class))
 
-    def osm_batch_release(self, country_code, run_id, worker_id, outcome='done'):
-        self.released.append(outcome)
+    def osm_batch_release(self, country_code, run_id, worker_id, outcome='done', completed_scopes=0):
+        self.released.append((outcome, completed_scopes))
         return {'finalized': False, 'counts': {'completed': len(self.completed), 'total': 3}}
 
 
@@ -140,7 +140,7 @@ class RunOsmSupplementTest(unittest.TestCase):
         self.assertTrue(all(sql.endswith(';') for sql in self.d1.statements))
         self.assertEqual(sum(sql.startswith('INSERT INTO osm_poi\n') for sql in self.d1.statements), 2)
         self.assertEqual(sum(sql.startswith('INSERT INTO osm_poi_type') for sql in self.d1.statements), 2)
-        self.assertEqual(worker.released, ['done'])
+        self.assertEqual(worker.released, [('done', 2)])
 
     def test_a_failed_scope_does_not_stop_the_rest_of_the_batch(self):
         worker = FakeWorkerClient([scope('osm-relation-100'), scope('osm-relation-101')])
@@ -156,7 +156,7 @@ class RunOsmSupplementTest(unittest.TestCase):
 
         self.assertEqual(worker.failed, [('osm-relation-100', 'overpass_failed')])
         self.assertEqual([row[0] for row in worker.completed], ['osm-relation-101'])
-        self.assertEqual(worker.released, ['done'])
+        self.assertEqual(worker.released, [('done', 1)])
 
     def test_a_429_stops_the_country_and_charges_nothing(self):
         worker = FakeWorkerClient([scope('osm-relation-100'), scope('osm-relation-101')])
@@ -171,9 +171,28 @@ class RunOsmSupplementTest(unittest.TestCase):
         # No per-scope failure is recorded: the limit is on us, and spending
         # the municipality's retry budget on it would eventually park it.
         self.assertEqual(worker.failed, [])
-        self.assertEqual(worker.released, ['rate_limited'])
+        # Nothing finished before the 429, so the country backs further off.
+        self.assertEqual(worker.released, [('rate_limited', 0)])
         # The second scope is never attempted — a 429 is a country-wide stop.
         self.assertEqual(worker.started, ['osm-relation-100'])
+
+    def test_a_429_after_real_work_reports_what_the_batch_achieved(self):
+        worker = FakeWorkerClient([scope('osm-relation-100'), scope('osm-relation-101'), scope('osm-relation-102')])
+        run_job.worker_client = worker
+
+        def behaviour(place_id, *_args, **_kwargs):
+            if place_id == 'osm-relation-100':
+                return [], {'unique_rows_to_write': 0, 'overpass_elements': 4}, []
+            raise OverpassRateLimited('rate limited')
+
+        self.use_scope(behaviour)
+        run_job.run_osm_supplement('PT', 'run-1')
+
+        # Being throttled while still finishing municipalities is not being
+        # blocked. Reporting the count is what lets the Worker recover the
+        # delay instead of ratcheting it to the cap (KAN-389).
+        self.assertEqual(worker.released, [('rate_limited', 1)])
+        self.assertEqual([row[0] for row in worker.completed], ['osm-relation-100'])
 
     def test_a_d1_write_failure_is_reported_as_its_own_error_class(self):
         worker = FakeWorkerClient([scope('osm-relation-100')])
@@ -211,7 +230,7 @@ class RunOsmSupplementTest(unittest.TestCase):
         self.assertEqual(worker.started, ['osm-relation-100'])
         self.assertEqual(worker.completed, [])
         # Still offer the lock back — we may well still hold it.
-        self.assertEqual(worker.released, ['done'])
+        self.assertEqual(worker.released, [('done', 0)])
 
     def test_a_failed_review_report_upload_still_completes_the_scope(self):
         worker = FakeWorkerClient([scope('osm-relation-100')])
@@ -236,7 +255,7 @@ class RunOsmSupplementTest(unittest.TestCase):
         run_job.run_osm_supplement('PT', 'run-1')
         # Returning without releasing would hold the lock until its lease
         # expired and stall the cron for the whole of that window.
-        self.assertEqual(worker.released, ['done'])
+        self.assertEqual(worker.released, [('done', 0)])
 
     def test_does_nothing_when_another_batch_owns_the_country(self):
         worker = FakeWorkerClient([], locked=False)

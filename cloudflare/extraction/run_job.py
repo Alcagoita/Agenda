@@ -273,6 +273,11 @@ def run_osm_supplement(country_code, run_id):
 
     corrections = supplement_osm_pois.source_corrections()
     outcome = 'done'
+    # What this batch actually achieved. The country-wide backoff escalates
+    # on this rather than on the bare fact of a 429 (KAN-389) — being
+    # throttled while still finishing municipalities is not the same as
+    # being blocked outright.
+    completed_scopes = 0
     for index, scope in enumerate(scopes, start=1):
         place_id = scope['placeId']
         print(f"[run_job] scope {index}/{len(scopes)}: {place_id}")
@@ -297,6 +302,7 @@ def run_osm_supplement(country_code, run_id):
                 print(f'[run_job] rename report upload failed for {place_id} — keeping the scope complete')
                 report_key = None
             worker_client.osm_scope_completed(country_code, place_id, worker_id, stats, report_key)
+            completed_scopes += 1
             print(f"[run_job] {place_id}: {stats.get('unique_rows_to_write', 0)} rows written")
         except enrich_osm_cuisine.OverpassRateLimited as error:
             # Country-wide stop. Every scope this worker holds goes back
@@ -327,10 +333,10 @@ def run_osm_supplement(country_code, run_id):
                 print(f'[run_job] could not record {place_id} — abandoning the batch')
                 return
 
-    released = worker_client.osm_batch_release(country_code, run_id, worker_id, outcome)
+    released = worker_client.osm_batch_release(country_code, run_id, worker_id, outcome, completed_scopes)
     counts = released.get('counts') or {}
-    print(f"[run_job] batch done ({outcome}): {counts.get('completed')}/{counts.get('total')} scopes, "
-          f"finalized={released.get('finalized')}")
+    print(f"[run_job] batch {outcome}: {completed_scopes} of {len(scopes)} scopes this batch, "
+          f"{counts.get('completed')}/{counts.get('total')} overall, finalized={released.get('finalized')}")
 
 if __name__ == '__main__':
     os.makedirs(extract.BUILD_DIR, exist_ok=True)

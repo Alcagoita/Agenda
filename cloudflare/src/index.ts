@@ -1968,9 +1968,14 @@ export default {
           (body.outcome !== 'done' && body.outcome !== 'rate_limited')) {
         return json({ error: 'invalid OSM supplement batch-release payload' }, 400);
       }
+      // KAN-389: how much this batch achieved before being throttled decides
+      // whether the country-wide delay escalates or recovers. Absent or
+      // malformed counts as zero — the conservative reading.
+      const completedScopes = Number.isSafeInteger(body.completedScopes) && (body.completedScopes as number) >= 0
+        ? body.completedScopes as number : 0;
       const released = await releaseBatch(env, {
         countryCode: body.countryCode.toUpperCase(), runId: body.runId,
-        workerId: body.workerId, outcome: body.outcome, now: Date.now(),
+        workerId: body.workerId, outcome: body.outcome, completedScopes, now: Date.now(),
       });
       return json({ ok: true, ...released });
     }

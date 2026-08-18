@@ -153,11 +153,17 @@ def osm_scope_failed(country_code, place_id, worker_id, error, error_class='over
     })
 
 
-def osm_batch_release(country_code, run_id, worker_id, outcome='done'):
+def osm_batch_release(country_code, run_id, worker_id, outcome='done', completed_scopes=0):
     """Drop the country lock. `outcome='rate_limited'` also sets the
     country-wide Overpass backoff and returns every held scope free of
-    charge — a 429 is about us, not about the municipality."""
+    charge — a 429 is about us, not about the municipality.
+
+    `completed_scopes` is what this batch finished before being throttled.
+    It is the signal the backoff escalates on (KAN-389): still working means
+    recover, nothing finished means back further off.
+    """
     return _post('/internal/osm-supplement/batch-release', {
         'countryCode': country_code, 'runId': run_id,
         'workerId': worker_id, 'outcome': outcome,
+        'completedScopes': completed_scopes,
     })
