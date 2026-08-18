@@ -199,6 +199,53 @@ describe('KAN-387 OSM supplement batch routes', () => {
   });
 });
 
+describe('KAN-389 completedScopes on batch-release', () => {
+  /**
+   * The route decides between escalating and recovering the country-wide
+   * Overpass delay, so a malformed count must not be able to pose as
+   * progress. Asserted through the delay the release actually produces
+   * rather than through call arguments: the stored value is what the next
+   * cron tick reads, and these suites deliberately run the real statements
+   * instead of mocking the module under test.
+   *
+   * Starting the ladder mid-range is what separates the two outcomes —
+   * normalized to zero doubles it, a real count halves it.
+   */
+  const START = 1200;
+
+  async function releaseWith(completedScopes: unknown): Promise<number> {
+    const db = testDb();
+    const env = envFor(db);
+    await worker.fetch(post('/internal/osm-supplement/queue', { countryCode: 'PT' }), env, CTX);
+    const runId = runIdFromTrigger();
+    await worker.fetch(post('/internal/osm-supplement/claim', {
+      countryCode: 'PT', runId, workerId: 'w1', batchSize: 1,
+    }), env, CTX);
+    db.prepare('UPDATE osm_supplement_import SET backoff_seconds = ?').run(START);
+
+    const body: Record<string, unknown> = {
+      countryCode: 'PT', runId, workerId: 'w1', outcome: 'rate_limited',
+    };
+    if (completedScopes !== undefined) body.completedScopes = completedScopes;
+    const response = await worker.fetch(post('/internal/osm-supplement/batch-release', body), env, CTX);
+    expect(response.status).toBe(200);
+    return (db.prepare('SELECT backoff_seconds AS s FROM osm_supplement_import').get() as { s: number }).s;
+  }
+
+  it('treats a missing, negative, fractional or unsafe count as no progress', async () => {
+    for (const value of [undefined, -1, -0.5, 2.5, Number.MAX_SAFE_INTEGER + 1, Number.NaN, '3', null]) {
+      expect(await releaseWith(value)).toBe(START * 2);
+    }
+  });
+
+  it('honours a real count and lets the delay recover', async () => {
+    expect(await releaseWith(7)).toBe(START / 2);
+    // Zero is a legitimate report, not a malformed one, and means the batch
+    // genuinely achieved nothing.
+    expect(await releaseWith(0)).toBe(START * 2);
+  });
+});
+
 describe('KAN-387 retrying failures', () => {
   it('un-parks failed scopes even while a run is already mapping', async () => {
     const db = testDb();
