@@ -49,6 +49,8 @@ def normalize_text(s):
 #     sometimes a drinking bar — genuinely ambiguous, so it stays out.
 NAME_TYPE_KEYWORDS = {
     'pastelaria': 'bakery', 'padaria': 'bakery', 'confeitaria': 'bakery',
+    # Both spellings are current in Portugal; geladaria is the more correct.
+    'geladaria': 'ice_cream', 'gelataria': 'ice_cream',
     'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
     'cabeleireiro': 'salon', 'barbearia': 'salon',
     'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',

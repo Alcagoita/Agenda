@@ -59,6 +59,14 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     expect(map.get('bus')).toEqual(new Set(['bus', 'bus_station']));
   });
 
+  it('lets an ice cream search reach the shops already classified', () => {
+    // 1,369 rows carried ice_cream_shop while the app had no such type, so
+    // nobody could reach any of them (KAN-399).
+    const map = relations();
+    expect(map.get('ice_cream')).toEqual(new Set(['ice_cream', 'ice_cream_shop']));
+    expect(map.get('ice_cream_shop')).toEqual(new Set(['ice_cream_shop', 'ice_cream']));
+  });
+
   it('lets cafe reach the coffee shops it was missing', () => {
     expect(relations().get('cafe')).toEqual(new Set(['cafe', 'coffee_shop']));
   });

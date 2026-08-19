@@ -79,6 +79,12 @@ TAG_TYPES: tuple[tuple[str, str, str], ...] = (
     ('amenity', 'clinic', 'clinic'),
     ('amenity', 'school', 'school'),
     ('shop', 'bakery', 'bakery'),
+    # KAN-399. Both tags are in use: amenity=ice_cream is the parlour you sit
+    # in, shop=ice_cream the counter you buy from. Neither was mapped, so the
+    # first produced no type at all (dropping the element outright) and the
+    # second fell through to generic `store`.
+    ('amenity', 'ice_cream', 'ice_cream'),
+    ('shop', 'ice_cream', 'ice_cream'),
     ('shop', 'florist', 'florist'),
     ('amenity', 'bar', 'bar'),
     ('amenity', 'pub', 'bar'),
@@ -222,7 +228,7 @@ def address_for(tags: dict[str, str]) -> str | None:
 def types_for(tags: dict[str, str]) -> list[str]:
     types = [poi_type for key, value, poi_type in TAG_TYPES if tags.get(key) == value]
     shop = tags.get('shop')
-    if shop and shop not in EXCLUDED_SHOP_VALUES and 'store' not in types and shop not in {'supermarket', 'bakery', 'florist'}:
+    if shop and shop not in EXCLUDED_SHOP_VALUES and 'store' not in types and shop not in {'supermarket', 'bakery', 'florist', 'ice_cream'}:
         types.append('store')
     return types
 

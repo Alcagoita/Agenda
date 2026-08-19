@@ -569,6 +569,11 @@ class TypesFromNameTest(unittest.TestCase):
             ['bakery', 'restaurant'],
         )
 
+    def test_both_portuguese_spellings_of_ice_cream_shop_are_recognised(self):
+        # Geladaria is the more correct spelling, gelataria is also current.
+        self.assertEqual(classify_and_load.types_from_name('Geladaria Santini', ['cafe']), ['ice_cream'])
+        self.assertEqual(classify_and_load.types_from_name('Gelataria do Cais', ['store']), ['ice_cream'])
+
     def test_snack_bar_is_a_cafe_and_never_a_bar(self):
         # A Portuguese snack-bar is a daytime eatery. Mapping it to `bar`
         # would surface it for "grab a beer tonight", which is wrong.

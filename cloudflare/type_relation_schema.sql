@@ -88,4 +88,11 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('bus', 'bus'),
   ('bus', 'bus_station'),
   ('bus_station', 'bus_station'),
-  ('bus_station', 'bus');
+  ('bus_station', 'bus'),
+  -- KAN-399: ice cream is a first-class type app-side (and quick-actionable
+  -- — it is the errand you decide on the spot), so the 1,369 rows already
+  -- classified as ice_cream_shop become reachable.
+  ('ice_cream', 'ice_cream'),
+  ('ice_cream', 'ice_cream_shop'),
+  ('ice_cream_shop', 'ice_cream_shop'),
+  ('ice_cream_shop', 'ice_cream');

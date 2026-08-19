@@ -52,7 +52,7 @@ export const GOOGLE_TYPE_ICON: Record<string, string> = {
   donut_shop:           'store',
   food:                 'restaurant',
   food_court:           'restaurant',
-  ice_cream_shop:       'store',
+  ice_cream_shop:       'ice_cream',
   juice_shop:           'cafe',
   kebab_shop:           'restaurant',
   meal_delivery:        'restaurant',
@@ -393,6 +393,17 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
           />
           <Path d="M8 10.5 10.5 13M12 8.5 14.5 11M16 10.5 18 12.5" stroke={color} strokeWidth={1.6} {...S} />
           <Line x1="4" y1="20" x2="20" y2="20" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'ice_cream':
+      return (
+        <Svg {...p}>
+          {/* Scoop over a cone: circle + tapering triangle, hairline
+              outline like every other icon here. */}
+          <Circle cx="12" cy="8" r="4.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M7.9 10.2 12 21l4.1-10.8" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="9" y1="14" x2="15" y2="14" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
 

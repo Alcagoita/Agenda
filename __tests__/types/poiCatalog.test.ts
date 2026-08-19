@@ -19,17 +19,17 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'gas', 'gym', 'bank', 'restaurant', 'park', 'library', 'post', 'store',
   'clinic', 'salon', 'bus', 'school', 'bakery', 'florist', 'bar',
   'currency_exchange', 'money_transfer',
-  'financial_service',
+  'financial_service', 'ice_cream',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
   'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
-  'florist', 'bakery', 'park', 'gym', 'bar', 'library',
+  'florist', 'bakery', 'ice_cream', 'park', 'gym', 'bar', 'library',
 ];
 
 describe('POI_CATALOG', () => {
   it('keeps all built-in types available for legacy task support', () => {
-    expect(POI_CATALOG).toHaveLength(22);
+    expect(POI_CATALOG).toHaveLength(23);
   });
 
   it('contains all built-in POI types', () => {

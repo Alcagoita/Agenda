@@ -75,6 +75,9 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── bakery ──
     bakery: 'bakery', 'buy bread': 'bakery', 'pick up bread': 'bakery',
     'bread shop': 'bakery', pastry: 'bakery', croissant: 'bakery',
+    // ── ice cream ──
+    'ice cream': 'ice_cream', icecream: 'ice_cream', gelato: 'ice_cream',
+    sorbet: 'ice_cream', 'ice lolly': 'ice_cream',
     // ── pharmacy ──
     pharmacy: 'pharmacy', drugstore: 'pharmacy', prescription: 'pharmacy',
     meds: 'pharmacy', medicine: 'pharmacy', medication: 'pharmacy',
@@ -139,6 +142,10 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── bakery ──
     padaria: 'bakery', 'comprar pão': 'bakery', 'ir buscar pão': 'bakery',
     pastelaria: 'bakery', croissant: 'bakery',
+    // ── ice cream ──
+    // Both spellings are current in Portugal; geladaria is the more correct.
+    geladaria: 'ice_cream', gelataria: 'ice_cream', gelado: 'ice_cream',
+    gelados: 'ice_cream', 'gelataria artesanal': 'ice_cream',
     // ── pharmacy ──
     'farmácia': 'pharmacy', receita: 'pharmacy', medicamentos: 'pharmacy',
     'remédios': 'pharmacy', comprimidos: 'pharmacy',
