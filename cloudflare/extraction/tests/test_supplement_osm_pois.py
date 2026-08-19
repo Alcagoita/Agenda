@@ -259,7 +259,9 @@ class NameInferredTypeTest(unittest.TestCase):
         )
         self.assertIsNotNone(poi)
         self.assertIn('tattoo', poi.poi_types)
-        self.assertIn('salon', poi.poi_types)
+        # shop=hairdresser gives hairdresser; the name adds the barber split.
+        self.assertIn('hairdresser', poi.poi_types)
+        self.assertIn('barber', poi.poi_types)
 
     def test_a_generic_shop_tag_is_replaced_by_what_the_name_says(self):
         # "Guanabara - Pizzaria Padaria Pastelaria" is a lot of things, but a

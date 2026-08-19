@@ -127,6 +127,7 @@ export type PoiType =
   | 'gas' | 'gym' | 'bank' | 'restaurant' | 'park'
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
   | 'bus' | 'school' | 'bakery' | 'florist' | 'bar' | 'ice_cream' | 'tattoo'
+  | 'barber' | 'hairdresser' | 'nail_salon'
   | 'currency_exchange' | 'money_transfer' | 'financial_service';
 
 /** All built-in POI types, in catalog display order. */
@@ -135,6 +136,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
   { type: 'ice_cream' },
   { type: 'tattoo' },
+  { type: 'barber' }, { type: 'hairdresser' }, { type: 'nail_salon' },
   { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' }, { type: 'bank' },
   // Retained for existing documents and free-text lookup, but intentionally
   // outside the curated quick-actionable list below.
@@ -334,7 +336,7 @@ export interface Category {
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
   errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist'],
   health:   ['pharmacy', 'clinic', 'gym'],
-  personal: ['cafe', 'restaurant', 'bar', 'park', 'salon', 'ice_cream', 'tattoo'],
+  personal: ['cafe', 'restaurant', 'bar', 'park', 'salon', 'ice_cream', 'tattoo', 'barber', 'hairdresser', 'nail_salon'],
   work:     ['library', 'school'],
 };
 
@@ -358,7 +360,10 @@ export const POI_GOOGLE_TYPES: Partial<Record<PoiType, string>> = {
   post:         'post_office',
   store:        'store',
   clinic:       'doctor',
-  salon:        'hair_care',
+  salon:        'beauty_salon',
+  barber:       'barber_shop',
+  hairdresser:  'hair_care',
+  nail_salon:   'nail_salon',
   bus:          'bus_station',
   school:       'school',
   bakery:       'bakery',
@@ -392,7 +397,11 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   post:        { key: 'amenity', value: 'post_office' },
   store:       { key: 'shop',    value: 'convenience' },
   clinic:      { key: 'amenity', value: 'clinic' },
-  salon:       { key: 'shop',    value: 'hairdresser' },
+  // salon is full service; hairdresser is hair only; barber is men's.
+  salon:       { key: 'shop',    value: 'beauty' },
+  barber:      { key: 'shop',    value: 'hairdresser' },
+  hairdresser: { key: 'shop',    value: 'hairdresser' },
+  nail_salon:  { key: 'shop',    value: 'beauty' },
   bus:         { key: 'highway', value: 'bus_stop' },
   school:      { key: 'amenity', value: 'school' },
   bakery:      { key: 'shop',    value: 'bakery' },
@@ -461,6 +470,9 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   store:       75,
   clinic:      75,
   salon:       50,
+  barber:      50,
+  hairdresser: 50,
+  nail_salon:  50,
   bus:         100,
   school:      100,
   bakery:      75,

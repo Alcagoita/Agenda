@@ -235,14 +235,14 @@ export const GOOGLE_TYPE_ICON: Record<string, string> = {
   tire_shop:            'gas',
   truck_dealer:         'store',
 
-  // Beauty & wellness
-  barber_shop:          'salon',
-  beautician:           'salon',
+  // Beauty & wellness — four distinct errands, not one (KAN-401)
+  barber_shop:          'barber',
+  hair_care:            'hairdresser',
+  hair_salon:           'hairdresser',
   beauty_salon:         'salon',
-  hair_care:            'salon',
-  hair_salon:           'salon',
+  beautician:           'salon',
   makeup_artist:        'salon',
-  nail_salon:           'salon',
+  nail_salon:           'nail_salon',
   spa:                  'salon',
 
   // Post, lodging, worship
@@ -394,6 +394,37 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
           />
           <Path d="M8 10.5 10.5 13M12 8.5 14.5 11M16 10.5 18 12.5" stroke={color} strokeWidth={1.6} {...S} />
           <Line x1="4" y1="20" x2="20" y2="20" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'barber':
+      return (
+        <Svg {...p}>
+          {/* Barber pole: cylinder with its two diagonal stripes. */}
+          <Rect x="8.5" y="4" width="7" height="16" rx="3.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="8.8" y1="12" x2="15.2" y2="8" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="8.8" y1="16" x2="15.2" y2="12" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'hairdresser':
+      return (
+        <Svg {...p}>
+          {/* Scissors: two finger rings and the crossed blades. */}
+          <Circle cx="6" cy="18" r="2.6" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="18" cy="18" r="2.6" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="16.4" y1="16" x2="7" y2="4" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="7.6" y1="16" x2="17" y2="4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'nail_salon':
+      return (
+        <Svg {...p}>
+          {/* Polish bottle: cap, neck and body. */}
+          <Rect x="10" y="2.5" width="4" height="3.5" rx="0.8" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="12" y1="6" x2="12" y2="8" stroke={color} strokeWidth={1.6} {...S} />
+          <Rect x="7.5" y="8" width="9" height="13" rx="2" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
 

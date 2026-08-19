@@ -55,7 +55,11 @@ NAME_TYPE_KEYWORDS = {
     # firing inside unrelated words such as "PlantaToo".
     'tattoo': 'tattoo', 'tatoo': 'tattoo', 'tatuagem': 'tattoo', 'tatuagens': 'tattoo',
     'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
-    'cabeleireiro': 'salon', 'barbearia': 'salon',
+    # KAN-401: four distinct errands. A barbearia is men's hair, a
+    # cabeleireiro is hair for women and unisex, a salao is full service.
+    'barbearia': 'barber', 'barbeiro': 'barber',
+    'cabeleireiro': 'hairdresser', 'cabeleireira': 'hairdresser',
+    'manicure': 'nail_salon', 'pedicure': 'nail_salon',
     'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',
     'restaurante': 'restaurant', 'churrasqueira': 'restaurant', 'marisqueira': 'restaurant',
     'pizzaria': 'restaurant', 'hamburgueria': 'restaurant', 'tasca': 'restaurant',

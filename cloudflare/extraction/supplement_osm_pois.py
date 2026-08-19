@@ -89,6 +89,10 @@ TAG_TYPES: tuple[tuple[str, str, str], ...] = (
     # KAN-402. shop=tattoo is a standard OSM tag that was never mapped, so
     # 77 Portuguese studios fell through to generic `store`.
     ('shop', 'tattoo', 'tattoo'),
+    # KAN-401. shop=hairdresser is hair; the barber split comes from the
+    # name. shop=beauty is the full-service salon.
+    ('shop', 'hairdresser', 'hairdresser'),
+    ('shop', 'beauty', 'salon'),
     ('amenity', 'bar', 'bar'),
     ('amenity', 'pub', 'bar'),
 )
@@ -231,7 +235,7 @@ def address_for(tags: dict[str, str]) -> str | None:
 def types_for(tags: dict[str, str]) -> list[str]:
     types = [poi_type for key, value, poi_type in TAG_TYPES if tags.get(key) == value]
     shop = tags.get('shop')
-    if shop and shop not in EXCLUDED_SHOP_VALUES and 'store' not in types and shop not in {'supermarket', 'bakery', 'florist', 'ice_cream', 'tattoo'}:
+    if shop and shop not in EXCLUDED_SHOP_VALUES and 'store' not in types and shop not in {'supermarket', 'bakery', 'florist', 'ice_cream', 'tattoo', 'hairdresser', 'beauty'}:
         types.append('store')
     return types
 

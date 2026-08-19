@@ -95,4 +95,19 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('ice_cream', 'ice_cream'),
   ('ice_cream', 'ice_cream_shop'),
   ('ice_cream_shop', 'ice_cream_shop'),
-  ('ice_cream_shop', 'ice_cream');
+  ('ice_cream_shop', 'ice_cream'),
+  -- KAN-401: hair and beauty are four errands. Never merged with each
+  -- other -- answering "I need a haircut" with a nail bar is a bad answer.
+  ('hairdresser', 'hairdresser'),
+  ('hairdresser', 'hair_care'),
+  ('hair_care', 'hair_care'),
+  ('hair_care', 'hairdresser'),
+  ('salon', 'salon'),
+  ('salon', 'beauty_salon'),
+  ('beauty_salon', 'beauty_salon'),
+  ('beauty_salon', 'salon'),
+  ('nail_salon', 'nail_salon'),
+  ('barber', 'barber'),
+  ('barber', 'barber_shop'),
+  ('barber_shop', 'barber_shop'),
+  ('barber_shop', 'barber');
