@@ -15,9 +15,12 @@ import { describe, expect, it } from 'vitest';
  */
 const ROOT = join(__dirname, '..', '..');
 
-function relations(): Map<string, Set<string>> {
-  const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(join(ROOT, 'type_relation_schema.sql'), 'utf8'));
+const SCHEMA = readFileSync(join(ROOT, 'type_relation_schema.sql'), 'utf8');
+const MIGRATION = readFileSync(join(ROOT, 'migrations', '0022_bridge_classifier_vocabulary.sql'), 'utf8');
+/** The table definition alone, without the rows the schema seeds. */
+const CREATE_TABLE = SCHEMA.split('INSERT OR IGNORE')[0];
+
+function mapOf(db: DatabaseSync): Map<string, Set<string>> {
   const rows = db.prepare('SELECT search_type, include_type FROM type_relation')
     .all() as { search_type: string; include_type: string }[];
   const map = new Map<string, Set<string>>();
@@ -26,6 +29,25 @@ function relations(): Map<string, Set<string>> {
     map.get(row.search_type)!.add(row.include_type);
   }
   return map;
+}
+
+/** The full canonical shape: what a database created from scratch has. */
+function relations(): Map<string, Set<string>> {
+  const db = new DatabaseSync(':memory:');
+  db.exec(SCHEMA);
+  return mapOf(db);
+}
+
+/**
+ * The migration applied to an empty table, so what it writes is measured on
+ * its own. Running it over a schema that already contains its rows proves
+ * nothing — INSERT OR IGNORE makes that a no-op whatever the file says.
+ */
+function migrationOnly(): Map<string, Set<string>> {
+  const db = new DatabaseSync(':memory:');
+  db.exec(CREATE_TABLE);
+  db.exec(MIGRATION);
+  return mapOf(db);
 }
 
 describe('KAN-398 classifier vocabulary bridges', () => {
@@ -83,15 +105,43 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     expect(map.get('bank')).toBeUndefined();
   });
 
-  it('applies the same rows whether the schema or the migration is used', () => {
-    // schema.sql is the canonical shape; the migration is how production
-    // gets there. They drifting apart is how a fresh database and a
-    // migrated one stop behaving the same way.
-    const migrated = new DatabaseSync(':memory:');
-    migrated.exec(readFileSync(join(ROOT, 'type_relation_schema.sql'), 'utf8'));
-    migrated.exec(readFileSync(join(ROOT, 'migrations', '0022_bridge_classifier_vocabulary.sql'), 'utf8'));
-    const after = migrated.prepare('SELECT COUNT(*) AS c FROM type_relation').get() as { c: number };
-    const rows = [...relations().values()].reduce((total, set) => total + set.size, 0);
-    expect(after.c).toBe(rows);
+  it('writes exactly the bridges it claims to, in both directions', () => {
+    // Measured on an empty table, so this is the migration's own content
+    // rather than whatever the schema already happened to contain.
+    expect(migrationOnly()).toEqual(new Map([
+      ['gas', new Set(['gas', 'gas_station'])],
+      ['gas_station', new Set(['gas_station', 'gas'])],
+      ['post', new Set(['post', 'post_office'])],
+      ['post_office', new Set(['post_office', 'post'])],
+      ['cafe', new Set(['cafe', 'coffee_shop'])],
+      ['coffee_shop', new Set(['coffee_shop', 'cafe'])],
+      ['clinic', new Set(['clinic', 'doctor'])],
+      ['doctor', new Set(['doctor', 'clinic'])],
+      ['bus', new Set(['bus', 'bus_station'])],
+      ['bus_station', new Set(['bus_station', 'bus'])],
+    ]));
+  });
+
+  it('reaches every bridge from the classifier side too', () => {
+    // The reverse rows are what let a search arriving as the classifier's
+    // own word still find the app's. Asserted explicitly because writing
+    // one direction and forgetting the other is silent.
+    const map = relations();
+    expect(map.get('gas_station')).toEqual(new Set(['gas_station', 'gas']));
+    expect(map.get('post_office')).toEqual(new Set(['post_office', 'post']));
+    expect(map.get('coffee_shop')).toEqual(new Set(['coffee_shop', 'cafe']));
+    expect(map.get('doctor')).toEqual(new Set(['doctor', 'clinic']));
+    expect(map.get('bus_station')).toEqual(new Set(['bus_station', 'bus']));
+  });
+
+  it('keeps the schema and the migration in step', () => {
+    // The schema is what a fresh database gets; the migration is how an
+    // existing one catches up. If they drift, the two stop behaving alike.
+    const schema = relations();
+    for (const [searchType, includes] of migrationOnly()) {
+      for (const include of includes) {
+        expect(schema.get(searchType)?.has(include)).toBe(true);
+      }
+    }
   });
 });
