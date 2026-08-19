@@ -60,4 +60,32 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('bar', 'bar'),
   ('bar', 'pub'),
   ('pub', 'pub'),
-  ('pub', 'bar');
+  ('pub', 'bar'),
+  -- KAN-398: the app's own catalog words vs the classifier's Google Places
+  -- names. gas/post/clinic/bus matched literally zero rows in production
+  -- until these landed, while 5,750 petrol stations and 1,380 post offices
+  -- sat in the table under the other spelling. Genuine synonyms, so both
+  -- directions.
+  ('gas', 'gas'),
+  ('gas', 'gas_station'),
+  ('gas_station', 'gas_station'),
+  ('gas_station', 'gas'),
+  ('post', 'post'),
+  ('post', 'post_office'),
+  ('post_office', 'post_office'),
+  ('post_office', 'post'),
+  ('cafe', 'cafe'),
+  ('cafe', 'coffee_shop'),
+  ('coffee_shop', 'coffee_shop'),
+  ('coffee_shop', 'cafe'),
+  -- clinic <-> doctor only; dentist/hospital/medical_lab/physiotherapist
+  -- stay separate, and bus <-> bus_station only, since a train station is a
+  -- different mode rather than another word for a bus stop.
+  ('clinic', 'clinic'),
+  ('clinic', 'doctor'),
+  ('doctor', 'doctor'),
+  ('doctor', 'clinic'),
+  ('bus', 'bus'),
+  ('bus', 'bus_station'),
+  ('bus_station', 'bus_station'),
+  ('bus_station', 'bus');
