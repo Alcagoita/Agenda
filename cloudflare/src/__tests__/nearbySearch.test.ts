@@ -209,6 +209,26 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     ]);
   });
 
+  it('hides a reviewed duplicate OSM element and keeps its Foursquare original', async () => {
+    // KAN-392's whole mechanism, in the opposite direction to the test above:
+    // there the Foursquare row was the stale one, here the OSM element is the
+    // duplicate. 182 PT elements are retired exactly this way.
+    const res = await worker.fetch(nearbyRequest([
+      { key: 'restaurant', type: 'restaurant' },
+    ]), env([
+      { fsq_place_id: 'fsq-martins', name: 'O Martins', raw_category_labels: '', category_label: '' },
+    ], [], [
+      { osm_element_id: 'node/6441622817', name: 'Restaurante Martins', primary_poi_type: 'restaurant' },
+    ], [
+      { source: 'openstreetmap', source_id: 'node/6441622817', visible: 0 },
+    ]), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ name: string; source: string }>> };
+    expect(body.results.restaurant).toEqual([
+      expect.objectContaining({ name: 'O Martins', source: 'foursquare' }),
+    ]);
+  });
+
   it('returns only pizza matches for a pizza subtype request, all for the broad bucket', async () => {
     const res = await worker.fetch(nearbyRequest([
       { key: 'restaurant', type: 'restaurant' },
