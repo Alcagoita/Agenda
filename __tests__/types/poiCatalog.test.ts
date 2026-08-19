@@ -20,6 +20,7 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'clinic', 'salon', 'bus', 'school', 'bakery', 'florist', 'bar',
   'currency_exchange', 'money_transfer',
   'financial_service', 'ice_cream', 'tattoo',
+  'barber', 'hairdresser', 'nail_salon',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -29,7 +30,7 @@ const QUICK_ACTIONABLE_TYPES: PoiType[] = [
 
 describe('POI_CATALOG', () => {
   it('keeps all built-in types available for legacy task support', () => {
-    expect(POI_CATALOG).toHaveLength(24);
+    expect(POI_CATALOG).toHaveLength(27);
   });
 
   it('contains all built-in POI types', () => {

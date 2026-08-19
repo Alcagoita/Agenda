@@ -51,7 +51,9 @@ describe('placeTypeLabel', () => {
   });
 
   it('title-cases unknown type strings as a fallback', () => {
-    expect(placeTypeLabel('nail_salon')).toBe('Nail Salon');
+    // nail_salon is a catalog type now (KAN-401), so it takes its own
+    // sentence-case copy rather than this fallback.
+    expect(placeTypeLabel('bowling_alley')).toBe('Bowling Alley');
     expect(placeTypeLabel('ice_cream_shop')).toBe('Ice Cream Shop');
   });
 });

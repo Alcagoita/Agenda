@@ -18,7 +18,7 @@ describe('resolvePoiIconType', () => {
     expect(resolvePoiIconType('dog_park')).toBe('park');
     expect(resolvePoiIconType('bus_stop')).toBe('bus');
     expect(resolvePoiIconType('general_hospital')).toBe('clinic');
-    expect(resolvePoiIconType('hair_salon')).toBe('salon');
+    expect(resolvePoiIconType('hair_salon')).toBe('hairdresser');
     expect(resolvePoiIconType('church')).toBe('library');
     expect(resolvePoiIconType('parking_garage')).toBe('gas');
   });

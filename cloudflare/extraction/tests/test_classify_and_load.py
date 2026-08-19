@@ -584,6 +584,17 @@ class TypesFromNameTest(unittest.TestCase):
         self.assertEqual(classify_and_load.types_from_name('PlantaToo', ['store']), [])
         self.assertEqual(classify_and_load.types_from_name('Tatoon', ['store']), [])
 
+    def test_hair_and_beauty_terms_map_to_their_own_errand(self):
+        # KAN-401: four distinct errands, never merged into one.
+        self.assertEqual(classify_and_load.types_from_name('Barbearia Candeias', ['store']), ['barber'])
+        self.assertEqual(classify_and_load.types_from_name('Guânson Cabeleireiros', ['store']), ['hairdresser'])
+        self.assertEqual(classify_and_load.types_from_name('Manicure da Ana', ['store']), ['nail_salon'])
+        # A barbershop that also tattoos keeps both.
+        self.assertEqual(
+            sorted(classify_and_load.types_from_name('Barbearia e Tattoo Asgard', [])),
+            ['barber', 'tattoo'],
+        )
+
     def test_snack_bar_is_a_cafe_and_never_a_bar(self):
         # A Portuguese snack-bar is a daytime eatery. Mapping it to `bar`
         # would surface it for "grab a beer tonight", which is wrong.
@@ -598,7 +609,7 @@ class TypesFromNameTest(unittest.TestCase):
         self.assertEqual(classify_and_load.types_from_name('Tascalicious', []), [])
 
     def test_matches_plurals_and_accented_forms(self):
-        self.assertEqual(classify_and_load.types_from_name('Guânson Cabeleireiros', ['store']), ['salon'])
+        self.assertEqual(classify_and_load.types_from_name('Guânson Cabeleireiros', ['store']), ['hairdresser'])
         self.assertEqual(classify_and_load.types_from_name('Ginásio Central', []), ['gym'])
         self.assertEqual(classify_and_load.types_from_name('Farmácias Reunidas', []), ['pharmacy'])
 

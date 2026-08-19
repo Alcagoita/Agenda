@@ -76,6 +76,12 @@ describe('inferPoiFromRules (en)', () => {
     expect(inferPoiFromRules('grab a coffee')).toBe('cafe');
   });
 
+  it('keeps the four hair and beauty errands apart', () => {
+    expect(inferPoiFromRules('need a haircut')).toBe('hairdresser');
+    expect(inferPoiFromRules('go to the barbershop')).toBe('barber');
+    expect(inferPoiFromRules('book a manicure')).toBe('nail_salon');
+  });
+
   it('maps a tattoo task to tattoo', () => {
     expect(inferPoiFromRules('book a tattoo')).toBe('tattoo');
     expect(inferPoiFromRules('get inked')).toBe('tattoo');
@@ -118,6 +124,12 @@ describe('inferPoiFromRules (pt-PT)', () => {
 
   it('maps a café task to cafe', () => {
     expect(inferPoiFromRules('tomar um café', 'pt-PT')).toBe('cafe');
+  });
+
+  it('keeps barbearia, cabeleireiro and manicure apart', () => {
+    expect(inferPoiFromRules('ir à barbearia', 'pt-PT')).toBe('barber');
+    expect(inferPoiFromRules('cortar o cabelo', 'pt-PT')).toBe('hairdresser');
+    expect(inferPoiFromRules('fazer as unhas', 'pt-PT')).toBe('nail_salon');
   });
 
   it('maps a tatuagem task to tattoo', () => {
@@ -172,7 +184,7 @@ describe('inferPoiFromRules: all built-in types (en)', () => {
     ['shop at the mall',        'store'],
     ['buy flowers',             'florist'],
     ['dentist checkup',         'clinic'],
-    ['book a haircut',          'salon'],
+    ['book a haircut',          'hairdresser'],
     ['catch the bus',           'bus'],
     ['pick up kids from school','school'],
     ['exchange money',          'currency_exchange'],
@@ -199,7 +211,7 @@ describe('inferPoiFromRules: extended types (pt-PT)', () => {
     ['comprar no centro comercial', 'store'],
     ['comprar flores',           'florist'],
     ['consulta no médico',       'clinic'],
-    ['corte de cabelo',          'salon'],
+    ['corte de cabelo',          'hairdresser'],
     ['apanhar o autocarro',      'bus'],
     ['reunião de pais',          'school'],
     ['trocar câmbio',            'currency_exchange'],

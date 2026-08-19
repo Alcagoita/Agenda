@@ -93,6 +93,21 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     }
   });
 
+  it('splits hair and beauty into four errands that never merge', () => {
+    const map = relations();
+    expect(map.get('barber')).toEqual(new Set(['barber', 'barber_shop']));
+    expect(map.get('hairdresser')).toEqual(new Set(['hairdresser', 'hair_care']));
+    expect(map.get('salon')).toEqual(new Set(['salon', 'beauty_salon']));
+    expect(map.get('nail_salon')).toEqual(new Set(['nail_salon']));
+    // Answering "I need a haircut" with a nail bar is a bad answer. 152
+    // POIs already carry more than one of these, and that combination is
+    // information a merge would destroy.
+    for (const [a, b] of [['barber', 'nail_salon'], ['hairdresser', 'nail_salon'],
+                          ['salon', 'barber'], ['nail_salon', 'hairdresser']] as const) {
+      expect(map.get(a)?.has(b)).toBeFalsy();
+    }
+  });
+
   it('keeps genuinely different errands apart', () => {
     const map = relations();
     // A dentist, a hospital and a physiotherapist are searched for by name,
@@ -109,9 +124,9 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     // Documented as deliberately isolated when this table was created:
     // a quick top-up is a different intent from the weekly grocery run.
     expect(map.has('convenience_store')).toBe(false);
-    // Hair, full-service beauty and nails are three errands, not one.
-    // KAN-401 splits them properly; nothing here may pre-empt it.
-    expect(map.has('salon')).toBe(false);
+    // salon is now the app's word for beauty_salon only — never for the
+    // hair_care rows KAN-391 briefly mislabelled (KAN-401).
+    expect(map.get('salon')?.has('hair_care')).toBeFalsy();
   });
 
   it('leaves the pre-existing merges untouched', () => {

@@ -124,8 +124,13 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     clinic: 'clinic', doctor: 'clinic', 'doctor appointment': 'clinic',
     checkup: 'clinic', dentist: 'clinic', 'medical appointment': 'clinic',
     // ── salon ──
-    salon: 'salon', haircut: 'salon', barber: 'salon', 'hair appointment': 'salon',
-    nails: 'salon', manicure: 'salon',
+    // KAN-401: four errands, not one. A haircut is not a manicure.
+    salon: 'salon', 'beauty salon': 'salon',
+    hairdresser: 'hairdresser', haircut: 'hairdresser',
+    'hair appointment': 'hairdresser', 'cut my hair': 'hairdresser',
+    barber: 'barber', barbershop: 'barber', 'barber shop': 'barber',
+    nails: 'nail_salon', 'nail salon': 'nail_salon',
+    manicure: 'nail_salon', pedicure: 'nail_salon',
     // ── bus ──
     bus: 'bus', 'bus stop': 'bus', 'bus station': 'bus', 'catch the bus': 'bus',
     // ── school ──
@@ -190,8 +195,13 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     'clínica': 'clinic', 'médico': 'clinic', consulta: 'clinic',
     dentista: 'clinic', exame: 'clinic',
     // ── salon ──
-    cabeleireiro: 'salon', 'corte de cabelo': 'salon', barbeiro: 'salon',
-    unhas: 'salon', manicure: 'salon',
+    // KAN-401: quatro recados distintos.
+    'salão de beleza': 'salon',
+    cabeleireiro: 'hairdresser', cabeleireira: 'hairdresser',
+    'corte de cabelo': 'hairdresser', 'cortar o cabelo': 'hairdresser',
+    'cortar cabelo': 'hairdresser',
+    barbeiro: 'barber', barbearia: 'barber',
+    unhas: 'nail_salon', manicure: 'nail_salon', pedicure: 'nail_salon',
     // ── bus ──
     autocarro: 'bus', paragem: 'bus', 'apanhar o autocarro': 'bus',
     // ── school ──
