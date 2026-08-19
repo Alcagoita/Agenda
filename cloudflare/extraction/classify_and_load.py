@@ -51,6 +51,9 @@ NAME_TYPE_KEYWORDS = {
     'pastelaria': 'bakery', 'padaria': 'bakery', 'confeitaria': 'bakery',
     # Both spellings are current in Portugal; geladaria is the more correct.
     'geladaria': 'ice_cream', 'gelataria': 'ice_cream',
+    # `tatoo` is a very common misspelling here. Word boundaries keep it from
+    # firing inside unrelated words such as "PlantaToo".
+    'tattoo': 'tattoo', 'tatoo': 'tattoo', 'tatuagem': 'tattoo', 'tatuagens': 'tattoo',
     'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
     'cabeleireiro': 'salon', 'barbearia': 'salon',
     'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',

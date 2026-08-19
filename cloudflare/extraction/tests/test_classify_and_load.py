@@ -574,6 +574,16 @@ class TypesFromNameTest(unittest.TestCase):
         self.assertEqual(classify_and_load.types_from_name('Geladaria Santini', ['cafe']), ['ice_cream'])
         self.assertEqual(classify_and_load.types_from_name('Gelataria do Cais', ['store']), ['ice_cream'])
 
+    def test_tattoo_spellings_including_the_common_misspelling(self):
+        self.assertEqual(classify_and_load.types_from_name('Sol Ink Tattoos', ['store']), ['tattoo'])
+        self.assertEqual(classify_and_load.types_from_name('Esquadra Tatoo', ['store']), ['tattoo'])
+        self.assertEqual(classify_and_load.types_from_name('Filipe Moreira - Tatuagens', []), ['tattoo'])
+
+    def test_tattoo_does_not_fire_inside_an_unrelated_word(self):
+        # "PlantaToo" contains 'tatoo' as a substring and is not a studio.
+        self.assertEqual(classify_and_load.types_from_name('PlantaToo', ['store']), [])
+        self.assertEqual(classify_and_load.types_from_name('Tatoon', ['store']), [])
+
     def test_snack_bar_is_a_cafe_and_never_a_bar(self):
         # A Portuguese snack-bar is a daytime eatery. Mapping it to `bar`
         # would surface it for "grab a beer tonight", which is wrong.

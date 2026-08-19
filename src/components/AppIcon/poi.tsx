@@ -135,6 +135,7 @@ export const GOOGLE_TYPE_ICON: Record<string, string> = {
   sporting_goods_store: 'store',
   sportswear_store:     'store',
   storage:              'store',
+  tattoo_parlor:        'tattoo',
   thrift_store:         'store',
   toy_store:            'store',
   warehouse_store:      'store',
@@ -393,6 +394,16 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
           />
           <Path d="M8 10.5 10.5 13M12 8.5 14.5 11M16 10.5 18 12.5" stroke={color} strokeWidth={1.6} {...S} />
           <Line x1="4" y1="20" x2="20" y2="20" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'tattoo':
+      return (
+        <Svg {...p}>
+          {/* Machine: grip barrel, needle, and the line it lays down. */}
+          <Path d="M14.5 3.5 20 9l-3.2 3.2-5.5-5.5L14.5 3.5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="11.3" y1="6.7" x2="6" y2="12" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M6 12 4 20l8-2" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
 

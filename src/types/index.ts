@@ -126,7 +126,7 @@ export type PoiType =
   | 'atm' | 'cafe' | 'supermarket' | 'pharmacy'
   | 'gas' | 'gym' | 'bank' | 'restaurant' | 'park'
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
-  | 'bus' | 'school' | 'bakery' | 'florist' | 'bar' | 'ice_cream'
+  | 'bus' | 'school' | 'bakery' | 'florist' | 'bar' | 'ice_cream' | 'tattoo'
   | 'currency_exchange' | 'money_transfer' | 'financial_service';
 
 /** All built-in POI types, in catalog display order. */
@@ -134,6 +134,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'supermarket' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
   { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
   { type: 'ice_cream' },
+  { type: 'tattoo' },
   { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' }, { type: 'bank' },
   // Retained for existing documents and free-text lookup, but intentionally
   // outside the curated quick-actionable list below.
@@ -333,7 +334,7 @@ export interface Category {
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
   errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist'],
   health:   ['pharmacy', 'clinic', 'gym'],
-  personal: ['cafe', 'restaurant', 'bar', 'park', 'salon', 'ice_cream'],
+  personal: ['cafe', 'restaurant', 'bar', 'park', 'salon', 'ice_cream', 'tattoo'],
   work:     ['library', 'school'],
 };
 
@@ -362,6 +363,7 @@ export const POI_GOOGLE_TYPES: Partial<Record<PoiType, string>> = {
   school:       'school',
   bakery:       'bakery',
   ice_cream:    'ice_cream_shop',
+  tattoo:       'tattoo_parlor',
   florist:      'florist',
   bar:          'bar',
 };
@@ -397,6 +399,7 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   // amenity=ice_cream is the parlour you sit in; shop=ice_cream also exists
   // and is picked up server-side (supplement_osm_pois.py's TAG_TYPES).
   ice_cream:   { key: 'amenity', value: 'ice_cream' },
+  tattoo:      { key: 'shop',    value: 'tattoo' },
   florist:     { key: 'shop',    value: 'florist' },
   bar:         { key: 'amenity', value: 'bar' },
 };
@@ -462,6 +465,7 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   school:      100,
   bakery:      75,
   ice_cream:   50,
+  tattoo:      50,
   florist:     75,
   bar:         75,
 };
