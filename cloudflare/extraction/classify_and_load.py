@@ -489,6 +489,8 @@ def classify(place_id, csv_path, out_sql_path):
     started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     poi_rows = []
     poi_type_rows = []
+    # KAN-391: ids whose generic `store` the name superseded — see below.
+    store_replaced_ids = []
     poi_attribute_rows = []
     type_counts = {}
     skipped_no_type = 0
@@ -570,6 +572,11 @@ def classify(place_id, csv_path, out_sql_path):
             inferred_types = types_from_name(row['name'], matched_types)
             if replaces_generic_store(matched_types, inferred_types, bool(store_kinds)):
                 matched_types = set(inferred_types)
+                # poi_type rows are written with INSERT OR IGNORE and never
+                # deleted, so on a re-import the superseded `store` row would
+                # survive alongside the new type and the venue would still
+                # answer a "buy a gift" store task. Retire it explicitly.
+                store_replaced_ids.append(row['fsq_place_id'])
             else:
                 matched_types.update(inferred_types)
 
@@ -685,6 +692,12 @@ def classify(place_id, csv_path, out_sql_path):
             f, poi_insert_prefix, [(r[0], poi_row_sql(r)) for r in poi_rows],
             'poi', place_id, poi_insert_suffix,
         )
+        # Before the inserts: a superseded `store` must go, or INSERT OR
+        # IGNORE would simply add the new type beside it. Bounded per
+        # statement for the same D1 statement-size reason as the batches.
+        for start in range(0, len(store_replaced_ids), 250):
+            ids = ','.join(sql_escape(i) for i in store_replaced_ids[start:start + 250])
+            f.write(f"DELETE FROM poi_type WHERE poi_type = 'store' AND fsq_place_id IN ({ids});\n")
         poi_type_batches = write_guarded_child_batches(
             f, 'poi_type', 'fsq_place_id, poi_type, rank',
             [(r[0], poi_type_row_select(r)) for r in poi_type_rows],

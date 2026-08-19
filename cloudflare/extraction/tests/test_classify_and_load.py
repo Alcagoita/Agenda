@@ -475,6 +475,70 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                 classify_and_load.BUILD_DIR = previous_build_dir
 
 
+class NameTypeBackfillTest(unittest.TestCase):
+    """KAN-391 — the backfill that fixes records already in D1."""
+
+    def emit(self, rows, store_kind_ids=()):
+        import backfill_name_types
+        original_rows, original_kinds = backfill_name_types.rows_for, backfill_name_types.store_kind_ids
+        backfill_name_types.rows_for = lambda source: rows
+        backfill_name_types.store_kind_ids = lambda source: set(store_kind_ids)
+        output, errors = io.StringIO(), io.StringIO()
+        original_argv = sys.argv
+        sys.argv = ['backfill_name_types.py', '--source', 'osm']
+        try:
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                backfill_name_types.main()
+        finally:
+            sys.argv = original_argv
+            backfill_name_types.rows_for, backfill_name_types.store_kind_ids = original_rows, original_kinds
+        return output.getvalue(), errors.getvalue()
+
+    def test_skips_a_record_that_has_no_type_at_all(self):
+        # The name must never be the sole basis for a POI — the live path
+        # refuses those, so a backfill that typed them would break the rule.
+        sql, _ = self.emit([{'id': 'node/1', 'name': 'Pastelaria Fantasma', 'types': None, 'max_rank': -1}])
+        self.assertEqual(sql, '')
+
+    def test_appends_without_disturbing_an_existing_primary_type(self):
+        sql, _ = self.emit([{'id': 'node/2', 'name': 'Padaria Pastelaria Boa', 'types': 'cafe', 'max_rank': 0}])
+        self.assertIn("('node/2','bakery',1)", sql)
+        self.assertNotIn('DELETE FROM', sql)
+        self.assertNotIn('primary_poi_type', sql)
+
+    def test_retires_a_superseded_generic_store_and_moves_the_primary(self):
+        sql, summary = self.emit([
+            {'id': 'node/3', 'name': 'Guanabara - Pizzaria Padaria Pastelaria', 'types': 'store', 'max_rank': 0},
+        ])
+        self.assertIn("DELETE FROM osm_poi_type WHERE poi_type = 'store'", sql)
+        self.assertIn("('node/3','bakery',0)", sql)
+        self.assertIn("UPDATE osm_poi SET primary_poi_type = 'bakery'", sql)
+        # The delete has to precede the insert or rank 0 is still taken.
+        self.assertLess(sql.index('DELETE FROM'), sql.index('INSERT OR IGNORE'))
+        self.assertIn('1 generic store rows retired', summary)
+
+    def test_a_known_store_kind_protects_the_store_type(self):
+        sql, _ = self.emit(
+            [{'id': 'node/4', 'name': 'Pastelaria Modas', 'types': 'store', 'max_rank': 0}],
+            store_kind_ids=['node/4'],
+        )
+        self.assertNotIn('DELETE FROM', sql)
+        self.assertIn("('node/4','bakery',1)", sql)
+
+    def test_a_wrangler_response_without_rows_reports_both_streams(self):
+        import backfill_name_types
+        completed = type('R', (), {'stdout': 'Total queries executed: 1', 'stderr': 'boom'})()
+        original = backfill_name_types.subprocess.run
+        backfill_name_types.subprocess.run = lambda *a, **k: completed
+        try:
+            with self.assertRaises(RuntimeError) as raised:
+                backfill_name_types.run_d1_query('SELECT 1')
+        finally:
+            backfill_name_types.subprocess.run = original
+        self.assertIn('Total queries executed', str(raised.exception))
+        self.assertIn('boom', str(raised.exception))
+
+
 class TypesFromNameTest(unittest.TestCase):
     """KAN-391 — recover types the venue's own name states."""
 
