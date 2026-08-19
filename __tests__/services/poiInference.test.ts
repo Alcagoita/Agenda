@@ -76,6 +76,11 @@ describe('inferPoiFromRules (en)', () => {
     expect(inferPoiFromRules('grab a coffee')).toBe('cafe');
   });
 
+  it('maps a tattoo task to tattoo', () => {
+    expect(inferPoiFromRules('book a tattoo')).toBe('tattoo');
+    expect(inferPoiFromRules('get inked')).toBe('tattoo');
+  });
+
   it('maps ice cream tasks to ice_cream, however they are written', () => {
     expect(inferPoiFromRules('buy ice cream')).toBe('ice_cream');
     expect(inferPoiFromRules('Gelato!')).toBe('ice_cream');
@@ -113,6 +118,11 @@ describe('inferPoiFromRules (pt-PT)', () => {
 
   it('maps a café task to cafe', () => {
     expect(inferPoiFromRules('tomar um café', 'pt-PT')).toBe('cafe');
+  });
+
+  it('maps a tatuagem task to tattoo', () => {
+    expect(inferPoiFromRules('fazer uma tatuagem', 'pt-PT')).toBe('tattoo');
+    expect(inferPoiFromRules('marcar tatuagens', 'pt-PT')).toBe('tattoo');
   });
 
   it('maps both spellings of gelataria to ice_cream', () => {

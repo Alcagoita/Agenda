@@ -61,7 +61,7 @@
   },
   "cafe": {
     "category_id": "4bf58dd8d48988d16d941735",
-    "category_name": "Caf\u00e9"
+    "category_name": "Café"
   },
   "campground": {
     "category_id": "4bf58dd8d48988d1e4941735",
@@ -365,5 +365,9 @@
   "train_station": {
     "category_id": "4bf58dd8d48988d129951735",
     "category_name": "Rail Station"
+  },
+  "tattoo": {
+    "category_id": "4bf58dd8d48988d1de931735",
+    "category_name": "Tattoo Parlor"
   }
 }

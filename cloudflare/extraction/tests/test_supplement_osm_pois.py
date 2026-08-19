@@ -244,6 +244,23 @@ class NameInferredTypeTest(unittest.TestCase):
         self.assertIn('ice_cream', counter.poi_types)
         self.assertNotIn('store', counter.poi_types)
 
+    def test_a_tattoo_shop_is_a_tattoo_studio_not_a_generic_store(self):
+        # shop=tattoo is a standard OSM tag that was never mapped, so 77
+        # Portuguese studios were sitting in generic `store` (KAN-402).
+        poi = supplement.osm_poi_from_element(element(30, 'Sol Ink Tattoos', shop='tattoo'), {})
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.poi_types, ('tattoo',))
+
+    def test_a_barbershop_that_also_tattoos_keeps_both(self):
+        # "Barbearia 31 Tatuagem" really does cut hair. The multi-type model
+        # is correct here and must not be collapsed to one or the other.
+        poi = supplement.osm_poi_from_element(
+            element(31, 'Barbearia 31 Tatuagem', shop='hairdresser'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertIn('tattoo', poi.poi_types)
+        self.assertIn('salon', poi.poi_types)
+
     def test_a_generic_shop_tag_is_replaced_by_what_the_name_says(self):
         # "Guanabara - Pizzaria Padaria Pastelaria" is a lot of things, but a
         # store is not one of them. `shop=convenience` was OSM shrugging.
