@@ -35,6 +35,93 @@ def normalize_text(s):
     s = re.sub(r'[^a-z0-9\s]', ' ', s)
     return re.sub(r'\s+', ' ', s).strip()
 
+# KAN-391. What a venue calls itself is type information neither source
+# reliably tags. 2,808 of the 75,490 OSM POIs imported for PT (3.7%) were
+# missing a type their own name states — roughly 840 real bakeries sitting
+# as generic `store`, which a "buy bread" task tagged `bakery` walks past.
+#
+# Deliberately conservative: only terms whose meaning is unambiguous in
+# pt-PT. Two decided exclusions worth not relitigating:
+#   - `snack bar` is a cafe here, NOT a bar. A Portuguese snack-bar is a
+#     daytime eatery; mapping it to `bar` would surface it for "grab a beer
+#     tonight", which is wrong.
+#   - `cervejaria` is omitted entirely. Usually a seafood restaurant,
+#     sometimes a drinking bar — genuinely ambiguous, so it stays out.
+NAME_TYPE_KEYWORDS = {
+    'pastelaria': 'bakery', 'padaria': 'bakery', 'confeitaria': 'bakery',
+    'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
+    'cabeleireiro': 'salon', 'barbearia': 'salon',
+    'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',
+    'restaurante': 'restaurant', 'churrasqueira': 'restaurant', 'marisqueira': 'restaurant',
+    'pizzaria': 'restaurant', 'hamburgueria': 'restaurant', 'tasca': 'restaurant',
+    'farmacia': 'pharmacy',
+    'ginasio': 'gym',
+    'florista': 'florist', 'floricultura': 'florist',
+    'papelaria': 'store', 'livraria': 'store', 'drogaria': 'store',
+}
+# Deliberately absent: `talho` and `peixaria`. A butcher and a fishmonger are
+# their own kind of errand, not a subtype of "shop" — they are getting proper
+# POI types of their own, so mapping them to `store` here would only have to
+# be reversed. See the butcher/fishmonger ticket.
+
+# Portuguese venue names pluralize freely ("Cabeleireiros Sofia"), so each
+# term matches an optional trailing s. Word boundaries keep `padaria` from
+# firing inside `empadaria`.
+_NAME_TYPE_PATTERNS = tuple(
+    (re.compile(rf'\b{re.escape(term)}s?\b'), poi_type)
+    for term, poi_type in NAME_TYPE_KEYWORDS.items()
+)
+
+
+def types_from_name(name, existing=()):
+    """Types the venue's own name states that nobody tagged.
+
+    Additive only, and never the sole basis for a POI: a row with no
+    tag-derived type at all is still skipped by both classifiers. This
+    recovers detail from names, it does not invent places.
+
+    Every matching term counts, not just the first — `Talho e mercearia
+    "Ti Leonor"` is a butcher AND a grocer, and stopping at the first hit
+    would silently drop one of them.
+    """
+    if not name:
+        return []
+    normalized = normalize_text(name)
+    if not normalized:
+        return []
+    have = set(existing)
+    found = []
+    for pattern, poi_type in _NAME_TYPE_PATTERNS:
+        if poi_type in have or poi_type in found:
+            continue
+        if pattern.search(normalized):
+            found.append(poi_type)
+    return found
+
+
+def replaces_generic_store(tag_types, inferred, has_store_kind):
+    """Should the name's verdict replace a generic `store`, not join it?
+
+    `store` is the catch-all both sources fall back to — OSM for any
+    unmapped `shop=*`, Foursquare for a bare Retail category. When it is the
+    ONLY thing the tags said and the name names something specific, the tag
+    was a shrug and the name is the actual answer: "Guanabara - Pizzaria
+    Padaria Pastelaria" is a lot of things, but a store is not one of them.
+
+    Both guards matter. If the tags produced any other type, they knew
+    something and are not overridden. If a store_kind was matched, the
+    source positively identified a kind of shop, which outranks a name —
+    and dropping `store` would orphan that attribute anyway, since
+    store_kind only exists on a record typed `store`.
+    """
+    return (
+        set(tag_types) == {'store'}
+        and bool(inferred)
+        and 'store' not in inferred
+        and not has_store_kind
+    )
+
+
 def load_brand_dictionary():
     # One canonical app/import/API catalogue. Every item has a persisted
     # `name` and source/title aliases that must resolve to that same value.
@@ -402,6 +489,8 @@ def classify(place_id, csv_path, out_sql_path):
     started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     poi_rows = []
     poi_type_rows = []
+    # KAN-391: ids whose generic `store` the name superseded — see below.
+    store_replaced_ids = []
     poi_attribute_rows = []
     type_counts = {}
     skipped_no_type = 0
@@ -475,6 +564,21 @@ def classify(place_id, csv_path, out_sql_path):
             if not matched_types:
                 skipped_no_type += 1
                 continue
+
+            # KAN-391. Only for rows Foursquare's own categories already
+            # classified — same restraint as the keyword subtype fallback
+            # above. A name is evidence about a known place, never grounds
+            # for inventing one.
+            inferred_types = types_from_name(row['name'], matched_types)
+            if replaces_generic_store(matched_types, inferred_types, bool(store_kinds)):
+                matched_types = set(inferred_types)
+                # poi_type rows are written with INSERT OR IGNORE and never
+                # deleted, so on a re-import the superseded `store` row would
+                # survive alongside the new type and the venue would still
+                # answer a "buy a gift" store task. Retire it explicitly.
+                store_replaced_ids.append(row['fsq_place_id'])
+            else:
+                matched_types.update(inferred_types)
 
             ranked_types = sorted(matched_types, key=lambda t: type_priority.get(t, len(type_priority)))
             primary_poi_type = ranked_types[0]
@@ -588,6 +692,12 @@ def classify(place_id, csv_path, out_sql_path):
             f, poi_insert_prefix, [(r[0], poi_row_sql(r)) for r in poi_rows],
             'poi', place_id, poi_insert_suffix,
         )
+        # Before the inserts: a superseded `store` must go, or INSERT OR
+        # IGNORE would simply add the new type beside it. Bounded per
+        # statement for the same D1 statement-size reason as the batches.
+        for start in range(0, len(store_replaced_ids), 250):
+            ids = ','.join(sql_escape(i) for i in store_replaced_ids[start:start + 250])
+            f.write(f"DELETE FROM poi_type WHERE poi_type = 'store' AND fsq_place_id IN ({ids});\n")
         poi_type_batches = write_guarded_child_batches(
             f, 'poi_type', 'fsq_place_id, poi_type, rank',
             [(r[0], poi_type_row_select(r)) for r in poi_type_rows],

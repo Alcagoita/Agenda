@@ -475,5 +475,128 @@ class ClassifyDeduplicationTest(unittest.TestCase):
                 classify_and_load.BUILD_DIR = previous_build_dir
 
 
+class NameTypeBackfillTest(unittest.TestCase):
+    """KAN-391 — the backfill that fixes records already in D1."""
+
+    def emit(self, rows, store_kind_ids=()):
+        import backfill_name_types
+        original_rows, original_kinds = backfill_name_types.rows_for, backfill_name_types.store_kind_ids
+        backfill_name_types.rows_for = lambda source: rows
+        backfill_name_types.store_kind_ids = lambda source: set(store_kind_ids)
+        output, errors = io.StringIO(), io.StringIO()
+        original_argv = sys.argv
+        sys.argv = ['backfill_name_types.py', '--source', 'osm']
+        try:
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                backfill_name_types.main()
+        finally:
+            sys.argv = original_argv
+            backfill_name_types.rows_for, backfill_name_types.store_kind_ids = original_rows, original_kinds
+        return output.getvalue(), errors.getvalue()
+
+    def test_skips_a_record_that_has_no_type_at_all(self):
+        # The name must never be the sole basis for a POI — the live path
+        # refuses those, so a backfill that typed them would break the rule.
+        sql, _ = self.emit([{'id': 'node/1', 'name': 'Pastelaria Fantasma', 'types': None, 'max_rank': -1}])
+        self.assertEqual(sql, '')
+
+    def test_appends_without_disturbing_an_existing_primary_type(self):
+        sql, _ = self.emit([{'id': 'node/2', 'name': 'Padaria Pastelaria Boa', 'types': 'cafe', 'max_rank': 0}])
+        self.assertIn("('node/2','bakery',1)", sql)
+        self.assertNotIn('DELETE FROM', sql)
+        self.assertNotIn('primary_poi_type', sql)
+
+    def test_retires_a_superseded_generic_store_and_moves_the_primary(self):
+        sql, summary = self.emit([
+            {'id': 'node/3', 'name': 'Guanabara - Pizzaria Padaria Pastelaria', 'types': 'store', 'max_rank': 0},
+        ])
+        self.assertIn("DELETE FROM osm_poi_type WHERE poi_type = 'store'", sql)
+        self.assertIn("('node/3','bakery',0)", sql)
+        self.assertIn("UPDATE osm_poi SET primary_poi_type = 'bakery'", sql)
+        # The delete has to precede the insert or rank 0 is still taken.
+        self.assertLess(sql.index('DELETE FROM'), sql.index('INSERT OR IGNORE'))
+        self.assertIn('1 generic store rows retired', summary)
+
+    def test_a_known_store_kind_protects_the_store_type(self):
+        sql, _ = self.emit(
+            [{'id': 'node/4', 'name': 'Pastelaria Modas', 'types': 'store', 'max_rank': 0}],
+            store_kind_ids=['node/4'],
+        )
+        self.assertNotIn('DELETE FROM', sql)
+        self.assertIn("('node/4','bakery',1)", sql)
+
+    def test_a_wrangler_response_without_rows_reports_both_streams(self):
+        import backfill_name_types
+        completed = type('R', (), {'stdout': 'Total queries executed: 1', 'stderr': 'boom'})()
+        original = backfill_name_types.subprocess.run
+        backfill_name_types.subprocess.run = lambda *a, **k: completed
+        try:
+            with self.assertRaises(RuntimeError) as raised:
+                backfill_name_types.run_d1_query('SELECT 1')
+        finally:
+            backfill_name_types.subprocess.run = original
+        self.assertIn('Total queries executed', str(raised.exception))
+        self.assertIn('boom', str(raised.exception))
+
+
+class TypesFromNameTest(unittest.TestCase):
+    """KAN-391 — recover types the venue's own name states."""
+
+    def test_adds_a_type_the_name_states_but_nobody_tagged(self):
+        # 682 PT rows looked exactly like this: a real pastelaria filed as a
+        # generic store, invisible to a "buy bread" task tagged bakery.
+        self.assertEqual(
+            classify_and_load.types_from_name('Belo Horizonte - Padaria Pastelaria', ['store']),
+            ['bakery'],
+        )
+
+    def test_returns_nothing_when_the_type_is_already_present(self):
+        self.assertEqual(classify_and_load.types_from_name('Padaria Central', ['bakery']), [])
+
+    def test_a_compound_name_yields_every_applicable_type(self):
+        # Stopping at the first match would silently drop one of the two.
+        self.assertEqual(
+            sorted(classify_and_load.types_from_name('Talho e mercearia "Ti Leonor"', ['store'])),
+            ['supermarket'],
+        )
+        # `talho` and `peixaria` are intentionally unmapped — a butcher and a
+        # fishmonger are their own errand, not a flavour of "shop", and are
+        # getting real POI types rather than being folded into `store`.
+        self.assertEqual(classify_and_load.types_from_name('Talho Silva', []), [])
+        self.assertEqual(classify_and_load.types_from_name('Peixaria Central', []), [])
+        self.assertEqual(
+            sorted(classify_and_load.types_from_name('Restaurante e Pastelaria do Cais', [])),
+            ['bakery', 'restaurant'],
+        )
+
+    def test_snack_bar_is_a_cafe_and_never_a_bar(self):
+        # A Portuguese snack-bar is a daytime eatery. Mapping it to `bar`
+        # would surface it for "grab a beer tonight", which is wrong.
+        for name in ('Snack-Bar Martinik', 'Snack Bar O Túnel', 'Dutchy Snackbar'):
+            with self.subTest(name=name):
+                inferred = classify_and_load.types_from_name(name, [])
+                self.assertIn('cafe', inferred)
+                self.assertNotIn('bar', inferred)
+
+    def test_respects_word_boundaries(self):
+        self.assertEqual(classify_and_load.types_from_name('Empadaria do Porto', []), [])
+        self.assertEqual(classify_and_load.types_from_name('Tascalicious', []), [])
+
+    def test_matches_plurals_and_accented_forms(self):
+        self.assertEqual(classify_and_load.types_from_name('Guânson Cabeleireiros', ['store']), ['salon'])
+        self.assertEqual(classify_and_load.types_from_name('Ginásio Central', []), ['gym'])
+        self.assertEqual(classify_and_load.types_from_name('Farmácias Reunidas', []), ['pharmacy'])
+
+    def test_ambiguous_terms_are_deliberately_absent(self):
+        # Usually a seafood restaurant, sometimes a drinking bar — left out
+        # rather than guessed. See NAME_TYPE_KEYWORDS' comment.
+        self.assertEqual(classify_and_load.types_from_name('Cervejaria Ramiro', []), [])
+
+    def test_an_empty_or_unmatched_name_adds_nothing(self):
+        self.assertEqual(classify_and_load.types_from_name('', ['store']), [])
+        self.assertEqual(classify_and_load.types_from_name(None, ['store']), [])
+        self.assertEqual(classify_and_load.types_from_name('Casa do Benfica', ['store']), [])
+
+
 if __name__ == '__main__':
     unittest.main()

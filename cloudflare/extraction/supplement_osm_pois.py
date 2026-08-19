@@ -26,7 +26,10 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from classify_and_load import encode_geohash, find_brand, load_brand_dictionary, normalize_text
+from classify_and_load import (
+    encode_geohash, find_brand, load_brand_dictionary, normalize_text,
+    replaces_generic_store, types_from_name,
+)
 from enrich_osm_cuisine import (
     MATCH_RADIUS_METERS,
     MIN_CONTAINED_NAME_LENGTH,
@@ -249,9 +252,21 @@ def osm_poi_from_element(element: dict, brand_dictionary: dict) -> OsmPoi | None
         return None
     if not isinstance(element_type, str) or not isinstance(element_id, int):
         return None
-    poi_types = types_for(tags)
-    if not poi_types:
+    tag_types = types_for(tags)
+    if not tag_types:
         return None
+    # KAN-391. Appended after the tag-derived types, never before: the first
+    # entry becomes primary_poi_type, and what the mapper tagged outranks
+    # what the name merely says. Guarded by the check above, so a name alone
+    # still cannot conjure a POI out of an untyped element.
+    inferred = types_from_name(name, tag_types)
+    store_kind = OSM_SHOP_TO_STORE_KIND.get((tags.get('shop') or '').strip().lower())
+    if replaces_generic_store(tag_types, inferred, bool(store_kind)):
+        # A bare `shop=*` OSM never mapped is a shrug, not a claim. Keeping
+        # it would leave a pastelaria matching a "buy a gift" store task.
+        poi_types = inferred
+    else:
+        poi_types = tag_types + inferred
     dedupe_name = normalize_text(name)
     if not dedupe_name:
         return None

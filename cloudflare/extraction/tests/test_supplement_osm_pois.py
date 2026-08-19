@@ -207,6 +207,67 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertNotIn('fsq_place_id', sql)
 
 
+class NameInferredTypeTest(unittest.TestCase):
+    """KAN-391 — the OSM classifier picks up types stated only in the name."""
+
+    def test_a_real_tag_decides_the_primary_type_and_the_name_only_adds(self):
+        # 682 PT rows looked like this: a genuine pastelaria whose only clue
+        # was in its name. The cafe tag is a real claim, so it stays primary
+        # and drives the hero card's icon; bakery joins it.
+        poi = supplement.osm_poi_from_element(
+            element(11, 'Padaria Pastelaria Belo Horizonte', amenity='cafe'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.primary_poi_type, 'cafe')
+        self.assertIn('bakery', poi.poi_types)
+
+    def test_snack_bar_tagged_as_a_cafe_gains_nothing_and_never_a_bar(self):
+        poi = supplement.osm_poi_from_element(element(12, 'Snack-Bar Martinik', amenity='cafe'), {})
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.poi_types, ('cafe',))
+
+    def test_a_name_alone_cannot_conjure_a_poi_from_an_untyped_element(self):
+        # `shop=yes` is excluded as an empty unit. A promising name must not
+        # be enough to import something nobody classified.
+        self.assertIsNone(supplement.osm_poi_from_element(element(13, 'Papelaria Universal', shop='yes'), {}))
+
+    def test_a_generic_shop_tag_is_replaced_by_what_the_name_says(self):
+        # "Guanabara - Pizzaria Padaria Pastelaria" is a lot of things, but a
+        # store is not one of them. `shop=convenience` was OSM shrugging.
+        poi = supplement.osm_poi_from_element(
+            element(15, 'Guanabara - Pizzaria Padaria Pastelaria', shop='convenience'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertNotIn('store', poi.poi_types)
+        self.assertEqual(set(poi.poi_types), {'bakery', 'restaurant'})
+
+    def test_a_known_shop_kind_outranks_the_name_and_keeps_its_store_type(self):
+        # `shop=clothes` is a positive identification, not a shrug — and
+        # dropping `store` would orphan the store_kind attribute.
+        poi = supplement.osm_poi_from_element(
+            element(16, 'Pastelaria Modas', shop='clothes'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertIn('store', poi.poi_types)
+        self.assertIn('bakery', poi.poi_types)
+        self.assertIn(('store_kind', 'clothing'), poi.attributes)
+
+    def test_store_survives_when_the_tags_said_something_else_too(self):
+        poi = supplement.osm_poi_from_element(
+            element(17, 'Pastelaria do Cais', shop='convenience', amenity='cafe'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertIn('store', poi.poi_types)
+        self.assertIn('cafe', poi.poi_types)
+
+    def test_inferred_types_are_deduplicated_and_ordered_after_the_tagged_one(self):
+        poi = supplement.osm_poi_from_element(
+            element(14, 'Restaurante e Churrasqueira do Cais', amenity='cafe'), {},
+        )
+        self.assertIsNotNone(poi)
+        self.assertEqual(poi.poi_types, ('cafe', 'restaurant'))
+
+
 class ScopedCandidateTest(unittest.TestCase):
     """KAN-387 — a scope reads its own neighbourhood, not the whole country."""
 
