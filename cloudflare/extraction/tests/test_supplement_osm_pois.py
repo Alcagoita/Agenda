@@ -231,6 +231,19 @@ class NameInferredTypeTest(unittest.TestCase):
         # be enough to import something nobody classified.
         self.assertIsNone(supplement.osm_poi_from_element(element(13, 'Papelaria Universal', shop='yes'), {}))
 
+    def test_ice_cream_tags_classify_instead_of_being_dropped_or_shelved(self):
+        # amenity=ice_cream produced no type at all before KAN-399, so the
+        # element was dropped outright at import; shop=ice_cream fell through
+        # to generic `store`.
+        parlour = supplement.osm_poi_from_element(element(20, 'Geladaria Santini', amenity='ice_cream'), {})
+        self.assertIsNotNone(parlour)
+        self.assertEqual(parlour.poi_types, ('ice_cream',))
+
+        counter = supplement.osm_poi_from_element(element(21, 'Gelataria do Cais', shop='ice_cream'), {})
+        self.assertIsNotNone(counter)
+        self.assertIn('ice_cream', counter.poi_types)
+        self.assertNotIn('store', counter.poi_types)
+
     def test_a_generic_shop_tag_is_replaced_by_what_the_name_says(self):
         # "Guanabara - Pizzaria Padaria Pastelaria" is a lot of things, but a
         # store is not one of them. `shop=convenience` was OSM shrugging.
