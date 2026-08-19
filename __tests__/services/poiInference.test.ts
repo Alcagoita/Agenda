@@ -76,6 +76,13 @@ describe('inferPoiFromRules (en)', () => {
     expect(inferPoiFromRules('grab a coffee')).toBe('cafe');
   });
 
+  it('maps ice cream tasks to ice_cream, however they are written', () => {
+    expect(inferPoiFromRules('buy ice cream')).toBe('ice_cream');
+    expect(inferPoiFromRules('Gelato!')).toBe('ice_cream');
+    // Punctuation and case are normalized away before matching.
+    expect(inferPoiFromRules('ICE CREAM, please')).toBe('ice_cream');
+  });
+
   it('maps a cash task to atm', () => {
     expect(inferPoiFromRules('withdraw cash')).toBe('atm');
   });
@@ -106,6 +113,13 @@ describe('inferPoiFromRules (pt-PT)', () => {
 
   it('maps a café task to cafe', () => {
     expect(inferPoiFromRules('tomar um café', 'pt-PT')).toBe('cafe');
+  });
+
+  it('maps both spellings of gelataria to ice_cream', () => {
+    // Geladaria is the more correct spelling; gelataria is also current.
+    expect(inferPoiFromRules('ir à geladaria', 'pt-PT')).toBe('ice_cream');
+    expect(inferPoiFromRules('Gelataria do Cais', 'pt-PT')).toBe('ice_cream');
+    expect(inferPoiFromRules('comprar um gelado', 'pt-PT')).toBe('ice_cream');
   });
 
   it('maps a multibanco task to atm', () => {

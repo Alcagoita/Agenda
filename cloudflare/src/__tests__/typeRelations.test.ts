@@ -17,6 +17,7 @@ const ROOT = join(__dirname, '..', '..');
 
 const SCHEMA = readFileSync(join(ROOT, 'type_relation_schema.sql'), 'utf8');
 const MIGRATION = readFileSync(join(ROOT, 'migrations', '0022_bridge_classifier_vocabulary.sql'), 'utf8');
+const ICE_CREAM_MIGRATION = readFileSync(join(ROOT, 'migrations', '0023_ice_cream_poi_type.sql'), 'utf8');
 /** The table definition alone, without the rows the schema seeds. */
 const CREATE_TABLE = SCHEMA.split('INSERT OR IGNORE')[0];
 
@@ -43,10 +44,10 @@ function relations(): Map<string, Set<string>> {
  * its own. Running it over a schema that already contains its rows proves
  * nothing — INSERT OR IGNORE makes that a no-op whatever the file says.
  */
-function migrationOnly(): Map<string, Set<string>> {
+function migrationOnly(sql: string = MIGRATION, times = 1): Map<string, Set<string>> {
   const db = new DatabaseSync(':memory:');
   db.exec(CREATE_TABLE);
-  db.exec(MIGRATION);
+  for (let i = 0; i < times; i += 1) db.exec(sql);
   return mapOf(db);
 }
 
@@ -65,6 +66,18 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     const map = relations();
     expect(map.get('ice_cream')).toEqual(new Set(['ice_cream', 'ice_cream_shop']));
     expect(map.get('ice_cream_shop')).toEqual(new Set(['ice_cream_shop', 'ice_cream']));
+  });
+
+  it('reaches the same ice cream mapping through the migration, twice over', () => {
+    // Production gets here by running the migration, not by seeding the
+    // schema, so the migration is exercised on its own — and applied twice,
+    // since an operator re-running it must not be able to break anything.
+    const expected = new Map([
+      ['ice_cream', new Set(['ice_cream', 'ice_cream_shop'])],
+      ['ice_cream_shop', new Set(['ice_cream_shop', 'ice_cream'])],
+    ]);
+    expect(migrationOnly(ICE_CREAM_MIGRATION)).toEqual(expected);
+    expect(migrationOnly(ICE_CREAM_MIGRATION, 2)).toEqual(expected);
   });
 
   it('lets cafe reach the coffee shops it was missing', () => {
@@ -146,7 +159,7 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     // The schema is what a fresh database gets; the migration is how an
     // existing one catches up. If they drift, the two stop behaving alike.
     const schema = relations();
-    for (const [searchType, includes] of migrationOnly()) {
+    for (const [searchType, includes] of new Map([...migrationOnly(), ...migrationOnly(ICE_CREAM_MIGRATION)])) {
       for (const include of includes) {
         expect(schema.get(searchType)?.has(include)).toBe(true);
       }
