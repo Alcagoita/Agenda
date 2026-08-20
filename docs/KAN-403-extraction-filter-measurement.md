@@ -172,6 +172,11 @@ are concentrated in the **tail**: 113 of the 172 leaves have fewer than 100
 rejected rows each and 2,720 rows between them. Ranking by volume puts offices,
 legal services and advertising agencies on the first screen and buries these:
 
+The 17 most obviously errand-shaped are listed below, but that selection is
+itself a hand-picked sample and carries the same bias — **the complete list of
+all 172 leaves is in the appendix at the end of this file**, so the keep/drop
+decision is made against everything rather than against what one reader noticed.
+
 ```
  1,471  52f2ab2ebcbc57f1066b8b2f  Repair Service
    514  52f2ab2ebcbc57f1066b8b33  Laundromat
@@ -201,6 +206,34 @@ KAN-401 — already a supported errand, rejected on an id mismatch.
 City, Neighborhood, Housing Development), never a branch of the taxonomy. Any
 list derived from the top of a volume ranking will systematically miss the
 errands, because errands are long-tail and infrastructure is not.
+
+## Every parent has the same shape
+
+The subtree above is not special. Grouping all 870 rejected categories by their
+top-level parent, the long tail is everywhere:
+
+| top-level parent | categories | rejected rows | leaves under 100 rows | rows in that tail |
+|---|---:|---:|---:|---:|
+| Business and Professional Services | 173 | 53,945 | 113 | 2,720 |
+| Dining and Drinking | 173 | 26,968 | 116 | 2,551 |
+| Retail | 117 | 34,507 | 64 | 1,744 |
+| Community and Government | 95 | 26,385 | 60 | 1,602 |
+| Landmarks and Outdoors | 70 | 20,936 | 44 | 1,303 |
+| Sports and Recreation | 68 | 6,301 | 57 | 787 |
+| Travel and Transportation | 56 | 19,057 | 30 | 1,012 |
+| Arts and Entertainment | 56 | 6,436 | 42 | 1,070 |
+| Health and Medicine | 46 | 7,452 | 38 | 766 |
+| Event | 16 | 348 | 15 | 331 |
+
+**579 of the 870 rejected categories are leaves with fewer than 100 rows each**,
+and together they account for roughly 13,900 rows — about 7% of all rejections.
+That is the entire cost of keeping the tail, and it is where the errands live:
+Locksmith, Lottery Retailer and Telecommunication Service are all in it, as are
+the Australian Restaurant and Tiki Bar cases above.
+
+Ranking by volume is useful for seeing *what dominates*. It is actively
+misleading for deciding *what to keep*, and no keep/drop list in KAN-400 or
+KAN-404 should be built by reading down from the top of it.
 
 ## Not measured here: the OSM half
 
@@ -1184,3 +1217,183 @@ WHERE country = 'PT' AND date_closed IS NULL
 - **KAN-396** — butcher 1,077, fish market 487. Keep list confirmed.
 - **KAN-400** — build the keep/drop list from the ranking above, not from inspection.
 - **KAN-397** — the missing-category detector is the same query shape and should reuse `measure_rejected_categories.py`.
+
+## Appendix — all 172 Business and Professional Services leaves
+
+Complete, unfiltered, ranked by rejected rows. The parent prefix
+`Business and Professional Services > ` is stripped from every line.
+
+```
+ 6,297  4bf58dd8d48988d124941735  Office
+ 3,606  63be6904847c3692a84b9b3d  Financial Service
+ 3,560  63be6904847c3692a84b9b6b  Legal Service
+ 2,802  4eb1bea83b7b6f98df247e06  Factory
+ 2,543  52e81612bcbc57f1066b7a3d  Advertising Agency
+ 1,884  5032885091d4c4b30a586d66  Real Estate Service > Real Estate Agency
+ 1,471  52f2ab2ebcbc57f1066b8b2f  Repair Service
+ 1,459  54541900498ea6ccd0202697  Health and Beauty Service
+ 1,227  4bf58dd8d48988d125941735  Office > Tech Startup
+ 1,214  4bf58dd8d48988d174941735  Office > Coworking Space
+ 1,059  58daa1558bbb0b01f18ec1f1  Insurance Agency
+ 1,052  5453de49498eade8af355881  Business Service
+   938  4bf58dd8d48988d171941735  Event Space
+   631  4bf58dd8d48988d1f4941735  Design Studio
+   577  63be6904847c3692a84b9b36  Construction
+   514  52f2ab2ebcbc57f1066b8b33  Laundromat
+   489  4eb1bdde3b7b55596b4a7490  Photography Service > Photography Lab
+   463  63be6904847c3692a84b9b26  Agriculture and Forestry Service
+   382  5454152e498ef71e2b9132c6  Event Service
+   356  4f4534884b9074f6e4fb0174  Funeral Home
+   354  52f2ab2ebcbc57f1066b8b3f  Legal Service > Law Office
+   325  63be6904847c3692a84b9b98  Wholesaler
+   321  52f2ab2ebcbc57f1066b8b1f  Shipping, Freight, and Material Transportation Service
+   282  52f2ab2ebcbc57f1066b8b3c  Health and Beauty Service > Massage Clinic
+   270  63be6904847c3692a84b9b49  Health and Beauty Service > Barbershop
+   248  5032781d91d4c4b30a586d5b  Tailor
+   243  63be6904847c3692a84b9b87  Real Estate Service > Real Estate Appraiser
+   239  5032897c91d4c4b30a586d69  Pet Service
+   238  4bf58dd8d48988d173941735  Auditorium
+   229  554a5e17498efabeda6cc559  Photography Service > Photography Studio
+   222  4f4532974b9074f6e4fb0104  Child Care Service > Daycare
+   220  63be6904847c3692a84b9b35  Computer Repair Service
+   210  56aa371be4b08b9a8d573517  Business Center
+   198  5fac002599ce226e27fe72e5  Architecture Firm
+   197  63be6904847c3692a84b9b73  Metals Supplier
+   196  63be6904847c3692a84b9b68  Industrial Equipment Supplier
+   171  4bf58dd8d48988d100941735  Convention Center > Conference Room
+   169  4bf58dd8d48988d127941735  Office > Meeting Room
+   167  52f2ab2ebcbc57f1066b8b36  Technology Business > IT Service
+   155  5032856091d4c4b30a586d63  Radio Station
+   149  52e81612bcbc57f1066b7a37  Distribution Center
+   149  5ae95d208a6f17002ce792b2  Legal Service > Notary
+   149  52f2ab2ebcbc57f1066b8b39  Shoe Repair Service
+   147  63be6904847c3692a84b9b28  Art Restoration Service
+   143  4f04b1572fb6e1c99f3db0bf  Storage Facility
+   140  63be6904847c3692a84b9b32  Office > Business and Strategy Consulting Office
+   139  4bf58dd8d48988d1ff931735  Convention Center
+   139  52f2ab2ebcbc57f1066b8b1d  Health and Beauty Service > Dry Cleaner
+   139  63be6904847c3692a84b9b4d  Home Improvement Service > Carpenter
+   136  63be6904847c3692a84b9b60  Home Improvement Service > Professional Cleaning Service
+   133  63be6904847c3692a84b9b7c  Photography Service > Photographer
+   130  56aa371be4b08b9a8d573550  Food and Beverage Service
+   123  63be6904847c3692a84b9b3a  Engineer
+   121  63be6904847c3692a84b9b4b  Health and Beauty Service > Skin Care Clinic
+   110  63be6904847c3692a84b9b58  Home Improvement Service
+   107  52e81612bcbc57f1066b7a36  Warehouse
+   102  63be6904847c3692a84b9b56  Home Improvement Service > Heating, Ventilating and Air Conditioning Contractor
+   101  63be6904847c3692a84b9b29  Audiovisual Service
+   101  63be6904847c3692a84b9b83  Real Estate Service
+    97  63be6904847c3692a84b9b2b  Automotive Service
+    93  63be6904847c3692a84b9b52  Home Improvement Service > Electrician
+    88  4d1cf8421a97d635ce361c31  Health and Beauty Service > Tanning Salon
+    88  5032764e91d4c4b30a586d5a  Office > Campaign Office
+    85  63be6904847c3692a84b9b86  Real Estate Service > Property Management Office
+    80  63be6904847c3692a84b9b5f  Home Improvement Service > Plumber
+    76  58daa1558bbb0b01f18ec1d6  Art Studio
+    76  63be6904847c3692a84b9b67  Import and Export Service
+    73  52f2ab2ebcbc57f1066b8b57  Employment Agency
+    71  63be6904847c3692a84b9b55  Home Improvement Service > General Contractor
+    71  5744ccdfe4b0c0459246b4d6  Research Laboratory
+    66  63be6904847c3692a84b9b51  Home Improvement Service > Doors and Windows Contractor
+    65  545419b1498ea6ccd0202f58  Home Improvement Service > Home Service
+    64  63be6904847c3692a84b9b7e  Plastics Supplier
+    63  4f4531084b9074f6e4fb0101  Recycling Facility
+    60  52f2ab2ebcbc57f1066b8b37  Recording Studio
+    60  63be6904847c3692a84b9b8f  Security and Safety
+    59  52f2ab2ebcbc57f1066b8b1e  Locksmith
+    52  56aa371be4b08b9a8d57356a  Outdoor Event Space
+    52  63be6904847c3692a84b9b90  Technology Business
+    52  63be6904847c3692a84b9b93  Telecommunication Service
+    43  63be6904847c3692a84b9b59  Home Improvement Service > Interior Designer
+    43  56aa371be4b08b9a8d5734d7  Industrial Estate
+    43  52e81612bcbc57f1066b7a31  TV Station
+    42  52f2ab2ebcbc57f1066b8b20  Health and Beauty Service > Body Piercing Shop
+    41  63be6904847c3692a84b9b85  Real Estate Service > Commercial Real Estate Developer
+    38  63be6904847c3692a84b9b34  Chemicals and Gasses Manufacturer
+    35  63be6904847c3692a84b9b65  Home Improvement Service > Upholstery Service
+    34  56aa371be4b08b9a8d5734c5  Wedding Hall
+    33  63be6904847c3692a84b9b4e  Home Improvement Service > Carpet and Flooring Contractor
+    31  63be6904847c3692a84b9b5d  Home Improvement Service > Painter
+    28  56aa371be4b08b9a8d573523  Film Studio
+    28  63be6904847c3692a84b9b70  Manufacturer
+    27  5744ccdfe4b0c0459246b4c7  Child Care Service
+    25  56aa371be4b08b9a8d573554  Entertainment Service
+    25  63be6904847c3692a84b9b5a  Home Improvement Service > Kitchen Remodeler
+    25  56aa371be4b08b9a8d573552  Rental Service
+    24  54f4ba06498e2cf5561da814  Office > Corporate Cafeteria
+    24  58daa1558bbb0b01f18ec1b2  Research Station
+    24  58daa1558bbb0b01f18ec1ac  Waste Management Service
+    22  63be6904847c3692a84b9b92  Technology Business > Website Designer
+    21  63be6904847c3692a84b9b2c  Automotive Service > Motorcycle Repair Shop
+    21  63be6904847c3692a84b9b5b  Home Improvement Service > Landscaper and Gardener
+    19  63be6904847c3692a84b9b2a  Automation and Control System
+    18  63be6904847c3692a84b9b6d  Logging Service
+    18  63be6904847c3692a84b9b88  Real Estate Service > Real Estate Development and Title Company
+    17  58daa1548bbb0b01f18ec1a9  Power Plant
+    16  63be6904847c3692a84b9b94  Translation Service
+    15  63be6904847c3692a84b9b48  Geological Service
+    15  63be6904847c3692a84b9b6e  Machine Shop
+    15  5665ef1d498ec706735f0e59  Office > Corporate Amenity
+    15  63be6904847c3692a84b9b8e  Search Engine Marketing and Optimization Service
+    14  63be6904847c3692a84b9b40  Financial Service > Business Broker
+    14  52e81612bcbc57f1066b7a27  Health and Beauty Service > Bath House
+    13  63be6904847c3692a84b9b2f  Automotive Service > Tire Repair Shop
+    13  63be6904847c3692a84b9b96  Water Treatment Service
+    12  5f2c1e0db6d05514c70436d4  Automotive Service > Vehicle Inspection Station
+    12  63be6904847c3692a84b9b4a  Health and Beauty Service > Hair Removal Service
+    12  63be6904847c3692a84b9b50  Home Improvement Service > Deck and Patio Contractor
+    12  63be6904847c3692a84b9b5c  Home Improvement Service > Mover
+    12  52f2ab2ebcbc57f1066b8b38  Lottery Retailer
+    12  5665c7b9498e7d8a4f2c0f06  Office > Corporate Coffee Shop
+    12  63be6904847c3692a84b9b76  Office > Office Building
+    12  63be6904847c3692a84b9b78  Paper Supplier
+    11  63be6904847c3692a84b9b66  Human Resources Agency
+    11  63be6904847c3692a84b9b8a  Renewable Energy Service
+    11  63be6904847c3692a84b9b91  Technology Business > Software Company
+    10  63be6904847c3692a84b9b38  Direct Mail and Email Marketing Service
+    10  63be6904847c3692a84b9b6f  Management Consultant
+    10  63be6904847c3692a84b9b89  Refrigeration and Ice Supplier
+     9  5032850891d4c4b30a586d62  Financial Service > Banking and Finance > Credit Union
+     9  698b7b3e05512d4553149a5d  Health and Beauty Service > Brow Bar
+     9  63be6904847c3692a84b9b79  Pet Service > Pet Grooming Service
+     9  63be6904847c3692a84b9b7d  Photography Service
+     8  63be6904847c3692a84b9b3f  Financial Service > Banking and Finance
+     8  63be6904847c3692a84b9b69  Laboratory
+     8  63be6904847c3692a84b9b72  Media Agency
+     8  63be6904847c3692a84b9b97  Welding Service
+     7  63be6904847c3692a84b9b3c  Equipment Rental Service
+     7  63be6904847c3692a84b9b7a  Pet Service > Pet Sitting and Boarding Service
+     7  63be6904847c3692a84b9b7b  Petroleum Supplier
+     7  63be6904847c3692a84b9b82  Publisher
+     7  63be6904847c3692a84b9b95  Tutoring Service
+     6  56aa371be4b08b9a8d5734cf  Ballroom
+     6  63be6904847c3692a84b9b39  Electrical Equipment Supplier
+     6  63be6904847c3692a84b9b43  Financial Service > Financial Planner
+     6  63be6904847c3692a84b9b47  Food and Beverage Service > Food Distribution Center
+     6  63be6904847c3692a84b9b4c  Home Improvement Service > Bathroom Contractor
+     5  63be6904847c3692a84b9b54  Home Improvement Service > Garage Door Supplier
+     5  63be6904847c3692a84b9b8b  Rubber Supplier
+     4  63be6904847c3692a84b9b57  Home Improvement Service > Home Inspection
+     4  63be6904847c3692a84b9b77  Online Advertising Service
+     3  63be6904847c3692a84b9b30  Automotive Service > Towing Service
+     3  63be6904847c3692a84b9b37  Creative Service
+     3  52f2ab2ebcbc57f1066b8b2d  Financial Service > Check Cashing Service
+     3  63be6904847c3692a84b9b41  Financial Service > Collections Service
+     3  63be6904847c3692a84b9b5e  Home Improvement Service > Pest Control Service
+     2  63be6904847c3692a84b9b3b  Entertainment Agency
+     2  63be6904847c3692a84b9b46  Food and Beverage Service > Caterer
+     2  63be6904847c3692a84b9b4f  Home Improvement Service > Chimney Sweep
+     2  63be6904847c3692a84b9b62  Home Improvement Service > Sewer Contractor
+     2  63be6904847c3692a84b9b64  Home Improvement Service > Tree Service
+     2  63be6904847c3692a84b9b6a  Leather Supplier
+     2  63be6904847c3692a84b9b75  Office > Corporate Housing Agency
+     2  63be6904847c3692a84b9b7f  Print, TV, Radio and Outdoor Advertising Service
+     2  63be6904847c3692a84b9b8d  Scientific Equipment Supplier
+     1  63be6904847c3692a84b9b27  Appraiser
+     1  63be6904847c3692a84b9b44  Financial Service > Loans Agency
+     1  63be6904847c3692a84b9b63  Home Improvement Service > Swimming Pool Maintenance and Service
+     1  63be6904847c3692a84b9b6c  Legal Service > Immigration Attorney
+     1  63be6904847c3692a84b9b71  Market Research and Consulting Service
+     1  63be6904847c3692a84b9b84  Real Estate Service > Building and Land Surveyor
+     1  63be6904847c3692a84b9b99  Writing, Copywriting and Technical Writing Service
+```
