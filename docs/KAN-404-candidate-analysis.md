@@ -148,6 +148,69 @@ One caveat on the destination bucket: 1,930 of its 12,090 rows carry the bare
 until someone reads the names. Same shape as the bare `Business and
 Professional Services` problem, and the same method applies.
 
+## Defects found while analysing — ticket-ready
+
+Not part of KAN-404. Recorded here because Jira was unreachable when they
+were found; both should be filed and fixed on their own branch.
+
+### 1. Two of the six cluster-leisure types can never fire
+
+`CLUSTER_LEISURE_TYPES` (`src/types/index.ts:450`) is what KAN-293's
+"Central Park is right there" companion line iterates over:
+
+```
+park · museum · attraction · aquarium · historical_landmark · tourist_attraction
+```
+
+`refreshHabitatCacheIfStale` filters the prefetch list through
+`isOsmMappable` (`src/services/habitatCache.ts:759`), which admits a type
+only if it appears in `POI_OSM_TAGS` or `SUPPLEMENTARY_OSM_TAGS`:
+
+```
+park                 POI_OSM_TAGS            prefetched
+museum               SUPPLEMENTARY_OSM_TAGS  prefetched
+attraction           SUPPLEMENTARY_OSM_TAGS  prefetched
+aquarium             SUPPLEMENTARY_OSM_TAGS  prefetched
+historical_landmark  neither                 NEVER PREFETCHED
+tourist_attraction   neither                 NEVER PREFETCHED
+```
+
+So `clusterLeisure` queries the habitat cache for two types nothing ever
+writes. In Portugal that is the worst possible pair to lose: castles,
+monasteries and miradouros are precisely the "fancy a walk?" draw the
+feature was built for.
+
+Same shape as KAN-398's dead `gas`/`post`/`clinic`/`bus` — a type offered
+in one list and absent from the list that makes it real.
+
+**Why the tests pass.** `__tests__/services/clusterLeisure.test.ts:124`
+seeds `historical_landmark` straight into a fake cache, so detection is
+proven against data production can never produce; and the prefetch test
+asserts the *requested* set (`proximityHabitatPrefetch.test.ts:185`)
+rather than what survives `isOsmMappable`. A regression test should assert
+that every `CLUSTER_LEISURE_TYPES` member is mappable, so the two lists
+cannot drift again.
+
+**Fix.** Add both to `SUPPLEMENTARY_OSM_TAGS`. `historic=*` is the OSM
+vocabulary for the first; `tourism=attraction` already covers `attraction`,
+so `tourist_attraction` may be a duplicate of it under another name and
+should probably be removed from `CLUSTER_LEISURE_TYPES` rather than mapped
+twice — worth deciding rather than assuming.
+
+### 2. The culture material we hold does not reach this feature at all
+
+`clusterLeisure` reads the habitat cache, which is populated from **OSM
+Overpass** (`osm_fetched_at`, `isOsmMappable`), not from the Cloudflare
+`poi` table. The 1,865 `historical_landmark` and 622 `museum` rows already
+in D1 therefore feed nothing here, and neither would any candidate promoted
+by KAN-404.
+
+This is a design question, not a bug: whether the leisure companion should
+read the POI API (making everything we import available to it, offline
+included) or stay OSM-only. It needs answering before promoting the nature
+and culture buckets, because promotion into `poi` alone will not surface a
+single extra place in the cluster box.
+
 ## Still needing a decision, ranked
 
 | category path | rows |
