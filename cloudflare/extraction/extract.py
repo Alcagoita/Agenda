@@ -89,6 +89,42 @@ def extract_country(foursquare_jwt, country_code):
     con.close()
     return out_path
 
+def extract_country_candidates(foursquare_jwt, country_code):
+    """KAN-404. The same country pull with NO category filter at all.
+
+    Deliberately a separate function rather than a flag on extract_country:
+    the two feed different tables and must not be confusable at a call site.
+    extract_country's output goes through partition_by_locality into
+    classify_and_load and ends up in `poi`; this one is only ever loaded
+    into `poi_candidate` by load_poi_candidates.py, and must never reach
+    run_country's locality/map_place path — that would write unfiltered
+    rows straight into production, which is the exact outcome the
+    candidates table exists to avoid.
+
+    `date_closed IS NULL` stays: a place that has shut down is not a
+    candidate for anything. Nothing else is filtered. Rows carrying no
+    category at all are kept too — 27,612 of them for PT — because a row
+    the source could not classify is precisely the kind only its name can
+    resolve, and a name only exists for a row we keep.
+    """
+    out_path = os.path.join(BUILD_DIR, f'raw_country_candidates_{country_code}.csv')
+    con = _connect(foursquare_jwt)
+    con.execute(
+        f"""
+        COPY (
+          SELECT fsq_place_id, name, latitude, longitude, address, locality,
+                 array_to_string(fsq_category_ids, '|') AS category_ids,
+                 array_to_string(fsq_category_labels, '|') AS category_labels
+          FROM places.datasets.places_os
+          WHERE country = ?
+            AND date_closed IS NULL
+        ) TO '{out_path}' (FORMAT CSV, HEADER)
+        """,
+        [country_code],
+    )
+    con.close()
+    return out_path
+
 def partition_by_locality(country_csv_path, country_code):
     """Splits a country-wide CSV into one CSV per distinct non-empty
     `locality` value, each written with the same column shape
