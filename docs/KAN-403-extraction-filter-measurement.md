@@ -156,6 +156,52 @@ same bare parent listed above as non-errand, and it is a real errand: buying a
 ticket needs no particular branch, exactly like an ATM. Judge the leaf, not the
 subtree it hangs from.
 
+## The Business and Professional Services subtree, measured
+
+The section above names the bare `Business and Professional Services` parent as
+non-errand, which is true of the parent and **misleading about the subtree**.
+That parent is one category of 173:
+
+| | categories | rejected rows |
+|---|---:|---:|
+| Bare `Business and Professional Services` (no leaf) | 1 | 11,589 |
+| Leaves beneath it | 172 | 42,356 |
+
+The leaves carry nearly four times the rows of the bare parent, and the errands
+are concentrated in the **tail**: 113 of the 172 leaves have fewer than 100
+rejected rows each and 2,720 rows between them. Ranking by volume puts offices,
+legal services and advertising agencies on the first screen and buries these:
+
+```
+ 1,471  52f2ab2ebcbc57f1066b8b2f  Repair Service
+   514  52f2ab2ebcbc57f1066b8b33  Laundromat
+   356  4f4534884b9074f6e4fb0174  Funeral Home
+   282  52f2ab2ebcbc57f1066b8b3c  Health and Beauty Service > Massage Clinic
+   270  63be6904847c3692a84b9b49  Health and Beauty Service > Barbershop
+   248  5032781d91d4c4b30a586d5b  Tailor
+   239  5032897c91d4c4b30a586d69  Pet Service
+   229  554a5e17498efabeda6cc559  Photography Service > Photography Studio
+   222  4f4532974b9074f6e4fb0104  Child Care Service > Daycare
+   220  63be6904847c3692a84b9b35  Computer Repair Service
+   149  5ae95d208a6f17002ce792b2  Legal Service > Notary
+   149  52f2ab2ebcbc57f1066b8b39  Shoe Repair Service
+   139  52f2ab2ebcbc57f1066b8b1d  Health and Beauty Service > Dry Cleaner
+    63  4f4531084b9074f6e4fb0101  Recycling Facility
+    59  52f2ab2ebcbc57f1066b8b1e  Locksmith
+    52  63be6904847c3692a84b9b93  Telecommunication Service
+    12  52f2ab2ebcbc57f1066b8b38  Lottery Retailer
+```
+
+Every one of those is somewhere a person goes to get a specific thing done, and
+`Barbershop` 270 is a straight descendant of the four-way hair split shipped in
+KAN-401 — already a supported errand, rejected on an id mismatch.
+
+**The consequence for KAN-404: a subtree may never be excluded wholesale, and a
+"known-bad" list may only name bare parents and geography** (Road, Structure,
+City, Neighborhood, Housing Development), never a branch of the taxonomy. Any
+list derived from the top of a volume ranking will systematically miss the
+errands, because errands are long-tail and infrastructure is not.
+
 ## Not measured here: the OSM half
 
 Everything above is Foursquare. The OSM side has the same shape of problem with
