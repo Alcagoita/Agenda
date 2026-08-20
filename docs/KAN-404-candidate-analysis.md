@@ -93,6 +93,61 @@ KAN-398.
 | `laundry` | 1 |
 | `tennis_court` | 1 |
 
+## Landmarks, historic places and the culture cluster
+
+Wanted for recommendations and for a feature still to be built, so measured
+separately. The important finding is that **the bottleneck here is not the
+import** — most of this material was never rejected in the first place.
+
+### Already in `poi`, and unreachable
+
+`poi_type` rows for the culture cluster today:
+
+```
+ 3,773  church              1,100  art_gallery        251  amusement_park
+ 1,968  beach                 645  library            212  stadium
+ 1,865  historical_landmark   622  museum             128  tourist_attraction
+ 1,725  park                  406  movie_theater       49  botanical_garden
+                              296  cultural_center     45  aquarium / 39 zoo
+```
+
+13,124 rows. Only `park` (1,725) and `library` (645) are types the app can
+express — the other **10,754 are already imported, already classified, and
+unreachable** because there is no `PoiType` for them. No amount of importing
+changes that; it is a `PoiType` union and catalog question (KAN-400).
+
+That is also why the candidates table holds only 21 churches and 4 historic
+sites: `church`, `historical_landmark`, `museum` and `art_gallery` were all in
+the 111-id filter, so those rows were kept all along.
+
+### What the candidates genuinely add
+
+25,625 rows under `Landmarks and Outdoors`, `Arts and Entertainment` and
+`Spiritual Center`, which split three ways:
+
+| bucket | rows | |
+|---|---:|---|
+| Destination — somewhere a person goes | 12,090 | Scenic Lookout 1,355 · Plaza 1,038 · Garden 766 · Music Venue 531 · Monument 475 · Concert Hall 348 · Spiritual Center 348 · Bridge 321 · Harbor or Marina 291 · History Museum 285 · Theater 255 · Castle 134 · Lighthouse 122 · Palace 41 |
+| Nature — a destination for a trip, not an errand | 1,598 | River 333 · Mountain 325 · Lake 271 · Surf Spot 226 · Waterfall 91 · Nature Preserve 80 · Hot Spring 75 |
+| Geography — not a place you visit | 11,937 | Structure 2,974 · City 1,719 · Neighborhood 1,695 · Other Great Outdoors 1,651 · Farm 1,634 · Field 969 · Village 568 · Town 288 |
+
+The "we want the Landmarks, but not the Outdoors" split does not fall on the
+parent name: `park` and `beach` are both under Outdoors and both already ship,
+while `Structure` and `Neighborhood` are the same parent and are pure
+geography. It falls on the leaf, as everywhere else in this work.
+
+The middle bucket is the genuinely open question. A waterfall or a scenic
+lookout is not an errand and does not belong on the Today screen, but it is
+exactly what a recommendations or trip feature would want. Whether those 1,598
+rows are promoted depends on what that feature turns out to be — so they should
+be held as `pending` rather than rejected, since rejecting is the one decision
+the table makes hard to undo once it is dropped.
+
+One caveat on the destination bucket: 1,930 of its 12,090 rows carry the bare
+`Arts and Entertainment` parent with no leaf at all, so what they are is unknown
+until someone reads the names. Same shape as the bare `Business and
+Professional Services` problem, and the same method applies.
+
 ## Still needing a decision, ranked
 
 | category path | rows |
