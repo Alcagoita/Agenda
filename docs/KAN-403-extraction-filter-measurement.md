@@ -137,6 +137,25 @@ stop filtering at extraction entirely and stage the rejected rows in a
 `poi_candidate` table. The measurement below is unaffected; only the conclusion
 drawn from it changed.
 
+**And the threshold fails in the other direction too.** Volume is not a reason to
+*exclude* either. `Restaurant > Australian Restaurant` has 8 rejected PT rows and
+`Bar > Tiki Bar` has 8, but a place the user can walk into is worth surfacing
+whether there are 8 of them or 8,000 — the count says how rare the cuisine is,
+not whether the venue is an errand. Both are descendants of categories we already
+map (`Restaurant` `4d4b7105d754a06374d81259`, `Bar` `4bf58dd8d48988d116941735`),
+so **inheriting the nearest mapped ancestor gives them a type with no per-cuisine
+decision at all**: Australian Restaurant becomes `restaurant`, Tiki Bar becomes
+`bar`. That is what the 58,494-row descendant finding buys. A named cuisine
+subtype on top of that is a separate, optional question — KAN-344's label-segment
+grouping is the mechanism, and an 8-row cuisine does not earn its own group while
+still appearing in the app as a restaurant.
+
+Conversely, a junk parent does not make its children junk.
+`Business and Professional Services > Lottery Retailer` (12 rows) sits under the
+same bare parent listed above as non-errand, and it is a real errand: buying a
+ticket needs no particular branch, exactly like an ATM. Judge the leaf, not the
+subtree it hangs from.
+
 ## Not measured here: the OSM half
 
 Everything above is Foursquare. The OSM side has the same shape of problem with
