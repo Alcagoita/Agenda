@@ -123,6 +123,78 @@ def statements(rows):
         yield INSERT_PREFIX + ','.join(values) + ';'
 
 
+# SQLite's SQLITE_MAX_COMPOUND_SELECT is 500; the VALUES list below is a
+# compound select in disguise, so stay well under it — the byte cap is not
+# the only ceiling.
+MAX_VALUES_TERMS = 400
+
+ANTI_JOIN_SUFFIX = (
+    ') WHERE column1 NOT IN (SELECT fsq_place_id FROM poi)'
+)
+SELECT_PREFIX = (
+    'INSERT OR IGNORE INTO poi_candidate '
+    '(fsq_place_id, name, lat, lng, address, locality, '
+    'raw_category_ids, raw_category_labels, imported_at) '
+    'SELECT * FROM (VALUES '
+)
+
+
+def anti_join_statements(rows):
+    """The same insert, with the "skip what poi already has" test done by D1
+    instead of by a locally held id set.
+
+    The container path can afford to read 223k ids through d1.internal and
+    filter in Python. A one-off run driven by `wrangler d1 execute --remote`
+    cannot — paging that many ids back out through the CLI is slower and
+    more fragile than letting SQLite answer a question it already has the
+    index for. Same result, and it stays correct if `poi` changes between
+    generating the file and running it.
+    """
+    values = []
+    size = byte_len(SELECT_PREFIX) + byte_len(ANTI_JOIN_SUFFIX) + byte_len(';\n')
+
+    def flush():
+        return SELECT_PREFIX + ','.join(values) + ANTI_JOIN_SUFFIX + ';\n'
+
+    for row in rows:
+        piece = value_tuple(row)
+        piece_size = byte_len(piece) + 1
+        if values and (size + piece_size > MAX_STATEMENT_BYTES
+                       or len(values) >= MAX_VALUES_TERMS):
+            yield flush()
+            values = []
+            size = byte_len(SELECT_PREFIX) + byte_len(ANTI_JOIN_SUFFIX) + byte_len(';\n')
+        values.append(piece)
+        size += piece_size
+    if values:
+        yield flush()
+
+
+def write_sql(csv_path, out_dir, statements_per_file=500):
+    """Emits the load as numbered .sql files for `wrangler d1 execute`.
+
+    Chunked into files rather than one 40MB script so a failure names the
+    chunk that failed and the run resumes from it — every statement is
+    INSERT OR IGNORE, so re-running an already-applied chunk is a no-op.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    paths, handle, count, total = [], None, 0, 0
+    for statement in anti_join_statements(candidate_rows(csv_path, known_ids=frozenset())):
+        if handle is None or count >= statements_per_file:
+            if handle:
+                handle.close()
+            path = os.path.join(out_dir, f'candidates_{len(paths):04d}.sql')
+            paths.append(path)
+            handle = open(path, 'w')
+            count = 0
+        handle.write(statement)
+        count += 1
+        total += 1
+    if handle:
+        handle.close()
+    return paths, total
+
+
 def load(country_code, csv_path):
     known_ids = existing_poi_ids()
     print(f'[candidates] {len(known_ids):,} ids already in poi — those are skipped')
@@ -142,9 +214,21 @@ def load(country_code, csv_path):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        raise SystemExit('usage: python3 load_poi_candidates.py <country_code> <unfiltered_csv>')
-    country, path = sys.argv[1], sys.argv[2]
+    args = sys.argv[1:]
+    sql_out = None
+    if '--sql-out' in args:
+        i = args.index('--sql-out')
+        sql_out = args[i + 1]
+        del args[i:i + 2]
+    if len(args) != 2:
+        raise SystemExit(
+            'usage: python3 load_poi_candidates.py <country_code> <unfiltered_csv> '
+            '[--sql-out <dir>]')
+    country, path = args[0].upper(), args[1]
     if not os.path.exists(path):
         raise SystemExit(f'no such CSV: {path}')
-    load(country.upper(), path)
+    if sql_out:
+        paths, total = write_sql(path, sql_out)
+        print(f'[candidates] {country}: {total:,} statements in {len(paths)} files -> {sql_out}')
+    else:
+        load(country, path)
