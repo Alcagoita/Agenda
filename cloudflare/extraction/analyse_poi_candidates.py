@@ -83,14 +83,15 @@ def query(sql, attempts=5):
     raise RuntimeError(f'D1 read failed after {attempts} attempts: {last}')
 
 
-def paged(table, columns, key, batch):
+def paged(table, columns, key, batch, where=None):
     """Keyset pagination, not OFFSET: D1 charges rows_read for everything it
     skips, so OFFSET on a 200k table re-reads the whole prefix every page."""
     last = ''
+    extra = f' AND ({where})' if where else ''
     while True:
         rows = query(
             f"SELECT {', '.join(columns)} FROM {table} "
-            f"WHERE {key} > '{last}' ORDER BY {key} LIMIT {batch}"
+            f"WHERE {key} > '{last}'{extra} ORDER BY {key} LIMIT {batch}"
         )
         if not rows:
             return
@@ -119,9 +120,14 @@ def build_identity_index(batch):
     """
     index = defaultdict(list)
     counts = Counter()
+    # All THREE sources nearby search reads. curated_poi is tiny (4 rows
+    # today) but it is a real source: a promoted candidate duplicating a
+    # hand-curated place would be a duplicate a person had already taken the
+    # trouble to enter, which is the worst kind to create.
     for table, key, source in (
         ('poi', 'fsq_place_id', 'fsq'),
         ('osm_poi', 'osm_element_id', 'osm'),
+        ('curated_poi', 'poi_id', 'curated'),
     ):
         for row in paged(table, [key, 'dedupe_name', 'lat', 'lng'], key, batch):
             name = row.get('dedupe_name')
