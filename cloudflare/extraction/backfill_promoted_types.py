@@ -32,7 +32,7 @@ exactly as it is: this fixes what a search can MATCH, not what the card
 displays, and changing the display type is a separate decision.
 
 Usage:
-  python3 backfill_promoted_types.py --sql-out <dir> [--stamp 2026-08-21] [--dry-run]
+  python3 backfill_promoted_types.py --sql-out <dir> [--dry-run]
 """
 import os
 import sys
@@ -78,11 +78,16 @@ def types_for(row, id_map, mapped_labels, reachable):
     # Resolve to what a user can actually reach, and drop the types the
     # product decided against — the same rules the promotion used, so the
     # backfill cannot introduce a type the promotion would have refused.
-    resolved = {reachable.get(t, t) for t in found}
+    #
+    # A classifier type with no entry in `reachable` is dropped, NOT kept
+    # under its own name. Keeping it would write rows for types the app has
+    # no PoiType for (airport, museum, stadium, yoga_studio) — unreachable
+    # by any search, and the exact dead-type shape KAN-398 had to clean up.
+    resolved = {reachable[t] for t in found if t in reachable}
     return {t for t in resolved if t not in NOT_WANTED_TYPES}
 
 
-def run(stamp, out_dir, dry_run):
+def run(out_dir, dry_run):
     id_map = category_id_types()
     mapped_labels = mapped_category_labels()
     reachable = reachable_types()
@@ -93,9 +98,19 @@ def run(stamp, out_dir, dry_run):
     added_by_type = Counter()
     pieces = []
 
-    for row in paged('poi', ['fsq_place_id', 'name', 'primary_poi_type',
-                             'raw_category_ids', 'raw_category_labels'],
-                     'fsq_place_id', 10000, where=f"date_refreshed = '{stamp}'"):
+    # Scoped by JOIN to poi_candidate, not by date. A date alone catches any
+    # ordinary import refreshed the same day, and this pass must only touch
+    # rows the promotion created.
+    #
+    # Consequence for ordering: run this BEFORE deleting promoted rows from
+    # poi_candidate, or there is nothing left to join to.
+    for row in paged('poi p JOIN poi_candidate c ON c.fsq_place_id = p.fsq_place_id',
+                     ['p.fsq_place_id AS fsq_place_id', 'p.name AS name',
+                      'p.primary_poi_type AS primary_poi_type',
+                      'p.raw_category_ids AS raw_category_ids',
+                      'p.raw_category_labels AS raw_category_labels'],
+                     'p.fsq_place_id', 10000,
+                     where="c.promotion_status = 'promoted'"):
         stats['scanned'] += 1
         if stats['scanned'] % 20000 == 0:
             print(f'  {stats["scanned"]:,}', file=sys.stderr)
@@ -132,9 +147,8 @@ def run(stamp, out_dir, dry_run):
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    stamp = args[args.index('--stamp') + 1] if '--stamp' in args else '2026-08-21'
     out = args[args.index('--sql-out') + 1] if '--sql-out' in args else None
     dry = '--dry-run' in args
     if not out and not dry:
-        raise SystemExit('usage: backfill_promoted_types.py --sql-out <dir> [--stamp DATE] [--dry-run]')
-    run(stamp, out, dry)
+        raise SystemExit('usage: backfill_promoted_types.py --sql-out <dir> [--dry-run]')
+    run(out, dry)

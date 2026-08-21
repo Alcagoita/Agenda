@@ -39,8 +39,15 @@ class FakeD1:
         return [dict(row) for row in self.db.execute(sql).fetchall()]
 
 
+_TEMP_CSVS = []
+
+
 def write_csv(rows):
+    """Every CSV written here is registered for removal, including the ones
+    written inside a test body — a raising assertion must not leave files in
+    the system temp directory."""
     handle = tempfile.NamedTemporaryFile('w', suffix='.csv', delete=False, newline='')
+    _TEMP_CSVS.append(handle.name)
     writer = csv.DictWriter(handle, fieldnames=[
         'fsq_place_id', 'name', 'latitude', 'longitude', 'address', 'locality',
         'category_ids', 'category_labels',
@@ -66,12 +73,19 @@ class LoadPoiCandidatesTest(unittest.TestCase):
     def setUp(self):
         self._real = load_poi_candidates.d1_client
         self.addCleanup(setattr, load_poi_candidates, 'd1_client', self._real)
+        self.addCleanup(self._remove_temp_csvs)
+
+    @staticmethod
+    def _remove_temp_csvs():
+        while _TEMP_CSVS:
+            path = _TEMP_CSVS.pop()
+            if os.path.exists(path):
+                os.unlink(path)
 
     def run_load(self, rows, poi_ids=()):
         fake = FakeD1(poi_ids)
         load_poi_candidates.d1_client = fake
         path = write_csv(rows)
-        self.addCleanup(os.unlink, path)
         result = load_poi_candidates.load('PT', path)
         return fake, result
 

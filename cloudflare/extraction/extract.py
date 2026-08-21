@@ -21,6 +21,7 @@ key (e.g. `region` + a coarser geohash grouping instead).
 """
 import csv
 import os
+import re
 import duckdb
 
 from category_ids import all_category_ids
@@ -107,6 +108,11 @@ def extract_country_candidates(foursquare_jwt, country_code):
     the source could not classify is precisely the kind only its name can
     resolve, and a name only exists for a row we keep.
     """
+    # country_code reaches the SQL through out_path, which is interpolated
+    # rather than bound — DuckDB's COPY target cannot be a parameter. Validate
+    # at the boundary so nothing but an ISO 3166-1 alpha-2 code can get there.
+    if not re.fullmatch(r'[A-Za-z]{2}', country_code or ''):
+        raise ValueError(f'country_code must be two ASCII letters, got {country_code!r}')
     out_path = os.path.join(BUILD_DIR, f'raw_country_candidates_{country_code}.csv')
     con = _connect(foursquare_jwt)
     con.execute(

@@ -156,13 +156,30 @@ def batched(prefix, pieces, suffix=''):
 
 
 def status_updates(decided_ids, status):
-    """promotion_status carries the audit trail, so a dropped table still
-    leaves a record of what was decided and why."""
+    """The audit trail: what was decided AND why.
+
+    promotion_note is written alongside promotion_status because a status on
+    its own cannot be reviewed — "rejected" does not say whether the row was
+    a duplicate, a road, or a company registration.
+
+    Guarded on `promotion_status = 'pending'` so a rerun can never overwrite
+    a decision already made. That guard matters: on a second pass a row
+    promoted by the first is now in `poi`, so the duplicate check matches it
+    against itself and would otherwise flip it from promoted to rejected.
+    """
     for start in range(0, len(decided_ids), 400):
         chunk = decided_ids[start:start + 400]
-        ids = ','.join(sql_escape(i) for i, _ in chunk)
-        yield (f"UPDATE poi_candidate SET promotion_status = '{status}' "
-               f"WHERE fsq_place_id IN ({ids});\n")
+        # One statement per distinct reason, so the note is accurate per row
+        # rather than a single reason smeared across the whole chunk.
+        by_reason = {}
+        for place_id, reason in chunk:
+            by_reason.setdefault(reason, []).append(place_id)
+        for reason, ids in by_reason.items():
+            id_list = ','.join(sql_escape(i) for i in ids)
+            yield (f"UPDATE poi_candidate SET promotion_status = '{status}', "
+                   f"promotion_note = {sql_escape(reason)} "
+                   f"WHERE fsq_place_id IN ({id_list}) "
+                   f"AND promotion_status = 'pending';\n")
 
 
 def run(batch, out_dir, dry_run):
@@ -180,10 +197,14 @@ def run(batch, out_dir, dry_run):
     poi_pieces, type_pieces = [], []
     promoted_ids, rejected_ids = [], []
 
+    # Only undecided rows. A row promoted by an earlier run is now in `poi`,
+    # so the duplicate check would match it against itself and re-decide it
+    # as a duplicate — turning a promotion into a rejection on every rerun.
     for row in paged('poi_candidate',
                      ['fsq_place_id', 'name', 'lat', 'lng', 'address',
                       'raw_category_ids', 'raw_category_labels'],
-                     'fsq_place_id', batch):
+                     'fsq_place_id', batch,
+                     where="promotion_status = 'pending'"):
         stats['scanned'] += 1
         if stats['scanned'] % 25000 == 0:
             print(f'  {stats["scanned"]:,}', file=sys.stderr)
