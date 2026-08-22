@@ -21,6 +21,8 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'currency_exchange', 'money_transfer',
   'financial_service', 'ice_cream', 'tattoo',
   'barber', 'hairdresser', 'nail_salon',
+  // KAN-411
+  'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tea', 'juice',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -30,7 +32,11 @@ const QUICK_ACTIONABLE_TYPES: PoiType[] = [
 
 describe('POI_CATALOG', () => {
   it('keeps all built-in types available for legacy task support', () => {
-    expect(POI_CATALOG).toHaveLength(27);
+    // Derived, not a magic number: a hardcoded length only ever tells you
+    // that someone added a type, never that they added it correctly, and it
+    // has to be edited every time regardless.
+    expect(POI_CATALOG).toHaveLength(ALL_BUILT_IN_TYPES.length);
+    expect(new Set(POI_CATALOG.map(e => e.type)).size).toBe(POI_CATALOG.length);
   });
 
   it('contains all built-in POI types', () => {
@@ -77,8 +83,16 @@ describe('POI_GEOFENCE_RADIUS', () => {
 
 describe('POI_GOOGLE_TYPES', () => {
   it('does not map services Google cannot search distinctly to generic banks', () => {
+    // Types added after the migration off Google (KAN-329-353) deliberately
+    // have no Google mapping: Google Places is not in the data chain and is
+    // being retired entirely (KAN-350), so mapping a new type into it would
+    // be adding to a system we are deleting.
+    const notGoogleBacked = [
+      'currency_exchange', 'money_transfer', 'financial_service',
+      'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tea', 'juice',
+    ];
     const googleBackedTypes = ALL_BUILT_IN_TYPES.filter(
-      type => !['currency_exchange', 'money_transfer', 'financial_service'].includes(type),
+      type => !notGoogleBacked.includes(type),
     );
     for (const type of googleBackedTypes) {
       const googleType = POI_GOOGLE_TYPES[type];

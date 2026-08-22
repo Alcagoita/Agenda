@@ -524,6 +524,71 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    // ─── KAN-411 ────────────────────────────────────────────────────────
+    // Same hairline house style: 24x24, strokeWidth 1.6, no fills.
+
+    case 'tea':
+      return (
+        <Svg {...p}>
+          {/* Cup with a handle and a wisp of steam. */}
+          <Path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M16 11h2a2 2 0 0 1 0 4h-2" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M9 6c0-1 1-1.5 1-2.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M12.5 6c0-1 1-1.5 1-2.5" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'juice':
+      return (
+        <Svg {...p}>
+          {/* Tapered glass with a straw. */}
+          <Path d="M7 5h10l-1.4 14a1 1 0 0 1-1 .9H9.4a1 1 0 0 1-1-.9L7 5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="14" y1="3" x2="11.5" y2="12" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="7.5" y1="10" x2="16.5" y2="10" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'phone_repair':
+      return (
+        <Svg {...p}>
+          {/* Handset with a screwdriver across it. */}
+          <Path d="M7 3h7a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="9.5" y1="15.5" x2="11.5" y2="15.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M15 14.5 20 19.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M14 13.5l1.8-1.8 1.4 1.4-1.8 1.8z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'shoe_repair':
+      return (
+        <Svg {...p}>
+          {/* Boot profile, with the sole stitched. */}
+          <Path d="M6 5h3.5l1 6.5c.3 1.6 1.4 2.3 3 2.6L20 15v3H6V5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="6" y1="18" x2="20" y2="18" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="9" y1="20.5" x2="17" y2="20.5" stroke={color} strokeWidth={1.6} strokeDasharray="1.6 1.8" {...S} />
+        </Svg>
+      );
+
+    case 'clothing_repair':
+      return (
+        <Svg {...p}>
+          {/* Needle with thread through the eye. */}
+          <Line x1="4" y1="20" x2="16" y2="8" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M16 8l4-4-1.5 5.5L16 8z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M9 15c2 1.5 4-1.5 6 0" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'lottery':
+      return (
+        <Svg {...p}>
+          {/* Ticket with a perforation and a lucky star. */}
+          <Path d="M3 8h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4V8z" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="9" y1="8" x2="9" y2="18" stroke={color} strokeWidth={1.6} strokeDasharray="1.5 1.8" {...S} />
+          <Path d="M14.5 10.8l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z" stroke={color} strokeWidth={1.4} {...S} />
+        </Svg>
+      );
+
     default:
       // Generic map-pin for custom (non-built-in) place types.
       return (

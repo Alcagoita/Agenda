@@ -78,9 +78,28 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── ice cream ──
     'ice cream': 'ice_cream', icecream: 'ice_cream', gelato: 'ice_cream',
     sorbet: 'ice_cream', 'ice lolly': 'ice_cream',
+    // ── tea ──
+    'tea room': 'tea', 'tea house': 'tea', 'bubble tea': 'tea',
+    'loose leaf tea': 'tea',
+    // ── juice ──
+    'juice bar': 'juice', smoothie: 'juice', 'fresh juice': 'juice',
     // ── tattoo ──
     tattoo: 'tattoo', 'tattoo studio': 'tattoo', 'get inked': 'tattoo',
     piercing: 'tattoo',
+    // ── repairs (KAN-411) ──
+    // Deliberately no vehicle repair: a broken car is searched for
+    // directly, never stumbled upon.
+    'phone repair': 'phone_repair', 'fix my phone': 'phone_repair',
+    'screen repair': 'phone_repair', 'cracked screen': 'phone_repair',
+    'repair my phone': 'phone_repair',
+    'shoe repair': 'shoe_repair', cobbler: 'shoe_repair',
+    'reheel': 'shoe_repair', 'resole': 'shoe_repair',
+    alterations: 'clothing_repair', 'clothing repair': 'clothing_repair',
+    'take up trousers': 'clothing_repair', 'hem trousers': 'clothing_repair',
+    seamstress: 'clothing_repair',
+    // ── lottery ──
+    lottery: 'lottery', 'lottery ticket': 'lottery', euromillions: 'lottery',
+    'scratch card': 'lottery',
     // ── pharmacy ──
     pharmacy: 'pharmacy', drugstore: 'pharmacy', prescription: 'pharmacy',
     meds: 'pharmacy', medicine: 'pharmacy', medication: 'pharmacy',
@@ -154,9 +173,29 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // Both spellings are current in Portugal; geladaria is the more correct.
     geladaria: 'ice_cream', gelataria: 'ice_cream', gelado: 'ice_cream',
     gelados: 'ice_cream', 'gelataria artesanal': 'ice_cream',
+    // ── tea ──
+    'casa de chá': 'tea', 'chá': 'tea', 'salão de chá': 'tea',
+    // ── juice ──
+    // A Portuguese sign says Sumos, never "bar de sumos".
+    sumos: 'juice', sumo: 'juice', batidos: 'juice', 'sumo natural': 'juice',
     // ── tattoo ──
     tatuagem: 'tattoo', tatuagens: 'tattoo', tatuador: 'tattoo',
     'fazer uma tatuagem': 'tattoo', piercing: 'tattoo',
+    // ── repairs (KAN-411) ──
+    // sapateiro is the cobbler; SAPATARIA is the shoe shop and must never
+    // map here — 346 of them would land on shoe_repair, sending someone
+    // with a broken heel to a shop that sells new ones.
+    'reparação de telemóveis': 'phone_repair', 'arranjar telemóvel': 'phone_repair',
+    'assistência técnica': 'phone_repair', 'ecrã partido': 'phone_repair',
+    sapateiro: 'shoe_repair', 'arranjar sapatos': 'shoe_repair',
+    'meias solas': 'shoe_repair',
+    // retrosaria and tecidos are SHOPS, not alterations — same trap.
+    'arranjos de roupa': 'clothing_repair', arranjos: 'clothing_repair',
+    costureira: 'clothing_repair', 'bainha': 'clothing_repair',
+    'apertar calças': 'clothing_repair',
+    // ── lottery ──
+    lotaria: 'lottery', lotarias: 'lottery', euromilhões: 'lottery',
+    'raspadinha': 'lottery', totoloto: 'lottery', 'jogos santa casa': 'lottery',
     // ── pharmacy ──
     'farmácia': 'pharmacy', receita: 'pharmacy', medicamentos: 'pharmacy',
     'remédios': 'pharmacy', comprimidos: 'pharmacy',
