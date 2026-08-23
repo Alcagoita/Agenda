@@ -83,7 +83,7 @@ def query(sql, attempts=5):
     raise RuntimeError(f'D1 read failed after {attempts} attempts: {last}')
 
 
-def paged(table, columns, key, batch, where=None):
+def paged(table, columns, key, batch, where=None, group_by=None):
     """Keyset pagination, not OFFSET: D1 charges rows_read for everything it
     skips, so OFFSET on a 200k table re-reads the whole prefix every page.
 
@@ -92,14 +92,22 @@ def paged(table, columns, key, batch, where=None):
     the cursor is read under the bare name. Reading it under the qualified
     one raises KeyError on the second page, and only on joins, which is why
     it survived every single-table caller.
+
+    **`key` MUST be unique per returned row.** The cursor advances with
+    `> last`, so if several rows share the key value and a page boundary
+    lands inside that group, every remaining row of the group is skipped —
+    silently, and by an amount that changes with `batch`. A 1:N join
+    therefore needs `group_by` (aggregating the many side) or a cursor that
+    is unique on its own.
     """
     cursor_field = key.split('.')[-1]
     last = ''
     extra = f' AND ({where})' if where else ''
+    grouping = f' GROUP BY {group_by}' if group_by else ''
     while True:
         rows = query(
             f"SELECT {', '.join(columns)} FROM {table} "
-            f"WHERE {key} > '{last}'{extra} ORDER BY {key} LIMIT {batch}"
+            f"WHERE {key} > '{last}'{extra}{grouping} ORDER BY {key} LIMIT {batch}"
         )
         if not rows:
             return

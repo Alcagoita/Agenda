@@ -119,6 +119,13 @@ def brand_tokens(brand_dictionary):
                 words = normalized.split()
                 if len(words) == 1 and len(words[0]) >= MIN_TOKEN_LENGTH:
                     out.add(words[0])
+                # The tokenizer emits adjacent pairs, so a three-word brand
+                # is never seen whole: "a padaria portuguesa" reaches the
+                # scorer as "padaria portuguesa". Exclude the pairs too, or
+                # the brand is learned under a shorter name. The single
+                # words still survive — that is what keeps `padaria`.
+                for first, second in zip(words, words[1:]):
+                    out.add(f'{first} {second}')
     return out
 
 
@@ -153,17 +160,29 @@ def collect(batch):
     token_type = defaultdict(Counter)
     type_totals = Counter()
     rows = 0
+    places = 0
+    # GROUP BY, so the join emits one row per place and the paging cursor is
+    # unique by construction. Paging a raw 1:N join on `p.fsq_place_id` is
+    # unsafe: a place with three types produces three rows sharing that
+    # value, and when a page boundary lands mid-group the `> last` cursor
+    # skips the remainder. Measured on this exact query — 302,033 join rows,
+    # 302,031 seen — so the loss is small, silent, and varies with batch
+    # size, which is the worst combination to leave in a measurement tool.
     for row in paged('poi p JOIN poi_type t ON t.fsq_place_id = p.fsq_place_id',
                      ['p.fsq_place_id AS fsq_place_id', 'p.name AS name',
-                      't.poi_type AS poi_type'],
-                     'p.fsq_place_id', batch):
-        rows += 1
-        if rows % 50000 == 0:
-            print(f'  {rows:,}', file=sys.stderr)
-        poi_type = row['poi_type']
-        type_totals[poi_type] += 1
-        for token in tokens_of(row['name']):
-            token_type[token][poi_type] += 1
+                      "group_concat(t.poi_type) AS poi_types"],
+                     'p.fsq_place_id', batch,
+                     group_by='p.fsq_place_id'):
+        places += 1
+        if places % 50000 == 0:
+            print(f'  {places:,}', file=sys.stderr)
+        types = [t for t in (row['poi_types'] or '').split(',') if t]
+        tokens = tokens_of(row['name'])
+        for poi_type in types:
+            rows += 1
+            type_totals[poi_type] += 1
+            for token in tokens:
+                token_type[token][poi_type] += 1
     return token_type, type_totals, rows
 
 
@@ -193,7 +212,9 @@ def score(token_type, type_totals, total, brands, min_support, min_lift, min_pre
 
 def report(path, candidates, rows, thresholds):
     reachable = reachable_types()
-    resolve = lambda t: reachable.get(t, t)
+    def resolve(poi_type):
+        return reachable.get(poi_type, poi_type)
+
     known = {normalize_text(k): resolve(v) for k, v in NAME_TYPE_KEYWORDS.items()}
     for c in candidates:
         c['type'] = resolve(c['type'])
@@ -213,7 +234,7 @@ def report(path, candidates, rows, thresholds):
     lines.append('The validation that matters. If the method cannot re-find terms a '
                  'person already found in a language we read, it cannot be trusted '
                  'with one we do not.\n')
-    lines.append(f'| | |\n|---|---:|')
+    lines.append('| | |\n|---|---:|')
     lines.append(f'| Hand-written terms (KAN-391) | {len(known)} |')
     lines.append(f'| Rediscovered | {len(rediscovered)} |')
     lines.append(f'| Missed | {len(missed)} |')
@@ -243,10 +264,10 @@ def report(path, candidates, rows, thresholds):
     usable = [c for c in novel if c['type'] in app_types]
     unusable = [c for c in novel if c['type'] not in app_types]
 
-    def table(rows, limit):
+    def table(rows):
         out = ['| token | type | support | occurrences | precision | lift |',
                '|---|---|---:|---:|---:|---:|']
-        for c in rows[:limit]:
+        for c in rows:
             out.append(f"| `{c['token']}` | {c['type']} | {c['support']} | "
                        f"{c['occurrences']} | {c['precision']:.2f} | {c['lift']:.1f} |")
         return out
@@ -254,7 +275,7 @@ def report(path, candidates, rows, thresholds):
     lines.append('## Proposed terms for types the app ships\n')
     lines.append(f'{len(usable)} terms. These are the actionable list — nothing is '
                  'applied, a person accepts or rejects each.\n')
-    lines += table(usable, 120)
+    lines += table(usable)
     lines.append('')
 
     lines.append('## Proposed terms for types the app has no PoiType for\n')
@@ -262,7 +283,7 @@ def report(path, candidates, rows, thresholds):
                  'time. A term here cannot be used until the type exists, so this is '
                  'evidence for KAN-400 rather than a list to approve. Strong signals '
                  'in here are an argument that the type is worth adding.\n')
-    lines += table(unusable, 60)
+    lines += table(unusable)
     lines.append('')
 
     with open(path, 'w') as handle:
