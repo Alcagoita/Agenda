@@ -206,7 +206,11 @@ def score(token_type, type_totals, total, brands, min_support, min_lift, min_pre
                 'token': token, 'type': poi_type, 'support': hits,
                 'occurrences': occurrences, 'precision': precision, 'lift': lift,
             })
-    candidates.sort(key=lambda c: (-c['lift'], -c['support']))
+    # Token is the final tiebreaker so the report is reproducible. Without
+    # it, ties on (lift, support) order by set iteration, which varies per
+    # process — the same data produced a different file each run, making a
+    # diff unable to answer whether anything actually changed.
+    candidates.sort(key=lambda c: (-c['lift'], -c['support'], c['token']))
     return drop_bigram_fragments(candidates)
 
 
@@ -271,6 +275,68 @@ def report(path, candidates, rows, thresholds):
             out.append(f"| `{c['token']}` | {c['type']} | {c['support']} | "
                        f"{c['occurrences']} | {c['precision']:.2f} | {c['lift']:.1f} |")
         return out
+
+    # The analysis lives HERE, not appended to the generated file by hand:
+    # this script overwrites its output on every run, so anything added to
+    # the markdown afterwards is destroyed by the next invocation. That
+    # already happened once and took the whole verdict with it.
+    lines.append('## Verdict\n')
+    lines.append(f'It rediscovered {len(rediscovered)} of {len(known)} hand-written terms '
+                 f'and agreed with the person on {len(agreed)}. The disagreements are the '
+                 'product calls the corpus cannot contain — a `barbeiro` is a men\'s '
+                 'barber even where most rows so named carry hairdresser tags.\n')
+    lines.append('The misses are honest limits rather than tuning opportunities: the '
+                 'terms below sit under the support floor, and lowering it is how one '
+                 'oddly named venue becomes a rule.\n')
+
+    lines.append('## Do not approve terms by score alone\n')
+    lines.append('The highest-scoring terms look excellent and are contaminated three '
+                 'ways. Sampled from precision >= 0.90, support >= 50:\n')
+    lines.append('```')
+    lines.append('caixa 898 @0.98 · depositos 521 · geral depositos 520   -> bank')
+    lines.append('    fragments of the brand "Caixa Geral de Depositos";')
+    lines.append('    `caixa` alone means box or till')
+    lines.append('fidelidade 460 @0.98                                    -> store')
+    lines.append('    an insurance brand that is also an ordinary noun')
+    lines.append('servicio 605 @0.92 · estacion servicio 581 @0.97        -> gas')
+    lines.append('    Spanish; "estacion de servicio" is a petrol station')
+    lines.append('construcao 699 @0.98 · construcoes 526 · materiais 403  -> store')
+    lines.append('    CONTRACTORS — the rows KAN-411 refused to type as hardware')
+    lines.append('    after finding 94 shops among 6,747 construction firms')
+    lines.append('```\n')
+    lines.append('Every one clears any threshold worth setting. **Precision and lift '
+                 'measure what the corpus says; they cannot detect that the corpus is '
+                 'wrong.**\n')
+    lines.append('Three causes, none fixable by tuning:\n')
+    lines.append('1. **Brand fragments.** The guard excludes one-word brands and whole '
+                 'phrases, which is what preserves `padaria` from "A Padaria '
+                 'Portuguesa" — and the same rule leaks `caixa` and `fidelidade`. '
+                 'Separating them needs a signal the statistics do not hold: one is a '
+                 'common noun naming a category, the other a common noun that happens '
+                 'to be a company.')
+    lines.append('2. **Country contamination.** Spanish terms carry real support in '
+                 'rows labelled `country = \'PT\'` — the border leakage seen in '
+                 'KAN-411, now measurable.')
+    lines.append('3. **Upstream mis-typing.** Contractors are typed `store` in `poi`, '
+                 'so the learner correctly infers that construction words predict '
+                 '`store`. It is reproducing an error we already found, faithfully.\n')
+    lines.append('Cause 3 is the one worth stating plainly: **the learner inherits '
+                 'every classification mistake already in the corpus and repeats it '
+                 'with high confidence.** That argues for fixing the corpus and '
+                 're-running, not against the method.\n')
+    lines.append('### Prerequisites before any term is approved\n')
+    lines.append('* clean the country boundary (Spanish rows inside PT data)')
+    lines.append('* decide what contractors are, and stop typing them `store`')
+    lines.append('* a brand rule that separates a category noun from a company noun, '
+                 'or an explicit exclusion list for the few that matter\n')
+    lines.append('Until then this document is **evidence, not a queue of work**. The '
+                 'terms that would survive all three fixes — `biblioteca`, '
+                 '`assistencia tecnica`, `paragem carris`, `paragem stcp`, '
+                 '`ourivesaria`, `confeccoes`, `moveis` — are real, and worth applying '
+                 'once the list can be trusted as a whole.\n')
+    lines.append('## Not done here\n')
+    lines.append('No classifier change. `NAME_TYPE_KEYWORDS` is untouched, per the '
+                 'ticket: the candidate list and the comparison come first.\n')
 
     lines.append('## Proposed terms for types the app ships\n')
     lines.append(f'{len(usable)} terms. These are the actionable list — nothing is '

@@ -31,6 +31,51 @@ The method chose a different type than the person did. Each is either a product 
 floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -> tattoo, tatuagem -> tattoo, tatuagens -> tattoo
 ```
 
+## Verdict
+
+It rediscovered 29 of 35 hand-written terms and agreed with the person on 28. The disagreements are the product calls the corpus cannot contain — a `barbeiro` is a men's barber even where most rows so named carry hairdresser tags.
+
+The misses are honest limits rather than tuning opportunities: the terms below sit under the support floor, and lowering it is how one oddly named venue becomes a rule.
+
+## Do not approve terms by score alone
+
+The highest-scoring terms look excellent and are contaminated three ways. Sampled from precision >= 0.90, support >= 50:
+
+```
+caixa 898 @0.98 · depositos 521 · geral depositos 520   -> bank
+    fragments of the brand "Caixa Geral de Depositos";
+    `caixa` alone means box or till
+fidelidade 460 @0.98                                    -> store
+    an insurance brand that is also an ordinary noun
+servicio 605 @0.92 · estacion servicio 581 @0.97        -> gas
+    Spanish; "estacion de servicio" is a petrol station
+construcao 699 @0.98 · construcoes 526 · materiais 403  -> store
+    CONTRACTORS — the rows KAN-411 refused to type as hardware
+    after finding 94 shops among 6,747 construction firms
+```
+
+Every one clears any threshold worth setting. **Precision and lift measure what the corpus says; they cannot detect that the corpus is wrong.**
+
+Three causes, none fixable by tuning:
+
+1. **Brand fragments.** The guard excludes one-word brands and whole phrases, which is what preserves `padaria` from "A Padaria Portuguesa" — and the same rule leaks `caixa` and `fidelidade`. Separating them needs a signal the statistics do not hold: one is a common noun naming a category, the other a common noun that happens to be a company.
+2. **Country contamination.** Spanish terms carry real support in rows labelled `country = 'PT'` — the border leakage seen in KAN-411, now measurable.
+3. **Upstream mis-typing.** Contractors are typed `store` in `poi`, so the learner correctly infers that construction words predict `store`. It is reproducing an error we already found, faithfully.
+
+Cause 3 is the one worth stating plainly: **the learner inherits every classification mistake already in the corpus and repeats it with high confidence.** That argues for fixing the corpus and re-running, not against the method.
+
+### Prerequisites before any term is approved
+
+* clean the country boundary (Spanish rows inside PT data)
+* decide what contractors are, and stop typing them `store`
+* a brand rule that separates a category noun from a company noun, or an explicit exclusion list for the few that matter
+
+Until then this document is **evidence, not a queue of work**. The terms that would survive all three fixes — `biblioteca`, `assistencia tecnica`, `paragem carris`, `paragem stcp`, `ourivesaria`, `confeccoes`, `moveis` — are real, and worth applying once the list can be trusted as a whole.
+
+## Not done here
+
+No classifier change. `NAME_TYPE_KEYWORDS` is untouched, per the ticket: the candidate list and the comparison come first.
+
 ## Proposed terms for types the app ships
 
 1288 terms. These are the actionable list — nothing is applied, a person accepts or rejects each.
@@ -147,9 +192,9 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `actividades desportivas` | gym | 16 | 17 | 0.94 | 101.6 |
 | `fitness` | gym | 375 | 400 | 0.94 | 101.2 |
 | `gimnasio` | gym | 21 | 23 | 0.91 | 98.6 |
-| `una marca` | clinic | 26 | 26 | 1.00 | 97.2 |
 | `gaes una` | clinic | 26 | 26 | 1.00 | 97.2 |
 | `marca amplifon` | clinic | 26 | 26 | 1.00 | 97.2 |
+| `una marca` | clinic | 26 | 26 | 1.00 | 97.2 |
 | `pediatra` | clinic | 18 | 18 | 1.00 | 97.2 |
 | `clinica pediatrica` | clinic | 15 | 15 | 1.00 | 97.2 |
 | `health` | gym | 142 | 160 | 0.89 | 95.8 |
@@ -170,9 +215,9 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `usf` | clinic | 59 | 68 | 0.87 | 84.3 |
 | `pilates` | gym | 46 | 59 | 0.78 | 84.2 |
 | `servicos medicos` | clinic | 19 | 22 | 0.86 | 83.9 |
-| `cuidado personal` | salon | 16 | 32 | 0.50 | 82.6 |
-| `clarel belleza` | salon | 16 | 32 | 0.50 | 82.6 |
 | `belleza cuidado` | salon | 16 | 32 | 0.50 | 82.6 |
+| `clarel belleza` | salon | 16 | 32 | 0.50 | 82.6 |
+| `cuidado personal` | salon | 16 | 32 | 0.50 | 82.6 |
 | `personal hogar` | salon | 16 | 32 | 0.50 | 82.6 |
 | `urbano` | park | 71 | 129 | 0.55 | 82.2 |
 | `posto medico` | clinic | 21 | 25 | 0.84 | 81.6 |
@@ -234,8 +279,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `bmci` | bank | 48 | 48 | 1.00 | 57.8 |
 | `banco caixa` | bank | 26 | 26 | 1.00 | 57.8 |
 | `caja extremadura` | bank | 18 | 18 | 1.00 | 57.8 |
-| `cih` | bank | 17 | 17 | 1.00 | 57.8 |
 | `attijari` | bank | 17 | 17 | 1.00 | 57.8 |
+| `cih` | bank | 17 | 17 | 1.00 | 57.8 |
 | `depositos` | bank | 521 | 526 | 0.99 | 57.2 |
 | `geral depositos` | bank | 520 | 525 | 0.99 | 57.2 |
 | `bmce` | bank | 64 | 65 | 0.98 | 56.9 |
@@ -263,9 +308,9 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `campsa` | gas | 20 | 20 | 1.00 | 52.5 |
 | `bomba gasolina` | gas | 17 | 17 | 1.00 | 52.5 |
 | `estaciones` | gas | 16 | 16 | 1.00 | 52.5 |
+| `cedipsa` | gas | 15 | 15 | 1.00 | 52.5 |
 | `petroleos` | gas | 15 | 15 | 1.00 | 52.5 |
 | `petronor` | gas | 15 | 15 | 1.00 | 52.5 |
-| `cedipsa` | gas | 15 | 15 | 1.00 | 52.5 |
 | `posto abastecimento` | gas | 247 | 248 | 1.00 | 52.3 |
 | `societe` | bank | 56 | 62 | 0.90 | 52.2 |
 | `familiar` | clinic | 34 | 64 | 0.53 | 51.6 |
@@ -311,15 +356,15 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `carburantes` | gas | 17 | 21 | 0.81 | 42.5 |
 | `centro clinico` | clinic | 17 | 39 | 0.44 | 42.4 |
 | `hair studio` | hairdresser | 22 | 22 | 1.00 | 41.9 |
-| `peluqueria caballeros` | hairdresser | 16 | 16 | 1.00 | 41.9 |
 | `barberia` | hairdresser | 16 | 16 | 1.00 | 41.9 |
-| `cred` | gas | 15 | 19 | 0.79 | 41.5 |
+| `peluqueria caballeros` | hairdresser | 16 | 16 | 1.00 | 41.9 |
 | `cmh` | gas | 15 | 19 | 0.79 | 41.5 |
+| `cred` | gas | 15 | 19 | 0.79 | 41.5 |
 | `alimentacion` | supermarket | 23 | 32 | 0.72 | 41.4 |
 | `forma` | gym | 19 | 50 | 0.38 | 41.0 |
 | `bom dia` | supermarket | 185 | 304 | 0.61 | 40.9 |
-| `supermercado jamon` | supermarket | 17 | 28 | 0.61 | 40.8 |
 | `supermercado dia` | supermarket | 17 | 28 | 0.61 | 40.8 |
+| `supermercado jamon` | supermarket | 17 | 28 | 0.61 | 40.8 |
 | `coiffeur` | hairdresser | 77 | 80 | 0.96 | 40.4 |
 | `peluqueros` | hairdresser | 47 | 49 | 0.96 | 40.2 |
 | `unisex` | hairdresser | 20 | 21 | 0.95 | 39.9 |
@@ -427,8 +472,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `pastelaria santa` | bakery | 20 | 31 | 0.65 | 18.4 |
 | `pao quente` | bakery | 208 | 323 | 0.64 | 18.4 |
 | `pastelaria flor` | bakery | 36 | 56 | 0.64 | 18.4 |
-| `quente pastelaria` | bakery | 16 | 25 | 0.64 | 18.3 |
 | `panisol` | bakery | 16 | 25 | 0.64 | 18.3 |
+| `quente pastelaria` | bakery | 16 | 25 | 0.64 | 18.3 |
 | `pastelaria doce` | bakery | 63 | 99 | 0.64 | 18.2 |
 | `croissants` | bakery | 21 | 33 | 0.64 | 18.2 |
 | `pastelaria sao` | bakery | 25 | 40 | 0.62 | 17.9 |
@@ -490,10 +535,10 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `pool` | bar | 55 | 121 | 0.45 | 9.6 |
 | `deck` | bar | 15 | 33 | 0.45 | 9.6 |
 | `cafe les` | cafe | 18 | 24 | 0.75 | 9.5 |
-| `cafe stop` | cafe | 15 | 20 | 0.75 | 9.5 |
 | `cafe sol` | cafe | 15 | 20 | 0.75 | 9.5 |
-| `cafe ponto` | cafe | 20 | 27 | 0.74 | 9.4 |
+| `cafe stop` | cafe | 15 | 20 | 0.75 | 9.5 |
 | `cafe flor` | cafe | 20 | 27 | 0.74 | 9.4 |
+| `cafe ponto` | cafe | 20 | 27 | 0.74 | 9.4 |
 | `bar das` | bar | 20 | 45 | 0.44 | 9.4 |
 | `cafe cantinho` | cafe | 17 | 23 | 0.74 | 9.4 |
 | `buondi` | cafe | 38 | 52 | 0.73 | 9.3 |
@@ -555,59 +600,59 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `tandoori` | restaurant | 56 | 56 | 1.00 | 5.7 |
 | `trattoria` | restaurant | 54 | 54 | 1.00 | 5.7 |
 | `restaurante churrasqueira` | restaurant | 49 | 49 | 1.00 | 5.7 |
-| `indian restaurant` | restaurant | 46 | 46 | 1.00 | 5.7 |
 | `hamburguer gourmet` | restaurant | 46 | 46 | 1.00 | 5.7 |
+| `indian restaurant` | restaurant | 46 | 46 | 1.00 | 5.7 |
 | `pizzas` | restaurant | 44 | 44 | 1.00 | 5.7 |
 | `dos grelhados` | restaurant | 42 | 42 | 1.00 | 5.7 |
 | `steak house` | restaurant | 42 | 42 | 1.00 | 5.7 |
 | `italian republic` | restaurant | 33 | 33 | 1.00 | 5.7 |
-| `burger ranch` | restaurant | 32 | 32 | 1.00 | 5.7 |
 | `bifanas vendas` | restaurant | 32 | 32 | 1.00 | 5.7 |
+| `burger ranch` | restaurant | 32 | 32 | 1.00 | 5.7 |
 | `restaurante sabores` | restaurant | 31 | 31 | 1.00 | 5.7 |
 | `restaurante adega` | restaurant | 29 | 29 | 1.00 | 5.7 |
-| `restaurante tipico` | restaurant | 28 | 28 | 1.00 | 5.7 |
 | `restaurante jardim` | restaurant | 28 | 28 | 1.00 | 5.7 |
+| `restaurante tipico` | restaurant | 28 | 28 | 1.00 | 5.7 |
 | `shoarma` | restaurant | 28 | 28 | 1.00 | 5.7 |
 | `tomatino` | restaurant | 28 | 28 | 1.00 | 5.7 |
-| `quasi` | restaurant | 27 | 27 | 1.00 | 5.7 |
-| `praca alimentacao` | restaurant | 27 | 27 | 1.00 | 5.7 |
 | `brasas` | restaurant | 27 | 27 | 1.00 | 5.7 |
-| `luzzo` | restaurant | 25 | 25 | 1.00 | 5.7 |
+| `praca alimentacao` | restaurant | 27 | 27 | 1.00 | 5.7 |
+| `quasi` | restaurant | 27 | 27 | 1.00 | 5.7 |
 | `kebab house` | restaurant | 25 | 25 | 1.00 | 5.7 |
-| `joshua` | restaurant | 24 | 24 | 1.00 | 5.7 |
+| `luzzo` | restaurant | 25 | 25 | 1.00 | 5.7 |
 | `frango guia` | restaurant | 24 | 24 | 1.00 | 5.7 |
-| `restaurante maria` | restaurant | 23 | 23 | 1.00 | 5.7 |
+| `joshua` | restaurant | 24 | 24 | 1.00 | 5.7 |
 | `quasi pronti` | restaurant | 23 | 23 | 1.00 | 5.7 |
+| `restaurante maria` | restaurant | 23 | 23 | 1.00 | 5.7 |
 | `joshua shoarma` | restaurant | 22 | 22 | 1.00 | 5.7 |
-| `shoarma grill` | restaurant | 22 | 22 | 1.00 | 5.7 |
 | `restaurante ponte` | restaurant | 22 | 22 | 1.00 | 5.7 |
+| `shoarma grill` | restaurant | 22 | 22 | 1.00 | 5.7 |
 | `bifes` | restaurant | 21 | 21 | 1.00 | 5.7 |
 | `grelhador` | restaurant | 21 | 21 | 1.00 | 5.7 |
 | `churrascao` | restaurant | 20 | 20 | 1.00 | 5.7 |
-| `restaurante lareira` | restaurant | 20 | 20 | 1.00 | 5.7 |
-| `wok walk` | restaurant | 20 | 20 | 1.00 | 5.7 |
 | `franguinho` | restaurant | 20 | 20 | 1.00 | 5.7 |
 | `restaurante flor` | restaurant | 20 | 20 | 1.00 | 5.7 |
-| `sushi house` | restaurant | 19 | 19 | 1.00 | 5.7 |
-| `espeto` | restaurant | 19 | 19 | 1.00 | 5.7 |
-| `beef` | restaurant | 19 | 19 | 1.00 | 5.7 |
-| `pizza pasta` | restaurant | 19 | 19 | 1.00 | 5.7 |
+| `restaurante lareira` | restaurant | 20 | 20 | 1.00 | 5.7 |
+| `wok walk` | restaurant | 20 | 20 | 1.00 | 5.7 |
 | `basilico` | restaurant | 19 | 19 | 1.00 | 5.7 |
+| `beef` | restaurant | 19 | 19 | 1.00 | 5.7 |
+| `espeto` | restaurant | 19 | 19 | 1.00 | 5.7 |
+| `pizza pasta` | restaurant | 19 | 19 | 1.00 | 5.7 |
 | `street food` | restaurant | 19 | 19 | 1.00 | 5.7 |
+| `sushi house` | restaurant | 19 | 19 | 1.00 | 5.7 |
 | `restaurante avenida` | restaurant | 18 | 18 | 1.00 | 5.7 |
 | `sushicome` | restaurant | 18 | 18 | 1.00 | 5.7 |
 | `churrasqueria` | restaurant | 17 | 17 | 1.00 | 5.7 |
-| `restaurante grill` | restaurant | 17 | 17 | 1.00 | 5.7 |
 | `mexican` | restaurant | 17 | 17 | 1.00 | 5.7 |
-| `indian tandoori` | restaurant | 16 | 16 | 1.00 | 5.7 |
-| `indian palace` | restaurant | 16 | 16 | 1.00 | 5.7 |
+| `restaurante grill` | restaurant | 17 | 17 | 1.00 | 5.7 |
 | `cataplana` | restaurant | 16 | 16 | 1.00 | 5.7 |
+| `indian palace` | restaurant | 16 | 16 | 1.00 | 5.7 |
+| `indian tandoori` | restaurant | 16 | 16 | 1.00 | 5.7 |
 | `pomodoro` | restaurant | 16 | 16 | 1.00 | 5.7 |
-| `restaurante tia` | restaurant | 15 | 15 | 1.00 | 5.7 |
 | `dos bifes` | restaurant | 15 | 15 | 1.00 | 5.7 |
+| `hamburgueres` | restaurant | 15 | 15 | 1.00 | 5.7 |
 | `restaurante antonio` | restaurant | 15 | 15 | 1.00 | 5.7 |
 | `restaurante palmeira` | restaurant | 15 | 15 | 1.00 | 5.7 |
-| `hamburgueres` | restaurant | 15 | 15 | 1.00 | 5.7 |
+| `restaurante tia` | restaurant | 15 | 15 | 1.00 | 5.7 |
 | `creme` | cafe | 16 | 36 | 0.44 | 5.6 |
 | `caffe` | cafe | 330 | 747 | 0.44 | 5.6 |
 | `tentacoes` | cafe | 15 | 34 | 0.44 | 5.6 |
@@ -625,37 +670,37 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `restaurante cantinho` | restaurant | 33 | 34 | 0.97 | 5.5 |
 | `chicken` | restaurant | 31 | 32 | 0.97 | 5.5 |
 | `cucina` | restaurant | 30 | 31 | 0.97 | 5.5 |
-| `tacos` | restaurant | 28 | 29 | 0.97 | 5.5 |
 | `osteria` | restaurant | 28 | 29 | 0.97 | 5.5 |
+| `tacos` | restaurant | 28 | 29 | 0.97 | 5.5 |
 | `dos frangos` | restaurant | 83 | 86 | 0.97 | 5.5 |
 | `restaurante santa` | restaurant | 27 | 28 | 0.96 | 5.5 |
 | `churrasquinho` | restaurant | 26 | 27 | 0.96 | 5.4 |
 | `restaurante japones` | restaurant | 26 | 27 | 0.96 | 5.4 |
 | `pasta` | restaurant | 128 | 133 | 0.96 | 5.4 |
 | `kebab` | restaurant | 379 | 394 | 0.96 | 5.4 |
-| `restaurante fonte` | restaurant | 25 | 26 | 0.96 | 5.4 |
 | `oakberry` | restaurant | 25 | 26 | 0.96 | 5.4 |
-| `restaurante mar` | restaurant | 24 | 25 | 0.96 | 5.4 |
-| `kebab pizza` | restaurant | 24 | 25 | 0.96 | 5.4 |
+| `restaurante fonte` | restaurant | 25 | 26 | 0.96 | 5.4 |
 | `acai natura` | restaurant | 24 | 25 | 0.96 | 5.4 |
+| `kebab pizza` | restaurant | 24 | 25 | 0.96 | 5.4 |
+| `restaurante mar` | restaurant | 24 | 25 | 0.96 | 5.4 |
 | `burger` | restaurant | 404 | 421 | 0.96 | 5.4 |
-| `restaurante paraiso` | restaurant | 23 | 24 | 0.96 | 5.4 |
 | `hamburgueseria` | restaurant | 23 | 24 | 0.96 | 5.4 |
 | `oakberry acai` | restaurant | 23 | 24 | 0.96 | 5.4 |
+| `restaurante paraiso` | restaurant | 23 | 24 | 0.96 | 5.4 |
 | `martino` | restaurant | 22 | 23 | 0.96 | 5.4 |
 | `mexicano` | restaurant | 22 | 23 | 0.96 | 5.4 |
 | `roulotte` | restaurant | 22 | 23 | 0.96 | 5.4 |
 | `grelha` | restaurant | 109 | 114 | 0.96 | 5.4 |
 | `dos leitoes` | restaurant | 126 | 132 | 0.95 | 5.4 |
+| `pregaria` | restaurant | 21 | 22 | 0.95 | 5.4 |
 | `restaurante mira` | restaurant | 21 | 22 | 0.95 | 5.4 |
 | `restaurante retiro` | restaurant | 21 | 22 | 0.95 | 5.4 |
-| `pregaria` | restaurant | 21 | 22 | 0.95 | 5.4 |
 | `brasa` | restaurant | 160 | 168 | 0.95 | 5.4 |
+| `barbecue` | restaurant | 20 | 21 | 0.95 | 5.4 |
 | `churrasqueira central` | restaurant | 20 | 21 | 0.95 | 5.4 |
 | `restaurante nova` | restaurant | 20 | 21 | 0.95 | 5.4 |
-| `sakura` | restaurant | 20 | 21 | 0.95 | 5.4 |
 | `restaurante parque` | restaurant | 20 | 21 | 0.95 | 5.4 |
-| `barbecue` | restaurant | 20 | 21 | 0.95 | 5.4 |
+| `sakura` | restaurant | 20 | 21 | 0.95 | 5.4 |
 | `doner kebab` | restaurant | 58 | 61 | 0.95 | 5.4 |
 | `restaurante beira` | restaurant | 19 | 20 | 0.95 | 5.4 |
 | `restaurante dona` | restaurant | 19 | 20 | 0.95 | 5.4 |
@@ -672,16 +717,16 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `tacho` | restaurant | 50 | 53 | 0.94 | 5.3 |
 | `churrasco` | restaurant | 83 | 88 | 0.94 | 5.3 |
 | `restaurante pizzaria` | restaurant | 48 | 51 | 0.94 | 5.3 |
+| `delhi` | restaurant | 16 | 17 | 0.94 | 5.3 |
+| `farnel` | restaurant | 16 | 17 | 0.94 | 5.3 |
 | `restaurant and` | restaurant | 16 | 17 | 0.94 | 5.3 |
 | `restaurante farol` | restaurant | 16 | 17 | 0.94 | 5.3 |
-| `farnel` | restaurant | 16 | 17 | 0.94 | 5.3 |
-| `delhi` | restaurant | 16 | 17 | 0.94 | 5.3 |
 | `pasto` | restaurant | 122 | 130 | 0.94 | 5.3 |
-| `restaurante cozinha` | restaurant | 15 | 16 | 0.94 | 5.3 |
-| `pollo` | restaurant | 15 | 16 | 0.94 | 5.3 |
-| `restaurante serra` | restaurant | 15 | 16 | 0.94 | 5.3 |
-| `restaurante panoramico` | restaurant | 15 | 16 | 0.94 | 5.3 |
 | `domino pizza` | restaurant | 15 | 16 | 0.94 | 5.3 |
+| `pollo` | restaurant | 15 | 16 | 0.94 | 5.3 |
+| `restaurante cozinha` | restaurant | 15 | 16 | 0.94 | 5.3 |
+| `restaurante panoramico` | restaurant | 15 | 16 | 0.94 | 5.3 |
+| `restaurante serra` | restaurant | 15 | 16 | 0.94 | 5.3 |
 | `restaurante estrela` | restaurant | 29 | 31 | 0.94 | 5.3 |
 | `restaurante casa` | restaurant | 127 | 136 | 0.93 | 5.3 |
 | `frango` | restaurant | 141 | 151 | 0.93 | 5.3 |
@@ -690,8 +735,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `restaurante solar` | restaurant | 28 | 30 | 0.93 | 5.3 |
 | `ristorante pizzeria` | restaurant | 27 | 29 | 0.93 | 5.3 |
 | `doner` | restaurant | 65 | 70 | 0.93 | 5.2 |
-| `taberna londrina` | restaurant | 26 | 28 | 0.93 | 5.2 |
 | `assador` | restaurant | 26 | 28 | 0.93 | 5.2 |
+| `taberna londrina` | restaurant | 26 | 28 | 0.93 | 5.2 |
 | `garfo` | restaurant | 51 | 55 | 0.93 | 5.2 |
 | `churrascaria` | restaurant | 127 | 137 | 0.93 | 5.2 |
 | `restaurant bar` | restaurant | 50 | 54 | 0.93 | 5.2 |
@@ -711,8 +756,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `tipico` | restaurant | 51 | 56 | 0.91 | 5.1 |
 | `italian` | restaurant | 70 | 77 | 0.91 | 5.1 |
 | `prato` | restaurant | 50 | 55 | 0.91 | 5.1 |
-| `restaurante praia` | restaurant | 20 | 22 | 0.91 | 5.1 |
 | `izakaya` | restaurant | 20 | 22 | 0.91 | 5.1 |
+| `restaurante praia` | restaurant | 20 | 22 | 0.91 | 5.1 |
 | `napoli` | restaurant | 29 | 32 | 0.91 | 5.1 |
 | `hot dog` | restaurant | 19 | 21 | 0.90 | 5.1 |
 | `restaurante carlos` | restaurant | 19 | 21 | 0.90 | 5.1 |
@@ -720,23 +765,23 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `restaurante marisqueira` | restaurant | 56 | 62 | 0.90 | 5.1 |
 | `restaurante residencial` | restaurant | 28 | 31 | 0.90 | 5.1 |
 | `petiscaria` | restaurant | 37 | 41 | 0.90 | 5.1 |
-| `restaurante regional` | restaurant | 18 | 20 | 0.90 | 5.1 |
 | `hamburgueria artesanal` | restaurant | 18 | 20 | 0.90 | 5.1 |
+| `restaurante regional` | restaurant | 18 | 20 | 0.90 | 5.1 |
 | `taj mahal` | restaurant | 18 | 20 | 0.90 | 5.1 |
 | `francesinha` | restaurant | 35 | 39 | 0.90 | 5.1 |
 | `das sandes` | restaurant | 51 | 57 | 0.89 | 5.1 |
 | `asian` | restaurant | 34 | 38 | 0.89 | 5.1 |
 | `restaurante perola` | restaurant | 17 | 19 | 0.89 | 5.1 |
-| `temperos` | restaurant | 24 | 27 | 0.89 | 5.0 |
 | `mahal` | restaurant | 24 | 27 | 0.89 | 5.0 |
+| `temperos` | restaurant | 24 | 27 | 0.89 | 5.0 |
 | `restaurante santo` | restaurant | 16 | 18 | 0.89 | 5.0 |
 | `japones` | restaurant | 31 | 35 | 0.89 | 5.0 |
 | `pregos` | restaurant | 31 | 35 | 0.89 | 5.0 |
 | `cachorros` | restaurant | 23 | 26 | 0.88 | 5.0 |
-| `cachorro` | restaurant | 15 | 17 | 0.88 | 5.0 |
-| `restaurante clube` | restaurant | 15 | 17 | 0.88 | 5.0 |
-| `kyoto` | restaurant | 15 | 17 | 0.88 | 5.0 |
 | `almoco` | restaurant | 15 | 17 | 0.88 | 5.0 |
+| `cachorro` | restaurant | 15 | 17 | 0.88 | 5.0 |
+| `kyoto` | restaurant | 15 | 17 | 0.88 | 5.0 |
+| `restaurante clube` | restaurant | 15 | 17 | 0.88 | 5.0 |
 | `convivio` | cafe | 27 | 69 | 0.39 | 5.0 |
 | `adega dos` | restaurant | 28 | 32 | 0.88 | 4.9 |
 | `dos pregos` | restaurant | 21 | 24 | 0.88 | 4.9 |
@@ -757,166 +802,166 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `artes graficas` | store | 84 | 84 | 1.00 | 4.9 |
 | `tecidos` | store | 82 | 82 | 1.00 | 4.9 |
 | `livraria papelaria` | store | 81 | 81 | 1.00 | 4.9 |
-| `industria mobiliario` | store | 76 | 76 | 1.00 | 4.9 |
 | `calzados` | store | 76 | 76 | 1.00 | 4.9 |
+| `industria mobiliario` | store | 76 | 76 | 1.00 | 4.9 |
 | `marmores granitos` | store | 74 | 74 | 1.00 | 4.9 |
 | `papelaria tabacaria` | store | 72 | 72 | 1.00 | 4.9 |
 | `comercio moveis` | store | 65 | 65 | 1.00 | 4.9 |
 | `pavimentos` | store | 63 | 63 | 1.00 | 4.9 |
-| `dutti` | store | 58 | 58 | 1.00 | 4.9 |
 | `alberto oculista` | store | 58 | 58 | 1.00 | 4.9 |
-| `papelaria livraria` | store | 57 | 57 | 1.00 | 4.9 |
+| `dutti` | store | 58 | 58 | 1.00 | 4.9 |
 | `jewelry` | store | 57 | 57 | 1.00 | 4.9 |
+| `papelaria livraria` | store | 57 | 57 | 1.00 | 4.9 |
 | `fidelidade agencia` | store | 56 | 56 | 1.00 | 4.9 |
 | `joalheiros` | store | 55 | 55 | 1.00 | 4.9 |
 | `sapatarias` | store | 55 | 55 | 1.00 | 4.9 |
 | `isolamentos` | store | 54 | 54 | 1.00 | 4.9 |
 | `relogios` | store | 52 | 52 | 1.00 | 4.9 |
-| `comercio electrodomesticos` | store | 49 | 49 | 1.00 | 4.9 |
 | `bigmat` | store | 49 | 49 | 1.00 | 4.9 |
-| `ourivesaria relojoaria` | store | 46 | 46 | 1.00 | 4.9 |
+| `comercio electrodomesticos` | store | 49 | 49 | 1.00 | 4.9 |
 | `malhas confeccoes` | store | 46 | 46 | 1.00 | 4.9 |
+| `ourivesaria relojoaria` | store | 46 | 46 | 1.00 | 4.9 |
 | `toys` | store | 46 | 46 | 1.00 | 4.9 |
 | `artigos decoracao` | store | 45 | 45 | 1.00 | 4.9 |
 | `oysho` | store | 45 | 45 | 1.00 | 4.9 |
 | `artigos papelaria` | store | 43 | 43 | 1.00 | 4.9 |
+| `loja gato` | store | 42 | 42 | 1.00 | 4.9 |
 | `pepe jeans` | store | 42 | 42 | 1.00 | 4.9 |
 | `remodelacoes` | store | 42 | 42 | 1.00 | 4.9 |
-| `loja gato` | store | 42 | 42 | 1.00 | 4.9 |
-| `women secret` | store | 41 | 41 | 1.00 | 4.9 |
 | `decoracao interiores` | store | 41 | 41 | 1.00 | 4.9 |
+| `women secret` | store | 41 | 41 | 1.00 | 4.9 |
 | `industria confeccoes` | store | 39 | 39 | 1.00 | 4.9 |
 | `tous jewelry` | store | 39 | 39 | 1.00 | 4.9 |
 | `moveis decoracoes` | store | 38 | 38 | 1.00 | 4.9 |
 | `impressao` | store | 37 | 37 | 1.00 | 4.9 |
-| `tectos` | store | 36 | 36 | 1.00 | 4.9 |
 | `malas` | store | 36 | 36 | 1.00 | 4.9 |
+| `tectos` | store | 36 | 36 | 1.00 | 4.9 |
 | `aluminios` | store | 35 | 35 | 1.00 | 4.9 |
 | `fabrica calcado` | store | 35 | 35 | 1.00 | 4.9 |
 | `servicos limpeza` | store | 34 | 34 | 1.00 | 4.9 |
-| `ventilacao` | store | 33 | 33 | 1.00 | 4.9 |
 | `sofas` | store | 33 | 33 | 1.00 | 4.9 |
-| `peles` | store | 32 | 32 | 1.00 | 4.9 |
+| `ventilacao` | store | 33 | 33 | 1.00 | 4.9 |
 | `carpintaria mecanica` | store | 32 | 32 | 1.00 | 4.9 |
+| `peles` | store | 32 | 32 | 1.00 | 4.9 |
+| `flying tiger` | store | 31 | 31 | 1.00 | 4.9 |
 | `sanitarios` | store | 31 | 31 | 1.00 | 4.9 |
 | `tmn` | store | 31 | 31 | 1.00 | 4.9 |
-| `flying tiger` | store | 31 | 31 | 1.00 | 4.9 |
 | `acessorios moda` | store | 30 | 30 | 1.00 | 4.9 |
 | `caixilharia` | store | 30 | 30 | 1.00 | 4.9 |
-| `stara` | store | 30 | 30 | 1.00 | 4.9 |
 | `ensitel` | store | 30 | 30 | 1.00 | 4.9 |
+| `stara` | store | 30 | 30 | 1.00 | 4.9 |
 | `sunglass hut` | store | 30 | 30 | 1.00 | 4.9 |
+| `embalagens` | store | 29 | 29 | 1.00 | 4.9 |
 | `etiquetas` | store | 29 | 29 | 1.00 | 4.9 |
 | `renovaveis` | store | 29 | 29 | 1.00 | 4.9 |
-| `embalagens` | store | 29 | 29 | 1.00 | 4.9 |
 | `falsos` | store | 28 | 28 | 1.00 | 4.9 |
-| `marcenaria` | store | 28 | 28 | 1.00 | 4.9 |
-| `instrumentos musicais` | store | 28 | 28 | 1.00 | 4.9 |
-| `w52` | store | 28 | 28 | 1.00 | 4.9 |
 | `galli` | store | 28 | 28 | 1.00 | 4.9 |
-| `tectos falsos` | store | 27 | 27 | 1.00 | 4.9 |
-| `industria calcado` | store | 27 | 27 | 1.00 | 4.9 |
+| `instrumentos musicais` | store | 28 | 28 | 1.00 | 4.9 |
+| `marcenaria` | store | 28 | 28 | 1.00 | 4.9 |
+| `w52` | store | 28 | 28 | 1.00 | 4.9 |
 | `comercio pronto` | store | 27 | 27 | 1.00 | 4.9 |
+| `industria calcado` | store | 27 | 27 | 1.00 | 4.9 |
 | `levi store` | store | 27 | 27 | 1.00 | 4.9 |
 | `people phone` | store | 27 | 27 | 1.00 | 4.9 |
+| `tectos falsos` | store | 27 | 27 | 1.00 | 4.9 |
 | `tiger copenhagen` | store | 27 | 27 | 1.00 | 4.9 |
-| `engenharia construcao` | store | 26 | 26 | 1.00 | 4.9 |
 | `comercio texteis` | store | 26 | 26 | 1.00 | 4.9 |
-| `mobiliario decoracao` | store | 26 | 26 | 1.00 | 4.9 |
+| `engenharia construcao` | store | 26 | 26 | 1.00 | 4.9 |
 | `lion porches` | store | 26 | 26 | 1.00 | 4.9 |
+| `mobiliario decoracao` | store | 26 | 26 | 1.00 | 4.9 |
 | `throttleman` | store | 26 | 26 | 1.00 | 4.9 |
-| `para construcao` | store | 25 | 25 | 1.00 | 4.9 |
 | `bricolage` | store | 25 | 25 | 1.00 | 4.9 |
-| `comercio peixe` | store | 24 | 24 | 1.00 | 4.9 |
-| `energias renovaveis` | store | 24 | 24 | 1.00 | 4.9 |
+| `para construcao` | store | 25 | 25 | 1.00 | 4.9 |
+| `accessorize` | store | 24 | 24 | 1.00 | 4.9 |
 | `calcados` | store | 24 | 24 | 1.00 | 4.9 |
 | `centroxogo` | store | 24 | 24 | 1.00 | 4.9 |
-| `accessorize` | store | 24 | 24 | 1.00 | 4.9 |
+| `comercio peixe` | store | 24 | 24 | 1.00 | 4.9 |
+| `energias renovaveis` | store | 24 | 24 | 1.00 | 4.9 |
 | `giovanni galli` | store | 24 | 24 | 1.00 | 4.9 |
-| `kids junior` | store | 23 | 23 | 1.00 | 4.9 |
-| `consumiveis` | store | 23 | 23 | 1.00 | 4.9 |
 | `comercio ourivesaria` | store | 23 | 23 | 1.00 | 4.9 |
+| `consumiveis` | store | 23 | 23 | 1.00 | 4.9 |
 | `estamparia` | store | 23 | 23 | 1.00 | 4.9 |
-| `reeducacao alimentar` | store | 23 | 23 | 1.00 | 4.9 |
 | `house reeducacao` | store | 23 | 23 | 1.00 | 4.9 |
+| `kids junior` | store | 23 | 23 | 1.00 | 4.9 |
 | `publicitarios` | store | 23 | 23 | 1.00 | 4.9 |
-| `reparacao electrodomesticos` | store | 23 | 23 | 1.00 | 4.9 |
 | `reclamos` | store | 23 | 23 | 1.00 | 4.9 |
-| `mobiliario escritorio` | store | 22 | 22 | 1.00 | 4.9 |
-| `electronico` | store | 22 | 22 | 1.00 | 4.9 |
-| `pichelaria` | store | 22 | 22 | 1.00 | 4.9 |
-| `texteis lar` | store | 22 | 22 | 1.00 | 4.9 |
-| `luminosos` | store | 22 | 22 | 1.00 | 4.9 |
+| `reeducacao alimentar` | store | 23 | 23 | 1.00 | 4.9 |
+| `reparacao electrodomesticos` | store | 23 | 23 | 1.00 | 4.9 |
 | `comercio calcado` | store | 22 | 22 | 1.00 | 4.9 |
+| `electronico` | store | 22 | 22 | 1.00 | 4.9 |
 | `industria moveis` | store | 22 | 22 | 1.00 | 4.9 |
+| `luminosos` | store | 22 | 22 | 1.00 | 4.9 |
+| `mobiliario escritorio` | store | 22 | 22 | 1.00 | 4.9 |
+| `pichelaria` | store | 22 | 22 | 1.00 | 4.9 |
 | `sociedad construcao` | store | 22 | 22 | 1.00 | 4.9 |
+| `texteis lar` | store | 22 | 22 | 1.00 | 4.9 |
 | `acabamentos` | store | 21 | 21 | 1.00 | 4.9 |
-| `espingardaria` | store | 21 | 21 | 1.00 | 4.9 |
 | `bimba lola` | store | 21 | 21 | 1.00 | 4.9 |
+| `espingardaria` | store | 21 | 21 | 1.00 | 4.9 |
 | `componentes electronicos` | store | 20 | 20 | 1.00 | 4.9 |
 | `imoveis` | store | 20 | 20 | 1.00 | 4.9 |
-| `natura selection` | store | 20 | 20 | 1.00 | 4.9 |
 | `kidstore` | store | 20 | 20 | 1.00 | 4.9 |
+| `natura selection` | store | 20 | 20 | 1.00 | 4.9 |
 | `stone stone` | store | 20 | 20 | 1.00 | 4.9 |
-| `ourivesarias` | store | 19 | 19 | 1.00 | 4.9 |
 | `carpintaria moveis` | store | 19 | 19 | 1.00 | 4.9 |
-| `reclamos luminosos` | store | 19 | 19 | 1.00 | 4.9 |
-| `opticas multiopticas` | store | 19 | 19 | 1.00 | 4.9 |
-| `novidades` | store | 19 | 19 | 1.00 | 4.9 |
-| `loja braga` | store | 19 | 19 | 1.00 | 4.9 |
 | `locker` | store | 19 | 19 | 1.00 | 4.9 |
-| `industria malhas` | store | 18 | 18 | 1.00 | 4.9 |
-| `bota minuto` | store | 18 | 18 | 1.00 | 4.9 |
-| `marroquinaria` | store | 18 | 18 | 1.00 | 4.9 |
-| `confecciones` | store | 18 | 18 | 1.00 | 4.9 |
-| `sociedade equipamentos` | store | 18 | 18 | 1.00 | 4.9 |
-| `construcao decoracao` | store | 18 | 18 | 1.00 | 4.9 |
-| `jeans london` | store | 18 | 18 | 1.00 | 4.9 |
-| `fabrica malhas` | store | 18 | 18 | 1.00 | 4.9 |
+| `loja braga` | store | 19 | 19 | 1.00 | 4.9 |
+| `novidades` | store | 19 | 19 | 1.00 | 4.9 |
+| `opticas multiopticas` | store | 19 | 19 | 1.00 | 4.9 |
+| `ourivesarias` | store | 19 | 19 | 1.00 | 4.9 |
+| `reclamos luminosos` | store | 19 | 19 | 1.00 | 4.9 |
 | `artigos pesca` | store | 18 | 18 | 1.00 | 4.9 |
-| `instalacoes tecnicas` | store | 18 | 18 | 1.00 | 4.9 |
-| `joalheiro` | store | 18 | 18 | 1.00 | 4.9 |
+| `bota minuto` | store | 18 | 18 | 1.00 | 4.9 |
+| `confecciones` | store | 18 | 18 | 1.00 | 4.9 |
+| `construcao decoracao` | store | 18 | 18 | 1.00 | 4.9 |
 | `euronics` | store | 18 | 18 | 1.00 | 4.9 |
+| `fabrica malhas` | store | 18 | 18 | 1.00 | 4.9 |
+| `industria malhas` | store | 18 | 18 | 1.00 | 4.9 |
+| `instalacoes tecnicas` | store | 18 | 18 | 1.00 | 4.9 |
+| `jeans london` | store | 18 | 18 | 1.00 | 4.9 |
+| `joalheiro` | store | 18 | 18 | 1.00 | 4.9 |
+| `marroquinaria` | store | 18 | 18 | 1.00 | 4.9 |
 | `persianas` | store | 18 | 18 | 1.00 | 4.9 |
 | `prenatal` | store | 18 | 18 | 1.00 | 4.9 |
-| `cutelarias` | store | 17 | 17 | 1.00 | 4.9 |
-| `cimentos` | store | 17 | 17 | 1.00 | 4.9 |
-| `papelarias` | store | 17 | 17 | 1.00 | 4.9 |
+| `sociedade equipamentos` | store | 18 | 18 | 1.00 | 4.9 |
 | `aquecimento central` | store | 17 | 17 | 1.00 | 4.9 |
-| `hush` | store | 17 | 17 | 1.00 | 4.9 |
-| `puppies` | store | 17 | 17 | 1.00 | 4.9 |
+| `cimentos` | store | 17 | 17 | 1.00 | 4.9 |
 | `comercio confeccoes` | store | 17 | 17 | 1.00 | 4.9 |
-| `publicacoes` | store | 17 | 17 | 1.00 | 4.9 |
+| `cutelarias` | store | 17 | 17 | 1.00 | 4.9 |
+| `hush` | store | 17 | 17 | 1.00 | 4.9 |
+| `impermeabilizacoes` | store | 17 | 17 | 1.00 | 4.9 |
 | `joyeros` | store | 17 | 17 | 1.00 | 4.9 |
 | `mudancas` | store | 17 | 17 | 1.00 | 4.9 |
-| `impermeabilizacoes` | store | 17 | 17 | 1.00 | 4.9 |
-| `sapatos` | store | 17 | 17 | 1.00 | 4.9 |
+| `papelarias` | store | 17 | 17 | 1.00 | 4.9 |
+| `publicacoes` | store | 17 | 17 | 1.00 | 4.9 |
+| `puppies` | store | 17 | 17 | 1.00 | 4.9 |
 | `samsonite` | store | 17 | 17 | 1.00 | 4.9 |
-| `materiais para` | store | 16 | 16 | 1.00 | 4.9 |
-| `para calcado` | store | 16 | 16 | 1.00 | 4.9 |
-| `reabilitacao auditiva` | store | 16 | 16 | 1.00 | 4.9 |
+| `sapatos` | store | 17 | 17 | 1.00 | 4.9 |
 | `comercio artesanato` | store | 16 | 16 | 1.00 | 4.9 |
-| `estudos projectos` | store | 16 | 16 | 1.00 | 4.9 |
 | `cozinhas equipamentos` | store | 16 | 16 | 1.00 | 4.9 |
+| `estudos projectos` | store | 16 | 16 | 1.00 | 4.9 |
+| `materiais para` | store | 16 | 16 | 1.00 | 4.9 |
+| `minisom` | store | 16 | 16 | 1.00 | 4.9 |
 | `ouriversaria` | store | 16 | 16 | 1.00 | 4.9 |
 | `papagaio sem` | store | 16 | 16 | 1.00 | 4.9 |
+| `para calcado` | store | 16 | 16 | 1.00 | 4.9 |
 | `promod` | store | 16 | 16 | 1.00 | 4.9 |
-| `minisom` | store | 16 | 16 | 1.00 | 4.9 |
-| `shana` | store | 15 | 15 | 1.00 | 4.9 |
+| `reabilitacao auditiva` | store | 16 | 16 | 1.00 | 4.9 |
 | `aerosoles` | store | 15 | 15 | 1.00 | 4.9 |
-| `uniformes` | store | 15 | 15 | 1.00 | 4.9 |
+| `bijouterie` | store | 15 | 15 | 1.00 | 4.9 |
+| `britas` | store | 15 | 15 | 1.00 | 4.9 |
 | `canalizacao` | store | 15 | 15 | 1.00 | 4.9 |
-| `granitos marmores` | store | 15 | 15 | 1.00 | 4.9 |
 | `carpintaria marcenaria` | store | 15 | 15 | 1.00 | 4.9 |
+| `colchoes companhia` | store | 15 | 15 | 1.00 | 4.9 |
+| `decimas` | store | 15 | 15 | 1.00 | 4.9 |
 | `equipamentos electronicos` | store | 15 | 15 | 1.00 | 4.9 |
 | `fatos` | store | 15 | 15 | 1.00 | 4.9 |
-| `britas` | store | 15 | 15 | 1.00 | 4.9 |
-| `colchoes companhia` | store | 15 | 15 | 1.00 | 4.9 |
-| `mike davis` | store | 15 | 15 | 1.00 | 4.9 |
+| `granitos marmores` | store | 15 | 15 | 1.00 | 4.9 |
 | `hilfiger` | store | 15 | 15 | 1.00 | 4.9 |
+| `mike davis` | store | 15 | 15 | 1.00 | 4.9 |
 | `sanitop` | store | 15 | 15 | 1.00 | 4.9 |
-| `decimas` | store | 15 | 15 | 1.00 | 4.9 |
-| `bijouterie` | store | 15 | 15 | 1.00 | 4.9 |
+| `shana` | store | 15 | 15 | 1.00 | 4.9 |
+| `uniformes` | store | 15 | 15 | 1.00 | 4.9 |
 | `sopa` | restaurant | 27 | 31 | 0.87 | 4.9 |
 | `das tapas` | restaurant | 20 | 23 | 0.87 | 4.9 |
 | `restaurante cafe` | restaurant | 33 | 38 | 0.87 | 4.9 |
@@ -924,8 +969,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `ourivesaria` | store | 565 | 568 | 0.99 | 4.9 |
 | `materiais construcao` | store | 336 | 338 | 0.99 | 4.9 |
 | `vestir` | store | 163 | 164 | 0.99 | 4.9 |
-| `subway` | restaurant | 26 | 30 | 0.87 | 4.9 |
 | `bbq` | restaurant | 26 | 30 | 0.87 | 4.9 |
+| `subway` | restaurant | 26 | 30 | 0.87 | 4.9 |
 | `chef` | restaurant | 84 | 97 | 0.87 | 4.9 |
 | `interiores` | store | 143 | 144 | 0.99 | 4.9 |
 | `oculista` | store | 134 | 135 | 0.99 | 4.9 |
@@ -956,8 +1001,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `restaurante sol` | restaurant | 24 | 28 | 0.86 | 4.8 |
 | `tokyo` | restaurant | 18 | 21 | 0.86 | 4.8 |
 | `malhas` | store | 171 | 174 | 0.98 | 4.8 |
-| `canalizacoes` | store | 57 | 58 | 0.98 | 4.8 |
 | `aquecimento` | store | 57 | 58 | 0.98 | 4.8 |
+| `canalizacoes` | store | 57 | 58 | 0.98 | 4.8 |
 | `vidreira` | store | 55 | 56 | 0.98 | 4.8 |
 | `copias` | store | 54 | 55 | 0.98 | 4.8 |
 | `brindes` | store | 53 | 54 | 0.98 | 4.8 |
@@ -974,8 +1019,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `vestuario` | store | 218 | 223 | 0.98 | 4.8 |
 | `opticas` | store | 43 | 44 | 0.98 | 4.8 |
 | `assado` | restaurant | 23 | 27 | 0.85 | 4.8 |
-| `maquinas ferramentas` | store | 41 | 42 | 0.98 | 4.8 |
 | `informaticos` | store | 41 | 42 | 0.98 | 4.8 |
+| `maquinas ferramentas` | store | 41 | 42 | 0.98 | 4.8 |
 | `construcoes` | store | 526 | 539 | 0.98 | 4.8 |
 | `energias` | store | 39 | 40 | 0.97 | 4.8 |
 | `centro copias` | store | 38 | 39 | 0.97 | 4.8 |
@@ -989,10 +1034,10 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `limpezas` | store | 106 | 109 | 0.97 | 4.8 |
 | `bordados` | store | 69 | 71 | 0.97 | 4.8 |
 | `brigitte` | store | 34 | 35 | 0.97 | 4.8 |
-| `vernizes` | store | 33 | 34 | 0.97 | 4.8 |
 | `estruturas` | store | 33 | 34 | 0.97 | 4.8 |
-| `hamburgaria` | restaurant | 22 | 26 | 0.85 | 4.8 |
+| `vernizes` | store | 33 | 34 | 0.97 | 4.8 |
 | `adega tipica` | restaurant | 22 | 26 | 0.85 | 4.8 |
+| `hamburgaria` | restaurant | 22 | 26 | 0.85 | 4.8 |
 | `montagens electricas` | store | 32 | 33 | 0.97 | 4.8 |
 | `wear` | store | 32 | 33 | 0.97 | 4.8 |
 | `take away` | restaurant | 82 | 97 | 0.85 | 4.8 |
@@ -1011,43 +1056,43 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `souvenirs` | store | 26 | 27 | 0.96 | 4.7 |
 | `meat` | restaurant | 26 | 31 | 0.84 | 4.7 |
 | `climatizacao` | store | 100 | 104 | 0.96 | 4.7 |
-| `print` | store | 25 | 26 | 0.96 | 4.7 |
 | `fabrica moveis` | store | 25 | 26 | 0.96 | 4.7 |
+| `print` | store | 25 | 26 | 0.96 | 4.7 |
 | `cozinhas` | store | 97 | 101 | 0.96 | 4.7 |
 | `bifanas` | restaurant | 139 | 166 | 0.84 | 4.7 |
-| `equipamentos electricos` | store | 24 | 25 | 0.96 | 4.7 |
-| `velharias` | store | 24 | 25 | 0.96 | 4.7 |
 | `comercio ferragens` | store | 24 | 25 | 0.96 | 4.7 |
 | `domesticas` | store | 24 | 25 | 0.96 | 4.7 |
-| `prendas` | store | 24 | 25 | 0.96 | 4.7 |
 | `editora` | store | 24 | 25 | 0.96 | 4.7 |
-| `cimento` | store | 23 | 24 | 0.96 | 4.7 |
-| `copia` | store | 23 | 24 | 0.96 | 4.7 |
-| `termicos` | store | 23 | 24 | 0.96 | 4.7 |
+| `equipamentos electricos` | store | 24 | 25 | 0.96 | 4.7 |
+| `prendas` | store | 24 | 25 | 0.96 | 4.7 |
+| `velharias` | store | 24 | 25 | 0.96 | 4.7 |
 | `carpintarias` | store | 23 | 24 | 0.96 | 4.7 |
+| `cimento` | store | 23 | 24 | 0.96 | 4.7 |
 | `cin` | store | 23 | 24 | 0.96 | 4.7 |
+| `copia` | store | 23 | 24 | 0.96 | 4.7 |
 | `optivisao` | store | 23 | 24 | 0.96 | 4.7 |
-| `artefactos` | store | 22 | 23 | 0.96 | 4.7 |
+| `termicos` | store | 23 | 24 | 0.96 | 4.7 |
 | `aluminio` | store | 22 | 23 | 0.96 | 4.7 |
+| `artefactos` | store | 22 | 23 | 0.96 | 4.7 |
 | `tabacos` | store | 22 | 23 | 0.96 | 4.7 |
 | `instalacoes` | store | 196 | 205 | 0.96 | 4.7 |
 | `boi` | restaurant | 15 | 18 | 0.83 | 4.7 |
-| `the good` | restaurant | 15 | 18 | 0.83 | 4.7 |
 | `honest` | restaurant | 15 | 18 | 0.83 | 4.7 |
+| `the good` | restaurant | 15 | 18 | 0.83 | 4.7 |
 | `bikes` | store | 43 | 45 | 0.96 | 4.7 |
 | `joias` | store | 106 | 111 | 0.95 | 4.7 |
 | `obras publicas` | store | 62 | 65 | 0.95 | 4.7 |
 | `sociedade construcoes` | store | 41 | 43 | 0.95 | 4.7 |
 | `electricos` | store | 100 | 105 | 0.95 | 4.7 |
 | `equipamento escritorio` | store | 20 | 21 | 0.95 | 4.7 |
-| `sex` | store | 20 | 21 | 0.95 | 4.7 |
 | `loja vila` | store | 20 | 21 | 0.95 | 4.7 |
+| `sex` | store | 20 | 21 | 0.95 | 4.7 |
 | `tipica` | restaurant | 39 | 47 | 0.83 | 4.7 |
 | `papeleria` | store | 39 | 41 | 0.95 | 4.7 |
 | `confeccoes texteis` | store | 19 | 20 | 0.95 | 4.7 |
-| `quadros` | store | 19 | 20 | 0.95 | 4.7 |
 | `izibuild` | store | 19 | 20 | 0.95 | 4.7 |
 | `kitea` | store | 19 | 20 | 0.95 | 4.7 |
+| `quadros` | store | 19 | 20 | 0.95 | 4.7 |
 | `sex shop` | store | 19 | 20 | 0.95 | 4.7 |
 | `electrodomesticos` | store | 281 | 296 | 0.95 | 4.7 |
 | `indiano` | restaurant | 24 | 29 | 0.83 | 4.7 |
@@ -1057,38 +1102,38 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `venezia` | cafe | 24 | 65 | 0.37 | 4.7 |
 | `shoes` | store | 55 | 58 | 0.95 | 4.7 |
 | `artesanato` | store | 164 | 173 | 0.95 | 4.7 |
-| `plasticos` | store | 36 | 38 | 0.95 | 4.7 |
 | `ale hop` | store | 36 | 38 | 0.95 | 4.7 |
+| `plasticos` | store | 36 | 38 | 0.95 | 4.7 |
 | `construcoes civis` | store | 18 | 19 | 0.95 | 4.7 |
-| `utilidades domesticas` | store | 18 | 19 | 0.95 | 4.7 |
 | `industria alimentar` | store | 18 | 19 | 0.95 | 4.7 |
 | `metalicos` | store | 18 | 19 | 0.95 | 4.7 |
+| `utilidades domesticas` | store | 18 | 19 | 0.95 | 4.7 |
 | `vegetariano` | restaurant | 19 | 23 | 0.83 | 4.7 |
 | `tabacaria` | store | 371 | 392 | 0.95 | 4.7 |
 | `alho` | restaurant | 33 | 40 | 0.82 | 4.7 |
 | `brunch` | cafe | 85 | 231 | 0.37 | 4.7 |
 | `condicionado` | store | 85 | 90 | 0.94 | 4.7 |
-| `ferragens ferramentas` | store | 34 | 36 | 0.94 | 4.7 |
 | `cocinas` | store | 34 | 36 | 0.94 | 4.7 |
+| `ferragens ferramentas` | store | 34 | 36 | 0.94 | 4.7 |
 | `optica medica` | store | 17 | 18 | 0.94 | 4.7 |
 | `bistrot` | restaurant | 28 | 34 | 0.82 | 4.7 |
 | `cozinha` | restaurant | 214 | 260 | 0.82 | 4.7 |
-| `serigrafia` | store | 33 | 35 | 0.94 | 4.6 |
-| `musicais` | store | 33 | 35 | 0.94 | 4.6 |
 | `levi` | store | 33 | 35 | 0.94 | 4.6 |
+| `musicais` | store | 33 | 35 | 0.94 | 4.6 |
+| `serigrafia` | store | 33 | 35 | 0.94 | 4.6 |
 | `colors` | store | 114 | 121 | 0.94 | 4.6 |
 | `comercio material` | store | 65 | 69 | 0.94 | 4.6 |
 | `telecomunicacoes` | store | 48 | 51 | 0.94 | 4.6 |
 | `deborla` | store | 32 | 34 | 0.94 | 4.6 |
 | `decorativos` | store | 32 | 34 | 0.94 | 4.6 |
-| `vidros espelhos` | store | 16 | 17 | 0.94 | 4.6 |
 | `artigos desportivos` | store | 16 | 17 | 0.94 | 4.6 |
 | `mais optica` | store | 16 | 17 | 0.94 | 4.6 |
-| `tien21` | store | 16 | 17 | 0.94 | 4.6 |
 | `quatro patas` | store | 16 | 17 | 0.94 | 4.6 |
 | `sem penas` | store | 16 | 17 | 0.94 | 4.6 |
-| `pronto comer` | restaurant | 32 | 39 | 0.82 | 4.6 |
+| `tien21` | store | 16 | 17 | 0.94 | 4.6 |
+| `vidros espelhos` | store | 16 | 17 | 0.94 | 4.6 |
 | `das francesinhas` | restaurant | 32 | 39 | 0.82 | 4.6 |
+| `pronto comer` | restaurant | 32 | 39 | 0.82 | 4.6 |
 | `united` | store | 111 | 118 | 0.94 | 4.6 |
 | `grafica` | store | 63 | 67 | 0.94 | 4.6 |
 | `comercio artigos` | store | 110 | 117 | 0.94 | 4.6 |
@@ -1096,15 +1141,15 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `automatismos` | store | 31 | 33 | 0.94 | 4.6 |
 | `comercio tintas` | store | 46 | 49 | 0.94 | 4.6 |
 | `tasquinha` | restaurant | 297 | 363 | 0.82 | 4.6 |
-| `restaurante cervejaria` | restaurant | 36 | 44 | 0.82 | 4.6 |
 | `republic` | restaurant | 36 | 44 | 0.82 | 4.6 |
+| `restaurante cervejaria` | restaurant | 36 | 44 | 0.82 | 4.6 |
 | `decor` | store | 45 | 48 | 0.94 | 4.6 |
 | `metalicas` | store | 30 | 32 | 0.94 | 4.6 |
-| `metais` | store | 15 | 16 | 0.94 | 4.6 |
 | `bike shop` | store | 15 | 16 | 0.94 | 4.6 |
 | `construcoes unipessoal` | store | 15 | 16 | 0.94 | 4.6 |
-| `portas automatismos` | store | 15 | 16 | 0.94 | 4.6 |
+| `metais` | store | 15 | 16 | 0.94 | 4.6 |
 | `nokia` | store | 15 | 16 | 0.94 | 4.6 |
+| `portas automatismos` | store | 15 | 16 | 0.94 | 4.6 |
 | `estofos` | store | 59 | 63 | 0.94 | 4.6 |
 | `artigos para` | store | 44 | 47 | 0.94 | 4.6 |
 | `artigos` | store | 421 | 450 | 0.94 | 4.6 |
@@ -1141,17 +1186,17 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `visao` | store | 33 | 36 | 0.92 | 4.5 |
 | `well centro` | store | 22 | 24 | 0.92 | 4.5 |
 | `publicas` | store | 64 | 70 | 0.91 | 4.5 |
-| `note` | store | 32 | 35 | 0.91 | 4.5 |
 | `librairie` | store | 32 | 35 | 0.91 | 4.5 |
+| `note` | store | 32 | 35 | 0.91 | 4.5 |
 | `taste` | restaurant | 47 | 59 | 0.80 | 4.5 |
 | `madeiras` | store | 63 | 69 | 0.91 | 4.5 |
 | `tapetes` | store | 21 | 23 | 0.91 | 4.5 |
 | `taj` | restaurant | 35 | 44 | 0.80 | 4.5 |
 | `vidros` | store | 62 | 68 | 0.91 | 4.5 |
 | `electricas` | store | 152 | 167 | 0.91 | 4.5 |
-| `transformadora` | store | 30 | 33 | 0.91 | 4.5 |
 | `candeeiros` | store | 30 | 33 | 0.91 | 4.5 |
 | `infantario` | store | 30 | 33 | 0.91 | 4.5 |
+| `transformadora` | store | 30 | 33 | 0.91 | 4.5 |
 | `espelhos` | store | 20 | 22 | 0.91 | 4.5 |
 | `lareiras` | store | 20 | 22 | 0.91 | 4.5 |
 | `obras` | store | 109 | 120 | 0.91 | 4.5 |
@@ -1162,10 +1207,10 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `grao` | cafe | 43 | 122 | 0.35 | 4.5 |
 | `kids` | store | 133 | 147 | 0.90 | 4.5 |
 | `electronica` | store | 114 | 126 | 0.90 | 4.5 |
-| `pet shop` | store | 19 | 21 | 0.90 | 4.5 |
 | `kid` | store | 19 | 21 | 0.90 | 4.5 |
-| `women` | store | 47 | 52 | 0.90 | 4.5 |
+| `pet shop` | store | 19 | 21 | 0.90 | 4.5 |
 | `fabricacao` | store | 47 | 52 | 0.90 | 4.5 |
+| `women` | store | 47 | 52 | 0.90 | 4.5 |
 | `electricidade` | store | 122 | 135 | 0.90 | 4.5 |
 | `comida` | restaurant | 52 | 66 | 0.79 | 4.5 |
 | `mamma` | restaurant | 48 | 61 | 0.79 | 4.4 |
@@ -1174,8 +1219,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `lingerie` | store | 63 | 70 | 0.90 | 4.4 |
 | `toldos` | store | 36 | 40 | 0.90 | 4.4 |
 | `minuto` | store | 27 | 30 | 0.90 | 4.4 |
-| `fardas` | store | 18 | 20 | 0.90 | 4.4 |
 | `closet` | store | 18 | 20 | 0.90 | 4.4 |
+| `fardas` | store | 18 | 20 | 0.90 | 4.4 |
 | `tommy` | store | 18 | 20 | 0.90 | 4.4 |
 | `take` | restaurant | 98 | 125 | 0.78 | 4.4 |
 | `moda` | store | 240 | 267 | 0.90 | 4.4 |
@@ -1187,23 +1232,23 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `distribuicao produtos` | store | 43 | 48 | 0.90 | 4.4 |
 | `peugas` | store | 17 | 19 | 0.89 | 4.4 |
 | `revistas` | store | 17 | 19 | 0.89 | 4.4 |
-| `massimo` | store | 59 | 66 | 0.89 | 4.4 |
 | `leroy` | store | 59 | 66 | 0.89 | 4.4 |
+| `massimo` | store | 59 | 66 | 0.89 | 4.4 |
 | `india` | restaurant | 52 | 67 | 0.78 | 4.4 |
 | `foot` | store | 32 | 36 | 0.89 | 4.4 |
 | `para industria` | store | 24 | 27 | 0.89 | 4.4 |
 | `artigos decorativos` | store | 16 | 18 | 0.89 | 4.4 |
-| `sexshop` | store | 16 | 18 | 0.89 | 4.4 |
 | `humana` | store | 16 | 18 | 0.89 | 4.4 |
-| `toscana` | restaurant | 17 | 22 | 0.77 | 4.4 |
+| `sexshop` | store | 16 | 18 | 0.89 | 4.4 |
 | `greens` | restaurant | 17 | 22 | 0.77 | 4.4 |
+| `toscana` | restaurant | 17 | 22 | 0.77 | 4.4 |
 | `francesinhas` | restaurant | 71 | 92 | 0.77 | 4.4 |
 | `instalacao` | store | 38 | 43 | 0.88 | 4.4 |
 | `thai` | restaurant | 77 | 100 | 0.77 | 4.4 |
 | `tipografia` | store | 30 | 34 | 0.88 | 4.4 |
 | `ceramicas` | store | 15 | 17 | 0.88 | 4.4 |
-| `rodrigues filhos` | store | 15 | 17 | 0.88 | 4.4 |
 | `leonidas` | store | 15 | 17 | 0.88 | 4.4 |
+| `rodrigues filhos` | store | 15 | 17 | 0.88 | 4.4 |
 | `dos petiscos` | restaurant | 30 | 39 | 0.77 | 4.3 |
 | `projectos` | store | 112 | 127 | 0.88 | 4.3 |
 | `sacoor` | store | 52 | 59 | 0.88 | 4.3 |
@@ -1221,8 +1266,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `nepal` | restaurant | 19 | 25 | 0.76 | 4.3 |
 | `cantina` | restaurant | 148 | 195 | 0.76 | 4.3 |
 | `papel` | store | 47 | 54 | 0.87 | 4.3 |
-| `elevadores` | store | 20 | 23 | 0.87 | 4.3 |
 | `brico` | store | 20 | 23 | 0.87 | 4.3 |
+| `elevadores` | store | 20 | 23 | 0.87 | 4.3 |
 | `espacos` | store | 20 | 23 | 0.87 | 4.3 |
 | `cafe restaurante` | restaurant | 250 | 330 | 0.76 | 4.3 |
 | `barriga` | restaurant | 25 | 33 | 0.76 | 4.3 |
@@ -1238,20 +1283,20 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `restaurantes` | restaurant | 30 | 40 | 0.75 | 4.2 |
 | `minhoto` | restaurant | 21 | 28 | 0.75 | 4.2 |
 | `terrazza` | restaurant | 18 | 24 | 0.75 | 4.2 |
-| `mexicana` | restaurant | 15 | 20 | 0.75 | 4.2 |
-| `dos presuntos` | restaurant | 15 | 20 | 0.75 | 4.2 |
-| `turkish` | restaurant | 15 | 20 | 0.75 | 4.2 |
 | `barracao` | restaurant | 15 | 20 | 0.75 | 4.2 |
+| `dos presuntos` | restaurant | 15 | 20 | 0.75 | 4.2 |
+| `mexicana` | restaurant | 15 | 20 | 0.75 | 4.2 |
+| `turkish` | restaurant | 15 | 20 | 0.75 | 4.2 |
 | `tapas` | restaurant | 316 | 422 | 0.75 | 4.2 |
 | `comunicacao` | store | 30 | 35 | 0.86 | 4.2 |
 | `loja chinesa` | store | 30 | 35 | 0.86 | 4.2 |
-| `santos filhos` | store | 24 | 28 | 0.86 | 4.2 |
 | `desportivos` | store | 24 | 28 | 0.86 | 4.2 |
-| `equipamentos para` | store | 18 | 21 | 0.86 | 4.2 |
+| `santos filhos` | store | 24 | 28 | 0.86 | 4.2 |
 | `alimentares congelados` | store | 18 | 21 | 0.86 | 4.2 |
 | `distribuicao alimentar` | store | 18 | 21 | 0.86 | 4.2 |
-| `higiene limpeza` | store | 18 | 21 | 0.86 | 4.2 |
+| `equipamentos para` | store | 18 | 21 | 0.86 | 4.2 |
 | `globe` | store | 18 | 21 | 0.86 | 4.2 |
+| `higiene limpeza` | store | 18 | 21 | 0.86 | 4.2 |
 | `acai` | restaurant | 91 | 122 | 0.75 | 4.2 |
 | `bike` | store | 106 | 124 | 0.85 | 4.2 |
 | `bicicletas` | store | 70 | 82 | 0.85 | 4.2 |
@@ -1260,40 +1305,40 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `comercio internacional` | store | 29 | 34 | 0.85 | 4.2 |
 | `jornal` | store | 29 | 34 | 0.85 | 4.2 |
 | `parreirinha` | restaurant | 23 | 31 | 0.74 | 4.2 |
+| `loja chines` | store | 17 | 20 | 0.85 | 4.2 |
 | `loucas` | store | 17 | 20 | 0.85 | 4.2 |
 | `modas confeccoes` | store | 17 | 20 | 0.85 | 4.2 |
 | `uomo` | store | 17 | 20 | 0.85 | 4.2 |
-| `loja chines` | store | 17 | 20 | 0.85 | 4.2 |
 | `concept store` | store | 28 | 33 | 0.85 | 4.2 |
 | `mia` | restaurant | 54 | 73 | 0.74 | 4.2 |
 | `bacalhau` | restaurant | 85 | 115 | 0.74 | 4.2 |
 | `pipo` | restaurant | 17 | 23 | 0.74 | 4.2 |
 | `marisco` | restaurant | 31 | 42 | 0.74 | 4.2 |
-| `edificios` | store | 22 | 26 | 0.85 | 4.2 |
 | `copy` | store | 22 | 26 | 0.85 | 4.2 |
+| `edificios` | store | 22 | 26 | 0.85 | 4.2 |
 | `industriais` | store | 152 | 180 | 0.84 | 4.2 |
 | `limpeza` | store | 103 | 122 | 0.84 | 4.2 |
 | `electrico` | store | 130 | 154 | 0.84 | 4.2 |
 | `food` | restaurant | 281 | 382 | 0.74 | 4.2 |
 | `buffet` | restaurant | 50 | 68 | 0.74 | 4.2 |
-| `lojas` | store | 32 | 38 | 0.84 | 4.2 |
 | `flying` | store | 32 | 38 | 0.84 | 4.2 |
+| `lojas` | store | 32 | 38 | 0.84 | 4.2 |
 | `cereais` | store | 16 | 19 | 0.84 | 4.2 |
-| `producao comercializacao` | store | 16 | 19 | 0.84 | 4.2 |
 | `imp` | store | 16 | 19 | 0.84 | 4.2 |
 | `lacticinios` | store | 16 | 19 | 0.84 | 4.2 |
+| `producao comercializacao` | store | 16 | 19 | 0.84 | 4.2 |
 | `petiscos` | restaurant | 154 | 210 | 0.73 | 4.1 |
 | `gusto` | restaurant | 33 | 45 | 0.73 | 4.1 |
 | `industria` | store | 808 | 961 | 0.84 | 4.1 |
 | `prego` | restaurant | 63 | 86 | 0.73 | 4.1 |
-| `table` | restaurant | 41 | 56 | 0.73 | 4.1 |
 | `farturas` | restaurant | 41 | 56 | 0.73 | 4.1 |
+| `table` | restaurant | 41 | 56 | 0.73 | 4.1 |
 | `bistro` | restaurant | 210 | 287 | 0.73 | 4.1 |
 | `costura` | store | 73 | 87 | 0.84 | 4.1 |
 | `merlin` | store | 57 | 68 | 0.84 | 4.1 |
-| `piteu` | restaurant | 19 | 26 | 0.73 | 4.1 |
 | `halal` | restaurant | 19 | 26 | 0.73 | 4.1 |
 | `namaste` | restaurant | 19 | 26 | 0.73 | 4.1 |
+| `piteu` | restaurant | 19 | 26 | 0.73 | 4.1 |
 | `petisqueira` | restaurant | 100 | 137 | 0.73 | 4.1 |
 | `mercado municipal` | store | 126 | 151 | 0.83 | 4.1 |
 | `bar restaurante` | restaurant | 144 | 198 | 0.73 | 4.1 |
@@ -1302,9 +1347,9 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `centro colombo` | store | 30 | 36 | 0.83 | 4.1 |
 | `domesticos` | store | 20 | 24 | 0.83 | 4.1 |
 | `horticolas` | store | 20 | 24 | 0.83 | 4.1 |
+| `leiloes` | store | 15 | 18 | 0.83 | 4.1 |
 | `ribeiro filhos` | store | 15 | 18 | 0.83 | 4.1 |
 | `sucessor` | store | 15 | 18 | 0.83 | 4.1 |
-| `leiloes` | store | 15 | 18 | 0.83 | 4.1 |
 | `comer` | restaurant | 53 | 73 | 0.73 | 4.1 |
 | `solucoes` | store | 84 | 101 | 0.83 | 4.1 |
 | `olivier` | restaurant | 21 | 29 | 0.72 | 4.1 |
@@ -1409,8 +1454,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `gnr posto` | police | 24 | 25 | 0.96 | 488.1 |
 | `posto territorial` | police | 24 | 25 | 0.96 | 488.1 |
 | `cementerio` | cemetery | 29 | 33 | 0.88 | 487.0 |
-| `nacional republicana` | police | 21 | 22 | 0.95 | 485.4 |
 | `guarda nacional` | police | 21 | 22 | 0.95 | 485.4 |
+| `nacional republicana` | police | 21 | 22 | 0.95 | 485.4 |
 | `policia municipal` | police | 17 | 18 | 0.94 | 480.2 |
 | `psp` | police | 151 | 160 | 0.94 | 479.9 |
 | `ferry` | ferry_terminal | 34 | 39 | 0.87 | 477.0 |
@@ -1431,8 +1476,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `humanitaria bombeiros` | fire_station | 35 | 35 | 1.00 | 423.0 |
 | `centro escolar` | primary_school | 33 | 36 | 0.92 | 418.9 |
 | `associacao humanitaria` | fire_station | 134 | 136 | 0.99 | 416.8 |
-| `vereda` | hiking_area | 19 | 20 | 0.95 | 415.2 |
 | `trail` | hiking_area | 19 | 20 | 0.95 | 415.2 |
+| `vereda` | hiking_area | 19 | 20 | 0.95 | 415.2 |
 | `consultoria` | accounting | 32 | 61 | 0.52 | 413.7 |
 | `palacio justica` | courthouse | 16 | 22 | 0.73 | 413.7 |
 | `bombeiros voluntarios` | fire_station | 511 | 523 | 0.98 | 413.3 |
@@ -1487,8 +1532,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `medicales` | medical_lab | 17 | 18 | 0.94 | 305.7 |
 | `analises clinicas` | medical_lab | 202 | 215 | 0.94 | 304.1 |
 | `parque saba` | parking | 27 | 28 | 0.96 | 304.0 |
-| `patologia` | medical_lab | 15 | 16 | 0.94 | 303.5 |
 | `analyses medicales` | medical_lab | 15 | 16 | 0.94 | 303.5 |
+| `patologia` | medical_lab | 15 | 16 | 0.94 | 303.5 |
 | `laboratorio analises` | medical_lab | 145 | 155 | 0.94 | 302.8 |
 | `medico veterinario` | veterinary_care | 16 | 16 | 1.00 | 302.0 |
 | `germano sousa` | medical_lab | 27 | 29 | 0.93 | 301.4 |
@@ -1639,14 +1684,14 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `clinicas dentarias` | dentist | 25 | 25 | 1.00 | 98.5 |
 | `oralmed` | dentist | 22 | 22 | 1.00 | 98.5 |
 | `smile clinicas` | dentist | 21 | 21 | 1.00 | 98.5 |
-| `consultorio dentario` | dentist | 18 | 18 | 1.00 | 98.5 |
 | `clinique dentaire` | dentist | 18 | 18 | 1.00 | 98.5 |
+| `consultorio dentario` | dentist | 18 | 18 | 1.00 | 98.5 |
 | `dental clinic` | dentist | 18 | 18 | 1.00 | 98.5 |
 | `reabilitacao oral` | dentist | 17 | 17 | 1.00 | 98.5 |
-| `ortodoncia` | dentist | 16 | 16 | 1.00 | 98.5 |
 | `chirurgien` | dentist | 16 | 16 | 1.00 | 98.5 |
-| `vital dent` | dentist | 15 | 15 | 1.00 | 98.5 |
+| `ortodoncia` | dentist | 16 | 16 | 1.00 | 98.5 |
 | `chirurgien dentiste` | dentist | 15 | 15 | 1.00 | 98.5 |
+| `vital dent` | dentist | 15 | 15 | 1.00 | 98.5 |
 | `praia` | beach | 1064 | 1670 | 0.64 | 97.8 |
 | `clinica dental` | dentist | 257 | 260 | 0.99 | 97.4 |
 | `dental` | dentist | 408 | 416 | 0.98 | 96.6 |
@@ -1670,8 +1715,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `prainha` | beach | 16 | 27 | 0.59 | 90.9 |
 | `comercio automoveis` | car_dealer | 257 | 312 | 0.82 | 90.5 |
 | `dentario` | dentist | 70 | 77 | 0.91 | 89.6 |
-| `santa madalena` | dentist | 20 | 22 | 0.91 | 89.6 |
 | `centre dentaire` | dentist | 20 | 22 | 0.91 | 89.6 |
+| `santa madalena` | dentist | 20 | 22 | 0.91 | 89.6 |
 | `mercedes benz` | car_dealer | 39 | 48 | 0.81 | 89.3 |
 | `medico dentaria` | dentist | 58 | 64 | 0.91 | 89.3 |
 | `vitaldent` | dentist | 18 | 20 | 0.90 | 88.7 |
@@ -1687,15 +1732,15 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `igreja evangelica` | church | 69 | 69 | 1.00 | 80.1 |
 | `parroquia san` | church | 56 | 56 | 1.00 | 80.1 |
 | `assembleia deus` | church | 45 | 45 | 1.00 | 80.1 |
-| `parroquia santa` | church | 30 | 30 | 1.00 | 80.1 |
 | `paroco` | church | 30 | 30 | 1.00 | 80.1 |
+| `parroquia santa` | church | 30 | 30 | 1.00 | 80.1 |
 | `setimo dia` | church | 29 | 29 | 1.00 | 80.1 |
 | `adventista setimo` | church | 28 | 28 | 1.00 | 80.1 |
 | `evangelica baptista` | church | 24 | 24 | 1.00 | 80.1 |
 | `iasd` | church | 21 | 21 | 1.00 | 80.1 |
 | `igreja baptista` | church | 19 | 19 | 1.00 | 80.1 |
-| `senora asuncion` | church | 16 | 16 | 1.00 | 80.1 |
 | `centro cristao` | church | 16 | 16 | 1.00 | 80.1 |
+| `senora asuncion` | church | 16 | 16 | 1.00 | 80.1 |
 | `disco` | night_club | 30 | 63 | 0.48 | 79.1 |
 | `fabrica igreja` | church | 48 | 49 | 0.98 | 78.4 |
 | `parroquia` | church | 174 | 178 | 0.98 | 78.3 |
@@ -1774,8 +1819,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `social paroquial` | church | 33 | 54 | 0.61 | 48.9 |
 | `seguridad social` | local_government_office | 45 | 45 | 1.00 | 48.9 |
 | `freguesia vale` | local_government_office | 41 | 41 | 1.00 | 48.9 |
-| `centro atencion` | local_government_office | 29 | 29 | 1.00 | 48.9 |
 | `atencion informacion` | local_government_office | 29 | 29 | 1.00 | 48.9 |
+| `centro atencion` | local_government_office | 29 | 29 | 1.00 | 48.9 |
 | `informacion seguridad` | local_government_office | 29 | 29 | 1.00 | 48.9 |
 | `direccao geral` | local_government_office | 25 | 25 | 1.00 | 48.9 |
 | `despachante oficial` | local_government_office | 22 | 22 | 1.00 | 48.9 |
@@ -1807,11 +1852,11 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `consejeria` | local_government_office | 21 | 23 | 0.91 | 44.7 |
 | `imtt` | local_government_office | 21 | 23 | 0.91 | 44.7 |
 | `junta` | local_government_office | 3437 | 3769 | 0.91 | 44.6 |
-| `registo predial` | local_government_office | 31 | 34 | 0.91 | 44.6 |
 | `ministere` | local_government_office | 31 | 34 | 0.91 | 44.6 |
+| `registo predial` | local_government_office | 31 | 34 | 0.91 | 44.6 |
 | `freguesia` | local_government_office | 3495 | 3846 | 0.91 | 44.4 |
-| `freguesia ribeira` | local_government_office | 18 | 20 | 0.90 | 44.0 |
 | `centro guadalinfo` | local_government_office | 18 | 20 | 0.90 | 44.0 |
+| `freguesia ribeira` | local_government_office | 18 | 20 | 0.90 | 44.0 |
 | `emprego` | local_government_office | 53 | 59 | 0.90 | 43.9 |
 | `senhora graca` | church | 17 | 31 | 0.55 | 43.9 |
 | `direction` | local_government_office | 26 | 29 | 0.90 | 43.9 |
@@ -1920,8 +1965,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `motorizados` | car_repair | 16 | 24 | 0.67 | 23.7 |
 | `camara` | local_government_office | 260 | 539 | 0.48 | 23.6 |
 | `repuestos` | car_repair | 17 | 26 | 0.65 | 23.3 |
-| `veiculos motorizados` | car_repair | 15 | 23 | 0.65 | 23.2 |
 | `automoveis lda` | car_repair | 15 | 23 | 0.65 | 23.2 |
+| `veiculos motorizados` | car_repair | 15 | 23 | 0.65 | 23.2 |
 | `reparacoes` | car_repair | 195 | 302 | 0.65 | 23.0 |
 | `chapa` | car_repair | 25 | 39 | 0.64 | 22.8 |
 | `racing` | car_repair | 16 | 25 | 0.64 | 22.8 |
@@ -1953,21 +1998,21 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `flats` | lodging | 36 | 36 | 1.00 | 18.5 |
 | `bed breakfast` | lodging | 33 | 33 | 1.00 | 18.5 |
 | `pierre vacances` | lodging | 26 | 26 | 1.00 | 18.5 |
-| `hotel apartamento` | lodging | 24 | 24 | 1.00 | 18.5 |
 | `hospedes` | lodging | 24 | 24 | 1.00 | 18.5 |
+| `hotel apartamento` | lodging | 24 | 24 | 1.00 | 18.5 |
+| `casa hospedes` | lodging | 22 | 22 | 1.00 | 18.5 |
 | `hotel casa` | lodging | 22 | 22 | 1.00 | 18.5 |
 | `lisbon hostel` | lodging | 22 | 22 | 1.00 | 18.5 |
-| `casa hospedes` | lodging | 22 | 22 | 1.00 | 18.5 |
-| `turismo habitacao` | lodging | 21 | 21 | 1.00 | 18.5 |
 | `hotel agadir` | lodging | 21 | 21 | 1.00 | 18.5 |
+| `turismo habitacao` | lodging | 21 | 21 | 1.00 | 18.5 |
 | `holiday inn` | lodging | 19 | 19 | 1.00 | 18.5 |
 | `residence pierre` | lodging | 18 | 18 | 1.00 | 18.5 |
 | `akisol` | lodging | 17 | 17 | 1.00 | 18.5 |
+| `beach hostel` | lodging | 15 | 15 | 1.00 | 18.5 |
+| `like home` | lodging | 15 | 15 | 1.00 | 18.5 |
 | `rurales` | lodging | 15 | 15 | 1.00 | 18.5 |
 | `serviced` | lodging | 15 | 15 | 1.00 | 18.5 |
-| `like home` | lodging | 15 | 15 | 1.00 | 18.5 |
 | `suite hotel` | lodging | 15 | 15 | 1.00 | 18.5 |
-| `beach hostel` | lodging | 15 | 15 | 1.00 | 18.5 |
 | `motor` | car_repair | 59 | 114 | 0.52 | 18.4 |
 | `conducao` | car_repair | 15 | 29 | 0.52 | 18.4 |
 | `seat` | car_repair | 31 | 60 | 0.52 | 18.4 |
@@ -2013,8 +2058,8 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `country house` | lodging | 29 | 31 | 0.94 | 17.3 |
 | `boutique hotel` | lodging | 78 | 84 | 0.93 | 17.2 |
 | `alojamento` | lodging | 99 | 107 | 0.93 | 17.1 |
-| `hotel vila` | lodging | 36 | 39 | 0.92 | 17.1 |
 | `hotel porto` | lodging | 36 | 39 | 0.92 | 17.1 |
+| `hotel vila` | lodging | 36 | 39 | 0.92 | 17.1 |
 | `residencial sao` | lodging | 24 | 26 | 0.92 | 17.1 |
 | `glass` | car_repair | 22 | 46 | 0.48 | 17.0 |
 | `acessorios para` | car_repair | 21 | 44 | 0.48 | 17.0 |
@@ -2080,10 +2125,10 @@ floricultura -> florist, manicure -> nail_salon, pedicure -> nail_salon, tatoo -
 | `hoteleiros` | lodging | 81 | 121 | 0.67 | 12.4 |
 | `lisbon` | lodging | 320 | 479 | 0.67 | 12.4 |
 | `residencia` | lodging | 51 | 78 | 0.65 | 12.1 |
-| `pension` | lodging | 15 | 23 | 0.65 | 12.1 |
-| `turim` | lodging | 15 | 23 | 0.65 | 12.1 |
-| `tulip` | lodging | 15 | 23 | 0.65 | 12.1 |
 | `melia` | lodging | 15 | 23 | 0.65 | 12.1 |
+| `pension` | lodging | 15 | 23 | 0.65 | 12.1 |
+| `tulip` | lodging | 15 | 23 | 0.65 | 12.1 |
+| `turim` | lodging | 15 | 23 | 0.65 | 12.1 |
 | `quinta sao` | lodging | 28 | 43 | 0.65 | 12.1 |
 | `country` | lodging | 54 | 83 | 0.65 | 12.0 |
 | `nature` | lodging | 52 | 80 | 0.65 | 12.0 |
