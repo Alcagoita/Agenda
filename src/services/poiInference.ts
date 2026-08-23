@@ -174,7 +174,11 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     geladaria: 'ice_cream', gelataria: 'ice_cream', gelado: 'ice_cream',
     gelados: 'ice_cream', 'gelataria artesanal': 'ice_cream',
     // ── tea ──
-    'casa de chá': 'tea', 'chá': 'tea', 'salão de chá': 'tea',
+    // Only the phrases that name the venue. Bare `chá` stays mapped to
+    // `cafe` above: a Portuguese café serves chá, and "beber um chá" is not
+    // a request for a tea room — moving it here would silently redirect a
+    // common task from 23,853 cafés to 638 tea rooms.
+    'casa de chá': 'tea', 'salão de chá': 'tea',
     // ── juice ──
     // A Portuguese sign says Sumos, never "bar de sumos".
     sumos: 'juice', sumo: 'juice', batidos: 'juice', 'sumo natural': 'juice',

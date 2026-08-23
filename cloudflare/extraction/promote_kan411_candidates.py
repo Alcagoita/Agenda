@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 from datetime import date
 
-from analyse_poi_candidates import build_identity_index, existing_match, paged
+from analyse_poi_candidates import build_identity_index, cell, existing_match, paged
 from apply_kan411_types import types_for
 from classify_and_load import load_brand_dictionary, normalize_text, sql_escape
 from promote_poi_candidates import (
@@ -63,6 +63,13 @@ def run(out_dir, dry_run):
             rejected.append((row['fsq_place_id'], 'duplicate within batch'))
             continue
         seen.add(identity)
+        # Accepted rows join the index, so the NEXT candidate is compared
+        # against them by the same name-within-75m rule as everything else.
+        # Without this, `seen` only catches identical coordinates, and two
+        # rows for one shop recorded 20m apart both promote — which is
+        # exactly the duplicate class this pass exists to avoid.
+        index[cell(row['lat'], row['lng'])].append(
+            (normalized, row['lat'], row['lng'], 'batch'))
 
         # A row that only earned a store_kind is a shop first: it becomes a
         # `store` carrying that subtype, not a typeless row.
