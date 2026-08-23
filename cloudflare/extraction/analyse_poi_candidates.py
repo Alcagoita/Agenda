@@ -85,7 +85,15 @@ def query(sql, attempts=5):
 
 def paged(table, columns, key, batch, where=None):
     """Keyset pagination, not OFFSET: D1 charges rows_read for everything it
-    skips, so OFFSET on a 200k table re-reads the whole prefix every page."""
+    skips, so OFFSET on a 200k table re-reads the whole prefix every page.
+
+    `key` is SQL, so on a join it is qualified (`p.fsq_place_id`). The result
+    dict is keyed by the COLUMN name D1 returns, which drops that prefix — so
+    the cursor is read under the bare name. Reading it under the qualified
+    one raises KeyError on the second page, and only on joins, which is why
+    it survived every single-table caller.
+    """
+    cursor_field = key.split('.')[-1]
     last = ''
     extra = f' AND ({where})' if where else ''
     while True:
@@ -97,7 +105,7 @@ def paged(table, columns, key, batch, where=None):
             return
         for row in rows:
             yield row
-        last = rows[-1][key]
+        last = rows[-1][cursor_field]
 
 
 def metres(lat1, lng1, lat2, lng2):
