@@ -369,5 +369,26 @@
   "tattoo": {
     "category_id": "4bf58dd8d48988d1de931735",
     "category_name": "Tattoo Parlor"
+  },
+  "tea": {
+    "category_id": "4bf58dd8d48988d1dc931735",
+    "category_name": "Tea Room"
+  },
+  "juice": {
+    "category_id": "4bf58dd8d48988d112941735",
+    "category_name": "Juice Bar"
+  },
+  "lottery": {
+    "category_id": "52f2ab2ebcbc57f1066b8b38",
+    "category_name": "Lottery Retailer"
+  },
+  "phone_repair": {
+    "category_name": "Phone Repair"
+  },
+  "shoe_repair": {
+    "category_name": "Shoe Repair"
+  },
+  "clothing_repair": {
+    "category_name": "Clothing Alterations"
   }
 }

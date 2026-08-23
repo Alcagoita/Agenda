@@ -2,85 +2,465 @@
   "any": {
     "label": "Any",
     "labelPt": "Qualquer",
-    "aliases": ["any", "anything", "any store", "generic", "general", "qualquer", "qualquer loja", "geral"],
+    "aliases": [
+      "any",
+      "anything",
+      "any store",
+      "generic",
+      "general",
+      "qualquer",
+      "qualquer loja",
+      "geral"
+    ],
     "stores": []
   },
   "clothing": {
     "label": "Clothing",
     "labelPt": "Roupa",
-    "aliases": ["clothing", "clothes", "t-shirt", "tshirt", "shirt", "trousers", "dress", "jacket", "coat", "roupa", "camisola", "t-shirt", "camisa", "calcas", "calças", "vestido", "casaco"],
-    "stores": ["Zara", "H&M", "Mango", "Pull&Bear", "Bershka", "Stradivarius", "Massimo Dutti", "Lefties", "Primark", "C&A", "Springfield", "Sacoor Brothers", "Cortefiel", "Tezenis", "Intimissimi", "Women'secret"]
+    "aliases": [
+      "clothing",
+      "clothes",
+      "t-shirt",
+      "tshirt",
+      "shirt",
+      "trousers",
+      "dress",
+      "jacket",
+      "coat",
+      "roupa",
+      "camisola",
+      "t-shirt",
+      "camisa",
+      "calcas",
+      "calças",
+      "vestido",
+      "casaco"
+    ],
+    "stores": [
+      "Zara",
+      "H&M",
+      "Mango",
+      "Pull&Bear",
+      "Bershka",
+      "Stradivarius",
+      "Massimo Dutti",
+      "Lefties",
+      "Primark",
+      "C&A",
+      "Springfield",
+      "Sacoor Brothers",
+      "Cortefiel",
+      "Tezenis",
+      "Intimissimi",
+      "Women'secret"
+    ]
   },
   "shoes": {
     "label": "Shoes",
     "labelPt": "Sapatos",
-    "aliases": ["shoes", "trainers", "sneakers", "boots", "sandals", "sapatos", "tenis", "ténis", "sapatilhas", "botas", "sandalias", "sandálias"],
-    "stores": ["Foot Locker", "JD Sports", "Sport Zone", "Seaside", "Foreva", "Aldo", "Calçado Guimarães", "Zilian", "Skechers", "Nike", "Adidas", "New Balance"]
+    "aliases": [
+      "shoes",
+      "trainers",
+      "sneakers",
+      "boots",
+      "sandals",
+      "sapatos",
+      "tenis",
+      "ténis",
+      "sapatilhas",
+      "botas",
+      "sandalias",
+      "sandálias"
+    ],
+    "stores": [
+      "Foot Locker",
+      "JD Sports",
+      "Sport Zone",
+      "Seaside",
+      "Foreva",
+      "Aldo",
+      "Calçado Guimarães",
+      "Zilian",
+      "Skechers",
+      "Nike",
+      "Adidas",
+      "New Balance"
+    ]
   },
   "electronics": {
     "label": "Electronics",
     "labelPt": "Eletrónica",
-    "aliases": ["electronics", "charger", "cable", "headphones", "phone", "laptop", "computer", "computer parts", "computer components", "pc", "pc parts", "pc components", "graphics card", "cpu", "motherboard", "mouse", "keyboard", "battery", "eletronica", "eletrónica", "carregador", "cabo", "auscultadores", "telemovel", "telemóvel", "portatil", "portátil", "computador", "pecas de computador", "peças de computador", "componentes de computador", "pecas de pc", "peças de pc", "componentes de pc", "placa grafica", "placa gráfica", "processador", "motherboard", "rato", "teclado", "bateria"],
-    "stores": ["Worten", "FNAC", "MediaMarkt", "Radio Popular", "iStore", "GMS Store", "PCDIGA", "Chip7", "CeX"]
+    "aliases": [
+      "electronics",
+      "charger",
+      "cable",
+      "headphones",
+      "phone",
+      "laptop",
+      "computer",
+      "computer parts",
+      "computer components",
+      "pc",
+      "pc parts",
+      "pc components",
+      "graphics card",
+      "cpu",
+      "motherboard",
+      "mouse",
+      "keyboard",
+      "battery",
+      "eletronica",
+      "eletrónica",
+      "carregador",
+      "cabo",
+      "auscultadores",
+      "telemovel",
+      "telemóvel",
+      "portatil",
+      "portátil",
+      "computador",
+      "pecas de computador",
+      "peças de computador",
+      "componentes de computador",
+      "pecas de pc",
+      "peças de pc",
+      "componentes de pc",
+      "placa grafica",
+      "placa gráfica",
+      "processador",
+      "motherboard",
+      "rato",
+      "teclado",
+      "bateria"
+    ],
+    "stores": [
+      "Worten",
+      "FNAC",
+      "MediaMarkt",
+      "Radio Popular",
+      "iStore",
+      "GMS Store",
+      "PCDIGA",
+      "Chip7",
+      "CeX"
+    ]
   },
   "books": {
     "label": "Books",
     "labelPt": "Livros",
-    "aliases": ["book", "books", "notebook", "stationery", "livro", "livros", "caderno", "papelaria"],
-    "stores": ["Bertrand", "FNAC", "Leya", "Wook", "Note!", "Staples"]
+    "aliases": [
+      "book",
+      "books",
+      "notebook",
+      "stationery",
+      "livro",
+      "livros",
+      "caderno",
+      "papelaria"
+    ],
+    "stores": [
+      "Bertrand",
+      "FNAC",
+      "Leya",
+      "Wook",
+      "Note!",
+      "Staples"
+    ]
   },
   "furniture": {
     "label": "Furniture",
     "labelPt": "Mobiliário",
-    "aliases": ["furniture", "sofa", "chair", "table", "desk", "mattress", "moveis", "móveis", "sofa", "sofá", "cadeira", "mesa", "secretaria", "colchao", "colchão"],
-    "stores": ["IKEA", "Conforama", "JYSK", "Area", "Kinda Home", "Banak", "Antarte", "Moviflor"]
+    "aliases": [
+      "furniture",
+      "sofa",
+      "chair",
+      "table",
+      "desk",
+      "mattress",
+      "moveis",
+      "móveis",
+      "sofa",
+      "sofá",
+      "cadeira",
+      "mesa",
+      "secretaria",
+      "colchao",
+      "colchão"
+    ],
+    "stores": [
+      "IKEA",
+      "Conforama",
+      "JYSK",
+      "Area",
+      "Kinda Home",
+      "Banak",
+      "Antarte",
+      "Moviflor"
+    ]
   },
   "hardware": {
     "label": "Hardware",
     "labelPt": "Ferragens",
-    "aliases": ["hardware", "tools", "tool", "paint", "screws", "nails", "diy", "ferragens", "ferramentas", "ferramenta", "tinta", "parafusos", "pregos", "bricolage"],
-    "stores": ["Leroy Merlin", "Maxmat", "Bricomarché", "Aki", "Brico Depôt", "Brico Depot"]
+    "aliases": [
+      "hardware",
+      "tools",
+      "tool",
+      "paint",
+      "screws",
+      "nails",
+      "diy",
+      "ferragens",
+      "ferramentas",
+      "ferramenta",
+      "tinta",
+      "parafusos",
+      "pregos",
+      "bricolage"
+    ],
+    "stores": [
+      "Leroy Merlin",
+      "Maxmat",
+      "Bricomarché",
+      "Aki",
+      "Brico Depôt",
+      "Brico Depot"
+    ]
   },
   "bicycle": {
     "label": "Bicycle",
     "labelPt": "Bicicletas",
-    "aliases": ["bicycle", "bike", "cycling", "helmet", "inner tube", "bicicleta", "bicicletas", "ciclismo", "capacete", "camara de ar", "câmara de ar"],
-    "stores": ["Decathlon", "Sport Zone", "Bike Zone", "Specialized", "Trek", "Biclas & Triclas"]
+    "aliases": [
+      "bicycle",
+      "bike",
+      "cycling",
+      "helmet",
+      "inner tube",
+      "bicicleta",
+      "bicicletas",
+      "ciclismo",
+      "capacete",
+      "camara de ar",
+      "câmara de ar"
+    ],
+    "stores": [
+      "Decathlon",
+      "Sport Zone",
+      "Bike Zone",
+      "Specialized",
+      "Trek",
+      "Biclas & Triclas"
+    ]
   },
   "jewelry": {
     "label": "Jewelry",
     "labelPt": "Joalharia",
-    "aliases": ["jewelry", "jewellery", "ring", "necklace", "bracelet", "watch", "joia", "joias", "joalharia", "anel", "colar", "pulseira", "relogio", "relógio"],
-    "stores": ["Pandora", "Tous", "Swarovski", "Ourivesaria Portugal", "Boutique dos Relógios", "Parfois"]
+    "aliases": [
+      "jewelry",
+      "jewellery",
+      "ring",
+      "necklace",
+      "bracelet",
+      "watch",
+      "joia",
+      "joias",
+      "joalharia",
+      "anel",
+      "colar",
+      "pulseira",
+      "relogio",
+      "relógio"
+    ],
+    "stores": [
+      "Pandora",
+      "Tous",
+      "Swarovski",
+      "Ourivesaria Portugal",
+      "Boutique dos Relógios",
+      "Parfois"
+    ]
   },
   "toys": {
     "label": "Toys",
     "labelPt": "Brinquedos",
-    "aliases": ["toy", "toys", "game", "games", "lego", "brinquedo", "brinquedos", "jogo", "jogos"],
-    "stores": ["Toys R Us", "Centroxogo", "Science4you", "Imaginarium", "LEGO Store", "Disney Store"]
+    "aliases": [
+      "toy",
+      "toys",
+      "game",
+      "games",
+      "lego",
+      "brinquedo",
+      "brinquedos",
+      "jogo",
+      "jogos"
+    ],
+    "stores": [
+      "Toys R Us",
+      "Centroxogo",
+      "Science4you",
+      "Imaginarium",
+      "LEGO Store",
+      "Disney Store"
+    ]
   },
   "pet": {
     "label": "Pet supplies",
     "labelPt": "Animais",
-    "aliases": ["pet", "pets", "dog food", "cat food", "fish tank", "aquarium", "animal", "animals", "ração", "racao", "aquario", "aquário"],
-    "stores": ["Kiwoko", "Tiendanimal", "Ornimundo", "Pet Outlet", "Goldpet", "Aquaplante"]
+    "aliases": [
+      "pet",
+      "pets",
+      "dog food",
+      "cat food",
+      "fish tank",
+      "aquarium",
+      "animal",
+      "animals",
+      "ração",
+      "racao",
+      "aquario",
+      "aquário"
+    ],
+    "stores": [
+      "Kiwoko",
+      "Tiendanimal",
+      "Ornimundo",
+      "Pet Outlet",
+      "Goldpet",
+      "Aquaplante"
+    ]
   },
   "sports": {
     "label": "Sports",
     "labelPt": "Desporto",
-    "aliases": ["sports", "sport", "gym clothes", "running", "football", "bike", "bicycle", "desporto", "desportivo", "corrida", "futebol", "bicicleta"],
-    "stores": ["Decathlon", "Sport Zone", "JD Sports", "Nike", "Adidas", "New Balance", "Prozis Store"]
+    "aliases": [
+      "sports",
+      "sport",
+      "gym clothes",
+      "running",
+      "football",
+      "bike",
+      "bicycle",
+      "desporto",
+      "desportivo",
+      "corrida",
+      "futebol",
+      "bicicleta"
+    ],
+    "stores": [
+      "Decathlon",
+      "Sport Zone",
+      "JD Sports",
+      "Nike",
+      "Adidas",
+      "New Balance",
+      "Prozis Store"
+    ]
   },
   "home": {
     "label": "Home",
     "labelPt": "Casa",
-    "aliases": ["home", "furniture", "decor", "lamp", "bedding", "kitchenware", "casa", "moveis", "móveis", "decoracao", "decoração", "candeeiro", "cama", "cozinha"],
-    "stores": ["IKEA", "Leroy Merlin", "Gato Preto", "Zara Home", "Homa", "Area", "Conforama", "JYSK", "Casa"]
+    "aliases": [
+      "home",
+      "furniture",
+      "decor",
+      "lamp",
+      "bedding",
+      "kitchenware",
+      "casa",
+      "moveis",
+      "móveis",
+      "decoracao",
+      "decoração",
+      "candeeiro",
+      "cama",
+      "cozinha"
+    ],
+    "stores": [
+      "IKEA",
+      "Leroy Merlin",
+      "Gato Preto",
+      "Zara Home",
+      "Homa",
+      "Area",
+      "Conforama",
+      "JYSK",
+      "Casa"
+    ]
   },
   "beauty": {
     "label": "Beauty",
     "labelPt": "Beleza",
-    "aliases": ["beauty", "makeup", "perfume", "skincare", "cosmetics", "beleza", "maquilhagem", "perfume", "cosmeticos", "cosméticos"],
-    "stores": ["Sephora", "Douglas", "Perfumes & Companhia", "O Boticário", "Kiko Milano", "Primor", "Rituals"]
+    "aliases": [
+      "beauty",
+      "makeup",
+      "perfume",
+      "skincare",
+      "cosmetics",
+      "beleza",
+      "maquilhagem",
+      "perfume",
+      "cosmeticos",
+      "cosméticos"
+    ],
+    "stores": [
+      "Sephora",
+      "Douglas",
+      "Perfumes & Companhia",
+      "O Boticário",
+      "Kiko Milano",
+      "Primor",
+      "Rituals"
+    ]
+  },
+  "drinks": {
+    "label": "Drinks",
+    "labelPt": "Bebidas",
+    "aliases": [
+      "wine",
+      "beer",
+      "spirits",
+      "liquor",
+      "drinks",
+      "bottle shop",
+      "off licence",
+      "vinho",
+      "vinhos",
+      "cerveja",
+      "bebidas",
+      "garrafeira",
+      "garrafeiras",
+      "espumante",
+      "licor",
+      "aguardente"
+    ],
+    "stores": [
+      "Garrafeira Nacional",
+      "Coisas do Arco do Vinho"
+    ]
+  },
+  "phone": {
+    "label": "Phones",
+    "labelPt": "Telemóveis",
+    "aliases": [
+      "phone",
+      "phones",
+      "mobile",
+      "smartphone",
+      "sim card",
+      "phone case",
+      "telemóvel",
+      "telemoveis",
+      "telemóveis",
+      "telefone",
+      "carregador",
+      "capa de telemóvel"
+    ],
+    "stores": [
+      "Vodafone",
+      "MEO",
+      "NOS",
+      "Phone House",
+      "Worten",
+      "Fnac"
+    ]
   }
 }

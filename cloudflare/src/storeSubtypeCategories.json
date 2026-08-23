@@ -54,5 +54,13 @@
   "pet": {
     "category_id": "4bf58dd8d48988d100951735",
     "category_name": "Pet Supplies Store"
+  },
+  "drinks": {
+    "category_id": "4bf58dd8d48988d186941735",
+    "category_name": "Liquor Store"
+  },
+  "phone": {
+    "category_id": "4f04afc02fb6e1c99f3db0bc",
+    "category_name": "Mobile Phone Store"
   }
 }

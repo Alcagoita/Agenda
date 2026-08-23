@@ -128,14 +128,22 @@ export type PoiType =
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
   | 'bus' | 'school' | 'bakery' | 'florist' | 'bar' | 'ice_cream' | 'tattoo'
   | 'barber' | 'hairdresser' | 'nail_salon'
-  | 'currency_exchange' | 'money_transfer' | 'financial_service';
+  | 'currency_exchange' | 'money_transfer' | 'financial_service'
+  // KAN-411. Repairs people find in a shopping centre and remember only
+  // once they are standing in one. Vehicle repair is deliberately absent:
+  // when a car breaks the user searches for it directly, so it is never a
+  // "you happen to be nearby" errand.
+  | 'phone_repair' | 'shoe_repair' | 'clothing_repair'
+  | 'lottery' | 'tea' | 'juice';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'supermarket' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
   { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
-  { type: 'ice_cream' },
+  { type: 'ice_cream' }, { type: 'tea' }, { type: 'juice' },
   { type: 'tattoo' },
+  { type: 'phone_repair' }, { type: 'shoe_repair' }, { type: 'clothing_repair' },
+  { type: 'lottery' },
   { type: 'barber' }, { type: 'hairdresser' }, { type: 'nail_salon' },
   { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' }, { type: 'bank' },
   // Retained for existing documents and free-text lookup, but intentionally
@@ -411,6 +419,25 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   tattoo:      { key: 'shop',    value: 'tattoo' },
   florist:     { key: 'shop',    value: 'florist' },
   bar:         { key: 'amenity', value: 'bar' },
+  // KAN-411. A type listed here but absent from what Overpass is actually
+  // asked for matches nothing (KAN-398's dead types, and KAN-405's
+  // amenity=ice_cream). These tags are the well-established ones:
+  //   craft=shoemaker  cobblers
+  //   craft=tailor     alterations; shop=tailor is the retail twin
+  //   shop=lottery     lottery retailers
+  //   shop=tea         tea shops and rooms
+  // shop=mobile_phone covers both selling and repair in OSM practice —
+  // most Portuguese phone shops do both, and OSM has no widely used
+  // repair-only tag.
+  phone_repair:    { key: 'shop',  value: 'mobile_phone' },
+  shoe_repair:     { key: 'craft', value: 'shoemaker' },
+  clothing_repair: { key: 'craft', value: 'tailor' },
+  lottery:         { key: 'shop',  value: 'lottery' },
+  tea:             { key: 'shop',  value: 'tea' },
+  // OSM has no settled juice tag. shop=beverages is the closest widely
+  // used one, but it means drinks retail rather than a juice counter, so
+  // this will under-match until KAN-405 checks what PT actually carries.
+  juice:           { key: 'shop',  value: 'beverages' },
 };
 
 /**
@@ -480,6 +507,14 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   tattoo:      50,
   florist:     75,
   bar:         75,
+  // KAN-411. Small shopfronts, so tight radii — a cobbler or a lottery
+  // counter is a doorway, not a forecourt.
+  phone_repair:    50,
+  shoe_repair:     50,
+  clothing_repair: 50,
+  lottery:         50,
+  tea:             50,
+  juice:           50,
 };
 
 // ─── Points & Achievements ────────────────────────────────────────────────────
