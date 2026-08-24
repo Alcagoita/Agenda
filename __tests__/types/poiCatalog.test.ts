@@ -23,6 +23,10 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'barber', 'hairdresser', 'nail_salon',
   // KAN-411
   'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tea', 'juice',
+  // KAN-412
+  'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
+  'car_rental', 'movie_theater', 'yoga_studio', 'playground',
+  'electric_vehicle_charging_station',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -90,6 +94,9 @@ describe('POI_GOOGLE_TYPES', () => {
     const notGoogleBacked = [
       'currency_exchange', 'money_transfer', 'financial_service',
       'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tea', 'juice',
+      'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
+      'car_rental', 'movie_theater', 'yoga_studio', 'playground',
+      'electric_vehicle_charging_station',
     ];
     const googleBackedTypes = ALL_BUILT_IN_TYPES.filter(
       type => !notGoogleBacked.includes(type),

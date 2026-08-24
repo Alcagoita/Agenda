@@ -66,7 +66,23 @@ NAME_TYPE_KEYWORDS = {
     'farmacia': 'pharmacy',
     'ginasio': 'gym',
     'florista': 'florist', 'floricultura': 'florist',
+    # `livraria` is a BOOKSHOP and `biblioteca` is the library — a false
+    # friend that had typed both wrong in both directions (KAN-412).
     'papelaria': 'store', 'livraria': 'store', 'drogaria': 'store',
+    'biblioteca': 'library',
+    # KAN-412. Each of these names a type the app now has, and the tag that
+    # would carry it is either absent from the Overpass selector or missing
+    # from TAG_TYPES — so the name is the only signal for a large share.
+    'talho': 'butcher', 'talhos': 'butcher', 'talhante': 'butcher',
+    'peixaria': 'fishmonger', 'peixarias': 'fishmonger',
+    # One type for the launderette and the dry cleaner alike: OSM's own
+    # shop=dry_cleaning carries 113 elements against 1,232 shop=laundry.
+    'lavandaria': 'laundry', 'lavandarias': 'laundry', 'tinturaria': 'laundry',
+    'veterinario': 'veterinary_care', 'veterinaria': 'veterinary_care',
+    # `parque infantil` names 561 rows, 506 already typed playground. Bare
+    # `parque` is deliberately absent — it is any green space, and the park
+    # type already covers that.
+    'parque infantil': 'playground',
 }
 # Deliberately absent: `talho` and `peixaria`. A butcher and a fishmonger are
 # their own kind of errand, not a subtype of "shop" — they are getting proper

@@ -100,6 +100,23 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── lottery ──
     lottery: 'lottery', 'lottery ticket': 'lottery', euromillions: 'lottery',
     'scratch card': 'lottery',
+    // ── KAN-412 ──
+    butcher: 'butcher', 'butchers': 'butcher', meat: 'butcher',
+    'buy meat': 'butcher', steak: 'butcher',
+    fishmonger: 'fishmonger', 'fish shop': 'fishmonger', 'buy fish': 'fishmonger',
+    laundry: 'laundry', launderette: 'laundry', laundrette: 'laundry',
+    'dry cleaning': 'laundry', 'dry cleaner': 'laundry', 'wash clothes': 'laundry',
+    vet: 'veterinary_care', vets: 'veterinary_care', veterinary: 'veterinary_care',
+    veterinarian: 'veterinary_care',
+    'car wash': 'car_wash', 'wash the car': 'car_wash',
+    'car rental': 'car_rental', 'rent a car': 'car_rental', 'hire car': 'car_rental',
+    cinema: 'movie_theater', 'movie theater': 'movie_theater',
+    'movie theatre': 'movie_theater', 'see a film': 'movie_theater',
+    yoga: 'yoga_studio', 'yoga studio': 'yoga_studio', pilates: 'yoga_studio',
+    playground: 'playground', 'play park': 'playground',
+    'charging station': 'electric_vehicle_charging_station',
+    'charge the car': 'electric_vehicle_charging_station',
+    'ev charging': 'electric_vehicle_charging_station',
     // ── pharmacy ──
     pharmacy: 'pharmacy', drugstore: 'pharmacy', prescription: 'pharmacy',
     meds: 'pharmacy', medicine: 'pharmacy', medication: 'pharmacy',
@@ -125,7 +142,9 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── bar ──
     bar: 'bar', pub: 'bar', drinks: 'bar', cocktail: 'bar', cocktails: 'bar',
     // ── park ──
-    park: 'park', walk: 'park', playground: 'park', picnic: 'park',
+    // `playground` resolves to the playground type (KAN-412), not here: a
+    // task saying "playground" wants the swings, not any green space.
+    park: 'park', walk: 'park', picnic: 'park',
     // ── library ──
     library: 'library', 'return book': 'library', 'borrow book': 'library',
     'library book': 'library',
@@ -200,6 +219,25 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── lottery ──
     lotaria: 'lottery', lotarias: 'lottery', euromilhões: 'lottery',
     'raspadinha': 'lottery', totoloto: 'lottery', 'jogos santa casa': 'lottery',
+    // ── KAN-412 ──
+    talho: 'butcher', talhos: 'butcher', talhante: 'butcher',
+    carne: 'butcher', 'comprar carne': 'butcher', 'carne para o jantar': 'butcher',
+    peixaria: 'fishmonger', peixarias: 'fishmonger', 'comprar peixe': 'fishmonger',
+    // One type for both. `tinturaria` is the classic word for a dry cleaner
+    // and 5àSec is the chain most people mean.
+    lavandaria: 'laundry', lavandarias: 'laundry', tinturaria: 'laundry',
+    'limpeza a seco': 'laundry', 'lavar a roupa': 'laundry',
+    veterinario: 'veterinary_care', 'veterinário': 'veterinary_care',
+    'clinica veterinaria': 'veterinary_care', 'clínica veterinária': 'veterinary_care',
+    'lavagem auto': 'car_wash', 'lavar o carro': 'car_wash',
+    'aluguer de carros': 'car_rental', 'alugar um carro': 'car_rental',
+    'rent a car': 'car_rental',
+    cinema: 'movie_theater', 'ver um filme': 'movie_theater',
+    ioga: 'yoga_studio', yoga: 'yoga_studio', pilates: 'yoga_studio',
+    'parque infantil': 'playground', parquinho: 'playground',
+    'carregamento eletrico': 'electric_vehicle_charging_station',
+    'carregamento elétrico': 'electric_vehicle_charging_station',
+    'carregar o carro': 'electric_vehicle_charging_station',
     // ── pharmacy ──
     'farmácia': 'pharmacy', receita: 'pharmacy', medicamentos: 'pharmacy',
     'remédios': 'pharmacy', comprimidos: 'pharmacy',
