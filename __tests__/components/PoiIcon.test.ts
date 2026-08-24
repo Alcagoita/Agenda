@@ -24,7 +24,11 @@ describe('resolvePoiIconType', () => {
   });
 
   it('maps broader leisure and building families away from the fallback pin', () => {
-    expect(resolvePoiIconType('movie_theater')).toBe('library');
+    // `movie_theater` used to borrow the library icon because it had none of
+    // its own. KAN-412 drew it a clapperboard and made it a real PoiType, so
+    // it now keeps itself — `concert_hall` below still exercises the
+    // borrowing this test is about.
+    expect(resolvePoiIconType('movie_theater')).toBe('movie_theater');
     expect(resolvePoiIconType('concert_hall')).toBe('park');
     expect(resolvePoiIconType('fitness_center')).toBe('gym');
     expect(resolvePoiIconType('apartment_building')).toBe('store');

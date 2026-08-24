@@ -56,6 +56,33 @@ class TagBackfillTest(unittest.TestCase):
             {'butcher': {'node/1'}}, {'node/1': {'butcher'}})
         self.assertEqual((statements, adds), ([], {}))
 
+    def test_reports_every_pair_a_failure_skipped(self):
+        # A value that errors must not vanish: the run covered less than it
+        # was asked to, and only `omitted` records that.
+        with mock.patch.object(backfill, 'fetch_overpass',
+                               side_effect=RuntimeError('boom')):
+            with mock.patch.object(backfill.time, 'sleep'):
+                by_type, omitted = backfill.fetch_ids('PT')
+        self.assertEqual(by_type, {})
+        self.assertEqual(len(omitted), len(backfill.BACKFILL_PAIRS))
+
+    def test_rate_limit_records_the_values_it_never_reached(self):
+        with mock.patch.object(backfill, 'fetch_overpass',
+                               side_effect=backfill.OverpassRateLimited('429')):
+            with mock.patch.object(backfill, 'seconds_until_slot', return_value=None):
+                with mock.patch.object(backfill.time, 'sleep'):
+                    _, omitted = backfill.fetch_ids('PT')
+        # Stopped on the first value, so every value is outstanding.
+        self.assertEqual(len(omitted), len(backfill.BACKFILL_PAIRS))
+        self.assertIn('shop=butcher', omitted)
+
+    def test_a_complete_run_reports_nothing_omitted(self):
+        with mock.patch.object(backfill, 'fetch_overpass',
+                               return_value={'elements': []}):
+            with mock.patch.object(backfill.time, 'sleep'):
+                _, omitted = backfill.fetch_ids('PT')
+        self.assertEqual(omitted, [])
+
     def test_skip_leaves_out_only_the_named_pairs(self):
         with mock.patch.object(backfill, 'fetch_overpass') as fetch:
             fetch.return_value = {'elements': []}

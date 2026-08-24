@@ -717,10 +717,34 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
   }
 }
 
+/**
+ * Types that draw themselves and must never be remapped (KAN-412).
+ *
+ * The heuristics below are for UNKNOWN strings — Google/classifier types the
+ * app has no icon for. Every one of these has its own hand-drawn case, and
+ * every one of them was being swallowed on the way there: `..._station`
+ * turned the EV charger into a bus stop, `car_wash` fell into the fuel
+ * branch, `veterinary_care` matched the medical branch, `playground` matched
+ * `park`, and `movie_theater` came out as a library. Eight of ten new icons
+ * were unreachable.
+ *
+ * `florist`, `bar` and `hairdresser` are deliberately NOT here: the first two
+ * have no case of their own and are meant to borrow `park` and `cafe`, and
+ * un-remapping `hairdresser` would change shipped UI, which belongs to
+ * whichever ticket decides salon iconography — not this one.
+ */
+const SELF_DRAWN_ICON_TYPES = new Set([
+  'financial_service',
+  'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
+  'car_rental', 'movie_theater', 'yoga_studio', 'playground',
+  'electric_vehicle_charging_station',
+]);
+
 export function resolvePoiIconType(type: string): string {
-  // Financial service has a dedicated neutral icon; do not let the generic
-  // "service" fallback misrepresent it as a Bank.
-  if (type === 'financial_service') return type;
+  // Before GOOGLE_TYPE_ICON and before the heuristics: a type that has its
+  // own icon is already the answer, and every rule past this point can only
+  // move it somewhere worse.
+  if (SELF_DRAWN_ICON_TYPES.has(type)) return type;
 
   if (GOOGLE_TYPE_ICON[type]) {
     return GOOGLE_TYPE_ICON[type];

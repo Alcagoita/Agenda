@@ -18,6 +18,11 @@ backfill.
 
 Safe to re-run: every statement is `INSERT OR IGNORE`, and the `store`
 retirement only fires where `store` is still the only type on the row.
+
+Exits NONZERO when Overpass did not answer for every value. The SQL it did
+produce is still valid and is still printed — but a truncated run must not
+look like a complete one to a caller reading only the exit code. Pass
+`--allow-partial` to accept the shortfall, or resume with `--skip`.
 """
 import argparse
 import json
@@ -50,9 +55,9 @@ BACKFILL_PAIRS = [
     ('leisure', 'playground', 'playground'),
 ]
 
-# Values per request. Same reasoning as KAN-405's measurement: Overpass
-# limits by cost and slot, not request rate, so batching is what helps.
-VALUES_PER_QUERY = 6
+# Overpass limits by cost and slot, not request rate (KAN-405). Spacing does
+# not buy a bigger budget, so this is politeness, not a rate-limit strategy —
+# the strategy is `--skip` plus a nonzero exit when a run is truncated.
 REQUEST_SPACING_S = 10.0
 
 
@@ -91,6 +96,7 @@ def fetch_ids(area, skip=()):
     """
     pairs = [p for p in BACKFILL_PAIRS if f'{p[0]}={p[1]}' not in skip]
     by_type = {}
+    omitted = []
     slot_waits = 0
     index = 0
     while index < len(pairs):
@@ -102,6 +108,7 @@ def fetch_ids(area, skip=()):
             if wait is None or slot_waits >= MAX_SLOT_WAITS:
                 print(f'  RATE LIMITED at {key}={value} — stopping with partial '
                       'results', file=sys.stderr)
+                omitted.extend(f'{k}={v}' for k, v, _ in pairs[index:])
                 break
             slot_waits += 1
             print(f'  rate limited; slot frees in {wait}s '
@@ -110,6 +117,7 @@ def fetch_ids(area, skip=()):
             continue
         except Exception as error:  # noqa: BLE001 — one bad value must not lose the run
             print(f'  {key}={value} FAILED ({error})', file=sys.stderr)
+            omitted.append(f'{key}={value}')
             index += 1
             continue
 
@@ -119,7 +127,7 @@ def fetch_ids(area, skip=()):
         index += 1
         if index < len(pairs):
             time.sleep(REQUEST_SPACING_S)
-    return by_type
+    return by_type, omitted
 
 
 def known_ids(candidate_ids):
@@ -212,9 +220,16 @@ def main():
         help='comma-separated key=value pairs to leave out. Overpass rate '
              'limits by cost, so a resumed run should not re-ask for the '
              'values an earlier run already applied.')
+    parser.add_argument(
+        '--allow-partial', action='store_true',
+        help='exit 0 even when some values were not fetched. Overpass rate '
+             'limits often enough that partial runs are the norm and their '
+             'SQL is valid — but a caller must ASK for that, or a truncated '
+             'run is indistinguishable from a complete one.')
     args = parser.parse_args()
 
-    by_type = fetch_ids(args.area, skip={s for s in args.skip.split(',') if s})
+    by_type, omitted = fetch_ids(
+        args.area, skip={s for s in args.skip.split(',') if s})
     statements, adds, retire = sql_for(by_type)
     for statement in statements:
         print(statement)
@@ -223,6 +238,17 @@ def main():
     print(f'[{args.area}] {sum(adds.values())} type rows to add ({summary}); '
           f'{len(retire)} generic store rows retired', file=sys.stderr)
 
+    if omitted:
+        # The SQL above is still correct for the values that DID answer, so it
+        # is printed either way — but the run did not cover what was asked.
+        print(f'[{args.area}] INCOMPLETE — {len(omitted)} values not fetched: '
+              f'{", ".join(omitted)}', file=sys.stderr)
+        print(f'  resume with --skip {",".join(f"{k}={v}" for k, v, _ in BACKFILL_PAIRS if f"{k}={v}" not in omitted)}',
+              file=sys.stderr)
+        if not args.allow_partial:
+            return 1
+    return 0
+
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

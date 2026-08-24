@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { resolvePoiIconType } from '../../src/components/AppIcon/poi';
+import { getCopyLanguage, setCopyLanguage } from '../../src/constants/copy';
 import {
   POI_CATALOG, POI_GEOFENCE_RADIUS, POI_OSM_TAGS, PoiType,
   QUICK_ACTIONABLE_POI_TYPES, poiCatalogLabel,
@@ -61,9 +63,24 @@ describe('KAN-412 type reachability', () => {
   });
 
   it('every catalog type has a non-empty label in both locales', () => {
-    for (const { type } of POI_CATALOG) {
-      expect(poiCatalogLabel(type, 'en').length).toBeGreaterThan(0);
-      expect(poiCatalogLabel(type, 'pt-PT').length).toBeGreaterThan(0);
+    // poiCatalogLabel reads the ACTIVE language and takes no second argument.
+    // Passing one was silently ignored, so this asserted the default locale
+    // twice and never once checked pt-PT.
+    const original = getCopyLanguage();
+    try {
+      for (const lang of ['en', 'pt-PT'] as const) {
+        setCopyLanguage(lang);
+        for (const { type } of POI_CATALOG) {
+          expect(poiCatalogLabel(type).trim().length).toBeGreaterThan(0);
+        }
+      }
+      // The two locales must not be the same object of English strings.
+      setCopyLanguage('en');
+      const en = poiCatalogLabel('butcher');
+      setCopyLanguage('pt-PT');
+      expect(poiCatalogLabel('butcher')).not.toBe(en);
+    } finally {
+      setCopyLanguage(original);
     }
   });
 
@@ -88,6 +105,30 @@ describe('KAN-412 type reachability', () => {
       expect(catalog.has(type)).toBe(true);
       expect(quick.has(type)).toBe(false);
     }
+  });
+
+  it('the new types keep their own icon instead of being remapped', () => {
+    // resolvePoiIconType's heuristics exist for UNKNOWN strings. They were
+    // swallowing eight of the ten icons this ticket drew: `..._station` made
+    // the EV charger a bus stop, `car_wash` fell into the fuel branch,
+    // `veterinary_care` into the medical branch, `playground` into `park`,
+    // `movie_theater` into `library`. A hand-drawn icon nothing can reach is
+    // the same defect as a type nothing can search.
+    const selfDrawn: PoiType[] = [
+      'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
+      'car_rental', 'movie_theater', 'yoga_studio', 'playground',
+      'electric_vehicle_charging_station',
+    ];
+    for (const type of selfDrawn) {
+      expect(resolvePoiIconType(type)).toBe(type);
+    }
+  });
+
+  it('leaves the deliberate icon borrowings alone', () => {
+    // Guards the fix above from over-reaching. `florist` and `bar` have no
+    // case of their own and are MEANT to borrow these.
+    expect(resolvePoiIconType('florist')).toBe('park');
+    expect(resolvePoiIconType('bar')).toBe('cafe');
   });
 
   it('pins exactly which classifier types no search can reach', () => {

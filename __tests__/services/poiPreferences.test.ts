@@ -150,6 +150,7 @@ import {
   resetProximityState,
   updateProximityPoiPreferences,
 } from '../../src/services/proximity';
+import { POI_GEOFENCE_RADIUS, PoiType } from '../../src/types';
 
 // ─── getPoiPreference ─────────────────────────────────────────────────────────
 
@@ -176,9 +177,16 @@ describe('getPoiPreference', () => {
   it('returns 75 m default for unknown custom type with no stored preference', async () => {
     mockGetDoc.mockResolvedValue({ exists: () => false });
 
-    // 'yoga_studio' is not in POI_GEOFENCE_RADIUS so it falls back to DEFAULT_GEOFENCE_RADIUS (75 m)
-    const pref = await getPoiPreference('uid-1', 'yoga_studio');
-    expect(pref).toEqual({ type: 'yoga_studio', radiusMeters: 75 });
+    // A free-text POI the user typed themselves. This used to say
+    // 'yoga_studio', which KAN-412 turned into a real catalog type with its
+    // own 50 m radius — so the example stopped being unknown and the test
+    // started asserting the fallback against a type that no longer takes it.
+    // Derived rather than hardcoded so the next new type cannot repeat that.
+    const unknown = 'cheesemonger_and_cave';
+    expect(POI_GEOFENCE_RADIUS[unknown as PoiType]).toBeUndefined();
+
+    const pref = await getPoiPreference('uid-1', unknown);
+    expect(pref).toEqual({ type: unknown, radiusMeters: 75 });
   });
 });
 
