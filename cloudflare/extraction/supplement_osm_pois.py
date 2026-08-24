@@ -93,6 +93,22 @@ TAG_TYPES: tuple[tuple[str, str, str], ...] = (
     # name. shop=beauty is the full-service salon.
     ('shop', 'hairdresser', 'hairdresser'),
     ('shop', 'beauty', 'salon'),
+    # KAN-412. These already arrive via the blanket `shop` selector and were
+    # landing as generic `store` — KAN-405 measured shop=butcher 1,153,
+    # shop=laundry 1,232, shop=seafood, shop=optician 1,040. No Overpass
+    # change and no re-import: the elements are already in the database.
+    ('shop', 'butcher', 'butcher'),
+    ('shop', 'seafood', 'fishmonger'),
+    ('shop', 'fishmonger', 'fishmonger'),
+    ('shop', 'laundry', 'laundry'),
+    ('shop', 'dry_cleaning', 'laundry'),
+    ('shop', 'car_parts', 'store'),
+    ('amenity', 'car_wash', 'car_wash'),
+    ('amenity', 'car_rental', 'car_rental'),
+    ('amenity', 'veterinary', 'veterinary_care'),
+    ('amenity', 'cinema', 'movie_theater'),
+    ('amenity', 'charging_station', 'electric_vehicle_charging_station'),
+    ('leisure', 'playground', 'playground'),
     ('amenity', 'bar', 'bar'),
     ('amenity', 'pub', 'bar'),
 )
@@ -476,7 +492,14 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
     selectors = [
         'nwr["amenity"~"^(atm|cafe|pharmacy|fuel|bank|bureau_de_change|money_transfer|restaurant|fast_food|library|post_office|clinic|school|bar|pub)$"]',
         'nwr["office"="financial"]',
-        'nwr["leisure"~"^(fitness_centre|park)$"]',
+        # KAN-412. These carry types the app now has, and the classifier now
+        # maps them — but a TAG_TYPES entry for a value the query never asks
+        # for is dead code, which is the exact defect this ticket exists to
+        # stop. Foursquare already supplies all six; without this line OSM
+        # never would. Unnamed elements are dropped downstream, so the volume
+        # this adds is the named minority (KAN-405 measured the totals).
+        'nwr["amenity"~"^(car_wash|car_rental|veterinary|cinema|charging_station)$"]',
+        'nwr["leisure"~"^(fitness_centre|park|playground)$"]',
         'nwr["shop"]',
     ]
     bbox = f'({min_lat},{min_lng},{max_lat},{max_lng})'

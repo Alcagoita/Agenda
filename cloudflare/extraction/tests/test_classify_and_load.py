@@ -557,13 +557,14 @@ class TypesFromNameTest(unittest.TestCase):
         # Stopping at the first match would silently drop one of the two.
         self.assertEqual(
             sorted(classify_and_load.types_from_name('Talho e mercearia "Ti Leonor"', ['store'])),
-            ['supermarket'],
+            ['butcher', 'supermarket'],
         )
-        # `talho` and `peixaria` are intentionally unmapped — a butcher and a
-        # fishmonger are their own errand, not a flavour of "shop", and are
-        # getting real POI types rather than being folded into `store`.
-        self.assertEqual(classify_and_load.types_from_name('Talho Silva', []), [])
-        self.assertEqual(classify_and_load.types_from_name('Peixaria Central', []), [])
+        # KAN-412 gave `talho` and `peixaria` the real POI types this comment
+        # used to be waiting for, rather than folding either into `store`: a
+        # butcher and a fishmonger are their own errand, not a flavour of
+        # "shop". The compound above is now genuinely both.
+        self.assertEqual(classify_and_load.types_from_name('Talho Silva', []), ['butcher'])
+        self.assertEqual(classify_and_load.types_from_name('Peixaria Central', []), ['fishmonger'])
         self.assertEqual(
             sorted(classify_and_load.types_from_name('Restaurante e Pastelaria do Cais', [])),
             ['bakery', 'restaurant'],
