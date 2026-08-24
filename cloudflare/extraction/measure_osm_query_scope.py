@@ -40,7 +40,8 @@ rather than request rate, so spacing them further apart does not help. The
 counts are therefore batched many-per-request — 85 requests become six.
 
 On a 429 the run reads Overpass's own status endpoint, waits the interval it
-announces, and gives up after MAX_SLOT_WAITS with partial results kept.
+announces and retries, giving up only after MAX_SLOT_WAITS with partial
+results kept.
 Waiting for the time the service publishes is the mechanism it provides;
 switching mirrors to dodge the limit would not be.
 
@@ -198,8 +199,16 @@ def seconds_until_slot():
             text = resp.read().decode('utf-8', 'replace')
     except Exception:  # noqa: BLE001 — status is a courtesy, not a dependency
         return None
-    waits = [int(m) for m in re.findall(r'Slot available after:.*?in (\d+) seconds', text)]
-    return min(waits) if waits else None
+    # A free slot is announced as "N slots available now", and a slot whose
+    # time has already passed is reported with a NEGATIVE number of seconds.
+    # Reading only positive integers turned both of those into "no data",
+    # which made the run stop while Overpass was ready to serve it.
+    if re.search(r'\d+ slots? available now', text):
+        return 0
+    waits = [int(m) for m in re.findall(r'Slot available after:.*?in (-?\d+) seconds', text)]
+    if not waits:
+        return None
+    return max(0, min(waits))
 
 
 def measure(pairs, area, label):
@@ -320,15 +329,23 @@ def report(path, never, degraded, area, stopped_early):
                  'These are therefore **targeted counts of a curated list**, not an '
                  'exhaustive ranking, and a value absent from the list is unmeasured '
                  'rather than zero.\n')
-    lines.append('Each count is one `out count` query, spaced '
-                 f'{REQUEST_SPACING_S:.0f}s apart. A 429 stops the run rather than '
-                 'moving to another mirror: the limit is on us, and KAN-387 lost a day '
-                 'to learning that.\n')
+    lines.append(f'Counts are batched: each request carries up to '
+                 f'{VALUES_PER_QUERY} `out count` statements, answered in order, with '
+                 f'{REQUEST_SPACING_S:.0f}s between requests. One request per value was '
+                 'rate-limited after two queries even at 3s spacing — each count scans '
+                 'the whole country, and Overpass limits by cost and slot rather than '
+                 'request rate.\n')
+    lines.append(f'On a 429 the run reads Overpass\'s status endpoint, waits the '
+                 f'interval it publishes, and retries — up to {MAX_SLOT_WAITS} times, '
+                 'after which it stops and keeps partial results. Waiting for the '
+                 'announced time is the mechanism the service provides; moving to '
+                 'another mirror to dodge the limit is not, and KAN-387 lost a day to '
+                 'learning that.\n')
     lines.append('```')
-    lines.append('[out:json][timeout:180];')
+    lines.append('[out:json][timeout:600];')
     lines.append(f'area["ISO3166-1"="{area}"][admin_level=2]->.a;')
-    lines.append('nwr["<key>"="<value>"](area.a);')
-    lines.append('out count;')
+    lines.append('nwr["<key>"="<value>"](area.a);out count;   // repeated, up to')
+    lines.append(f'nwr["<key>"="<value>"](area.a);out count;   // {VALUES_PER_QUERY} per request')
     lines.append('```\n')
 
     with open(path, 'w') as handle:
@@ -340,10 +357,21 @@ def run(area, out_path, cache_path=None, use_cache=False):
     # Counts are cached so the wording of the report can be revised without
     # asking Overpass again. Re-measuring to fix a table header is exactly
     # the sort of casual load the usage policy exists to prevent.
+    cached = None
     if use_cache and cache_path and os.path.exists(cache_path):
         with open(cache_path) as handle:
-            cached = json.load(handle)
-        print(f'using cached counts from {cache_path}', file=sys.stderr)
+            payload = json.load(handle)
+        # The cache records the area it was measured for. Without that,
+        # `--area ES --use-cache` would publish Portuguese counts under a
+        # Spanish heading — silently wrong output, which is worse than none.
+        if payload.get('area') == area:
+            cached = payload
+            print(f'using cached counts from {cache_path}', file=sys.stderr)
+        else:
+            print(f'cache holds {payload.get("area")!r}, not {area!r} — re-measuring',
+                  file=sys.stderr)
+
+    if cached:
         never, degraded, stopped = cached['never'], cached['degraded'], cached['stopped']
     else:
         print(f'never-requested values ({len(NEVER_REQUESTED)})...', file=sys.stderr)
@@ -358,7 +386,8 @@ def run(area, out_path, cache_path=None, use_cache=False):
 
         if cache_path:
             with open(cache_path, 'w') as handle:
-                json.dump({'never': never, 'degraded': degraded, 'stopped': stopped}, handle)
+                json.dump({'area': area, 'never': never, 'degraded': degraded,
+                           'stopped': stopped}, handle)
 
     report(out_path, never, degraded, area, stopped)
     return never, degraded

@@ -141,12 +141,14 @@ This is the same lesson as KAN-403 arriving from the other direction. There, rea
 
 Overpass has no GROUP BY, so an exhaustive ranking of every unrequested value would mean downloading the tags of every element in the country — precisely what the usage policy exists to prevent. These are therefore **targeted counts of a curated list**, not an exhaustive ranking, and a value absent from the list is unmeasured rather than zero.
 
-Each count is one `out count` query, spaced 10s apart. A 429 stops the run rather than moving to another mirror: the limit is on us, and KAN-387 lost a day to learning that.
+Counts are batched: each request carries up to 12 `out count` statements, answered in order, with 10s between requests. One request per value was rate-limited after two queries even at 3s spacing — each count scans the whole country, and Overpass limits by cost and slot rather than request rate.
+
+On a 429 the run reads Overpass's status endpoint, waits the interval it publishes, and retries — up to 3 times, after which it stops and keeps partial results. Waiting for the announced time is the mechanism the service provides; moving to another mirror to dodge the limit is not, and KAN-387 lost a day to learning that.
 
 ```
-[out:json][timeout:180];
+[out:json][timeout:600];
 area["ISO3166-1"="PT"][admin_level=2]->.a;
-nwr["<key>"="<value>"](area.a);
-out count;
+nwr["<key>"="<value>"](area.a);out count;   // repeated, up to
+nwr["<key>"="<value>"](area.a);out count;   // 12 per request
 ```
 
