@@ -589,8 +589,122 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    // ─── KAN-412 ────────────────────────────────────────────────────────
+    // Same hairline house style. Every catalog type gets a bespoke glyph
+    // rather than falling through to the pin: ten entries all showing the
+    // same marker reads as a bug, not as staging. The `default` below stays
+    // the fallback for custom, non-built-in types.
+
+    case 'butcher':
+      return (
+        <Svg {...p}>
+          {/* Cleaver: blade with a spine and a handle. */}
+          <Path d="M4 4h9v9H4z" stroke={color} strokeWidth={1.6} {...S} />
+          <Line x1="13" y1="6" x2="20" y2="6" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M6.5 13v7" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'fishmonger':
+      return (
+        <Svg {...p}>
+          {/* Fish: body, tail, eye. */}
+          <Path d="M3 12c3-4 7-5 10-5s5 2 6 5c-1 3-3 5-6 5s-7-1-10-5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M3 12 1.5 8.5M3 12 1.5 15.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="15.5" cy="10.5" r="1" stroke={color} strokeWidth={1.4} {...S} />
+        </Svg>
+      );
+
+    case 'laundry':
+      return (
+        <Svg {...p}>
+          {/* Washing machine: door and control. */}
+          <Path d="M4 3h16v18H4z" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="12" cy="14" r="4.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="7.5" cy="6.5" r="0.9" stroke={color} strokeWidth={1.4} {...S} />
+        </Svg>
+      );
+
+    case 'veterinary_care':
+      return (
+        <Svg {...p}>
+          {/* Paw: pad and four toes. */}
+          <Path d="M8 16.5c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5-1.8 3.5-4 3.5-4-1.3-4-3.5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="7" cy="10" r="1.7" stroke={color} strokeWidth={1.5} {...S} />
+          <Circle cx="11" cy="7.5" r="1.7" stroke={color} strokeWidth={1.5} {...S} />
+          <Circle cx="15" cy="7.5" r="1.7" stroke={color} strokeWidth={1.5} {...S} />
+          <Circle cx="18" cy="10.5" r="1.7" stroke={color} strokeWidth={1.5} {...S} />
+        </Svg>
+      );
+
+    case 'car_wash':
+      return (
+        <Svg {...p}>
+          {/* Car under falling water. */}
+          <Path d="M4 17h16M5.5 17v-3l2-4h9l2 4v3" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="8" cy="18.5" r="1.4" stroke={color} strokeWidth={1.5} {...S} />
+          <Circle cx="16" cy="18.5" r="1.4" stroke={color} strokeWidth={1.5} {...S} />
+          <Path d="M7 3v2.5M12 2.5V5M17 3v2.5" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'car_rental':
+      return (
+        <Svg {...p}>
+          {/* Car with a key fob. */}
+          <Path d="M3 15h12M4.5 15v-2.5l1.8-3.5h7l1.8 3.5V15" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="6.5" cy="16.5" r="1.3" stroke={color} strokeWidth={1.5} {...S} />
+          <Circle cx="13" cy="16.5" r="1.3" stroke={color} strokeWidth={1.5} {...S} />
+          <Circle cx="18.5" cy="7" r="2.5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M18.5 9.5V15l1.6 1" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
+    case 'movie_theater':
+      return (
+        <Svg {...p}>
+          {/* Clapperboard. */}
+          <Path d="M3 9h18v11H3z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M3 9 5 4l16 1-2 4" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M8.5 4.4 6.5 9M13.5 4.7 11.5 9M18 5.1 16 9" stroke={color} strokeWidth={1.4} {...S} />
+        </Svg>
+      );
+
+    case 'yoga_studio':
+      return (
+        <Svg {...p}>
+          {/* Seated figure: head, folded legs, arms resting. */}
+          <Circle cx="12" cy="5" r="2.4" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M12 8v5" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M5 18c2-3 5-4.5 7-4.5s5 1.5 7 4.5z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M12 10.5 7.5 13M12 10.5 16.5 13" stroke={color} strokeWidth={1.5} {...S} />
+        </Svg>
+      );
+
+    case 'playground':
+      return (
+        <Svg {...p}>
+          {/* Slide: ladder, chute, ground line. */}
+          <Path d="M5 20V9M8.5 20V9" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M5 12h3.5M5 15.5h3.5" stroke={color} strokeWidth={1.4} {...S} />
+          <Path d="M8.5 9 19 17.5V20" stroke={color} strokeWidth={1.6} {...S} />
+          <Circle cx="6.75" cy="5" r="1.8" stroke={color} strokeWidth={1.5} {...S} />
+        </Svg>
+      );
+
+    case 'electric_vehicle_charging_station':
+      return (
+        <Svg {...p}>
+          {/* Charging post with a bolt. */}
+          <Path d="M5 21V5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M9.8 7.5 8 11.5h3l-1.8 4" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M14 9h3a2 2 0 0 1 2 2v5a1.5 1.5 0 0 1-3 0v-3" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+
     default:
-      // Generic map-pin for custom (non-built-in) place types.
+      // Generic map-pin for custom (non-built-in) place types, and the
+      // agreed fallback for any catalog type shipped before its artwork.
       return (
         <Svg {...p}>
           <Path

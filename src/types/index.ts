@@ -134,7 +134,26 @@ export type PoiType =
   // when a car breaks the user searches for it directly, so it is never a
   // "you happen to be nearby" errand.
   | 'phone_repair' | 'shoe_repair' | 'clothing_repair'
-  | 'lottery' | 'tea' | 'juice';
+  | 'lottery' | 'tea' | 'juice'
+  // KAN-412. Types the classifiers were already writing with nowhere for a
+  // search to reach them — 64 such types held 75,977 rows. These are the
+  // ones that pass the test: could a user plausibly write a task about
+  // going there?
+  //
+  // The literals match the classifier's own keys exactly, so no
+  // type_relation bridge is needed and the guard test has one rule rather
+  // than three. `veterinary_care` and `electric_vehicle_charging_station`
+  // are ugly as identifiers and correct as keys; the labels users see are
+  // in copy.ts, not here.
+  //
+  // Deliberately NOT here, and left classified-but-unreachable rather than
+  // deleted: car_repair (8,481) and the medical types — dentist 3,066,
+  // hospital 1,400, medical_lab 933, physiotherapist 345. A broken car or a
+  // dentist appointment is searched for by name at a specific address, never
+  // stumbled upon. Pharmacy is the only medical errand the app needs.
+  | 'butcher' | 'fishmonger' | 'laundry' | 'veterinary_care'
+  | 'car_wash' | 'car_rental' | 'movie_theater' | 'yoga_studio'
+  | 'playground' | 'electric_vehicle_charging_station';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
@@ -144,6 +163,14 @@ export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'tattoo' },
   { type: 'phone_repair' }, { type: 'shoe_repair' }, { type: 'clothing_repair' },
   { type: 'lottery' },
+  // KAN-412. Catalog and free-text only — none of these joins
+  // QUICK_ACTIONABLE_POI_TYPES. People reach for them specifically ("find a
+  // vet for today"), never by browsing a carousel, so the dictionary is
+  // where the value is.
+  { type: 'butcher' }, { type: 'fishmonger' }, { type: 'laundry' },
+  { type: 'veterinary_care' }, { type: 'car_wash' }, { type: 'car_rental' },
+  { type: 'movie_theater' }, { type: 'yoga_studio' }, { type: 'playground' },
+  { type: 'electric_vehicle_charging_station' },
   { type: 'barber' }, { type: 'hairdresser' }, { type: 'nail_salon' },
   { type: 'park' }, { type: 'gym' }, { type: 'bar' }, { type: 'library' }, { type: 'bank' },
   // Retained for existing documents and free-text lookup, but intentionally
@@ -438,6 +465,19 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
   // used one, but it means drinks retail rather than a juice counter, so
   // this will under-match until KAN-405 checks what PT actually carries.
   juice:           { key: 'shop',  value: 'beverages' },
+  // KAN-412. Tags chosen from what OSM actually carries in PT, measured in
+  // KAN-405 — shop=butcher 1,153, shop=laundry 1,232, shop=seafood, and
+  // leisure=playground 5,275 that the selector does not yet request.
+  butcher:         { key: 'shop',    value: 'butcher' },
+  fishmonger:      { key: 'shop',    value: 'seafood' },
+  laundry:         { key: 'shop',    value: 'laundry' },
+  veterinary_care: { key: 'amenity', value: 'veterinary' },
+  car_wash:        { key: 'amenity', value: 'car_wash' },
+  car_rental:      { key: 'amenity', value: 'car_rental' },
+  movie_theater:   { key: 'amenity', value: 'cinema' },
+  yoga_studio:     { key: 'leisure', value: 'fitness_centre' },
+  playground:      { key: 'leisure', value: 'playground' },
+  electric_vehicle_charging_station: { key: 'amenity', value: 'charging_station' },
 };
 
 /**
@@ -515,6 +555,18 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   lottery:         50,
   tea:             50,
   juice:           50,
+  // KAN-412. Small shopfronts stay tight; a playground and a charging
+  // station are open areas you approach rather than doorways.
+  butcher:         50,
+  fishmonger:      50,
+  laundry:         50,
+  veterinary_care: 50,
+  car_wash:        75,
+  car_rental:      75,
+  movie_theater:   75,
+  yoga_studio:     50,
+  playground:      100,
+  electric_vehicle_charging_station: 75,
 };
 
 // ─── Points & Achievements ────────────────────────────────────────────────────
