@@ -1033,6 +1033,19 @@ describe('refreshHabitatCacheIfStale', () => {
     expect(mockSearchNearbyPlaces).not.toHaveBeenCalled();
   });
 
+  it.each(['constructor', 'toString', '__proto__', 'valueOf', 'hasOwnProperty'])(
+    'refuses inherited Object property %s as a POI type',
+    async (inherited) => {
+      // These are real free-text strings a user could type, and `key in obj`
+      // is true for every one of them on any object literal. The mappable
+      // check used `in`, so they passed the guard, got prefetched, matched
+      // nothing, and came back for another try on every cooldown.
+      await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, [inherited]);
+
+      expect(mockSearchNearbyPlaces).not.toHaveBeenCalled();
+    },
+  );
+
   it('skips enforceSizeBudget\'s full-table COUNT(*) when OSM returned zero results for every fetched type', async () => {
     mockSearchNearbyPlaces.mockResolvedValue(nearbyAnswer({ atm: [] }, 'osm'));
 

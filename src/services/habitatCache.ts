@@ -757,7 +757,15 @@ export function getHabitatPlaceById(id: string): NearbyPlace | null {
  * capable of ever reaching empty for a custom-only request (KAN-238 review).
  */
 function isOsmMappable(poiType: string): boolean {
-  return poiType in POI_OSM_TAGS || poiType in SUPPLEMENTARY_OSM_TAGS;
+  // hasOwnProperty, not `in`. `'constructor' in POI_OSM_TAGS` is true, as are
+  // toString, valueOf and __proto__ — every object inherits them. A task can
+  // carry a free-text POI the user typed, so those are reachable strings, and
+  // `in` waved them straight past the very guard this function is.
+  return hasOwn(POI_OSM_TAGS, poiType) || hasOwn(SUPPLEMENTARY_OSM_TAGS, poiType);
+}
+
+function hasOwn(table: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(table, key);
 }
 
 /**
