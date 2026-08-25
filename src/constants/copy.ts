@@ -670,6 +670,21 @@ const en = {
   // above. ─────────────────────────────────────────────────────────────────
   poiCatalog: {
     // KAN-408 — Nature and Landmarks.
+    viewpoint:                            'Viewpoint',
+    waterfall:                            'Waterfall',
+    river:                                'River',
+    mountain:                             'Mountain',
+    lake:                                 'Lake',
+    island:                               'Island',
+    surf_spot:                            'Surf spot',
+    hot_spring:                           'Hot spring',
+    nature_preserve:                      'Nature reserve',
+    plaza:                                'Square',
+    bridge:                               'Bridge',
+    lighthouse:                           'Lighthouse',
+    marina:                               'Marina',
+    theatre:                              'Theatre',
+    music_venue:                          'Music venue',
     amusement_park:                       'Amusement park',
     aquarium:                             'Aquarium',
     art_gallery:                          'Art gallery',
@@ -1833,6 +1848,21 @@ const ptPT: typeof en = {
 
   poiCatalog: {
     // KAN-408 — Nature and Landmarks.
+    viewpoint:                            'Miradouro',
+    waterfall:                            'Cascata',
+    river:                                'Rio',
+    mountain:                             'Montanha',
+    lake:                                 'Lago',
+    island:                               'Ilha',
+    surf_spot:                            'Praia de surf',
+    hot_spring:                           'Termas',
+    nature_preserve:                      'Reserva natural',
+    plaza:                                'Praça',
+    bridge:                               'Ponte',
+    lighthouse:                           'Farol',
+    marina:                               'Marina',
+    theatre:                              'Teatro',
+    music_venue:                          'Sala de espetáculos',
     amusement_park:                       'Parque de diversões',
     aquarium:                             'Aquário',
     art_gallery:                          'Galeria de arte',

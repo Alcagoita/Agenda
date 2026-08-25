@@ -6,7 +6,7 @@ import { getCopyLanguage, setCopyLanguage } from '../../src/constants/copy';
 import {
   CLUSTER_LEISURE_TYPES,
   POI_CATALOG, POI_GEOFENCE_RADIUS, POI_OSM_TAGS, PoiType,
-  LANDMARK_POI_TYPES, NATURE_POI_TYPES,
+  TOURISM_GROUPS,
   QUICK_ACTIONABLE_POI_TYPES, SUPPLEMENTARY_OSM_TAGS, isPoiApiServableType,
   osmTagValues, poiCatalogLabel, tourismGroupFor,
 } from '../../src/types';
@@ -132,6 +132,10 @@ describe('KAN-412 type reachability', () => {
       'mosque', 'museum', 'night_club', 'rv_park',
       'spa', 'stadium', 'synagogue', 'tennis_court',
       'tourist_attraction', 'water_park', 'winery', 'zoo',
+      'viewpoint', 'waterfall', 'river', 'mountain',
+      'lake', 'island', 'surf_spot', 'hot_spring',
+      'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+      'marina', 'theatre', 'music_venue',
     ];
     for (const type of selfDrawn) {
       expect(resolvePoiIconType(type)).toBe(type);
@@ -150,6 +154,10 @@ describe('KAN-412 type reachability', () => {
       'historical_landmark', 'mosque', 'museum', 'night_club', 'rv_park',
       'spa', 'stadium', 'synagogue', 'tennis_court', 'tourist_attraction',
       'water_park', 'winery', 'zoo',
+      'viewpoint', 'waterfall', 'river', 'mountain',
+      'lake', 'island', 'surf_spot', 'hot_spring',
+      'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+      'marina', 'theatre', 'music_venue',
     ] as PoiType[]) {
       expect(catalog.has(type)).toBe(true);
       expect(quick.has(type)).toBe(false);
@@ -254,18 +262,36 @@ describe('KAN-412 type reachability', () => {
 describe('KAN-408 tourism groups', () => {
   it('every grouped type is a real catalog type', () => {
     const catalog = new Set(POI_CATALOG.map(e => e.type));
-    for (const type of [...NATURE_POI_TYPES, ...LANDMARK_POI_TYPES]) {
+    for (const type of Object.values(TOURISM_GROUPS).flat()) {
       expect(catalog.has(type)).toBe(true);
     }
   });
 
-  it('the two groups are disjoint', () => {
-    // A place serves one kind of outing or the other. Something in both
-    // would make "landmarks near here" and "nature near here" return the
-    // same row, which is the merged bucket this exists to replace.
-    const nature = new Set<string>(NATURE_POI_TYPES);
-    for (const type of LANDMARK_POI_TYPES) {
-      expect(nature.has(type)).toBe(false);
+  it('no type belongs to two groups', () => {
+    // A place serves one kind of outing. Something in two would make
+    // "nature near here" and "landmarks near here" return the same row,
+    // which is the merged bucket this exists to replace.
+    const seen = new Map<string, string>();
+    for (const [group, types] of Object.entries(TOURISM_GROUPS)) {
+      for (const type of types) {
+        expect(seen.get(type)).toBeUndefined();
+        seen.set(type, group);
+      }
+    }
+  });
+
+  it('groups the material that was waiting in poi_candidate', () => {
+    // The concrete gap this pass closed: 1,292 Scenic Lookout rows had no
+    // type at all, and a miradouro is the draw.
+    expect(tourismGroupFor('viewpoint')).toBe('nature');
+    expect(tourismGroupFor('waterfall')).toBe('nature');
+    expect(tourismGroupFor('theatre')).toBe('culture');
+    expect(tourismGroupFor('lighthouse')).toBe('landmark');
+  });
+
+  it('keeps the three faiths together in one group', () => {
+    for (const type of ['church', 'mosque', 'synagogue']) {
+      expect(tourismGroupFor(type)).toBe('religion');
     }
   });
 
@@ -280,7 +306,7 @@ describe('KAN-408 tourism groups', () => {
 
   it('resolves a group for the types that have one', () => {
     expect(tourismGroupFor('beach')).toBe('nature');
-    expect(tourismGroupFor('historical_landmark')).toBe('landmark');
+    expect(tourismGroupFor('historical_landmark')).toBe('historic');
     expect(tourismGroupFor('pharmacy')).toBeNull();
   });
 });

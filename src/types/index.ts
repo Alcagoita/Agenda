@@ -169,11 +169,24 @@ export type PoiType =
   | 'cultural_center' | 'golf_course' | 'hiking_area' | 'historical_landmark'
   | 'mosque' | 'museum' | 'night_club' | 'rv_park'
   | 'spa' | 'stadium' | 'synagogue' | 'tennis_court'
-  | 'tourist_attraction' | 'water_park' | 'winery' | 'zoo';
+  | 'tourist_attraction' | 'water_park' | 'winery' | 'zoo'
+  // KAN-408, second pass. The first 28 came from the classifier's own
+  // vocabulary; these came from the material actually waiting in
+  // poi_candidate, none of which the classifier had a name for. Scenic
+  // Lookout alone is 1,292 rows — a miradouro is the draw, and it had
+  // nowhere to go.
+  | 'viewpoint' | 'waterfall' | 'river' | 'mountain'
+  | 'lake' | 'island' | 'surf_spot' | 'hot_spring'
+  | 'nature_preserve' | 'plaza' | 'bridge' | 'lighthouse'
+  | 'marina' | 'theatre' | 'music_venue';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
   // KAN-408 — Nature and Landmarks.
+  { type: 'viewpoint' }, { type: 'waterfall' }, { type: 'river' }, { type: 'mountain' },
+  { type: 'lake' }, { type: 'island' }, { type: 'surf_spot' }, { type: 'hot_spring' },
+  { type: 'nature_preserve' }, { type: 'plaza' }, { type: 'bridge' }, { type: 'lighthouse' },
+  { type: 'marina' }, { type: 'theatre' }, { type: 'music_venue' },
   { type: 'amusement_park' }, { type: 'aquarium' }, { type: 'art_gallery' }, { type: 'beach' },
   { type: 'botanical_garden' }, { type: 'bowling_alley' }, { type: 'brewery' }, { type: 'campground' },
   { type: 'casino' }, { type: 'cemetery' }, { type: 'church' }, { type: 'community_center' },
@@ -460,6 +473,21 @@ export function osmTagValues(tag: OsmTagSelector): readonly string[] {
 
 export const POI_OSM_TAGS: Record<PoiType, OsmTagSelector> = {
   // KAN-408 — Nature and Landmarks.
+  viewpoint:                            { key: 'tourism', value: 'viewpoint' },
+  waterfall:                            { key: 'waterway', value: 'waterfall' },
+  river:                                { key: 'waterway', value: 'river' },
+  mountain:                             { key: 'natural', value: 'peak' },
+  lake:                                 { key: 'natural', value: 'water' },
+  island:                               { key: 'place', value: 'island' },
+  surf_spot:                            { key: 'sport', value: 'surfing' },
+  hot_spring:                           { key: 'natural', value: 'hot_spring' },
+  nature_preserve:                      { key: 'boundary', value: 'protected_area' },
+  plaza:                                { key: 'place', value: 'square' },
+  bridge:                               { key: 'man_made', value: 'bridge' },
+  lighthouse:                           { key: 'man_made', value: 'lighthouse' },
+  marina:                               { key: 'leisure', value: 'marina' },
+  theatre:                              { key: 'amenity', value: 'theatre' },
+  music_venue:                          { key: 'amenity', value: 'music_venue' },
   amusement_park:                       { key: 'tourism', value: 'theme_park' },
   aquarium:                             { key: 'tourism', value: 'aquarium' },
   art_gallery:                          { key: 'tourism', value: 'gallery' },
@@ -608,47 +636,57 @@ export const SUPPLEMENTARY_OSM_TAGS: Record<string, OsmTagSelector> = {
 // historical_landmark + 128 tourist_attraction rows in D1 stayed invisible
 // (KAN-407).
 /**
- * The two kinds of tourism, as two groups (KAN-408).
+ * The recommendation groups (KAN-408).
  *
  * `PoiType` says WHAT a place is. These say what kind of outing it serves,
- * which is a different question and the one the planned features ask:
- * "what landmarks are walkable around here", "you're near a park, fancy a
- * walk?". A single merged "leisure" bucket cannot answer either.
+ * which is what the planned features ask: "what is worth seeing around
+ * here". All of them feed the recommended set.
  *
- * **Neither group is a ranking tier.** `tourist_attraction` sits alongside
- * the historic landmarks, not behind them — these names are classifier
- * leaves, not a hierarchy, and the same castle arrives as
- * `historical_landmark` from one source and `tourist_attraction` from
- * another purely by how that source described it. Ordering by the label
- * would rank places by an accident of tagging. Ranking stays on physical
- * signals, as `clusterLeisure.compareSuggestions` already does.
+ * **No group is a ranking tier.** `tourist_attraction` sits alongside the
+ * historic places, not behind them — these names are classifier leaves, not
+ * a hierarchy, and the same castle arrives as `historical_landmark` from one
+ * source and `tourist_attraction` from another purely by how that source
+ * described it. Ranking stays on physical signals, as
+ * `clusterLeisure.compareSuggestions` already does.
  */
-export const NATURE_POI_TYPES = [
-  'beach', 'botanical_garden', 'campground', 'hiking_area', 'park', 'rv_park',
-] as const;
+export const TOURISM_GROUPS = {
+  // Somewhere outdoors, under the sky. A miradouro is the draw here — 1,292
+  // Scenic Lookout rows were waiting with no type to land in.
+  nature: [
+    'beach', 'botanical_garden', 'campground', 'hiking_area', 'hot_spring',
+    'island', 'lake', 'mountain', 'nature_preserve', 'park', 'river',
+    'rv_park', 'surf_spot', 'viewpoint', 'waterfall',
+  ],
+  // Kept apart from the rest rather than filed under culture: someone
+  // looking for a church on a Sunday morning is not sightseeing, and the
+  // three faiths are one group because the intent is shared.
+  religion: ['church', 'mosque', 'synagogue'],
+  // Built, and old.
+  historic: ['cemetery', 'historical_landmark'],
+  // Built, and worth stopping at. `bridge`, `lighthouse` and `plaza` live
+  // here rather than in nature: they are structures you go and look at.
+  landmark: ['bridge', 'lighthouse', 'marina', 'plaza', 'tourist_attraction'],
+  // Something on, or something to look at indoors.
+  culture: ['art_gallery', 'cultural_center', 'museum', 'music_venue', 'theatre'],
+} as const;
 
-export const LANDMARK_POI_TYPES = [
-  'art_gallery', 'cemetery', 'church', 'cultural_center', 'historical_landmark',
-  'mosque', 'museum', 'synagogue', 'tourist_attraction',
-] as const;
-
-export type NaturePoiType = typeof NATURE_POI_TYPES[number];
-export type LandmarkPoiType = typeof LANDMARK_POI_TYPES[number];
+export type TourismGroup = keyof typeof TOURISM_GROUPS;
 
 /**
- * Deliberately in NEITHER group: amusement_park, aquarium, bowling_alley,
+ * Deliberately in NO group: amusement_park, aquarium, bowling_alley,
  * brewery, casino, community_center, golf_course, night_club, spa, stadium,
  * tennis_court, water_park, winery, zoo.
  *
- * They are real taggable types — someone writes "levar os miúdos ao zoo" —
- * but they are entertainment and amenities rather than the two kinds of
- * tourism this models. Forcing a bowling alley into "Landmarks" to make the
- * partition total would make the group mean less, and a group that means
- * less is a group a feature cannot act on.
+ * They are real taggable types — someone does write "levar os miúdos ao
+ * zoo" — but they are entertainment and amenities rather than the kinds of
+ * outing this models. Forcing a bowling alley into a group to make the
+ * partition total would make every group mean less, and a group that means
+ * less is one a feature cannot act on.
  */
-export function tourismGroupFor(poiType: string): 'nature' | 'landmark' | null {
-  if ((NATURE_POI_TYPES as readonly string[]).includes(poiType)) { return 'nature'; }
-  if ((LANDMARK_POI_TYPES as readonly string[]).includes(poiType)) { return 'landmark'; }
+export function tourismGroupFor(poiType: string): TourismGroup | null {
+  for (const [group, types] of Object.entries(TOURISM_GROUPS)) {
+    if ((types as readonly string[]).includes(poiType)) { return group as TourismGroup; }
+  }
   return null;
 }
 
@@ -682,6 +720,21 @@ export function isPoiApiServableType(poiType: string): boolean {
 export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   // KAN-408 — an area, not a shopfront: a beach or a hiking route is
   // somewhere you are, not a door you stand at.
+  viewpoint:                            150,
+  waterfall:                            200,
+  river:                                500,
+  mountain:                             1000,
+  lake:                                 500,
+  island:                               1000,
+  surf_spot:                            300,
+  hot_spring:                           200,
+  nature_preserve:                      1000,
+  plaza:                                100,
+  bridge:                               200,
+  lighthouse:                           200,
+  marina:                               300,
+  theatre:                              100,
+  music_venue:                          100,
   amusement_park:                       300,
   aquarium:                             100,
   art_gallery:                          75,

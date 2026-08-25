@@ -35,6 +35,10 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'mosque', 'museum', 'night_club', 'rv_park',
   'spa', 'stadium', 'synagogue', 'tennis_court',
   'tourist_attraction', 'water_park', 'winery', 'zoo',
+  'viewpoint', 'waterfall', 'river', 'mountain',
+  'lake', 'island', 'surf_spot', 'hot_spring',
+  'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+  'marina', 'theatre', 'music_venue',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -112,6 +116,10 @@ describe('POI_GOOGLE_TYPES', () => {
       'mosque', 'museum', 'night_club', 'rv_park',
       'spa', 'stadium', 'synagogue', 'tennis_court',
       'tourist_attraction', 'water_park', 'winery', 'zoo',
+      'viewpoint', 'waterfall', 'river', 'mountain',
+      'lake', 'island', 'surf_spot', 'hot_spring',
+      'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+      'marina', 'theatre', 'music_venue',
     ];
     const googleBackedTypes = ALL_BUILT_IN_TYPES.filter(
       type => !notGoogleBacked.includes(type),

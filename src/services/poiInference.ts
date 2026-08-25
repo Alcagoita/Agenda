@@ -61,6 +61,17 @@ type KeywordMap = Record<string, PoiResolution>;
 
 const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
   en: {
+    'viewpoint': 'viewpoint', 'lookout': 'viewpoint', 'scenic lookout': 'viewpoint',
+    'waterfall': 'waterfall', 'river': 'river', 'riverside': 'river',
+    'mountain': 'mountain', 'peak': 'mountain', 'summit': 'mountain',
+    'lake': 'lake', 'lagoon': 'lake', 'island': 'island',
+    'surf': 'surf_spot', 'surf spot': 'surf_spot', 'surfing': 'surf_spot',
+    'hot spring': 'hot_spring', 'thermal spring': 'hot_spring', 'nature reserve': 'nature_preserve',
+    'nature preserve': 'nature_preserve', 'protected area': 'nature_preserve', 'plaza': 'plaza',
+    'square': 'plaza', 'town square': 'plaza', 'bridge': 'bridge',
+    'lighthouse': 'lighthouse', 'marina': 'marina', 'harbour': 'marina',
+    'harbor': 'marina', 'theatre': 'theatre', 'theater': 'theatre',
+    'music venue': 'music_venue', 'concert hall': 'music_venue', 'live music': 'music_venue',
     // KAN-408 — Nature and Landmarks.
     'amusement park': 'amusement_park', 'theme park': 'amusement_park', 'aquarium': 'aquarium',
     'art gallery': 'art_gallery', 'gallery': 'art_gallery', 'beach': 'beach',
@@ -192,6 +203,18 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     'parent meeting': 'school', 'drop off kids': 'school',
   },
   'pt-PT': {
+    'miradouro': 'viewpoint', 'vista': 'viewpoint', 'panoramica': 'viewpoint',
+    'cascata': 'waterfall', 'queda de agua': 'waterfall', 'rio': 'river',
+    'margem do rio': 'river', 'montanha': 'mountain', 'serra': 'mountain',
+    'pico': 'mountain', 'lago': 'lake', 'lagoa': 'lake',
+    'albufeira': 'lake', 'ilha': 'island', 'ilheu': 'island',
+    'surf': 'surf_spot', 'praia de surf': 'surf_spot', 'onda': 'surf_spot',
+    'aguas termais': 'hot_spring', 'nascente termal': 'hot_spring', 'area protegida': 'nature_preserve',
+    'parque natural': 'nature_preserve', 'praca': 'plaza', 'largo': 'plaza',
+    'rossio': 'plaza', 'ponte': 'bridge', 'farol': 'lighthouse',
+    'marina': 'marina', 'porto de recreio': 'marina', 'doca': 'marina',
+    'teatro': 'theatre', 'sala de espetaculos': 'music_venue', 'casa da musica': 'music_venue',
+    'auditorio': 'music_venue',
     // KAN-408 — Nature and Landmarks.
     'parque de diversoes': 'amusement_park', 'feira popular': 'amusement_park', 'aquario': 'aquarium',
     'oceanario': 'aquarium', 'galeria de arte': 'art_gallery', 'galeria': 'art_gallery',

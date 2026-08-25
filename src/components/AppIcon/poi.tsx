@@ -871,6 +871,97 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
           <Path d="M12 3l2.6 5.6 6.1.8-4.4 4.2 1.1 6-5.4-2.9L6.6 19.6l1.1-6L3.3 9.4l6.1-.8z" stroke={color} strokeWidth={1.6} {...S} />
         </Svg>
       );
+    // ── KAN-408 · the material that was waiting in poi_candidate ──
+    case 'viewpoint':
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="10" r="3" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 10c3-4 15-4 18 0-3 4-15 4-18 0z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 17v4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'waterfall':
+      return (
+        <Svg {...p}>
+          <Path d="M7 3v10M12 3v12M17 3v10" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 18c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'river':
+      return (
+        <Svg {...p}>
+          <Path d="M3 7c4-2 6 2 10 0s6-2 8 0" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 13c4-2 6 2 10 0s6-2 8 0" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 19c4-2 6 2 10 0s6-2 8 0" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'mountain':
+      return (
+        <Svg {...p}>
+          <Path d="M3 19l6-11 4 6 2-3 6 8z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M7.5 12.5l1.5-2 1.5 2" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'lake':
+      return (
+        <Svg {...p}>
+          <Path d="M4 14c2-3 5-4 8-4s6 1 8 4c-2 3-5 4-8 4s-6-1-8-4z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M8 7l2-3 2 3" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'island':
+      return (
+        <Svg {...p}>
+          <Path d="M4 18h16" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 18V9" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 9c-3 0-5 1-6 3 2-1 4-1 6 0 2-1 4-1 6 0-1-2-3-3-6-3z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'surf_spot':
+      return (
+        <Svg {...p}>
+          <Path d="M4 17c3-9 9-13 16-13-1 8-6 13-13 14" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 21c2-1.2 4-1.2 6 0s4 1.2 6 0 4-1.2 6 0" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'hot_spring':
+      return (
+        <Svg {...p}>
+          <Path d="M4 20h16" stroke={color} strokeWidth={1.6} {...S} /><Path d="M6 20c0-4 2-6 6-6s6 2 6 6" stroke={color} strokeWidth={1.6} {...S} /><Path d="M10 9c0-1.5 2-2 2-3.5M14 9c0-1.5-2-2-2-3.5" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'nature_preserve':
+      return (
+        <Svg {...p}>
+          <Path d="M12 3l8 4v6c0 4-4 7-8 8-4-1-8-4-8-8V7z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 16v-5M12 11c-2 0-3-1-3-3 2 0 3 1 3 3z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'plaza':
+      return (
+        <Svg {...p}>
+          <Rect x="3" y="3" width="18" height="18" rx="1" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'bridge':
+      return (
+        <Svg {...p}>
+          <Path d="M3 16h18" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 16c0-5 4-8 9-8s9 3 9 8" stroke={color} strokeWidth={1.6} {...S} /><Path d="M8 16v-4.5M16 16v-4.5M12 16V9" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'lighthouse':
+      return (
+        <Svg {...p}>
+          <Path d="M9 20l1-11h4l1 11z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M10 9V6h4v3" stroke={color} strokeWidth={1.6} {...S} /><Path d="M4 6l3 1M20 6l-3 1" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'marina':
+      return (
+        <Svg {...p}>
+          <Path d="M12 8v11" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="12" cy="5.5" r="1.8" stroke={color} strokeWidth={1.6} {...S} /><Path d="M6 13c0 4 3 6 6 6s6-2 6-6" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'theatre':
+      return (
+        <Svg {...p}>
+          <Path d="M4 6h16v7a8 8 0 01-16 0z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M9 10.5h.01M15 10.5h.01" stroke={color} strokeWidth={1.6} {...S} /><Path d="M9 15c1.8 1.5 4.2 1.5 6 0" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'music_venue':
+      return (
+        <Svg {...p}>
+          <Path d="M9 18V6l10-2v12" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="7" cy="18" r="2" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="17" cy="16" r="2" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
     default:
       // Generic map-pin for custom (non-built-in) place types, and the
       // agreed fallback for any catalog type shipped before its artwork.
@@ -905,6 +996,11 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
 const SELF_DRAWN_ICON_TYPES = new Set([
   // KAN-408 — Nature and Landmarks. Without these the heuristics assigned
   // actively wrong icons: a church became a library, a beach became a park.
+  'viewpoint',, 'waterfall',, 'river',
+  'mountain',, 'lake',, 'island',
+  'surf_spot',, 'hot_spring',, 'nature_preserve',
+  'plaza',, 'bridge',, 'lighthouse',
+  'marina',, 'theatre',, 'music_venue',
   'beach',, 'hiking_area',, 'botanical_garden',
   'amusement_park',, 'aquarium',, 'zoo',
   'water_park',, 'campground',, 'rv_park',
