@@ -39,7 +39,7 @@ import enrich_osm_cuisine
 # the authority, this is the request.
 OSM_SCOPE_BATCH_SIZE = 8
 
-def supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng):
+def supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng, country_code=None):
     """The per-Place OSM pass (KAN-394). Additive, and never fails the Place.
 
     Before this, "mapped" meant two different things. A country-mapped Place
@@ -68,15 +68,22 @@ def supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng):
     is idempotent on the OSM element id.
     """
     try:
-        imports, stats, _renames = supplement_osm_pois.supplement_scope(
+        imports, stats, conflicts = supplement_osm_pois.supplement_scope(
             place_id, min_lat, max_lat, min_lng, max_lng,
         )
         # D1 first: a crash before returning re-runs the scope, which the
         # element-id upsert makes harmless.
         for statement in supplement_osm_pois.statements_for_pois(imports):
             d1_client.execute(statement)
+        # KAN-390 — an on-demand Place produces the same staleness evidence a
+        # country scope does, and it is worth just as much.
+        for statement in supplement_osm_pois.statements_for_conflicts(
+            conflicts, country_code=country_code, place_id=place_id,
+        ):
+            d1_client.execute(statement)
         print(f"[run_job] {place_id}: OSM supplement added "
-              f"{stats.get('unique_rows_to_write', 0)} rows")
+              f"{stats.get('unique_rows_to_write', 0)} rows, "
+              f"{len(conflicts)} source conflicts")
         return stats
     except enrich_osm_cuisine.OverpassRateLimited:
         traceback.print_exc()
@@ -345,6 +352,13 @@ def run_osm_supplement(country_code, run_id):
             # scope, which the element-id upsert makes harmless. The reverse
             # order could mark a scope done that wrote nothing.
             for statement in supplement_osm_pois.statements_for_pois(imports):
+                d1_client.execute(statement)
+            # KAN-390 — the queryable half of the same evidence. Written
+            # after the POIs and before the checkpoint, so a crash re-runs
+            # the scope and the upsert makes that harmless.
+            for statement in supplement_osm_pois.statements_for_conflicts(
+                renames, country_code=country_code, place_id=place_id, run_id=run_id,
+            ):
                 d1_client.execute(statement)
             report_key = f'osm-rename-reports/{country_code}/{run_id}/{place_id}.json'
             try:

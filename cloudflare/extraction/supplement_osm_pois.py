@@ -162,6 +162,9 @@ class PossibleRename:
     source_lng: float
     distance_meters: float
     severity: str
+    # KAN-390 — 'disagreement' (both rows now exist) or 'ambiguous' (the
+    # element was dropped because two candidates were indistinguishable).
+    conflict_class: str = 'disagreement'
 
     def as_dict(self) -> dict:
         return {
@@ -177,7 +180,16 @@ class PossibleRename:
             'source_lng': self.source_lng,
             'distance_meters': round(self.distance_meters, 1),
             'severity': self.severity,
+            'conflict_class': self.conflict_class,
         }
+
+
+SAME_LOCATION_METERS = 20
+
+
+def conflict_severity(distance_meters: float) -> str:
+    """The bands the rename report has always used, named once (KAN-390)."""
+    return 'same_location' if distance_meters <= SAME_LOCATION_METERS else 'nearby'
 
 
 def sql_quote(value: str | None) -> str:
@@ -322,6 +334,18 @@ def grid_for(candidates: Iterable[Candidate], center_lat: float) -> dict[tuple[s
     return grid
 
 
+@dataclass(frozen=True)
+class AmbiguousMatch:
+    """Two or more candidates the matcher could not tell apart (KAN-390).
+
+    Replaces the bare string `'ambiguous'`. The element is still dropped —
+    that decision is unchanged — but the candidates it could have been are
+    now carried out so they can be written to the triage queue instead of
+    incrementing a counter and vanishing.
+    """
+    candidates: tuple
+
+
 def confident_match(poi: OsmPoi, grid: dict[tuple[str, int, int], list[Candidate]], center_lat: float) -> Candidate | str | None:
     """Return an existing confident duplicate, ``ambiguous``, or None.
 
@@ -351,9 +375,14 @@ def confident_match(poi: OsmPoi, grid: dict[tuple[str, int, int], list[Candidate
         return None
     scored.sort(key=lambda value: (-value[0], value[1], value[2].source, value[2].source_id))
     best_similarity, best_distance, best = scored[0]
-    for similarity, distance, _ in scored[1:]:
-        if best_similarity - similarity < 0.05 and abs(best_distance - distance) < 15:
-            return 'ambiguous'
+    # KAN-390: returning the bare string 'ambiguous' threw away the very rows
+    # that make the verdict reviewable. The competitors come back with it now.
+    rivals = [
+        candidate for similarity, distance, candidate in scored[1:]
+        if best_similarity - similarity < 0.05 and abs(best_distance - distance) < 15
+    ]
+    if rivals:
+        return AmbiguousMatch(candidates=(best, *rivals))
     return best
 
 
@@ -506,12 +535,15 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
     return f'[out:json][timeout:170];({"".join(selector + bbox + ";" for selector in selectors)});out center;'
 
 
-def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center_lat: float, corrections: dict[tuple[str, str], SourceCorrection] | None = None) -> tuple[list[OsmPoi], dict[str, int]]:
+def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center_lat: float, corrections: dict[tuple[str, str], SourceCorrection] | None = None) -> tuple[list[OsmPoi], dict[str, int], list[PossibleRename]]:
     brand_dictionary = load_brand_dictionary()
     grid = grid_for(candidates, center_lat)
     grid_lng_deg = GRID_LAT_DEG / max(math.cos(math.radians(center_lat)), 0.01)
     existing_osm_ids = {candidate.source_id for candidate in candidates if candidate.source == 'openstreetmap'}
     imports: list[OsmPoi] = []
+    # KAN-390 — the elements dropped for being indistinguishable between two
+    # candidates. Previously a counter and nothing else.
+    ambiguous_conflicts: list[PossibleRename] = []
     stats: dict[str, int] = defaultdict(int)
     seen_elements: set[str] = set()
     corrections = corrections or {}
@@ -533,8 +565,21 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
             stats['updated'] += 1
             continue
         match = confident_match(poi, grid, center_lat)
-        if match == 'ambiguous':
+        if isinstance(match, AmbiguousMatch):
             stats['ambiguous_skipped'] += 1
+            # One row per candidate it could have been: each is its own thing
+            # to review, and which of them is right is exactly the question.
+            for candidate in match.candidates:
+                distance = haversine_m(poi.lat, poi.lng, candidate.lat, candidate.lng)
+                ambiguous_conflicts.append(PossibleRename(
+                    osm_element_id=poi.osm_element_id, osm_name=poi.name,
+                    osm_lat=poi.lat, osm_lng=poi.lng, poi_type=candidate.poi_type,
+                    source=candidate.source, source_id=candidate.source_id,
+                    source_name=candidate.name, source_lat=candidate.lat,
+                    source_lng=candidate.lng, distance_meters=distance,
+                    severity=conflict_severity(distance),
+                    conflict_class='ambiguous',
+                ))
         elif match is not None:
             stats['matched_skipped'] += 1
             if normalized_identity_terms_match(poi.dedupe_name, match.dedupe_name):
@@ -547,7 +592,7 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
                     Candidate('openstreetmap', poi.osm_element_id, poi.name, poi.dedupe_name, poi.lat, poi.lng, poi_type),
                 )
     stats['source_elements'] = len(seen_elements)
-    return imports, dict(stats)
+    return imports, dict(stats), ambiguous_conflicts
 
 
 def possible_renames(imports: Iterable[OsmPoi], candidates: Iterable[Candidate]) -> list[PossibleRename]:
@@ -661,6 +706,61 @@ ON CONFLICT(osm_element_id) DO UPDATE SET
     return statements
 
 
+def statements_for_conflicts(
+    conflicts: list[PossibleRename], *, country_code: str | None = None,
+    place_id: str | None = None, run_id: str | None = None,
+) -> list[str]:
+    """Upsert the triage queue (KAN-390).
+
+    Keyed on (osm_element_id, source, source_id, poi_type), so re-running a
+    scope refreshes a conflict rather than duplicating it — the same
+    idempotency contract as `osm_poi`.
+
+    What the upsert deliberately does NOT touch:
+
+      * `triage_status` and `resolution_note` — a reviewed conflict must stay
+        reviewed. A scope re-runs for reasons that have nothing to do with the
+        review, and silently returning a row to `unreviewed` would make the
+        queue lie about what has been looked at.
+      * `first_seen_at` — when we first saw the disagreement is a fact about
+        the data, not about the last run.
+
+    Everything else is refreshed, because the observation genuinely is newer:
+    the element may have moved, been renamed, or changed severity band.
+    """
+    if not conflicts:
+        return []
+    statements: list[str] = []
+    for start in range(0, len(conflicts), SQL_BATCH_SIZE):
+        chunk = conflicts[start:start + SQL_BATCH_SIZE]
+        values = ','.join(
+            '(' + ','.join((
+                sql_quote(row.osm_element_id), sql_quote(row.source), sql_quote(row.source_id),
+                sql_quote(row.poi_type), sql_quote(country_code), sql_quote(place_id),
+                sql_quote(run_id), sql_quote(row.osm_name), repr(float(row.osm_lat)),
+                repr(float(row.osm_lng)), sql_quote(row.source_name), repr(float(row.source_lat)),
+                repr(float(row.source_lng)), repr(round(float(row.distance_meters), 1)),
+                sql_quote(row.conflict_class), sql_quote(row.severity),
+            )) + ')'
+            for row in chunk
+        )
+        statements.append(
+            'INSERT INTO osm_source_conflict ('
+            'osm_element_id, source, source_id, poi_type, country_code, place_id, run_id, '
+            'osm_name, osm_lat, osm_lng, source_name, source_lat, source_lng, '
+            'distance_meters, conflict_class, severity) VALUES ' + values +
+            ' ON CONFLICT (osm_element_id, source, source_id, poi_type) DO UPDATE SET '
+            'country_code = excluded.country_code, place_id = excluded.place_id, '
+            'run_id = excluded.run_id, osm_name = excluded.osm_name, '
+            'osm_lat = excluded.osm_lat, osm_lng = excluded.osm_lng, '
+            'source_name = excluded.source_name, source_lat = excluded.source_lat, '
+            'source_lng = excluded.source_lng, distance_meters = excluded.distance_meters, '
+            'conflict_class = excluded.conflict_class, severity = excluded.severity, '
+            'last_seen_at = CURRENT_TIMESTAMP;'
+        )
+    return statements
+
+
 def sql_for_pois(pois: list[OsmPoi]) -> str:
     """The same writes as one reviewable .sql file for an operator dry-run."""
     statements = statements_for_pois(pois)
@@ -672,7 +772,7 @@ def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max
     elements = fetch_overpass(osm_query(min_lat, max_lat, min_lng, max_lng)).get('elements', [])
     corrections = corrections if corrections is not None else source_corrections()
     scope_candidates = candidates if candidates is not None else existing_candidates_in_bbox(min_lat, max_lat, min_lng, max_lng, corrections)
-    imports, stats = classify_scope(elements, scope_candidates, (min_lat + max_lat) / 2, corrections)
+    imports, stats, ambiguous_conflicts = classify_scope(elements, scope_candidates, (min_lat + max_lat) / 2, corrections)
     # Existing OSM ids are source refreshes, not new additions. The report is
     # specifically for OSM candidates that could otherwise be newly imported.
     existing_osm_ids = {candidate.source_id for candidate in scope_candidates if candidate.source == 'openstreetmap'}
@@ -680,9 +780,13 @@ def import_scope(label: str, min_lat: float, max_lat: float, min_lng: float, max
         (poi for poi in imports if poi.osm_element_id not in existing_osm_ids),
         scope_candidates,
     )
+    # KAN-390 — both classes travel together from here. The disagreements were
+    # already reported; the ambiguous ones used to stop at a counter.
+    renames = renames + ambiguous_conflicts
     stats['overpass_elements'] = len(elements)
     stats['possible_rename_same_location'] = sum(row.severity == 'same_location' for row in renames)
     stats['possible_rename_nearby'] = sum(row.severity == 'nearby' for row in renames)
+    stats['ambiguous_conflicts'] = len(ambiguous_conflicts)
     print(f'[{label}] OSM audit: ' + ', '.join(f'{key}={value}' for key, value in sorted(stats.items())))
     if show_candidates:
         for poi in imports[:50]:
@@ -731,15 +835,19 @@ def supplement_scope(
     corrections = corrections if corrections is not None else source_corrections()
     elements = fetch_overpass(osm_query(min_lat, max_lat, min_lng, max_lng)).get('elements', [])
     candidates = existing_candidates_in_bbox(min_lat, max_lat, min_lng, max_lng, corrections)
-    imports, stats = classify_scope(elements, candidates, (min_lat + max_lat) / 2, corrections)
+    imports, stats, ambiguous_conflicts = classify_scope(elements, candidates, (min_lat + max_lat) / 2, corrections)
     existing_osm_ids = {candidate.source_id for candidate in candidates if candidate.source == 'openstreetmap'}
     renames = possible_renames(
         (poi for poi in imports if poi.osm_element_id not in existing_osm_ids),
         candidates,
     )
+    # KAN-390 — both classes travel together from here. The disagreements were
+    # already reported; the ambiguous ones used to stop at a counter.
+    renames = renames + ambiguous_conflicts
     stats['overpass_elements'] = len(elements)
     stats['possible_rename_same_location'] = sum(row.severity == 'same_location' for row in renames)
     stats['possible_rename_nearby'] = sum(row.severity == 'nearby' for row in renames)
+    stats['ambiguous_conflicts'] = len(ambiguous_conflicts)
     print(f'[{place_id}] OSM audit: ' + ', '.join(f'{key}={value}' for key, value in sorted(stats.items())))
     return imports, stats, renames
 

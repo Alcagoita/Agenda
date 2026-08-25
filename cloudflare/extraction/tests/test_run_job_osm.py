@@ -411,3 +411,67 @@ class MapPlaceOrderTest(unittest.TestCase):
         self.assertLess(self.order.index('d1_load'), self.order.index('osm'))
         self.assertLess(self.order.index('osm'), self.order.index('build_complete'))
         self.assertNotIn('place_failed', self.order)
+
+
+class SourceConflictQueueTest(unittest.TestCase):
+    """KAN-390 — the disagreements and ambiguities become a queryable queue."""
+
+    def setUp(self):
+        self.original_d1 = run_job.d1_client
+        self.original_scope = supplement_osm_pois.supplement_scope
+        self.original_corrections = supplement_osm_pois.source_corrections
+        supplement_osm_pois.source_corrections = lambda: {}
+        self.d1 = FakeD1()
+        run_job.d1_client = self.d1
+
+    def tearDown(self):
+        run_job.d1_client = self.original_d1
+        supplement_osm_pois.supplement_scope = self.original_scope
+        supplement_osm_pois.source_corrections = self.original_corrections
+
+    @staticmethod
+    def conflict(conflict_class, source_id='fsq1'):
+        return supplement_osm_pois.PossibleRename(
+            osm_element_id='node/1', osm_name='Café Destaque', osm_lat=1.0, osm_lng=2.0,
+            poi_type='cafe', source='foursquare', source_id=source_id,
+            source_name='A Brazileira de Torres', source_lat=1.0, source_lng=2.0,
+            distance_meters=12.4, severity='same_location', conflict_class=conflict_class,
+        )
+
+    def test_both_classes_are_written(self):
+        supplement_osm_pois.supplement_scope = lambda *a, **k: (
+            [], {}, [self.conflict('disagreement'), self.conflict('ambiguous', 'fsq2')])
+
+        run_job.supplement_place_with_osm('osm-relation-1', 1.0, 2.0, 3.0, 4.0)
+
+        written = '\n'.join(self.d1.statements)
+        self.assertIn('osm_source_conflict', written)
+        self.assertIn("'disagreement'", written)
+        self.assertIn("'ambiguous'", written)
+
+    def test_a_scope_with_no_conflicts_writes_nothing(self):
+        supplement_osm_pois.supplement_scope = lambda *a, **k: ([], {}, [])
+        run_job.supplement_place_with_osm('osm-relation-1', 1.0, 2.0, 3.0, 4.0)
+        self.assertEqual(
+            [s for s in self.d1.statements if 'osm_source_conflict' in s], [])
+
+    def test_the_upsert_never_resets_a_human_verdict(self):
+        # The whole point of a queue is that reviewing something makes it stay
+        # reviewed. A scope re-runs for reasons unrelated to the review.
+        statements = supplement_osm_pois.statements_for_conflicts(
+            [self.conflict('disagreement')], country_code='PT')
+        sql = statements[0]
+        self.assertIn('ON CONFLICT (osm_element_id, source, source_id, poi_type) DO UPDATE', sql)
+        self.assertNotIn('triage_status', sql)
+        self.assertNotIn('resolution_note', sql)
+        # ...nor claim the row is newly discovered on every run.
+        self.assertNotIn('first_seen_at', sql)
+        self.assertIn('last_seen_at = CURRENT_TIMESTAMP', sql)
+
+    def test_one_row_per_candidate_the_element_could_have_been(self):
+        # An ambiguous element is ambiguous BETWEEN candidates; which one is
+        # right is the question being queued, so each is its own row.
+        statements = supplement_osm_pois.statements_for_conflicts(
+            [self.conflict('ambiguous', 'fsq1'), self.conflict('ambiguous', 'fsq2')])
+        self.assertIn("'fsq1'", statements[0])
+        self.assertIn("'fsq2'", statements[0])

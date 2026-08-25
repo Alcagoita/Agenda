@@ -145,6 +145,13 @@ CREATE TABLE IF NOT EXISTS poi_source_correction (
   visible               INTEGER NOT NULL CHECK (visible IN (0, 1)),
   name_override         TEXT,
   dedupe_name_override  TEXT,
+  -- KAN-390. Where `name_override` came from, and when. Once a row's name and
+  -- its coordinates can originate in different places, "where did this string
+  -- come from" stops being answerable from the schema — and the Settings
+  -- attribution footer has to name every source actually shipping. Same
+  -- reason `poi` records source identity.
+  name_source           TEXT,
+  name_updated_at       TEXT,
   review_note           TEXT NOT NULL,
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (source, source_id)
