@@ -152,22 +152,112 @@ def load_brand_dictionary():
     # `name` and source/title aliases that must resolve to that same value.
     return load_mapping(os.path.join(REPO_ROOT, 'src', 'constants', 'brandDictionary.json'))
 
+def is_ambiguous_brand_form(normalized_brand):
+    """Is this brand form too weak to be matched by substring alone? (KAN-409)
+
+    `normalize_text` collapses every non-alphanumeric character to a space, so
+    `C&A`, `C. A.` and the initials in `C A Santos` all become `c a`. A
+    padded-substring match then brands a private individual's registered
+    business as a clothing chain.
+
+    Two shapes are unsafe: a run of single letters (initials), and a form of
+    two letters or fewer. Both are things Portuguese company and personal
+    names produce constantly.
+
+    A digit makes a short brand safe again — `h3` and `q8` are not initials
+    and not words, and across 122 production rows neither produced a single
+    false positive, while requiring them to lead the name would have wrongly
+    unbranded "Café H3" and "New Hamburgology H3".
+    """
+    compact = normalized_brand.replace(' ', '')
+    if not compact.isalpha():
+        return False
+    return all(len(token) == 1 for token in normalized_brand.split()) or len(compact) <= 2
+
+
+def leads_with_tight_ampersand(raw_name, canonical_name):
+    """Does `raw_name` open with `canonical_name` written tight? (KAN-409)
+
+    Measured across every row carrying C&A or H&M: a genuine store always
+    writes the ampersand closed up — `C&A`, `C&A Kids Store`, `H&M HOME`,
+    `C&A, Braga Parque`. Every SPACED instance in the database is a different
+    business whose name merely opens with those initials:
+
+        C & A Costa - materiais construçao
+        C & A Modas, Unipessoal
+        Modas Lda & C, C & A
+        RS & HM - Material Eléctrico
+
+    which is what "C & A" usually is in Portuguese company names — two
+    initials joined by an "and", not a chain.
+
+    So the tight form is the signal, and it must LEAD: `RS & HM` is not an
+    H&M. A word boundary after it keeps `C&American` from matching.
+
+    A genuine store written `C & A` would lose its brand here. That is the
+    deliberate direction to err — it stays a store, findable as one, while
+    the alternative leaves a construction supplier branded as a clothing
+    chain. Reviewed against the data, this costs nothing today.
+    """
+    tight = re.sub(r'\s+', '', canonical_name)
+    if not tight:
+        return False
+    head = raw_name.lstrip()
+    if head[:len(tight)].casefold() != tight.casefold():
+        return False
+    rest = head[len(tight):]
+    return not rest[:1].isalnum()
+
+
+def brand_form_matches(normalized_brand, normalized_name, raw_name, canonical_name):
+    """Does `normalized_brand` identify this POI as `canonical_name`?
+
+    The ordinary rule is a word-boundary substring match, padded with spaces,
+    so 'Delta' does not match inside a longer word while multi-word brands
+    like 'Costa Coffee' still match as a phrase.
+
+    An ambiguous form (above) has to earn it twice over:
+
+      * it must LEAD the name. "Maria C A M Pinto Lavrador" is not a C&A.
+      * if the real brand carries an ampersand, the name must carry one too.
+        That character is the entire difference between `C&A Portimão` and
+        `C. A. Produções`, and normalization is what throws it away. It is
+        checked against the canonical brand, not the matched alias, so the
+        bare `HM` alias cannot let "HM Telecom" through.
+
+    Measured against the 760 production rows carrying these brands: 33 are
+    unbranded by this rule and every one of them is a false positive — car
+    dealers, opticians, garages and people's names. No genuine store loses
+    its brand.
+    """
+    if not is_ambiguous_brand_form(normalized_brand):
+        return f' {normalized_brand} ' in f' {normalized_name} '
+    if '&' in canonical_name:
+        # The name is ONLY the brand, however the ampersand is spaced:
+        # `C&A`, `C &A`, `C& A`, `C & A`. Nothing else is in the name, so
+        # there is no other business it could be. Compared against the
+        # canonical form, so the bare `HM` alias does not qualify a shop
+        # simply called "HM".
+        if normalized_name == normalize_text(canonical_name):
+            return True
+        return leads_with_tight_ampersand(raw_name, canonical_name)
+    return normalized_name == normalized_brand or normalized_name.startswith(normalized_brand + ' ')
+
+
 def find_brand(name, ranked_types, brand_dictionary):
     """First brand match, in the same priority order as primary_poi_type
-    (ranked_types), then by the brand list's own declared order. Word-
-    boundary substring match (padded with spaces) so 'Delta' doesn't match
-    inside an unrelated longer word, while multi-word brands like 'Costa
-    Coffee' still match as a phrase."""
+    (ranked_types), then by the brand list's own declared order."""
     normalized_name = normalize_text(name)
     if not normalized_name:
         return None
-    padded_name = f' {normalized_name} '
     for t in ranked_types:
         for brand in brand_dictionary.get(t, []):
             canonical_name = brand['name']
             for candidate in [canonical_name, *brand.get('aliases', [])]:
                 normalized_brand = normalize_text(candidate)
-                if normalized_brand and f' {normalized_brand} ' in padded_name:
+                if not normalized_brand:
+                    continue
+                if brand_form_matches(normalized_brand, normalized_name, name, canonical_name):
                     return canonical_name
     return None
 
