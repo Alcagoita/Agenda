@@ -19,7 +19,9 @@ describe('resolvePoiIconType', () => {
     expect(resolvePoiIconType('bus_stop')).toBe('bus');
     expect(resolvePoiIconType('general_hospital')).toBe('clinic');
     expect(resolvePoiIconType('hair_salon')).toBe('hairdresser');
-    expect(resolvePoiIconType('church')).toBe('library');
+    // KAN-408 drew church its own icon; it no longer borrows the library's.
+    // The other assertions here still exercise the suffix rules.
+    expect(resolvePoiIconType('church')).toBe('church');
     expect(resolvePoiIconType('parking_garage')).toBe('gas');
   });
 
@@ -33,6 +35,7 @@ describe('resolvePoiIconType', () => {
     expect(resolvePoiIconType('fitness_center')).toBe('gym');
     expect(resolvePoiIconType('apartment_building')).toBe('store');
     expect(resolvePoiIconType('travel_agency')).toBe('bank');
-    expect(resolvePoiIconType('brewery')).toBe('cafe');
+    // Likewise brewery — a real type since KAN-408, not a cafe.
+    expect(resolvePoiIconType('brewery')).toBe('brewery');
   });
 });

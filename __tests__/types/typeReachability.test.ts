@@ -120,9 +120,38 @@ describe('KAN-412 type reachability', () => {
       'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
       'car_rental', 'movie_theater', 'yoga_studio', 'playground',
       'electric_vehicle_charging_station',
+      // KAN-408 — these had it worse than a generic pin. GOOGLE_TYPE_ICON
+      // actively mapped museum and art_gallery to 'library', beach and
+      // historical_landmark to 'park', and church to 'library' — a wrong
+      // icon rather than an absent one.
+      'amusement_park', 'aquarium', 'art_gallery', 'beach',
+      'botanical_garden', 'bowling_alley', 'brewery', 'campground',
+      'casino', 'cemetery', 'church', 'community_center',
+      'cultural_center', 'golf_course', 'hiking_area', 'historical_landmark',
+      'mosque', 'museum', 'night_club', 'rv_park',
+      'spa', 'stadium', 'synagogue', 'tennis_court',
+      'tourist_attraction', 'water_park', 'winery', 'zoo',
     ];
     for (const type of selfDrawn) {
       expect(resolvePoiIconType(type)).toBe(type);
+    }
+  });
+
+  it('KAN-408 types are catalog-only, never quick-actionable', () => {
+    // Same call as KAN-412's ten. Tourism is something people reach for
+    // deliberately; the creation carousel stays short and stays errands.
+    const quick = new Set<string>(QUICK_ACTIONABLE_POI_TYPES);
+    const catalog = new Set(POI_CATALOG.map(e => e.type));
+    for (const type of [
+      'amusement_park', 'aquarium', 'art_gallery', 'beach', 'botanical_garden',
+      'bowling_alley', 'brewery', 'campground', 'casino', 'cemetery', 'church',
+      'community_center', 'cultural_center', 'golf_course', 'hiking_area',
+      'historical_landmark', 'mosque', 'museum', 'night_club', 'rv_park',
+      'spa', 'stadium', 'synagogue', 'tennis_court', 'tourist_attraction',
+      'water_park', 'winery', 'zoo',
+    ] as PoiType[]) {
+      expect(catalog.has(type)).toBe(true);
+      expect(quick.has(type)).toBe(false);
     }
   });
 
@@ -190,14 +219,9 @@ describe('KAN-412 type reachability', () => {
     const DELIBERATELY_UNREACHABLE = [
       // Searched by name at a specific address, never stumbled upon (KAN-412).
       'car_repair', 'dentist', 'hospital', 'medical_lab', 'physiotherapist',
-      // Owned by KAN-408 / KAN-410 — the Nature and Landmarks grouping.
-      // Deciding them here would decide them twice.
-      'amusement_park', 'aquarium', 'art_gallery', 'beach', 'botanical_garden',
-      'bowling_alley', 'brewery', 'campground', 'casino', 'cemetery', 'church',
-      'community_center', 'cultural_center', 'golf_course', 'hiking_area',
-      'historical_landmark', 'mosque', 'museum', 'night_club', 'rv_park',
-      'spa', 'stadium', 'synagogue', 'tennis_court', 'tourist_attraction',
-      'water_park', 'winery', 'zoo',
+      // KAN-408 decided this group: all 28 are now real, taggable PoiTypes.
+      // The list is 28 shorter than it was, which is the ticket's own
+      // acceptance criterion rather than an accident.
       // Deliberately dormant pending a use case (KAN-404).
       'lodging', 'hotel',
       // Transport. Same call as bus stops: a location without routes or

@@ -702,6 +702,175 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    // ── KAN-408 · Nature and Landmarks ──
+    case 'beach':
+      return (
+        <Svg {...p}>
+          <Path d="M3 19h18" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 19V9" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 9c-4 0-7 2-8 4 3-1 6-1 8 0 2-1 5-1 8 0-1-2-4-4-8-4z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'hiking_area':
+      return (
+        <Svg {...p}>
+          <Path d="M3 19h18" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 19l6-10 4 6 2-3 6 7" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'botanical_garden':
+      return (
+        <Svg {...p}>
+          <Path d="M12 21V10" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 12c-3 0-5-2-5-5 3 0 5 2 5 5z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 14c3 0 5-2 5-5-3 0-5 2-5 5z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'amusement_park':
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="12" r="8" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 4v16M4 12h16" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'aquarium':
+      return (
+        <Svg {...p}>
+          <Path d="M4 12c3-4 9-4 12 0-3 4-9 4-12 0z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M16 12l4-3v6z" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="8" cy="11" r="0.9" fill={color} />
+        </Svg>
+      );
+    case 'zoo':
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="13" r="5" stroke={color} strokeWidth={1.6} {...S} /><Path d="M8 8l-1-3 3 1M16 8l1-3-3 1" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'water_park':
+      return (
+        <Svg {...p}>
+          <Path d="M4 9h9a4 4 0 010 8H8" stroke={color} strokeWidth={1.6} {...S} /><Path d="M3 20c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'campground':
+      return (
+        <Svg {...p}>
+          <Path d="M12 4L4 20h16z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 12l-4 8M12 12l4 8" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'rv_park':
+      return (
+        <Svg {...p}>
+          <Path d="M3 8h13a5 5 0 015 5v3H3z" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="8" cy="18" r="1.8" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'golf_course':
+      return (
+        <Svg {...p}>
+          <Path d="M11 20V4l8 4-8 4" stroke={color} strokeWidth={1.6} {...S} /><Path d="M5 20h14" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'stadium':
+      return (
+        <Svg {...p}>
+          <Path d="M4 9c0-2 3.5-3 8-3s8 1 8 3-3.5 3-8 3-8-1-8-3z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M4 9v6c0 2 3.5 3 8 3s8-1 8-3V9" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'tennis_court':
+      return (
+        <Svg {...p}>
+          <Rect x="3" y="5" width="18" height="14" rx="1" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 5v14M3 12h18" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'bowling_alley':
+      return (
+        <Svg {...p}>
+          <Path d="M12 3c2 0 3 3 3 7s-1 11-3 11-3-7-3-11 1-7 3-7z" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="12" cy="7" r="0.9" fill={color} />
+        </Svg>
+      );
+    case 'casino':
+      return (
+        <Svg {...p}>
+          <Rect x="4" y="4" width="16" height="16" rx="2" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="9" cy="9" r="1.1" fill={color} /><Circle cx="15" cy="15" r="1.1" fill={color} />
+        </Svg>
+      );
+    case 'night_club':
+      return (
+        <Svg {...p}>
+          <Path d="M9 18V6l10-2v12" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="7" cy="18" r="2" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="17" cy="16" r="2" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'brewery':
+      return (
+        <Svg {...p}>
+          <Path d="M6 7h9v13H6z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M15 10h3v5h-3" stroke={color} strokeWidth={1.6} {...S} /><Path d="M9 4v3M12 4v3" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'winery':
+      return (
+        <Svg {...p}>
+          <Path d="M8 4h8l-1 6a3 3 0 01-6 0z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 13v6M9 20h6" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'spa':
+      return (
+        <Svg {...p}>
+          <Path d="M12 20c0-5 3-8 7-9-1 5-3 8-7 9z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 20c0-5-3-8-7-9 1 5 3 8 7 9z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'cemetery':
+      return (
+        <Svg {...p}>
+          <Path d="M8 20V10a4 4 0 018 0v10z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 7V4M10 5.5h4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'church':
+      return (
+        <Svg {...p}>
+          <Path d="M6 20V11l6-4 6 4v9z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 7V3M10 4.5h4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'mosque':
+      return (
+        <Svg {...p}>
+          <Path d="M6 20v-7a6 6 0 0112 0v7z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 6V3" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="12" cy="5" r="1.4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'synagogue':
+      return (
+        <Svg {...p}>
+          <Path d="M12 4l7 4v12H5V8z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M12 10l3 5H9zM12 16l-3-5h6z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'museum':
+      return (
+        <Svg {...p}>
+          <Path d="M3 9l9-5 9 5" stroke={color} strokeWidth={1.6} {...S} /><Path d="M5 9v9M12 9v9M19 9v9M3 20h18" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'art_gallery':
+      return (
+        <Svg {...p}>
+          <Rect x="4" y="4" width="16" height="16" rx="1" stroke={color} strokeWidth={1.6} {...S} /><Path d="M7 16l3.5-4.5L13 15l2-2.5 2.5 3.5z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'cultural_center':
+      return (
+        <Svg {...p}>
+          <Path d="M4 20V8l8-4 8 4v12z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M9 20v-6h6v6" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'community_center':
+      return (
+        <Svg {...p}>
+          <Path d="M4 20V10l8-5 8 5v10z" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="9.5" cy="14" r="1.4" stroke={color} strokeWidth={1.6} {...S} /><Circle cx="14.5" cy="14" r="1.4" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'historical_landmark':
+      return (
+        <Svg {...p}>
+          <Path d="M4 20V8h4V5l4-2 4 2v3h4v12z" stroke={color} strokeWidth={1.6} {...S} /><Path d="M10 20v-5h4v5" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
+    case 'tourist_attraction':
+      return (
+        <Svg {...p}>
+          <Path d="M12 3l2.6 5.6 6.1.8-4.4 4.2 1.1 6-5.4-2.9L6.6 19.6l1.1-6L3.3 9.4l6.1-.8z" stroke={color} strokeWidth={1.6} {...S} />
+        </Svg>
+      );
     default:
       // Generic map-pin for custom (non-built-in) place types, and the
       // agreed fallback for any catalog type shipped before its artwork.
@@ -734,6 +903,18 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
  * whichever ticket decides salon iconography — not this one.
  */
 const SELF_DRAWN_ICON_TYPES = new Set([
+  // KAN-408 — Nature and Landmarks. Without these the heuristics assigned
+  // actively wrong icons: a church became a library, a beach became a park.
+  'beach',, 'hiking_area',, 'botanical_garden',
+  'amusement_park',, 'aquarium',, 'zoo',
+  'water_park',, 'campground',, 'rv_park',
+  'golf_course',, 'stadium',, 'tennis_court',
+  'bowling_alley',, 'casino',, 'night_club',
+  'brewery',, 'winery',, 'spa',
+  'cemetery',, 'church',, 'mosque',
+  'synagogue',, 'museum',, 'art_gallery',
+  'cultural_center',, 'community_center',, 'historical_landmark',
+  'tourist_attraction',
   'financial_service',
   'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
   'car_rental', 'movie_theater', 'yoga_studio', 'playground',

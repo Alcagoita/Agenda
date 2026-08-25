@@ -153,10 +153,34 @@ export type PoiType =
   // stumbled upon. Pharmacy is the only medical errand the app needs.
   | 'butcher' | 'fishmonger' | 'laundry' | 'veterinary_care'
   | 'car_wash' | 'car_rental' | 'movie_theater' | 'yoga_studio'
-  | 'playground' | 'electric_vehicle_charging_station';
+  | 'playground' | 'electric_vehicle_charging_station'
+  // KAN-408. Nature and Landmarks, taggable like any other type. The user
+  // writes "visitar o castelo" and tags it; that is a task they chose, and
+  // reaching the Nearby hero at a castle is the product working. The fear
+  // this reverses — tourism outranking errands — only ever applied to the
+  // app VOLUNTEERING a place, which is clusterLeisure's suggestion path and
+  // is governed separately.
+  //
+  // Catalog-only, never quick-actionable: people reach for these
+  // deliberately, and the creation carousel stays short.
+  | 'amusement_park' | 'aquarium' | 'art_gallery' | 'beach'
+  | 'botanical_garden' | 'bowling_alley' | 'brewery' | 'campground'
+  | 'casino' | 'cemetery' | 'church' | 'community_center'
+  | 'cultural_center' | 'golf_course' | 'hiking_area' | 'historical_landmark'
+  | 'mosque' | 'museum' | 'night_club' | 'rv_park'
+  | 'spa' | 'stadium' | 'synagogue' | 'tennis_court'
+  | 'tourist_attraction' | 'water_park' | 'winery' | 'zoo';
 
 /** All built-in POI types, in catalog display order. */
 export const POI_CATALOG: { type: PoiType }[] = [
+  // KAN-408 — Nature and Landmarks.
+  { type: 'amusement_park' }, { type: 'aquarium' }, { type: 'art_gallery' }, { type: 'beach' },
+  { type: 'botanical_garden' }, { type: 'bowling_alley' }, { type: 'brewery' }, { type: 'campground' },
+  { type: 'casino' }, { type: 'cemetery' }, { type: 'church' }, { type: 'community_center' },
+  { type: 'cultural_center' }, { type: 'golf_course' }, { type: 'hiking_area' }, { type: 'historical_landmark' },
+  { type: 'mosque' }, { type: 'museum' }, { type: 'night_club' }, { type: 'rv_park' },
+  { type: 'spa' }, { type: 'stadium' }, { type: 'synagogue' }, { type: 'tennis_court' },
+  { type: 'tourist_attraction' }, { type: 'water_park' }, { type: 'winery' }, { type: 'zoo' },
   { type: 'supermarket' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
   { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
   { type: 'ice_cream' }, { type: 'tea' }, { type: 'juice' },
@@ -435,6 +459,44 @@ export function osmTagValues(tag: OsmTagSelector): readonly string[] {
 }
 
 export const POI_OSM_TAGS: Record<PoiType, OsmTagSelector> = {
+  // KAN-408 — Nature and Landmarks.
+  amusement_park:                       { key: 'tourism', value: 'theme_park' },
+  aquarium:                             { key: 'tourism', value: 'aquarium' },
+  art_gallery:                          { key: 'tourism', value: 'gallery' },
+  beach:                                { key: 'natural', value: 'beach' },
+  botanical_garden:                     { key: 'leisure', value: 'garden' },
+  bowling_alley:                        { key: 'leisure', value: 'bowling_alley' },
+  brewery:                              { key: 'craft', value: 'brewery' },
+  campground:                           { key: 'tourism', value: 'camp_site' },
+  casino:                               { key: 'amenity', value: 'casino' },
+  cemetery:                             { key: 'landuse', value: 'cemetery' },
+  church:                               { key: 'building', value: 'church' },
+  community_center:                     { key: 'amenity', value: 'community_centre' },
+  cultural_center:                      { key: 'amenity', value: 'arts_centre' },
+  golf_course:                          { key: 'leisure', value: 'golf_course' },
+  hiking_area:                          { key: 'leisure', value: 'nature_reserve' },
+  // KAN-406's multi-value selector, preserved: "a historic place" has no
+  // single tag value, and picking one silently drops the rest.
+  historical_landmark:                  {
+    key: 'historic',
+    value: 'castle',
+    values: [
+      'castle', 'monument', 'memorial', 'ruins', 'archaeological_site',
+      'fort', 'manor', 'monastery', 'tower', 'city_gate', 'aqueduct',
+    ],
+  },
+  mosque:                               { key: 'building', value: 'mosque' },
+  museum:                               { key: 'tourism', value: 'museum' },
+  night_club:                           { key: 'amenity', value: 'nightclub' },
+  rv_park:                              { key: 'tourism', value: 'caravan_site' },
+  spa:                                  { key: 'leisure', value: 'spa' },
+  stadium:                              { key: 'leisure', value: 'stadium' },
+  synagogue:                            { key: 'building', value: 'synagogue' },
+  tennis_court:                         { key: 'leisure', value: 'pitch' },
+  tourist_attraction:                   { key: 'tourism', value: 'attraction' },
+  water_park:                           { key: 'leisure', value: 'water_park' },
+  winery:                               { key: 'craft', value: 'winery' },
+  zoo:                                  { key: 'tourism', value: 'zoo' },
   atm:         { key: 'amenity', value: 'atm' },
   cafe:        { key: 'amenity', value: 'cafe' },
   supermarket: { key: 'shop',    value: 'supermarket' },
@@ -512,23 +574,15 @@ export const SUPPLEMENTARY_OSM_TAGS: Record<string, OsmTagSelector> = {
   // KAN-293 — leisure/cultural draws for the cluster box's companion line.
   // `park` is absent here on purpose: it's already a PoiType in
   // POI_OSM_TAGS, so it rides the normal prefetch without duplication.
-  museum:   { key: 'tourism', value: 'museum' },
-  aquarium: { key: 'tourism', value: 'aquarium' },
+  // KAN-408 — museum, aquarium, tourist_attraction and historical_landmark
+  // graduated to real PoiTypes and now live in POI_OSM_TAGS. Leaving copies
+  // here would be two sources of truth for one selector, and the lookup
+  // prefers POI_OSM_TAGS, so the copies would be silently dead.
   // KAN-406. `tourism=attraction` used to be mapped under the bare name
   // `attraction`, which our own database has never once written — 0 rows,
   // against 128 for `tourist_attraction`. Two names for one concept, split
   // across two source vocabularies, so whichever one a lookup used it saw
   // half the world. One type now carries both: the D1 name, the OSM tag.
-  tourist_attraction: { key: 'tourism', value: 'attraction' },
-  // A single value cannot say "a historic place". The set is the mapping.
-  historical_landmark: {
-    key: 'historic',
-    value: 'castle',
-    values: [
-      'castle', 'monument', 'memorial', 'ruins', 'archaeological_site',
-      'fort', 'manor', 'monastery', 'tower', 'city_gate', 'aqueduct',
-    ],
-  },
 };
 
 /**
@@ -581,6 +635,36 @@ export function isPoiApiServableType(poiType: string): boolean {
 
 /** Default geofence radius in metres per POI type. */
 export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
+  // KAN-408 — an area, not a shopfront: a beach or a hiking route is
+  // somewhere you are, not a door you stand at.
+  amusement_park:                       300,
+  aquarium:                             100,
+  art_gallery:                          75,
+  beach:                                500,
+  botanical_garden:                     300,
+  bowling_alley:                        75,
+  brewery:                              100,
+  campground:                           300,
+  casino:                               100,
+  cemetery:                             200,
+  church:                               100,
+  community_center:                     100,
+  cultural_center:                      100,
+  golf_course:                          500,
+  hiking_area:                          1000,
+  historical_landmark:                  200,
+  mosque:                               100,
+  museum:                               100,
+  night_club:                           75,
+  rv_park:                              300,
+  spa:                                  100,
+  stadium:                              300,
+  synagogue:                            100,
+  tennis_court:                         100,
+  tourist_attraction:                   200,
+  water_park:                           300,
+  winery:                               200,
+  zoo:                                  300,
   atm:         50,
   pharmacy:    50,
   cafe:        75,

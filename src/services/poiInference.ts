@@ -61,6 +61,22 @@ type KeywordMap = Record<string, PoiResolution>;
 
 const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
   en: {
+    // KAN-408 — Nature and Landmarks.
+    'amusement park': 'amusement_park', 'theme park': 'amusement_park', 'aquarium': 'aquarium',
+    'art gallery': 'art_gallery', 'gallery': 'art_gallery', 'beach': 'beach',
+    'botanical garden': 'botanical_garden', 'bowling': 'bowling_alley', 'brewery': 'brewery',
+    'campsite': 'campground', 'campground': 'campground', 'camping': 'campground',
+    'casino': 'casino', 'cemetery': 'cemetery', 'church': 'church',
+    'chapel': 'church', 'community centre': 'community_center', 'community center': 'community_center',
+    'cultural centre': 'cultural_center', 'arts centre': 'cultural_center', 'golf': 'golf_course',
+    'hiking': 'hiking_area', 'trail': 'hiking_area', 'hiking area': 'hiking_area',
+    'landmark': 'historical_landmark', 'historic site': 'historical_landmark', 'monument': 'historical_landmark',
+    'mosque': 'mosque', 'museum': 'museum', 'night club': 'night_club',
+    'nightclub': 'night_club', 'club': 'night_club', 'rv park': 'rv_park',
+    'motorhome': 'rv_park', 'spa': 'spa', 'stadium': 'stadium',
+    'synagogue': 'synagogue', 'tennis': 'tennis_court', 'tennis court': 'tennis_court',
+    'attraction': 'tourist_attraction', 'tourist attraction': 'tourist_attraction', 'water park': 'water_park',
+    'winery': 'winery', 'wine estate': 'winery', 'zoo': 'zoo',
     // ── atm ──
     atm: 'atm', cash: 'atm', withdraw: 'atm', withdrawal: 'atm', 'cash machine': 'atm',
     // ── cafe ──
@@ -176,6 +192,25 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     'parent meeting': 'school', 'drop off kids': 'school',
   },
   'pt-PT': {
+    // KAN-408 — Nature and Landmarks.
+    'parque de diversoes': 'amusement_park', 'feira popular': 'amusement_park', 'aquario': 'aquarium',
+    'oceanario': 'aquarium', 'galeria de arte': 'art_gallery', 'galeria': 'art_gallery',
+    'praia': 'beach', 'jardim botanico': 'botanical_garden', 'estufa fria': 'botanical_garden',
+    'bowling': 'bowling_alley', 'cervejaria artesanal': 'brewery', 'fabrica de cerveja': 'brewery',
+    'parque de campismo': 'campground', 'campismo': 'campground', 'casino': 'casino',
+    'cemiterio': 'cemetery', 'igreja': 'church', 'capela': 'church',
+    'se catedral': 'church', 'mosteiro': 'church', 'centro comunitario': 'community_center',
+    'junta de freguesia': 'community_center', 'centro cultural': 'cultural_center', 'casa da cultura': 'cultural_center',
+    'golfe': 'golf_course', 'campo de golfe': 'golf_course', 'percurso pedestre': 'hiking_area',
+    'trilho': 'hiking_area', 'reserva natural': 'hiking_area', 'monumento': 'historical_landmark',
+    'castelo': 'historical_landmark', 'forte': 'historical_landmark', 'palacio': 'historical_landmark',
+    'ruinas': 'historical_landmark', 'mesquita': 'mosque', 'museu': 'museum',
+    'discoteca': 'night_club', 'bar de noite': 'night_club', 'parque de autocaravanas': 'rv_park',
+    'autocaravana': 'rv_park', 'spa': 'spa', 'termas': 'spa',
+    'estadio': 'stadium', 'sinagoga': 'synagogue', 'tenis': 'tennis_court',
+    'court de tenis': 'tennis_court', 'ponto de interesse': 'tourist_attraction', 'atracao': 'tourist_attraction',
+    'parque aquatico': 'water_park', 'adega': 'winery', 'quinta do vinho': 'winery',
+    'zoo': 'zoo', 'jardim zoologico': 'zoo',
     // ── atm ──
     multibanco: 'atm', dinheiro: 'atm', levantar: 'atm', levantamento: 'atm',
     // ── cafe ──
