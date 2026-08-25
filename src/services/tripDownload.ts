@@ -128,6 +128,14 @@ export function formatTripSizeMb(bytes: number): string {
   return mb < 1 ? '< 1 MB' : `${Math.round(mb)} MB`;
 }
 
+/** Exact R2 export size for the post-tap download confirmation. */
+export function formatTripDownloadSize(bytes: number): string {
+  if (bytes < 1_000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${Math.round(bytes / 1_000)} KB`;
+  const mb = bytes / 1_000_000;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
 // ─── Download orchestration ───────────────────────────────────────────────────
 
 /**
@@ -207,6 +215,23 @@ export type TripDownloadResult = {
   placesWritten: number;
   cloudflareExport?: NonNullable<Trip['cloudflareExport']>;
 };
+
+/**
+ * Looks up the exact R2 export size without downloading it. Undefined keeps
+ * the existing OSM path intact for uncovered/building destinations.
+ */
+export async function getCloudflareTripExportSize(
+  center: { lat: number; lng: number },
+): Promise<number | undefined> {
+  try {
+    const coverage = await cloudflareCoverageProxy(center.lat, center.lng);
+    return coverage.status === 'ready' && typeof coverage.exportBytes === 'number'
+      ? coverage.exportBytes
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Cloudflare is preferred for covered destinations; every unavailable or
  * failed export falls back to the established OSM path without touching the

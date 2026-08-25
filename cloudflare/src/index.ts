@@ -2337,7 +2337,18 @@ export default {
       const { lat, lng } = parsed;
 
       const place = await findPlace(env, lat, lng);
-      return json({ status: toApiStatus(place?.status ?? 'none'), placeId: place?.place_id ?? null, buildId: place?.build_id ?? null });
+      // The curated records live in D1, while the client-downloadable SQLite
+      // build lives in R2. HEAD avoids transferring that build merely to tell
+      // the user its exact download size.
+      const exportObject = place?.status === 'mapped' && place.build_id
+        ? await env.POI_EXPORTS.head(`exports/${place.place_id}/${place.build_id}.sqlite`)
+        : null;
+      return json({
+        status: toApiStatus(place?.status ?? 'none'),
+        placeId: place?.place_id ?? null,
+        buildId: place?.build_id ?? null,
+        exportBytes: exportObject?.size ?? null,
+      });
     }
 
     // GET /export/:placeId  — the current build's client-download SQLite

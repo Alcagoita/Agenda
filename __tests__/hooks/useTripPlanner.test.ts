@@ -50,12 +50,14 @@ jest.mock('../../src/services/firestore/trips', () => ({
 
 const mockDownloadTripArea = jest.fn();
 const mockDownloadTripAreaWithCloudflare = jest.fn();
+const mockGetCloudflareTripExportSize = jest.fn();
 jest.mock('../../src/services/tripDownload', () => {
   const actual = jest.requireActual('../../src/services/tripDownload');
   return {
     ...actual,
     downloadTripArea: (...args: unknown[]) => mockDownloadTripArea(...args),
     downloadTripAreaWithCloudflare: (...args: unknown[]) => mockDownloadTripAreaWithCloudflare(...args),
+    getCloudflareTripExportSize: (...args: unknown[]) => mockGetCloudflareTripExportSize(...args),
   };
 });
 
@@ -75,6 +77,7 @@ beforeEach(() => {
   mockGetTrip.mockResolvedValue(null);
   mockUpdateTrip.mockResolvedValue(undefined);
   mockDownloadTripAreaWithCloudflare.mockResolvedValue({ placesWritten: 5 });
+  mockGetCloudflareTripExportSize.mockResolvedValue(undefined);
   (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: true });
 });
 
@@ -455,6 +458,24 @@ describe('confirmDownload', () => {
     }));
     expect(mockShowToast).toHaveBeenCalled();
     expect(onDoneMock).toHaveBeenCalled();
+  });
+
+  it('shows the exact R2 export size after the first tap, then downloads only after confirmation', async () => {
+    mockGetCloudflareTripExportSize.mockResolvedValue(123_456);
+    mockAddTrip.mockResolvedValue('trip-1');
+    const result = await goToRadiusStep();
+
+    await act(async () => { await result.current.confirmDownload(); });
+
+    expect(mockGetCloudflareTripExportSize).toHaveBeenCalledWith(expect.objectContaining({ lat: 1, lng: 2 }));
+    expect(result.current.exactDownloadBytes).toBe(123_456);
+    expect(mockDownloadTripAreaWithCloudflare).not.toHaveBeenCalled();
+
+    await act(async () => { await result.current.confirmDownload(); });
+
+    expect(mockDownloadTripAreaWithCloudflare).toHaveBeenCalledWith(
+      { lat: 1, lng: 2 }, expect.any(Number), expect.any(String), expect.any(Number),
+    );
   });
 
   it('surfaces an error and returns to the radius step on failure', async () => {

@@ -15,6 +15,7 @@ import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { addTrip, getTrip, updateTrip } from '../services/firestore';
 import {
   downloadTripAreaWithCloudflare,
+  getCloudflareTripExportSize,
   computeTripExpiresAt,
   estimateTripDownloadBytes,
   getAreaDownloadPoiTypes,
@@ -76,6 +77,8 @@ export interface TripPlannerState {
   estimatedBytes: number;
   /** Meters for the currently-selected radiusKey — for the screen's MapView Circle radius. */
   radiusMeters: number;
+  /** Exact R2 export size after the user first requests a covered download. */
+  exactDownloadBytes: number | null;
 
   confirmDownload: () => Promise<void>;
   error: string | null;
@@ -113,6 +116,7 @@ export function useTripPlanner(
   );
   const [endDate, setEndDate] = useState<string | undefined>(undefined);
   const [radiusKey, setRadiusKey] = useState<TripRadiusPreset>('town_and_around');
+  const [exactDownloadBytes, setExactDownloadBytes] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
@@ -185,6 +189,7 @@ export function useTripPlanner(
     justSelectedRef.current = true;
     setQuery(suggestion.name);
     setSuggestions([]);
+    setExactDownloadBytes(null);
     if (suggestion.lat == null || suggestion.lng == null) {
       setError(COPY.tripPlanner.downloadErrorToast);
       return;
@@ -199,6 +204,11 @@ export function useTripPlanner(
     setStartDate(undefined);
     setEndDate(undefined);
     setStep('radius');
+  }, []);
+
+  const setTripRadiusKey = useCallback((key: TripRadiusPreset) => {
+    setExactDownloadBytes(null);
+    setRadiusKey(key);
   }, []);
 
   const preset = TRIP_RADIUS_PRESETS.find(p => p.key === radiusKey) ?? TRIP_RADIUS_PRESETS[1];
@@ -259,6 +269,16 @@ export function useTripPlanner(
     }
 
     if (!destination || !uid) { return; }
+    // A ready Cloudflare destination has an R2 object whose exact size is
+    // known without downloading it. First tap surfaces that fact; the second
+    // tap is the user's explicit approval to transfer it.
+    if (exactDownloadBytes == null) {
+      const exportBytes = await getCloudflareTripExportSize(destination);
+      if (exportBytes != null) {
+        setExactDownloadBytes(exportBytes);
+        return;
+      }
+    }
     setStep('downloading');
     setError(null);
 
@@ -302,7 +322,7 @@ export function useTripPlanner(
     }
   }, [
     isEditing, editingTrip, uid, endDate, startDate, preset.radiusMeters,
-    editInitialStep, onDone, destination,
+    editInitialStep, onDone, destination, exactDownloadBytes,
   ]);
 
   const goBack = useCallback(() => {
@@ -319,7 +339,7 @@ export function useTripPlanner(
     step,
     query, setQuery, suggestions, searching, selectDestination, destination,
     startDate, endDate, setStartDate, setEndDate, goToRadius, skipDates,
-    radiusKey, setRadiusKey, estimatedBytes, radiusMeters: preset.radiusMeters,
+    radiusKey, setRadiusKey: setTripRadiusKey, estimatedBytes, radiusMeters: preset.radiusMeters, exactDownloadBytes,
     confirmDownload, error, goBack,
     isEditing, editInitialStep: editInitialStep ?? null,
   };

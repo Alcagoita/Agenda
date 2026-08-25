@@ -389,10 +389,10 @@ function createFakeDb(
 const API_KEY = 'test-key';
 const BUILD_SECRET = 'build-secret';
 
-function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[]; poiAttributeSeed?: FakePoiAttributeRow[] } = {}): Env {
+function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[]; poiAttributeSeed?: FakePoiAttributeRow[]; exportBytes?: number } = {}): Env {
   return {
     REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed, opts.poiSeed, opts.poiTypeSeed, opts.poiAttributeSeed),
-    POI_EXPORTS: {} as R2Bucket,
+    POI_EXPORTS: { head: vi.fn().mockResolvedValue(opts.exportBytes == null ? null : { size: opts.exportBytes }) } as unknown as R2Bucket,
     API_KEY,
     EXTRACTION_CONTAINER: {} as Env['EXTRACTION_CONTAINER'], // getContainer() itself is mocked — never really touches this
     BUILD_TRIGGER_SECRET: BUILD_SECRET,
@@ -565,6 +565,26 @@ describe('POST /poi/nearby', () => {
       requests: [{ key: 'ramen', type: 'restaurant', attribute: { dimension: 'food_cuisine', values: ['ramen'] } }],
     }), env);
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /coverage', () => {
+  it('returns the exact ready R2 export size without downloading the export', async () => {
+    const env = makeEnv([{
+      place_id: 'osm-relation-2897141', name: 'Lisboa', country_code: 'PT', place_kind: 'city',
+      min_lat: 38.0, max_lat: 39.0, min_lng: -10, max_lng: -8,
+      status: 'mapped', build_id: 'b1', mapped_at: '2026-01-01T00:00:00.000Z',
+      request_count: 0, first_requested_at: null, last_requested_at: null,
+    }], { exportBytes: 123_456 });
+
+    const res = await worker.fetch(new Request('https://poi-api.brushaway.app/coverage?lat=38.7223&lng=-9.1393', {
+      headers: { 'X-Api-Key': API_KEY },
+    }), env);
+
+    expect(await res.json()).toEqual({
+      status: 'ready', placeId: 'osm-relation-2897141', buildId: 'b1', exportBytes: 123_456,
+    });
+    expect((env.POI_EXPORTS.head as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('exports/osm-relation-2897141/b1.sqlite');
   });
 });
 

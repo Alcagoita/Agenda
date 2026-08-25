@@ -52,7 +52,7 @@ beforeEach(() => {
 
 describe('direct POI API transport', () => {
   it('sends the Firebase ID token as a bearer credential', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1' }));
+    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1', exportBytes: 123_456 }));
 
     await cloudflareCoverageProxy(38.7, -9.1);
 
@@ -64,9 +64,9 @@ describe('direct POI API transport', () => {
   });
 
   it('returns the coverage payload unchanged', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1' }));
+    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1', exportBytes: 123_456 }));
     await expect(cloudflareCoverageProxy(38.7, -9.1)).resolves.toEqual({
-      status: 'ready', placeId: 'lisboa', buildId: 'b1',
+      status: 'ready', placeId: 'lisboa', buildId: 'b1', exportBytes: 123_456,
     });
   });
 

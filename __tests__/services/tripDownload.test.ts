@@ -69,6 +69,8 @@ import {
   refreshTripArea,
   checkAndRunTripPreRefresh,
   getAreaDownloadPoiTypes,
+  getCloudflareTripExportSize,
+  formatTripDownloadSize,
 } from '../../src/services/tripDownload';
 import { ALL_POI_TYPES } from '../../src/types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
@@ -273,6 +275,21 @@ describe('downloadTripAreaWithCloudflare', () => {
       .resolves.toEqual({ placesWritten: 0, cloudflareExport: cached });
     expect(mockImportExport).not.toHaveBeenCalled();
     expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+  });
+});
+
+describe('getCloudflareTripExportSize', () => {
+  it('returns the exact ready R2 export size and leaves unavailable coverage undefined', async () => {
+    mockCoverage.mockResolvedValueOnce({ status: 'ready', placeId: 'place-1', buildId: 'build-1', exportBytes: 123_456 });
+    await expect(getCloudflareTripExportSize({ lat: 1, lng: 2 })).resolves.toBe(123_456);
+
+    mockCoverage.mockResolvedValueOnce({ status: 'building', placeId: 'place-1' });
+    await expect(getCloudflareTripExportSize({ lat: 1, lng: 2 })).resolves.toBeUndefined();
+  });
+
+  it('formats exact export sizes for the confirmation UI', () => {
+    expect(formatTripDownloadSize(123_456)).toBe('123 KB');
+    expect(formatTripDownloadSize(1_250_000)).toBe('1.3 MB');
   });
 });
 

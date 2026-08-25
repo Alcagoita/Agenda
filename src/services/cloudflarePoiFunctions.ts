@@ -16,6 +16,8 @@ export interface CoverageResponse {
   status: 'none' | 'building' | 'ready';
   placeId: string | null;
   buildId?: string | null;
+  /** Exact byte size of the ready R2 SQLite export, when available. */
+  exportBytes?: number | null;
 }
 
 /**
