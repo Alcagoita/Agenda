@@ -14,7 +14,7 @@ import { searchDestinationAutocomplete } from '../services/maps';
 import type { PlaceAutocompleteSuggestion } from '../services/maps';
 import { addTrip, getTrip, updateTrip } from '../services/firestore';
 import {
-  downloadTripArea,
+  downloadTripAreaWithCloudflare,
   computeTripExpiresAt,
   estimateTripDownloadBytes,
   getAreaDownloadPoiTypes,
@@ -226,19 +226,21 @@ export function useTripPlanner(
         const isOnline = (await NetInfo.fetch()).isConnected !== false;
 
         if (grewArea && isOnline) {
-          await downloadTripArea(
+          const result = await downloadTripAreaWithCloudflare(
             { lat: editingTrip.centerLat, lng: editingTrip.centerLng },
             preset.radiusMeters,
             editingTrip.cacheAreaId,
             expiresAt,
+            editingTrip.cloudflareExport,
           );
           const preRefreshedAt = Date.now();
           await updateTrip(uid, editingTrip.id, {
             areaRadius: preset.radiusMeters,
             expiresAt,
             preRefreshedAt,
+            cloudflareExport: result.cloudflareExport,
           });
-          setEditingTrip({ ...editingTrip, areaRadius: preset.radiusMeters, expiresAt, preRefreshedAt });
+          setEditingTrip({ ...editingTrip, areaRadius: preset.radiusMeters, expiresAt, preRefreshedAt, cloudflareExport: result.cloudflareExport });
         } else if (grewArea) {
           await updateTrip(uid, editingTrip.id, { expiresAt });
           setEditingTrip({ ...editingTrip, expiresAt });
@@ -264,7 +266,7 @@ export function useTripPlanner(
     const expiresAt = computeTripExpiresAt(endDate);
 
     try {
-      await downloadTripArea(
+      const result = await downloadTripAreaWithCloudflare(
         { lat: destination.lat, lng: destination.lng },
         preset.radiusMeters,
         cacheAreaId,
@@ -281,6 +283,7 @@ export function useTripPlanner(
           areaRadius: preset.radiusMeters,
           cacheAreaId,
           expiresAt,
+          cloudflareExport: result.cloudflareExport,
         });
       } catch (err) {
         // The habitat rows were already written under cacheAreaId — without

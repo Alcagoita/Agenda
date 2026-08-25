@@ -17,6 +17,7 @@ jest.mock('@react-native-firebase/auth/lib/modular', () => ({
 import { getAuth } from '@react-native-firebase/auth/lib/modular';
 import {
   cloudflareCoverageProxy,
+  cloudflareExportProxy,
   cloudflarePoiAllProxy,
   cloudflareRequestCoverageProxy,
 } from '../../src/services/cloudflarePoiFunctions';
@@ -51,7 +52,7 @@ beforeEach(() => {
 
 describe('direct POI API transport', () => {
   it('sends the Firebase ID token as a bearer credential', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', cityId: 'lisboa', buildId: 'b1' }));
+    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1' }));
 
     await cloudflareCoverageProxy(38.7, -9.1);
 
@@ -63,10 +64,20 @@ describe('direct POI API transport', () => {
   });
 
   it('returns the coverage payload unchanged', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', cityId: 'lisboa', buildId: 'b1' }));
+    mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1' }));
     await expect(cloudflareCoverageProxy(38.7, -9.1)).resolves.toEqual({
-      status: 'ready', cityId: 'lisboa', buildId: 'b1',
+      status: 'ready', placeId: 'lisboa', buildId: 'b1',
     });
+  });
+
+  it('downloads a SQLite export as authenticated binary, never JSON', async () => {
+    const bytes = new Uint8Array([83, 81, 76, 105, 116, 101]);
+    mockFetch.mockResolvedValue({ ok: true, status: 200, arrayBuffer: async () => bytes.buffer });
+
+    await expect(cloudflareExportProxy('place/a')).resolves.toEqual(bytes);
+    const { url, init } = lastRequest();
+    expect(url).toBe(`${POI_API_BASE_URL}/export/place%2Fa`);
+    expect(headerValue(init, 'Authorization')).toBe('Bearer id-token-abc');
   });
 
   it('posts nearby searches using the Worker\'s own radius field name', async () => {
@@ -96,10 +107,10 @@ describe('direct POI API transport', () => {
   });
 
   it('posts coverage demand to /coverage/request', async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ coverageStatus: 'none', cityId: null }));
+    mockFetch.mockResolvedValue(jsonResponse({ coverageStatus: 'none', placeId: null }));
 
     await expect(cloudflareRequestCoverageProxy(38.7, -9.1)).resolves.toEqual({
-      coverageStatus: 'none', cityId: null,
+      coverageStatus: 'none', placeId: null,
     });
     const { url, init } = lastRequest();
     expect(url).toBe(`${POI_API_BASE_URL}/coverage/request`);
@@ -135,7 +146,7 @@ describe('direct POI API transport', () => {
   it('clears the abort timer once a response arrives', async () => {
     jest.useFakeTimers();
     try {
-      mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', cityId: 'lisboa', buildId: 'b1' }));
+      mockFetch.mockResolvedValue(jsonResponse({ status: 'ready', placeId: 'lisboa', buildId: 'b1' }));
       await cloudflareCoverageProxy(38.7, -9.1);
       // A leaked timer would keep the JS thread waking up per request — and
       // on RN, fire an abort against an AbortController nothing is reading.

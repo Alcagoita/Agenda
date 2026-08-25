@@ -10,11 +10,11 @@
  * the rollback path until this build is verified in production.
  */
 
-import { poiApiGet, poiApiPost } from './poiApi';
+import { poiApiGet, poiApiGetBinary, poiApiPost } from './poiApi';
 
-interface CoverageResponse {
+export interface CoverageResponse {
   status: 'none' | 'building' | 'ready';
-  cityId: string | null;
+  placeId: string | null;
   buildId?: string | null;
 }
 
@@ -27,7 +27,7 @@ interface CoverageResponse {
  */
 export interface RequestCoverageResponse {
   coverageStatus: 'none' | 'building' | 'ready';
-  cityId: string | null;
+  placeId: string | null;
   retryAfterSeconds?: number;
 }
 
@@ -70,6 +70,11 @@ export function cloudflareCoverageProxy(lat: number, lng: number): Promise<Cover
   return poiApiGet<CoverageResponse>(
     `/coverage?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
   );
+}
+
+/** KAN-343 — authenticated SQLite export, streamed by the Worker from R2. */
+export function cloudflareExportProxy(placeId: string): Promise<Uint8Array> {
+  return poiApiGetBinary(`/export/${encodeURIComponent(placeId)}`);
 }
 
 /** KAN-347 global typed nearby search — POST /poi/nearby. */

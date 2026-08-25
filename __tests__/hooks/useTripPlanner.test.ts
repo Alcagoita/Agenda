@@ -49,11 +49,13 @@ jest.mock('../../src/services/firestore/trips', () => ({
 }));
 
 const mockDownloadTripArea = jest.fn();
+const mockDownloadTripAreaWithCloudflare = jest.fn();
 jest.mock('../../src/services/tripDownload', () => {
   const actual = jest.requireActual('../../src/services/tripDownload');
   return {
     ...actual,
     downloadTripArea: (...args: unknown[]) => mockDownloadTripArea(...args),
+    downloadTripAreaWithCloudflare: (...args: unknown[]) => mockDownloadTripAreaWithCloudflare(...args),
   };
 });
 
@@ -72,6 +74,7 @@ beforeEach(() => {
   mockGetCategories.mockResolvedValue([]);
   mockGetTrip.mockResolvedValue(null);
   mockUpdateTrip.mockResolvedValue(undefined);
+  mockDownloadTripAreaWithCloudflare.mockResolvedValue({ placesWritten: 5 });
   (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: true });
 });
 
@@ -353,7 +356,6 @@ describe('edit mode (KAN-266)', () => {
 
   it('downloads into the existing cache area when the radius grows online', async () => {
     mockGetTrip.mockResolvedValue(EDIT_TRIP);
-    mockDownloadTripArea.mockResolvedValue(5);
     const { result } = renderHook(() =>
       useTripPlanner(jest.fn(), undefined, undefined, { editTripId: 'trip-1', initialStep: 'radius' }),
     );
@@ -363,11 +365,11 @@ describe('edit mode (KAN-266)', () => {
     await act(async () => { await result.current.confirmDownload(); });
 
     expect(mockUpdateTrip).toHaveBeenCalledWith('test-uid', 'trip-1', expect.objectContaining({ areaRadius: 40_000 }));
-    expect(mockDownloadTripArea).toHaveBeenCalledWith(
+    expect(mockDownloadTripAreaWithCloudflare).toHaveBeenCalledWith(
       { lat: 37.0179, lng: -7.9304 },
       40_000,
       'ta_existing',
-      expect.any(Number),
+      expect.any(Number), undefined,
     );
     expect(mockAddTrip).not.toHaveBeenCalled();
   });
@@ -384,7 +386,7 @@ describe('edit mode (KAN-266)', () => {
     await act(async () => { await result.current.confirmDownload(); });
 
     expect(mockUpdateTrip).toHaveBeenCalledWith('test-uid', 'trip-1', expect.objectContaining({ areaRadius: 5_000 }));
-    expect(mockDownloadTripArea).not.toHaveBeenCalled();
+    expect(mockDownloadTripAreaWithCloudflare).not.toHaveBeenCalled();
   });
 
   it('keeps the previous radius for offline growth so a later online edit still downloads the larger area', async () => {
@@ -399,15 +401,14 @@ describe('edit mode (KAN-266)', () => {
     act(() => { first.result.current.setRadiusKey('region'); });
     await act(async () => { await first.result.current.confirmDownload(); });
 
-    expect(mockDownloadTripArea).not.toHaveBeenCalled();
+    expect(mockDownloadTripAreaWithCloudflare).not.toHaveBeenCalled();
     expect(mockUpdateTrip).toHaveBeenCalledWith('test-uid', 'trip-1', expect.not.objectContaining({ areaRadius: 40_000 }));
     expect(firstDone).toHaveBeenCalled();
 
     mockGetTrip.mockResolvedValue(EDIT_TRIP);
     mockUpdateTrip.mockClear();
-    mockDownloadTripArea.mockClear();
+    mockDownloadTripAreaWithCloudflare.mockClear();
     (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: true });
-    mockDownloadTripArea.mockResolvedValue(5);
 
     const second = renderHook(() =>
       useTripPlanner(jest.fn(), undefined, undefined, { editTripId: 'trip-1', initialStep: 'radius' }),
@@ -417,11 +418,11 @@ describe('edit mode (KAN-266)', () => {
     act(() => { second.result.current.setRadiusKey('region'); });
     await act(async () => { await second.result.current.confirmDownload(); });
 
-    expect(mockDownloadTripArea).toHaveBeenCalledWith(
+    expect(mockDownloadTripAreaWithCloudflare).toHaveBeenCalledWith(
       { lat: 37.0179, lng: -7.9304 },
       40_000,
       'ta_existing',
-      expect.any(Number),
+      expect.any(Number), undefined,
     );
     expect(mockUpdateTrip).toHaveBeenCalledWith('test-uid', 'trip-1', expect.objectContaining({ areaRadius: 40_000 }));
   });
@@ -441,13 +442,12 @@ describe('confirmDownload', () => {
   beforeEach(() => { onDoneMock = jest.fn(); });
 
   it('downloads the area, creates the trip, shows a toast, and calls onDone', async () => {
-    mockDownloadTripArea.mockResolvedValue(5);
     mockAddTrip.mockResolvedValue('trip-1');
     const result = await goToRadiusStep();
 
     await act(async () => { await result.current.confirmDownload(); });
 
-    expect(mockDownloadTripArea).toHaveBeenCalledWith(
+    expect(mockDownloadTripAreaWithCloudflare).toHaveBeenCalledWith(
       { lat: 1, lng: 2 }, expect.any(Number), expect.any(String), expect.any(Number),
     );
     expect(mockAddTrip).toHaveBeenCalledWith('test-uid', expect.objectContaining({
@@ -458,7 +458,7 @@ describe('confirmDownload', () => {
   });
 
   it('surfaces an error and returns to the radius step on failure', async () => {
-    mockDownloadTripArea.mockRejectedValue(new Error('network down'));
+    mockDownloadTripAreaWithCloudflare.mockRejectedValue(new Error('network down'));
     const result = await goToRadiusStep();
 
     await act(async () => { await result.current.confirmDownload(); });
@@ -469,14 +469,13 @@ describe('confirmDownload', () => {
   });
 
   it('rolls back the downloaded cache rows when addTrip fails after a successful download (KAN-234 review fix)', async () => {
-    mockDownloadTripArea.mockResolvedValue(5);
     mockAddTrip.mockRejectedValue(new Error('firestore unavailable'));
     const result = await goToRadiusStep();
 
     await act(async () => { await result.current.confirmDownload(); });
 
-    expect(mockDownloadTripArea).toHaveBeenCalled();
-    const [, , cacheAreaId] = mockDownloadTripArea.mock.calls[0];
+    expect(mockDownloadTripAreaWithCloudflare).toHaveBeenCalled();
+    const [, , cacheAreaId] = mockDownloadTripAreaWithCloudflare.mock.calls[0];
     expect(mockDeleteTripAreaPlaces).toHaveBeenCalledWith(cacheAreaId);
     expect(result.current.step).toBe('radius');
     expect(result.current.error).not.toBeNull();

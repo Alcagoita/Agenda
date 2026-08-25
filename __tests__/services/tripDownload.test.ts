@@ -36,6 +36,16 @@ jest.mock('../../src/services/firestore/trips', () => ({
   updateTrip: (...args: unknown[]) => mockUpdateTrip(...args),
 }));
 
+const mockCoverage = jest.fn();
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: (...args: unknown[]) => mockCoverage(...args),
+}));
+
+const mockImportExport = jest.fn();
+jest.mock('../../src/services/cloudflareTripExport', () => ({
+  importCloudflareTripExport: (...args: unknown[]) => mockImportExport(...args),
+}));
+
 const mockNetInfoFetch = jest.fn();
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
@@ -54,6 +64,7 @@ import {
   computeTripExpiresAt,
   shouldPreRefreshTrip,
   downloadTripArea,
+  downloadTripAreaWithCloudflare,
   downloadAreaSnapshot,
   refreshTripArea,
   checkAndRunTripPreRefresh,
@@ -84,6 +95,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
 beforeEach(() => {
   jest.clearAllMocks();
   mockNetInfoFetch.mockResolvedValue({ isConnected: true });
+  mockCoverage.mockResolvedValue({ status: 'none', placeId: null });
 });
 
 describe('TRIP_RADIUS_PRESETS', () => {
@@ -233,6 +245,37 @@ describe('downloadTripArea', () => {
   });
 });
 
+describe('downloadTripAreaWithCloudflare', () => {
+  it('imports a ready Cloudflare export instead of starting an OSM download', async () => {
+    mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    mockImportExport.mockResolvedValue(4);
+
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100))
+      .resolves.toMatchObject({ placesWritten: 4, cloudflareExport: { placeId: 'place-1', buildId: 'build-1' } });
+    expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+    expect(mockImportExport).toHaveBeenCalledWith('place-1', { lat: 1, lng: 2 }, 15_000, 'ta_1', 100, expect.any(Array));
+  });
+
+  it('falls back to OSM when coverage is not ready or the export fails', async () => {
+    mockCoverage.mockResolvedValueOnce({ status: 'building', placeId: 'place-1' });
+    mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100)).resolves.toMatchObject({ placesWritten: 1 });
+
+    mockCoverage.mockResolvedValueOnce({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    mockImportExport.mockRejectedValueOnce(new Error('export unavailable'));
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100)).resolves.toMatchObject({ placesWritten: 1 });
+  });
+
+  it('does not re-download an unchanged place build', async () => {
+    mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    const cached = { placeId: 'place-1', buildId: 'build-1', downloadedAt: 10 };
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100, cached))
+      .resolves.toEqual({ placesWritten: 0, cloudflareExport: cached });
+    expect(mockImportExport).not.toHaveBeenCalled();
+    expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+  });
+});
+
 describe('downloadAreaSnapshot (KAN-237 — shared by trip and mall snapshot downloads)', () => {
   it('requests exactly the given poiTypes (no union/derivation — caller decides the set)', async () => {
     mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
@@ -274,6 +317,7 @@ describe('refreshTripArea', () => {
     expect(mockUpdateTrip).toHaveBeenCalledWith('uid-1', 'trip-1', {
       expiresAt: computeTripExpiresAt('2026-07-27'),
       preRefreshedAt: expect.any(Number),
+      cloudflareExport: undefined,
     });
   });
 });

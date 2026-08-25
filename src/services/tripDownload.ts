@@ -28,6 +28,8 @@ import { searchOsmPlacesStrict } from './osmPlaces';
 import { writeTripAreaPlaces, HABITAT_BYTES_PER_ROW } from './habitatCache';
 import { updateTrip } from './firestore/trips';
 import { todayISO } from '../utils/date';
+import { cloudflareCoverageProxy } from './cloudflarePoiFunctions';
+import { importCloudflareTripExport } from './cloudflareTripExport';
 // ─── Radius presets ───────────────────────────────────────────────────────────
 
 /**
@@ -201,6 +203,41 @@ export async function downloadTripArea(
   return downloadAreaSnapshot(center, radiusMeters, cacheAreaId, expiresAt, poiTypes);
 }
 
+export type TripDownloadResult = {
+  placesWritten: number;
+  cloudflareExport?: NonNullable<Trip['cloudflareExport']>;
+};
+
+/** Cloudflare is preferred for covered destinations; every unavailable or
+ * failed export falls back to the established OSM path without touching the
+ * existing cache until a complete replacement is ready. */
+export async function downloadTripAreaWithCloudflare(
+  center: { lat: number; lng: number },
+  radiusMeters: number,
+  cacheAreaId: string,
+  expiresAt: number,
+  cachedExport?: Trip['cloudflareExport'],
+): Promise<TripDownloadResult> {
+  try {
+    const coverage = await cloudflareCoverageProxy(center.lat, center.lng);
+    if (coverage.status === 'ready' && coverage.placeId && coverage.buildId) {
+      if (cachedExport?.placeId === coverage.placeId && cachedExport.buildId === coverage.buildId) {
+        return { placesWritten: 0, cloudflareExport: cachedExport };
+      }
+      const placesWritten = await importCloudflareTripExport(
+        coverage.placeId, center, radiusMeters, cacheAreaId, expiresAt, getAreaDownloadPoiTypes(),
+      );
+      return {
+        placesWritten,
+        cloudflareExport: { placeId: coverage.placeId, buildId: coverage.buildId, downloadedAt: Date.now() },
+      };
+    }
+  } catch (error) {
+    console.warn('[tripDownload] Cloudflare export failed; falling back to OSM', error);
+  }
+  return { placesWritten: await downloadTripArea(center, radiusMeters, cacheAreaId, expiresAt) };
+}
+
 /**
  * Re-runs downloadTripArea for an existing trip (manual refresh from Places
  * I Know, or the day-before pre-refresh) and bumps its Firestore
@@ -211,13 +248,14 @@ export async function refreshTripArea(
   trip: Trip,
 ): Promise<void> {
   const expiresAt = computeTripExpiresAt(trip.endDate);
-  await downloadTripArea(
+  const result = await downloadTripAreaWithCloudflare(
     { lat: trip.centerLat, lng: trip.centerLng },
     trip.areaRadius,
     trip.cacheAreaId,
     expiresAt,
+    trip.cloudflareExport,
   );
-  await updateTrip(uid, trip.id, { expiresAt, preRefreshedAt: Date.now() });
+  await updateTrip(uid, trip.id, { expiresAt, preRefreshedAt: Date.now(), cloudflareExport: result.cloudflareExport });
 }
 
 /**

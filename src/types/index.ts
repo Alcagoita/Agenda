@@ -1176,6 +1176,12 @@ export interface Trip {
   expiresAt: number;
   /** Set once the day-before-departure pre-refresh has run, so it isn't repeated every app open during the trip window. */
   preRefreshedAt?: number;
+  /** Version of the Cloudflare SQLite export imported into this trip's local cache. */
+  cloudflareExport?: {
+    placeId: string;
+    buildId: string;
+    downloadedAt: number;
+  };
   /**
    * KAN-246 — absent (undefined) for a regular future/destination trip.
    * `'offgrid'` marks a now + duration connectivity window instead (center =

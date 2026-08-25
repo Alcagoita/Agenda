@@ -1312,10 +1312,10 @@ async function bumpCoverageDemand(env: Env, place: PlaceRow): Promise<void> {
 }
 
 function respondCoverageRequest(place: PlaceRow | null): Response {
-  if (!place) return json({ coverageStatus: 'none', cityId: null });
+  if (!place) return json({ coverageStatus: 'none', placeId: null });
   return json({
     coverageStatus: toApiStatus(place.status),
-    cityId: place.place_id,
+    placeId: place.place_id,
     ...(place.status === 'mapping' ? { retryAfterSeconds: COVERAGE_BUILDING_RETRY_AFTER_SECONDS } : {}),
   });
 }
@@ -2327,7 +2327,7 @@ export default {
 
     // GET /coverage?lat=&lng=  — is this location ready / building / none?
     // buildId (KAN-339): lets the client compare against its locally cached
-    // download's build_id and skip re-downloading /export/:cityId when
+    // download's build_id and skip re-downloading /export/:placeId when
     // nothing changed, without fetching the export file just to check.
     if (url.pathname === '/coverage' && request.method === 'GET') {
       const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'coverage');
@@ -2337,51 +2337,50 @@ export default {
       const { lat, lng } = parsed;
 
       const place = await findPlace(env, lat, lng);
-      return json({ status: toApiStatus(place?.status ?? 'none'), cityId: place?.place_id ?? null, buildId: place?.build_id ?? null });
+      return json({ status: toApiStatus(place?.status ?? 'none'), placeId: place?.place_id ?? null, buildId: place?.build_id ?? null });
     }
 
-    // GET /export/:cityId  — the current build's client-download SQLite
+    // GET /export/:placeId  — the current build's client-download SQLite
     // export (KAN-339), streamed straight from R2. Not a public R2 URL —
     // goes through the same X-Api-Key gate as every other endpoint here,
     // for the same reason: no anonymous access to the POI dataset. Route
-    // and param name are unchanged by KAN-355 on purpose — the /export/:cityId
-    // -> /export/:placeId rename is explicitly KAN-343's scope, not this
-    // ticket's.
+    // This is authenticated rather than a public R2 URL: the native client
+    // receives a binary stream and imports it into its offline cache.
     if (url.pathname.startsWith('/export/') && request.method === 'GET') {
       // Its own budget rather than the shared read one: each hit streams a
       // multi-megabyte R2 object, by far the most expensive thing a token
       // holder can ask for repeatedly.
       const limited = await enforceUserRateLimit(caller, env.COVERAGE_REQUEST_RATE_LIMITER, 'export');
       if (limited) return limited;
-      let cityId: string;
+      let placeId: string;
       try {
-        cityId = decodeURIComponent(url.pathname.slice('/export/'.length));
+        placeId = decodeURIComponent(url.pathname.slice('/export/'.length));
       } catch {
         // Malformed percent-encoding (e.g. a lone '%' followed by non-hex,
         // or an incomplete UTF-8 sequence) throws URIError — previously
         // unhandled, surfaced as Cloudflare's generic 500 instead of this
         // API's usual clean 400 JSON error.
-        return json({ error: 'cityId is not validly percent-encoded' }, 400);
+        return json({ error: 'placeId is not validly percent-encoded' }, 400);
       }
-      if (!cityId) return json({ error: 'cityId is required' }, 400);
+      if (!placeId) return json({ error: 'placeId is required' }, 400);
 
-      const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?').bind(cityId).first<PlaceRow>();
+      const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?').bind(placeId).first<PlaceRow>();
       if (!place || place.status !== 'mapped' || !place.build_id) {
-        return json({ error: `city '${cityId}' is not ready` }, 404);
+        return json({ error: `place '${placeId}' is not ready` }, 404);
       }
 
-      const object = await env.POI_EXPORTS.get(`exports/${cityId}/${place.build_id}.sqlite`);
+      const object = await env.POI_EXPORTS.get(`exports/${placeId}/${place.build_id}.sqlite`);
       if (!object) {
         // The place row is 'mapped' but the export object is missing — an
         // older build (predating KAN-339) or an upload step that was
         // skipped. Distinct from "not ready" so it's clear this needs a
         // re-run of the export step, not a re-map of the whole Place.
-        return json({ error: `export not found for city '${cityId}' build '${place.build_id}'` }, 404);
+        return json({ error: `export not found for place '${placeId}' build '${place.build_id}'` }, 404);
       }
       return new Response(object.body, {
         headers: {
           'Content-Type': 'application/octet-stream',
-          'Content-Disposition': `attachment; filename="${cityId}-${place.build_id}.sqlite"`,
+          'Content-Disposition': `attachment; filename="${placeId}-${place.build_id}.sqlite"`,
           'X-Build-Id': place.build_id,
         },
       });

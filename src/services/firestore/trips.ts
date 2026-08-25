@@ -36,7 +36,7 @@ export async function getTrip(uid: string, tripId: string): Promise<Trip | null>
 
 type TripUpdate = Partial<Pick<
   Trip,
-  'startDate' | 'endDate' | 'areaRadius' | 'expiresAt' | 'preRefreshedAt'
+  'startDate' | 'endDate' | 'areaRadius' | 'expiresAt' | 'preRefreshedAt' | 'cloudflareExport'
 >>;
 
 /** Updates mutable trip metadata after user edits or a (re)download. */
