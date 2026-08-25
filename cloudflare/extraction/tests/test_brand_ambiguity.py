@@ -15,7 +15,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classify_and_load import (  # noqa: E402
-    brand_form_matches, find_brand, is_ambiguous_brand_form, load_brand_dictionary,
+    brand_form_matches, find_brand, is_ambiguous_brand_form,
+    leads_with_tight_ampersand, load_brand_dictionary,
 )
 
 TYPES = ['store', 'restaurant', 'gas', 'supermarket', 'clothing_repair']
@@ -45,9 +46,23 @@ class BrandMatchingTest(unittest.TestCase):
         return find_brand(name, TYPES, self.brands)
 
     def test_genuine_ampersand_stores_keep_their_brand(self):
-        for name in ['C&A Portimao', 'C & A - Modas', 'C&A Massamá',
-                     'H&M HOME', 'H&M, Algarve Shopping']:
+        # Every one of these is a real store: bare, a sub-brand, a mall
+        # branch with a comma and one without.
+        for name in ['C&A', 'C&A Portimao', 'C&A Massamá', 'C&A Kids Store',
+                     'C&a, Arrabida Shopping', 'C&A, Braga Parque',
+                     'H&M', 'H&M HOME', 'H&M Store', 'H&M Mar Shopping',
+                     'H&M, Algarve Shopping']:
             self.assertIn(self.brand_for(name), ('C&A', 'H&M'), name)
+
+    def test_a_spaced_ampersand_is_two_initials_not_a_chain(self):
+        # In Portuguese company names "C & A" is normally two initials joined
+        # by an "and". Across every row we hold, no genuine store writes it
+        # that way and every spaced instance is a different business.
+        for name in ['C & A Modas, Unipessoal',
+                     'C & A Costa - materiais construçao',
+                     'C & A - Modas',
+                     'Modas Lda & C, C & A']:
+            self.assertIsNone(self.brand_for(name), name)
 
     def test_initials_in_a_company_or_personal_name_are_not_a_brand(self):
         for name in ['C A Santos - Comércio de Electrodomésticos',
@@ -74,6 +89,17 @@ class BrandMatchingTest(unittest.TestCase):
         # Has an ampersand, but the brand does not lead the name.
         self.assertIsNone(self.brand_for('RS & HM - Material Eléctrico'))
 
+    def test_the_tight_form_must_end_on_a_word_boundary(self):
+        self.assertTrue(leads_with_tight_ampersand('C&A Kids Store', 'C&A'))
+        self.assertTrue(leads_with_tight_ampersand('C&A, Braga Parque', 'C&A'))
+        self.assertTrue(leads_with_tight_ampersand('  C&A', 'C&A'))
+        # Case-insensitive: the source writes it however it likes.
+        self.assertTrue(leads_with_tight_ampersand('C&a, Arrabida Shopping', 'C&A'))
+        # Must not run into a longer word.
+        self.assertFalse(leads_with_tight_ampersand('C&American Diner', 'C&A'))
+        # Must lead.
+        self.assertFalse(leads_with_tight_ampersand('Loja C&A', 'C&A'))
+
     def test_digit_brands_still_match_anywhere_in_the_name(self):
         self.assertEqual(self.brand_for('Café H3'), 'H3')
         self.assertEqual(self.brand_for('New Hamburgology H3'), 'H3')
@@ -90,8 +116,11 @@ class BrandMatchingTest(unittest.TestCase):
 
 class FormMatchingUnitTest(unittest.TestCase):
     def test_ampersand_requirement_reads_the_canonical_brand_not_the_alias(self):
+        # `HM` is an alias of H&M carrying no ampersand of its own. The rule
+        # is checked against the canonical brand, so the alias cannot be the
+        # way in.
         self.assertFalse(brand_form_matches('hm', 'hm telecom', 'HM Telecom', 'H&M'))
-        self.assertTrue(brand_form_matches('hm', 'hm home', 'H&M HOME', 'H&M'))
+        self.assertTrue(brand_form_matches('hm', 'h m home', 'H&M HOME', 'H&M'))
 
     def test_a_non_ambiguous_form_keeps_the_substring_rule(self):
         self.assertTrue(brand_form_matches(

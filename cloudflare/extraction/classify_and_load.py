@@ -175,6 +175,40 @@ def is_ambiguous_brand_form(normalized_brand):
     return all(len(token) == 1 for token in normalized_brand.split()) or len(compact) <= 2
 
 
+def leads_with_tight_ampersand(raw_name, canonical_name):
+    """Does `raw_name` open with `canonical_name` written tight? (KAN-409)
+
+    Measured across every row carrying C&A or H&M: a genuine store always
+    writes the ampersand closed up — `C&A`, `C&A Kids Store`, `H&M HOME`,
+    `C&A, Braga Parque`. Every SPACED instance in the database is a different
+    business whose name merely opens with those initials:
+
+        C & A Costa - materiais construçao
+        C & A Modas, Unipessoal
+        Modas Lda & C, C & A
+        RS & HM - Material Eléctrico
+
+    which is what "C & A" usually is in Portuguese company names — two
+    initials joined by an "and", not a chain.
+
+    So the tight form is the signal, and it must LEAD: `RS & HM` is not an
+    H&M. A word boundary after it keeps `C&American` from matching.
+
+    A genuine store written `C & A` would lose its brand here. That is the
+    deliberate direction to err — it stays a store, findable as one, while
+    the alternative leaves a construction supplier branded as a clothing
+    chain. Reviewed against the data, this costs nothing today.
+    """
+    tight = re.sub(r'\s+', '', canonical_name)
+    if not tight:
+        return False
+    head = raw_name.lstrip()
+    if head[:len(tight)].casefold() != tight.casefold():
+        return False
+    rest = head[len(tight):]
+    return not rest[:1].isalnum()
+
+
 def brand_form_matches(normalized_brand, normalized_name, raw_name, canonical_name):
     """Does `normalized_brand` identify this POI as `canonical_name`?
 
@@ -198,8 +232,8 @@ def brand_form_matches(normalized_brand, normalized_name, raw_name, canonical_na
     """
     if not is_ambiguous_brand_form(normalized_brand):
         return f' {normalized_brand} ' in f' {normalized_name} '
-    if '&' in canonical_name and '&' not in raw_name:
-        return False
+    if '&' in canonical_name:
+        return leads_with_tight_ampersand(raw_name, canonical_name)
     return normalized_name == normalized_brand or normalized_name.startswith(normalized_brand + ' ')
 
 
