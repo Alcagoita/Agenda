@@ -6,7 +6,8 @@ import { getCopyLanguage, setCopyLanguage } from '../../src/constants/copy';
 import {
   CLUSTER_LEISURE_TYPES,
   POI_CATALOG, POI_GEOFENCE_RADIUS, POI_OSM_TAGS, PoiType,
-  QUICK_ACTIONABLE_POI_TYPES, isPoiApiServableType, poiCatalogLabel,
+  QUICK_ACTIONABLE_POI_TYPES, SUPPLEMENTARY_OSM_TAGS, isPoiApiServableType,
+  osmTagValues, poiCatalogLabel,
 } from '../../src/types';
 
 /**
@@ -150,6 +151,30 @@ describe('KAN-412 type reachability', () => {
     // nothing in either source, so it must never reach the prefetch.
     for (const freeText of ['o meu sitio secreto', 'grandma house', '']) {
       expect(isPoiApiServableType(freeText)).toBe(false);
+    }
+  });
+
+  it('every leisure type has an OSM mapping for the fallback path (KAN-406)', () => {
+    // This is the assertion whose absence let the bug ship. CLUSTER_LEISURE_TYPES
+    // and the tag maps are two lists that must agree, and nothing checked.
+    // A leisure type with no OSM selector is skipped outright by
+    // searchOsmPlaces, so the moment our API cannot answer, it returns
+    // nothing and the companion line silently loses that type.
+    for (const type of CLUSTER_LEISURE_TYPES) {
+      const tag = POI_OSM_TAGS[type as PoiType] ?? SUPPLEMENTARY_OSM_TAGS[type];
+      expect(tag).toBeDefined();
+      expect(tag.key.length).toBeGreaterThan(0);
+      expect(osmTagValues(tag).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('a multi-value selector always includes its own primary value', () => {
+    // `value` is what anything reading a single value gets; `values` is what
+    // the query and the filter use. If the primary is not in the set, the
+    // representative value is one the selector would itself reject.
+    const all = [...Object.values(POI_OSM_TAGS), ...Object.values(SUPPLEMENTARY_OSM_TAGS)];
+    for (const tag of all) {
+      expect(osmTagValues(tag)).toContain(tag.value);
     }
   });
 

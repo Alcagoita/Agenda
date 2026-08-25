@@ -34,6 +34,7 @@ import {
 import type { NearbyPlace } from '../../src/services/maps';
 import type { ErrandBundle } from '../../src/services/errandBundles';
 import type { Task } from '../../src/types';
+import { CLUSTER_LEISURE_TYPES } from '../../src/types';
 
 /** Degrees of latitude for a given metre offset, per the mocked haversine. */
 function latOffset(meters: number): number {
@@ -180,9 +181,43 @@ describe('findClusterLeisure — exactly one, ranked offline-first', () => {
     expect(found?.distanceToStopMeters).toBe(10);
   });
 
+  it('ranks every leisure type against the others, never by which type it is', () => {
+    // Product requirement: a tourist_attraction is recommended alongside the
+    // historic landmarks, not behind them. The labels are classifier leaves —
+    // the same castle can arrive under either depending on the source — so
+    // preferring one would rank places by an accident of tagging.
+    //
+    // Derived from the constant, not a hand-picked sample: every ordered pair
+    // of distinct types, so a type added later is covered without anyone
+    // remembering to extend this, and both directions of each pair are
+    // asserted so it cannot pass by coincidence of iteration order.
+    const pairs = CLUSTER_LEISURE_TYPES.flatMap(
+      winner => CLUSTER_LEISURE_TYPES
+        .filter(loser => loser !== winner)
+        .map(loser => [winner, loser] as const),
+    );
+    expect(pairs).toHaveLength(CLUSTER_LEISURE_TYPES.length * (CLUSTER_LEISURE_TYPES.length - 1));
+
+    for (const [winner, loser] of pairs) {
+      cacheReturns({
+        [winner]: [makePlace({
+          placeId: 'big', name: 'O Grande', lat: latOffset(260), lng: 0, footprintAreaM2: 3_500,
+        })],
+        [loser]: [makePlace({
+          placeId: 'small', name: 'O Pequeno', lat: latOffset(205), lng: 0, footprintAreaM2: 120,
+        })],
+      });
+
+      const found = findClusterLeisure(makeBundle());
+      // The bigger one wins on footprint regardless of which type holds it.
+      expect(found?.place.name).toBe('O Grande');
+      expect(found?.type).toBe(winner);
+    }
+  });
+
   it('lets a mapped landmark outrank a closer small fixture by footprint magnitude', () => {
     cacheReturns({
-      attraction: [
+      tourist_attraction: [
         makePlace({
           placeId: 'fountain',
           name: 'Chafariz da Princesa',
@@ -207,7 +242,7 @@ describe('findClusterLeisure — exactly one, ranked offline-first', () => {
 
   it('falls back to nearest-first when footprint data is absent for every candidate', () => {
     cacheReturns({
-      attraction: [
+      tourist_attraction: [
         makePlace({ placeId: 'tower', name: 'Torre de Belém', lat: latOffset(260), lng: 0 }),
         makePlace({ placeId: 'fountain', name: 'Chafariz da Princesa', lat: latOffset(205), lng: 0 }),
       ],
@@ -250,7 +285,9 @@ describe('findClusterLeisure — cost', () => {
   it('asks the cache only for the fixed leisure type set', () => {
     findClusterLeisure(makeBundle());
     const requestedTypes = mockQueryHabitatCache.mock.calls[0][2];
-    expect([...requestedTypes].sort()).toEqual(['aquarium', 'attraction', 'historical_landmark', 'museum', 'park', 'tourist_attraction']);
+    // `attraction` was retired by KAN-406 — it duplicated tourist_attraction
+    // under the OSM vocabulary and matched zero rows in our own database.
+    expect([...requestedTypes].sort()).toEqual(['aquarium', 'historical_landmark', 'museum', 'park', 'tourist_attraction']);
   });
 
   it('asks the cache not to cap leisure candidates before ranking sees them', () => {

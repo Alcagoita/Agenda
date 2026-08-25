@@ -57,6 +57,48 @@ describe('searchOsmPlaces', () => {
   // malls especially, are mapped as a building-footprint way/relation and
   // were structurally invisible to a node-only query. `out center bb;`
   // returns the bounding box those need for a location and a footprint area.
+  // KAN-406 — a concept with no single tag value. "A historic place" is
+  // castle OR monument OR ruins OR ...; mapping it to any one of them would
+  // silently drop the rest, which is the defect this ticket was about.
+  it('builds a regex alternation for a multi-value selector, and matches every value in it', async () => {
+    mockOverpassResponse([]);
+    await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['historical_landmark'], 5000);
+
+    const [, options] = mockFetch.mock.calls[0];
+    const body = decodeURIComponent((options.body as string).replace(/^data=/, ''));
+    expect(body).toContain('nwr["historic"~"^(');
+    expect(body).toContain('castle');
+    expect(body).toContain('monument');
+    // Not an equality clause — that is what could only ever match one value.
+    expect(body).not.toContain('nwr["historic"="castle"]');
+  });
+
+  it('returns an element whose tag value is not the selector primary', async () => {
+    // `historic=monument` is in the accepted set but is not `value`. Filtering
+    // the response against `value` alone would throw away everything the
+    // alternation above deliberately asked for.
+    mockOverpassResponse([
+      { id: 1, lat: 0.0001, lon: 0, tags: { historic: 'monument', name: 'Padrão dos Descobrimentos' } },
+    ]);
+
+    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['historical_landmark'], 5000);
+
+    expect(result.historical_landmark).toHaveLength(1);
+    expect(result.historical_landmark[0].name).toBe('Padrão dos Descobrimentos');
+  });
+
+  it('still rejects an element whose tag value is outside the accepted set', async () => {
+    // Guards the alternation from becoming "any historic=* at all" — the
+    // filter must stay as narrow as the query.
+    mockOverpassResponse([
+      { id: 2, lat: 0.0001, lon: 0, tags: { historic: 'wayside_cross', name: 'Cruzeiro' } },
+    ]);
+
+    const result = await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['historical_landmark'], 5000);
+
+    expect(result.historical_landmark).toHaveLength(0);
+  });
+
   it('builds one nwr clause per requested POI type using POI_OSM_TAGS', async () => {
     mockOverpassResponse([]);
     await searchOsmPlaces(ORIGIN.lat, ORIGIN.lng, ['pharmacy', 'cafe'], 5000);
