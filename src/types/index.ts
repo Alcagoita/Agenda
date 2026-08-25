@@ -607,6 +607,51 @@ export const SUPPLEMENTARY_OSM_TAGS: Record<string, OsmTagSelector> = {
 // mappable-types filter dropped both before any fetch ran, and 1,865
 // historical_landmark + 128 tourist_attraction rows in D1 stayed invisible
 // (KAN-407).
+/**
+ * The two kinds of tourism, as two groups (KAN-408).
+ *
+ * `PoiType` says WHAT a place is. These say what kind of outing it serves,
+ * which is a different question and the one the planned features ask:
+ * "what landmarks are walkable around here", "you're near a park, fancy a
+ * walk?". A single merged "leisure" bucket cannot answer either.
+ *
+ * **Neither group is a ranking tier.** `tourist_attraction` sits alongside
+ * the historic landmarks, not behind them — these names are classifier
+ * leaves, not a hierarchy, and the same castle arrives as
+ * `historical_landmark` from one source and `tourist_attraction` from
+ * another purely by how that source described it. Ordering by the label
+ * would rank places by an accident of tagging. Ranking stays on physical
+ * signals, as `clusterLeisure.compareSuggestions` already does.
+ */
+export const NATURE_POI_TYPES = [
+  'beach', 'botanical_garden', 'campground', 'hiking_area', 'park', 'rv_park',
+] as const;
+
+export const LANDMARK_POI_TYPES = [
+  'art_gallery', 'cemetery', 'church', 'cultural_center', 'historical_landmark',
+  'mosque', 'museum', 'synagogue', 'tourist_attraction',
+] as const;
+
+export type NaturePoiType = typeof NATURE_POI_TYPES[number];
+export type LandmarkPoiType = typeof LANDMARK_POI_TYPES[number];
+
+/**
+ * Deliberately in NEITHER group: amusement_park, aquarium, bowling_alley,
+ * brewery, casino, community_center, golf_course, night_club, spa, stadium,
+ * tennis_court, water_park, winery, zoo.
+ *
+ * They are real taggable types — someone writes "levar os miúdos ao zoo" —
+ * but they are entertainment and amenities rather than the two kinds of
+ * tourism this models. Forcing a bowling alley into "Landmarks" to make the
+ * partition total would make the group mean less, and a group that means
+ * less is a group a feature cannot act on.
+ */
+export function tourismGroupFor(poiType: string): 'nature' | 'landmark' | null {
+  if ((NATURE_POI_TYPES as readonly string[]).includes(poiType)) { return 'nature'; }
+  if ((LANDMARK_POI_TYPES as readonly string[]).includes(poiType)) { return 'landmark'; }
+  return null;
+}
+
 export const CLUSTER_LEISURE_TYPES = ['park', 'museum', 'aquarium', 'historical_landmark', 'tourist_attraction'] as const;
 
 export type ClusterLeisureType = typeof CLUSTER_LEISURE_TYPES[number];

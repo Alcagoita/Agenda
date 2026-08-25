@@ -6,8 +6,9 @@ import { getCopyLanguage, setCopyLanguage } from '../../src/constants/copy';
 import {
   CLUSTER_LEISURE_TYPES,
   POI_CATALOG, POI_GEOFENCE_RADIUS, POI_OSM_TAGS, PoiType,
+  LANDMARK_POI_TYPES, NATURE_POI_TYPES,
   QUICK_ACTIONABLE_POI_TYPES, SUPPLEMENTARY_OSM_TAGS, isPoiApiServableType,
-  osmTagValues, poiCatalogLabel,
+  osmTagValues, poiCatalogLabel, tourismGroupFor,
 } from '../../src/types';
 
 /**
@@ -247,5 +248,39 @@ describe('KAN-412 type reachability', () => {
     const reach = reachable();
     const unreachable = classifierTypes().filter(t => !reach.has(t)).sort();
     expect(unreachable).toEqual(DELIBERATELY_UNREACHABLE);
+  });
+});
+
+describe('KAN-408 tourism groups', () => {
+  it('every grouped type is a real catalog type', () => {
+    const catalog = new Set(POI_CATALOG.map(e => e.type));
+    for (const type of [...NATURE_POI_TYPES, ...LANDMARK_POI_TYPES]) {
+      expect(catalog.has(type)).toBe(true);
+    }
+  });
+
+  it('the two groups are disjoint', () => {
+    // A place serves one kind of outing or the other. Something in both
+    // would make "landmarks near here" and "nature near here" return the
+    // same row, which is the merged bucket this exists to replace.
+    const nature = new Set<string>(NATURE_POI_TYPES);
+    for (const type of LANDMARK_POI_TYPES) {
+      expect(nature.has(type)).toBe(false);
+    }
+  });
+
+  it('leaves entertainment types deliberately ungrouped', () => {
+    // Forcing a bowling alley into "Landmarks" to make the partition total
+    // would make the group mean less — and a group that means less is one a
+    // feature cannot act on. They stay taggable, just not tourism.
+    for (const type of ['bowling_alley', 'casino', 'night_club', 'spa', 'zoo']) {
+      expect(tourismGroupFor(type)).toBeNull();
+    }
+  });
+
+  it('resolves a group for the types that have one', () => {
+    expect(tourismGroupFor('beach')).toBe('nature');
+    expect(tourismGroupFor('historical_landmark')).toBe('landmark');
+    expect(tourismGroupFor('pharmacy')).toBeNull();
   });
 });
