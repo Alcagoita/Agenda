@@ -474,3 +474,44 @@ class AmbiguousConflictTest(unittest.TestCase):
 
         self.assertEqual(len(imports), 1)
         self.assertEqual(conflicts, [])
+
+
+class Kan408ImporterCoverageTest(unittest.TestCase):
+    """KAN-408 — every app type the importer claims to supply, it must ask for.
+
+    The app gaining a type does nothing on its own. If the Overpass query
+    never requests the tag, the type is one the app can express and the
+    database can never hold — the same defect KAN-412 named, from the other
+    side.
+    """
+
+    def test_every_tag_rule_is_actually_requested(self):
+        query = supplement.osm_query(41.0, 41.1, -8.5, -8.4)
+        for key, value, poi_type in supplement.TAG_TYPES:
+            if key == 'shop':
+                # The blanket shop selector covers every shop value.
+                self.assertIn('"shop"', query)
+                continue
+            self.assertIn(f'"{key}"', query, f'{key}={value} ({poi_type}) never requested')
+            self.assertIn(value, query, f'{key}={value} ({poi_type}) never requested')
+
+    def test_the_nature_types_reach_the_importer(self):
+        # praia fluvial is the case that exposed this: Foursquare had 160
+        # typed `beach`, OSM had zero, because natural=beach was not asked
+        # for and no OSM beach could ever be imported.
+        mapped = {poi_type: (key, value) for key, value, poi_type in supplement.TAG_TYPES}
+        for poi_type, expected in [
+            ('beach', ('natural', 'beach')),
+            ('viewpoint', ('tourism', 'viewpoint')),
+            ('waterfall', ('waterway', 'waterfall')),
+            ('lighthouse', ('man_made', 'lighthouse')),
+            ('theatre', ('amenity', 'theatre')),
+        ]:
+            self.assertEqual(mapped.get(poi_type), expected, poi_type)
+
+    def test_the_query_never_asks_for_a_bare_key(self):
+        # `natural` alone would pull every tree and pond in the bbox. Only
+        # `shop` is deliberately blanket, and it predates this.
+        query = supplement.osm_query(41.0, 41.1, -8.5, -8.4)
+        for key in ('natural', 'tourism', 'historic', 'man_made', 'place', 'waterway', 'leisure', 'amenity'):
+            self.assertNotIn(f'nwr["{key}"]', query, f'{key} is requested unscoped')
