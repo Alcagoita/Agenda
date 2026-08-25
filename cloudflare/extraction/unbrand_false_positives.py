@@ -46,17 +46,26 @@ def run_d1_query(sql):
 
 
 def ambiguous_brand_names(brand_dictionary):
-    """Canonical names holding at least one ambiguous form, and the forms."""
+    """Canonical names holding at least one ambiguous form -> ALL their forms.
+
+    An ambiguous form is what makes a brand worth re-checking, but the check
+    itself has to see every form the classifier sees. `C&A` carries the alias
+    `C and A`, which is not ambiguous and matches by ordinary substring:
+    testing only `c a` would decide a legitimately-matched row no longer
+    qualifies and unbrand it. `brand_form_matches` already applies the right
+    rule per form, so it is given all of them.
+    """
     from classify_and_load import is_ambiguous_brand_form
     out = {}
     for brands in brand_dictionary.values():
         for brand in brands:
-            forms = []
-            for candidate in [brand['name'], *brand.get('aliases', [])]:
-                normalized = normalize_text(candidate)
-                if normalized and is_ambiguous_brand_form(normalized):
-                    forms.append(normalized)
-            if forms:
+            forms = {
+                normalized for normalized in (
+                    normalize_text(candidate)
+                    for candidate in [brand['name'], *brand.get('aliases', [])]
+                ) if normalized
+            }
+            if any(is_ambiguous_brand_form(form) for form in forms):
                 out.setdefault(brand['name'], set()).update(forms)
     return out
 
@@ -101,10 +110,20 @@ def main():
         if len(stale) > 40:
             print(f'    ... +{len(stale) - 40} more', file=sys.stderr)
 
-        for start in range(0, len(stale), SQL_BATCH_SIZE):
-            chunk = stale[start:start + SQL_BATCH_SIZE]
-            ids = ','.join(sql_quote(row['id']) for row in chunk)
-            print(f'UPDATE {table} SET brand = NULL WHERE {id_column} IN ({ids});')
+        # Grouped by the brand actually observed, and that brand is repeated in
+        # the WHERE clause. This script PRINTS sql for an operator to apply
+        # later, so there is a window in which a row could be re-branded
+        # correctly by something else; without the predicate, applying a stale
+        # statement would wipe that newer, correct value.
+        by_brand = {}
+        for row in stale:
+            by_brand.setdefault(row['brand'], []).append(row['id'])
+        for brand, row_ids in sorted(by_brand.items()):
+            for start in range(0, len(row_ids), SQL_BATCH_SIZE):
+                chunk = row_ids[start:start + SQL_BATCH_SIZE]
+                ids = ','.join(sql_quote(row_id) for row_id in chunk)
+                print(f'UPDATE {table} SET brand = NULL '
+                      f'WHERE {id_column} IN ({ids}) AND brand = {sql_quote(brand)};')
         total_cleared += len(stale)
 
     print(f'total to unbrand: {total_cleared}', file=sys.stderr)
