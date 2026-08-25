@@ -233,6 +233,13 @@ def brand_form_matches(normalized_brand, normalized_name, raw_name, canonical_na
     if not is_ambiguous_brand_form(normalized_brand):
         return f' {normalized_brand} ' in f' {normalized_name} '
     if '&' in canonical_name:
+        # The name is ONLY the brand, however the ampersand is spaced:
+        # `C&A`, `C &A`, `C& A`, `C & A`. Nothing else is in the name, so
+        # there is no other business it could be. Compared against the
+        # canonical form, so the bare `HM` alias does not qualify a shop
+        # simply called "HM".
+        if normalized_name == normalize_text(canonical_name):
+            return True
         return leads_with_tight_ampersand(raw_name, canonical_name)
     return normalized_name == normalized_brand or normalized_name.startswith(normalized_brand + ' ')
 
