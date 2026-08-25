@@ -6,7 +6,9 @@ before the import keeps the test hermetic and, more importantly, keeps it
 honest: the loop is exercised through the same worker_client / d1_client /
 r2_client calls production uses, so a change to that contract fails here.
 """
+import contextlib
 import importlib.util
+import io
 import os
 import sys
 import types
@@ -320,22 +322,39 @@ class PlaceOsmSupplementTest(unittest.TestCase):
         run_job.supplement_place_with_osm('osm-relation-1', 41.5, 41.6, -8.5, -8.4)
         self.assertEqual(called['min_lat'], 41.5)
 
+    def run_supplement(self):
+        """Returns (result, stdout). Both failure branches return None, so the
+        log line is the only thing that says WHICH one ran — without it a test
+        aimed at the rate-limit branch passes just as happily on any other
+        exception, which is exactly how the first version of this test passed
+        while raising NameError."""
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = run_job.supplement_place_with_osm('osm-relation-1', 1.0, 2.0, 3.0, 4.0)
+        return result, out.getvalue()
+
     def test_a_rate_limit_does_not_fail_the_place(self):
         # The Foursquare rows are already loaded. Failing here would trade a
         # Place with one source for a Place with nothing, over a limit that
         # is not the Place's fault.
         def behaviour(*_a, **_k):
-            raise enrich_osm_cuisine.OverpassRateLimited('429')
+            raise OverpassRateLimited('429')
 
         supplement_osm_pois.supplement_scope = behaviour
-        self.assertIsNone(run_job.supplement_place_with_osm('osm-relation-1', 1.0, 2.0, 3.0, 4.0))
+        result, log = self.run_supplement()
+        self.assertIsNone(result)
+        self.assertIn('rate limited', log)
 
     def test_any_other_failure_does_not_fail_the_place_either(self):
         def behaviour(*_a, **_k):
             raise RuntimeError('overpass exploded')
 
         supplement_osm_pois.supplement_scope = behaviour
-        self.assertIsNone(run_job.supplement_place_with_osm('osm-relation-1', 1.0, 2.0, 3.0, 4.0))
+        result, log = self.run_supplement()
+        self.assertIsNone(result)
+        # The generic branch, NOT the rate-limit one.
+        self.assertIn('OSM supplement failed', log)
+        self.assertNotIn('rate limited', log)
 
     def test_a_d1_write_failure_is_contained(self):
         # Stranding the Place in `mapping` is the one outcome KAN-387 exists
