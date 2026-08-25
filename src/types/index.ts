@@ -415,7 +415,26 @@ export const POI_GOOGLE_TYPES: Partial<Record<PoiType, string>> = {
  * is sourced from OSM instead — this is the OSM equivalent of
  * POI_GOOGLE_TYPES above.
  */
-export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
+/**
+ * One OSM tag selector. `value` is the primary/representative value; `values`
+ * lists the full accepted set when a single value cannot express the concept
+ * — `historical_landmark` is `historic=castle|monument|ruins|...`, not any one
+ * of them. Read the accepted set through `osmTagValues`, never by hand, so the
+ * query and the response filter can never disagree about what matches.
+ */
+export interface OsmTagSelector {
+  key: string;
+  value: string;
+  values?: readonly string[];
+}
+
+/** Every value this selector accepts. The single source of truth for both the
+ *  Overpass clause and the filter applied to its response. */
+export function osmTagValues(tag: OsmTagSelector): readonly string[] {
+  return tag.values ?? [tag.value];
+}
+
+export const POI_OSM_TAGS: Record<PoiType, OsmTagSelector> = {
   atm:         { key: 'amenity', value: 'atm' },
   cafe:        { key: 'amenity', value: 'cafe' },
   supermarket: { key: 'shop',    value: 'supermarket' },
@@ -488,14 +507,28 @@ export const POI_OSM_TAGS: Record<PoiType, { key: string; value: string }> = {
  * which must work fully offline against the habitat cache the same way
  * every catalog type does, not just from a live Google search.
  */
-export const SUPPLEMENTARY_OSM_TAGS: Record<string, { key: string; value: string }> = {
+export const SUPPLEMENTARY_OSM_TAGS: Record<string, OsmTagSelector> = {
   shopping_mall: { key: 'shop', value: 'mall' },
   // KAN-293 — leisure/cultural draws for the cluster box's companion line.
   // `park` is absent here on purpose: it's already a PoiType in
   // POI_OSM_TAGS, so it rides the normal prefetch without duplication.
-  museum:     { key: 'tourism', value: 'museum' },
-  attraction: { key: 'tourism', value: 'attraction' },
-  aquarium:   { key: 'tourism', value: 'aquarium' },
+  museum:   { key: 'tourism', value: 'museum' },
+  aquarium: { key: 'tourism', value: 'aquarium' },
+  // KAN-406. `tourism=attraction` used to be mapped under the bare name
+  // `attraction`, which our own database has never once written — 0 rows,
+  // against 128 for `tourist_attraction`. Two names for one concept, split
+  // across two source vocabularies, so whichever one a lookup used it saw
+  // half the world. One type now carries both: the D1 name, the OSM tag.
+  tourist_attraction: { key: 'tourism', value: 'attraction' },
+  // A single value cannot say "a historic place". The set is the mapping.
+  historical_landmark: {
+    key: 'historic',
+    value: 'castle',
+    values: [
+      'castle', 'monument', 'memorial', 'ruins', 'archaeological_site',
+      'fort', 'manor', 'monastery', 'tower', 'city_gate', 'aqueduct',
+    ],
+  },
 };
 
 /**
@@ -520,7 +553,7 @@ export const SUPPLEMENTARY_OSM_TAGS: Record<string, { key: string; value: string
 // mappable-types filter dropped both before any fetch ran, and 1,865
 // historical_landmark + 128 tourist_attraction rows in D1 stayed invisible
 // (KAN-407).
-export const CLUSTER_LEISURE_TYPES = ['park', 'museum', 'attraction', 'aquarium', 'historical_landmark', 'tourist_attraction'] as const;
+export const CLUSTER_LEISURE_TYPES = ['park', 'museum', 'aquarium', 'historical_landmark', 'tourist_attraction'] as const;
 
 export type ClusterLeisureType = typeof CLUSTER_LEISURE_TYPES[number];
 

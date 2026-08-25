@@ -26,7 +26,8 @@
  */
 
 import type { PoiType } from '../types';
-import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS, poiCatalogLabel } from '../types';
+import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS, osmTagValues, poiCatalogLabel } from '../types';
+import type { OsmTagSelector } from '../types';
 import { getDistanceMeters } from './geoDistance';
 import { getCanonicalBrand } from './brandDictionary';
 
@@ -285,13 +286,20 @@ async function fetchOsmPlaces(
   // Build one nwr[...] clause per recognized type (node+way+relation in one
   // selector) — skip anything without an OSM tag mapping (e.g. arbitrary
   // custom-category Google Places strings).
-  const tagByType: Record<string, { key: string; value: string }> = {};
+  const tagByType: Record<string, OsmTagSelector> = {};
   const clauseEntries: { poiType: string; clause: string }[] = [];
   for (const poiType of poiTypes) {
     const tag = POI_OSM_TAGS[poiType as PoiType] ?? SUPPLEMENTARY_OSM_TAGS[poiType];
     if (!tag) { continue; }
     tagByType[poiType] = tag;
-    clauseEntries.push({ poiType, clause: `nwr["${tag.key}"="${tag.value}"](around:${radiusMeters},${lat},${lng});` });
+    // A multi-value selector becomes a regex alternation. Some concepts have
+    // no single tag value — "a historic place" is castle OR monument OR ruins
+    // — and picking one of them would silently drop the others (KAN-406).
+    const values = osmTagValues(tag);
+    const selector = values.length === 1
+      ? `["${tag.key}"="${values[0]}"]`
+      : `["${tag.key}"~"^(${values.join('|')})$"]`;
+    clauseEntries.push({ poiType, clause: `nwr${selector}(around:${radiusMeters},${lat},${lng});` });
   }
   if (clauseEntries.length === 0) { return result; }
 
@@ -327,7 +335,12 @@ async function fetchOsmPlaces(
       for (const poiType of poiTypes) {
         if (!chunkTypes.has(poiType)) { continue; }
         const tag = tagByType[poiType];
-        if (!tag || el.tags[tag.key] !== tag.value) { continue; }
+        // Same accepted set the clause was built from. Comparing against
+        // `tag.value` alone would discard every element the alternation above
+        // deliberately asked for.
+        if (!tag) { continue; }
+        const elementValue = el.tags[tag.key];
+        if (elementValue == null || !osmTagValues(tag).includes(elementValue)) { continue; }
 
         result[poiType].push({
           osmId:          `${el.type}/${el.id}`,

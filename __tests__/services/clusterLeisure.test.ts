@@ -182,7 +182,7 @@ describe('findClusterLeisure — exactly one, ranked offline-first', () => {
 
   it('lets a mapped landmark outrank a closer small fixture by footprint magnitude', () => {
     cacheReturns({
-      attraction: [
+      tourist_attraction: [
         makePlace({
           placeId: 'fountain',
           name: 'Chafariz da Princesa',
@@ -207,7 +207,7 @@ describe('findClusterLeisure — exactly one, ranked offline-first', () => {
 
   it('falls back to nearest-first when footprint data is absent for every candidate', () => {
     cacheReturns({
-      attraction: [
+      tourist_attraction: [
         makePlace({ placeId: 'tower', name: 'Torre de Belém', lat: latOffset(260), lng: 0 }),
         makePlace({ placeId: 'fountain', name: 'Chafariz da Princesa', lat: latOffset(205), lng: 0 }),
       ],
@@ -250,7 +250,9 @@ describe('findClusterLeisure — cost', () => {
   it('asks the cache only for the fixed leisure type set', () => {
     findClusterLeisure(makeBundle());
     const requestedTypes = mockQueryHabitatCache.mock.calls[0][2];
-    expect([...requestedTypes].sort()).toEqual(['aquarium', 'attraction', 'historical_landmark', 'museum', 'park', 'tourist_attraction']);
+    // `attraction` was retired by KAN-406 — it duplicated tourist_attraction
+    // under the OSM vocabulary and matched zero rows in our own database.
+    expect([...requestedTypes].sort()).toEqual(['aquarium', 'historical_landmark', 'museum', 'park', 'tourist_attraction']);
   });
 
   it('asks the cache not to cap leisure candidates before ranking sees them', () => {

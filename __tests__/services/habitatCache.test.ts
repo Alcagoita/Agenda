@@ -770,13 +770,13 @@ describe('queryHabitatCache', () => {
 
   it('can opt out of the per-type cap for callers that rank beyond distance', () => {
     for (let i = 0; i < 60; i++) {
-      upsertPlace({ poiType: 'attraction', name: `Attraction ${i}`, lat: i * 0.002, lng: 0, source: { osm: `way/${i}` } });
+      upsertPlace({ poiType: 'tourist_attraction', name: `Attraction ${i}`, lat: i * 0.002, lng: 0, source: { osm: `way/${i}` } });
     }
 
-    const result = queryHabitatCache(ORIGIN.lat, ORIGIN.lng, ['attraction'], 20_000, { maxResultsPerType: null });
+    const result = queryHabitatCache(ORIGIN.lat, ORIGIN.lng, ['tourist_attraction'], 20_000, { maxResultsPerType: null });
 
-    expect(result.attraction).toHaveLength(60);
-    expect(result.attraction[0].distanceMeters).toBeLessThan(result.attraction[59].distanceMeters);
+    expect(result.tourist_attraction).toHaveLength(60);
+    expect(result.tourist_attraction[0].distanceMeters).toBeLessThan(result.tourist_attraction[59].distanceMeters);
   });
 
   it('preserves explicitly provided integer caps', () => {
