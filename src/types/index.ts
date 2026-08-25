@@ -513,10 +513,38 @@ export const SUPPLEMENTARY_OSM_TAGS: Record<string, { key: string; value: string
 // (clusterLeisure). historical_landmark + tourist_attraction added so heritage
 // sites — monasteries, castles, monuments — can surface too; they were a blind
 // spot (e.g. Mosteiro de Alcobaça sits metres from a stop but is typed
-// historical_landmark). Both are already prefetched into the habitat cache.
+// historical_landmark).
+//
+// This comment used to end "Both are already prefetched into the habitat
+// cache." They were not: neither has an OSM tag mapping, so the prefetch's
+// mappable-types filter dropped both before any fetch ran, and 1,865
+// historical_landmark + 128 tourist_attraction rows in D1 stayed invisible
+// (KAN-407).
 export const CLUSTER_LEISURE_TYPES = ['park', 'museum', 'attraction', 'aquarium', 'historical_landmark', 'tourist_attraction'] as const;
 
 export type ClusterLeisureType = typeof CLUSTER_LEISURE_TYPES[number];
+
+/**
+ * Can the POI API answer for this type? (KAN-407.)
+ *
+ * The habitat prefetch used to accept only OSM-mappable types, because a type
+ * with no OSM tag could never satisfy a freshness check judged purely on
+ * `osm_fetched_at` and would re-fetch forever. KAN-366 ended that: the
+ * prefetch goes through `searchNearbyPlaces` (our API first, Overpass second)
+ * and counts an `fsq_place_id` row as real coverage. So an OSM tag stopped
+ * being the price of admission — but the filter stayed, and kept the two
+ * heritage types out.
+ *
+ * Deliberately NOT "anything goes". A task can carry a free-text POI the user
+ * typed themselves, and those match nothing in either source: they would come
+ * back empty forever and retry on every cooldown. This admits the vocabulary
+ * we actually import — catalog types and the fixed leisure set — and nothing
+ * else.
+ */
+export function isPoiApiServableType(poiType: string): boolean {
+  return isCatalogPoiType(poiType)
+    || (CLUSTER_LEISURE_TYPES as readonly string[]).includes(poiType);
+}
 
 /** Default geofence radius in metres per POI type. */
 export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {

@@ -50,7 +50,7 @@ import { normalize } from './poiInference';
 import { getCanonicalBrand } from './brandDictionary';
 import type { NearbyPlace } from './maps';
 import { getDistanceMeters, searchNearbyPlaces } from './maps';
-import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
+import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS, isPoiApiServableType } from '../types';
 import {
   inferRestaurantFoodTypeFromPlaceName,
   listRestaurantFoodTypes,
@@ -757,7 +757,33 @@ export function getHabitatPlaceById(id: string): NearbyPlace | null {
  * capable of ever reaching empty for a custom-only request (KAN-238 review).
  */
 function isOsmMappable(poiType: string): boolean {
-  return poiType in POI_OSM_TAGS || poiType in SUPPLEMENTARY_OSM_TAGS;
+  // hasOwnProperty, not `in`. `'constructor' in POI_OSM_TAGS` is true, as are
+  // toString, valueOf and __proto__ — every object inherits them. A task can
+  // carry a free-text POI the user typed, so those are reachable strings, and
+  // `in` waved them straight past the very guard this function is.
+  return hasOwn(POI_OSM_TAGS, poiType) || hasOwn(SUPPLEMENTARY_OSM_TAGS, poiType);
+}
+
+function hasOwn(table: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(table, key);
+}
+
+/**
+ * Types the prefetch below is allowed to ask for (KAN-407).
+ *
+ * The comment above describes why this used to be `isOsmMappable` alone, and
+ * that reason expired with KAN-366: the fetch is `searchNearbyPlaces` (our
+ * API first, Overpass second), and the freshness query counts an
+ * `fsq_place_id` row as coverage just like an `osm_id` one. A type our API
+ * can answer for no longer needs an OSM tag to escape being permanently
+ * stale — it just needed to be asked for.
+ *
+ * The runaway-refetch guard the OSM filter provided is preserved by
+ * `isPoiApiServableType`, which admits the imported vocabulary and still
+ * excludes free-text custom POI strings.
+ */
+function isPrefetchable(poiType: string): boolean {
+  return isOsmMappable(poiType) || isPoiApiServableType(poiType);
 }
 
 /** Refetch cooldown for a (poiType, area) pair that came back with zero OSM
@@ -845,7 +871,7 @@ export async function refreshHabitatCacheIfStale(
   poiTypes: string[],
   force = false,
 ): Promise<void> {
-  const mappableTypes = poiTypes.filter(isOsmMappable);
+  const mappableTypes = poiTypes.filter(isPrefetchable);
   if (mappableTypes.length === 0) { return; }
 
   try {

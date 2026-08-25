@@ -4,8 +4,9 @@ import { join } from 'path';
 import { resolvePoiIconType } from '../../src/components/AppIcon/poi';
 import { getCopyLanguage, setCopyLanguage } from '../../src/constants/copy';
 import {
+  CLUSTER_LEISURE_TYPES,
   POI_CATALOG, POI_GEOFENCE_RADIUS, POI_OSM_TAGS, PoiType,
-  QUICK_ACTIONABLE_POI_TYPES, poiCatalogLabel,
+  QUICK_ACTIONABLE_POI_TYPES, isPoiApiServableType, poiCatalogLabel,
 } from '../../src/types';
 
 /**
@@ -129,6 +130,27 @@ describe('KAN-412 type reachability', () => {
     // case of their own and are MEANT to borrow these.
     expect(resolvePoiIconType('florist')).toBe('park');
     expect(resolvePoiIconType('bar')).toBe('cafe');
+  });
+
+  it('the leisure types our API can answer are all servable (KAN-407)', () => {
+    // The habitat prefetch admits a type on this predicate. Every leisure
+    // type must pass it, or the leisure companion silently cannot see that
+    // type's rows — which is exactly how historical_landmark (1,865 rows) and
+    // tourist_attraction (128) stayed invisible behind the old OSM-only gate.
+    for (const type of CLUSTER_LEISURE_TYPES) {
+      expect(isPoiApiServableType(type)).toBe(true);
+    }
+  });
+
+  it('every catalog type is servable, and free text is not', () => {
+    for (const { type } of POI_CATALOG) {
+      expect(isPoiApiServableType(type)).toBe(true);
+    }
+    // The runaway-refetch guard: a POI the user typed themselves matches
+    // nothing in either source, so it must never reach the prefetch.
+    for (const freeText of ['o meu sitio secreto', 'grandma house', '']) {
+      expect(isPoiApiServableType(freeText)).toBe(false);
+    }
   });
 
   it('pins exactly which classifier types no search can reach', () => {
