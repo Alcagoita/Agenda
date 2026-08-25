@@ -34,6 +34,7 @@ import {
 import type { NearbyPlace } from '../../src/services/maps';
 import type { ErrandBundle } from '../../src/services/errandBundles';
 import type { Task } from '../../src/types';
+import { CLUSTER_LEISURE_TYPES } from '../../src/types';
 
 /** Degrees of latitude for a given metre offset, per the mocked haversine. */
 function latOffset(meters: number): number {
@@ -186,12 +187,18 @@ describe('findClusterLeisure — exactly one, ranked offline-first', () => {
     // the same castle can arrive under either depending on the source — so
     // preferring one would rank places by an accident of tagging.
     //
-    // Asserted both ways round so it cannot pass by coincidence of ordering.
-    for (const [winner, loser] of [
-      ['tourist_attraction', 'historical_landmark'],
-      ['historical_landmark', 'tourist_attraction'],
-      ['museum', 'tourist_attraction'],
-    ] as const) {
+    // Derived from the constant, not a hand-picked sample: every ordered pair
+    // of distinct types, so a type added later is covered without anyone
+    // remembering to extend this, and both directions of each pair are
+    // asserted so it cannot pass by coincidence of iteration order.
+    const pairs = CLUSTER_LEISURE_TYPES.flatMap(
+      winner => CLUSTER_LEISURE_TYPES
+        .filter(loser => loser !== winner)
+        .map(loser => [winner, loser] as const),
+    );
+    expect(pairs).toHaveLength(CLUSTER_LEISURE_TYPES.length * (CLUSTER_LEISURE_TYPES.length - 1));
+
+    for (const [winner, loser] of pairs) {
       cacheReturns({
         [winner]: [makePlace({
           placeId: 'big', name: 'O Grande', lat: latOffset(260), lng: 0, footprintAreaM2: 3_500,
