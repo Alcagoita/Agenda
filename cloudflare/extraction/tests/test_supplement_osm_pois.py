@@ -64,7 +64,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
         existing = [
             supplement.Candidate('foursquare', 'fsq-santo', 'Santo Amaro', 'santo amaro', 39.80345, -8.10126, 'restaurant'),
         ]
-        imports, stats = supplement.classify_scope([
+        imports, stats, _ = supplement.classify_scope([
             element(1, 'Santo Amaro', amenity='restaurant'),
             element(2, 'Lagar Restaurante', lat=39.80346, lng=-8.10127, amenity='restaurant'),
         ], existing, 39.80345)
@@ -95,7 +95,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
             supplement.Candidate('foursquare', 'ala-sul', 'Ala Sul Café', 'ala sul cafe', 39.80345, -8.10126, 'cafe'),
             supplement.Candidate('foursquare', 'rosa-family', 'Alberto Rosa & Filhos', 'alberto rosa filhos', 39.80355, -8.10126, 'cafe'),
         ]
-        imports, stats = supplement.classify_scope([
+        imports, stats, _ = supplement.classify_scope([
             element(1, 'Café Ala Sul', amenity='cafe'),
             element(2, 'Café Rosa', lat=39.80355, amenity='cafe'),
         ], existing, 39.80345)
@@ -108,7 +108,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
         existing = [
             supplement.Candidate('foursquare', 'fsq-lagar', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
         ]
-        imports, _ = supplement.classify_scope([
+        imports, _, _ = supplement.classify_scope([
             element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
         ], existing, 39.80345)
 
@@ -166,7 +166,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
             supplement.Candidate('foursquare', 'one', 'Casa Verde', 'casa verde', 39.80345, -8.10126, 'restaurant'),
             supplement.Candidate('foursquare', 'two', 'Casa Verde', 'casa verde', 39.80346, -8.10127, 'restaurant'),
         ]
-        imports, stats = supplement.classify_scope([
+        imports, stats, _ = supplement.classify_scope([
             element(1, 'Casa Verde', amenity='restaurant'),
         ], existing, 39.80345)
         self.assertEqual(imports, [])
@@ -176,7 +176,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
         existing = [
             supplement.Candidate('openstreetmap', 'node/5335674113', 'Santo Amaro', 'santo amaro', 39.80345, -8.10126, 'restaurant'),
         ]
-        imports, stats = supplement.classify_scope([
+        imports, stats, _ = supplement.classify_scope([
             element(5335674113, 'Santo Amaro', amenity='restaurant'),
         ], existing, 39.80345)
         self.assertEqual([poi.osm_element_id for poi in imports], ['node/5335674113'])
@@ -188,7 +188,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
             ('openstreetmap', 'node/5381704191'): supplement.SourceCorrection('openstreetmap', 'node/5381704191', False, None, None),
             ('openstreetmap', 'node/5381704211'): supplement.SourceCorrection('openstreetmap', 'node/5381704211', True, 'Lagar', 'lagar'),
         }
-        imports, stats = supplement.classify_scope([
+        imports, stats, _ = supplement.classify_scope([
             element(5381704191, 'O Vilaça', amenity='restaurant'),
             element(5381704211, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
         ], [], 39.80345, corrections)
@@ -425,3 +425,52 @@ class ScopeCheckpointTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AmbiguousConflictTest(unittest.TestCase):
+    """KAN-390 — an indistinguishable match is evidence, not just a counter."""
+
+    @staticmethod
+    def candidate(source_id, name):
+        return supplement.Candidate(
+            source='foursquare', source_id=source_id, name=name,
+            dedupe_name=supplement.normalize_text(name),
+            lat=41.5, lng=-8.4, poi_type='cafe',
+        )
+
+    def element(self):
+        return {'type': 'node', 'id': 1, 'lat': 41.5, 'lon': -8.4,
+                'tags': {'amenity': 'cafe', 'name': 'Café Central'}}
+
+    def test_two_indistinguishable_candidates_produce_one_row_each(self):
+        # Same name, same spot, two source ids: the matcher cannot say which
+        # one the element is, so it imports nothing — and that verdict is
+        # exactly what someone needs to review.
+        candidates = [self.candidate('fsq1', 'Café Central'),
+                      self.candidate('fsq2', 'Café Central')]
+
+        imports, stats, conflicts = supplement.classify_scope(
+            [self.element()], candidates, 41.5)
+
+        self.assertEqual(imports, [])
+        self.assertEqual(stats['ambiguous_skipped'], 1)
+        self.assertEqual(len(conflicts), 2)
+        self.assertEqual({c.source_id for c in conflicts}, {'fsq1', 'fsq2'})
+        for conflict in conflicts:
+            self.assertEqual(conflict.conflict_class, 'ambiguous')
+            self.assertEqual(conflict.osm_element_id, 'node/1')
+
+    def test_a_single_confident_match_is_not_a_conflict(self):
+        imports, stats, conflicts = supplement.classify_scope(
+            [self.element()], [self.candidate('fsq1', 'Café Central')], 41.5)
+
+        self.assertEqual(imports, [])
+        self.assertEqual(stats.get('ambiguous_skipped', 0), 0)
+        self.assertEqual(conflicts, [])
+
+    def test_no_candidates_means_an_import_and_no_conflict(self):
+        imports, _stats, conflicts = supplement.classify_scope(
+            [self.element()], [], 41.5)
+
+        self.assertEqual(len(imports), 1)
+        self.assertEqual(conflicts, [])
