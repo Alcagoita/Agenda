@@ -180,6 +180,34 @@ describe('findClusterLeisure — exactly one, ranked offline-first', () => {
     expect(found?.distanceToStopMeters).toBe(10);
   });
 
+  it('ranks every leisure type against the others, never by which type it is', () => {
+    // Product requirement: a tourist_attraction is recommended alongside the
+    // historic landmarks, not behind them. The labels are classifier leaves —
+    // the same castle can arrive under either depending on the source — so
+    // preferring one would rank places by an accident of tagging.
+    //
+    // Asserted both ways round so it cannot pass by coincidence of ordering.
+    for (const [winner, loser] of [
+      ['tourist_attraction', 'historical_landmark'],
+      ['historical_landmark', 'tourist_attraction'],
+      ['museum', 'tourist_attraction'],
+    ] as const) {
+      cacheReturns({
+        [winner]: [makePlace({
+          placeId: 'big', name: 'O Grande', lat: latOffset(260), lng: 0, footprintAreaM2: 3_500,
+        })],
+        [loser]: [makePlace({
+          placeId: 'small', name: 'O Pequeno', lat: latOffset(205), lng: 0, footprintAreaM2: 120,
+        })],
+      });
+
+      const found = findClusterLeisure(makeBundle());
+      // The bigger one wins on footprint regardless of which type holds it.
+      expect(found?.place.name).toBe('O Grande');
+      expect(found?.type).toBe(winner);
+    }
+  });
+
   it('lets a mapped landmark outrank a closer small fixture by footprint magnitude', () => {
     cacheReturns({
       tourist_attraction: [
