@@ -993,7 +993,7 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
  * un-remapping `hairdresser` would change shipped UI, which belongs to
  * whichever ticket decides salon iconography — not this one.
  */
-const SELF_DRAWN_ICON_TYPES = new Set([
+export const SELF_DRAWN_ICON_TYPES = new Set([
   // KAN-408 — Nature and Landmarks. Without these the heuristics assigned
   // actively wrong icons: a church became a library, a beach became a park.
   'viewpoint',, 'waterfall',, 'river',

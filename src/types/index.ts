@@ -463,6 +463,15 @@ export interface OsmTagSelector {
   key: string;
   value: string;
   values?: readonly string[];
+  /**
+   * A companion tag that must ALSO be present (KAN-408 review).
+   *
+   * Some OSM concepts need two tags to be themselves. `leisure=pitch` is
+   * every pitch there is — football, basketball, padel — and only
+   * `sport=tennis` alongside it means a tennis court. Without this the
+   * selector typed every soccer field in the country as one.
+   */
+  where?: { key: string; value: string };
 }
 
 /** Every value this selector accepts. The single source of truth for both the
@@ -520,7 +529,7 @@ export const POI_OSM_TAGS: Record<PoiType, OsmTagSelector> = {
   spa:                                  { key: 'leisure', value: 'spa' },
   stadium:                              { key: 'leisure', value: 'stadium' },
   synagogue:                            { key: 'building', value: 'synagogue' },
-  tennis_court:                         { key: 'leisure', value: 'pitch' },
+  tennis_court:                         { key: 'leisure', value: 'pitch', where: { key: 'sport', value: 'tennis' } },
   tourist_attraction:                   { key: 'tourism', value: 'attraction' },
   water_park:                           { key: 'leisure', value: 'water_park' },
   winery:                               { key: 'craft', value: 'winery' },

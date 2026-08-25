@@ -299,3 +299,27 @@ describe('learned layer', () => {
     expect(inferPoiFromRules('book a spin class')).toBe('gym');
   });
 });
+
+describe('KAN-408 review — keywords the dedupe gave to the wrong type', () => {
+  // Both were silently skipped when these types were added, because an
+  // earlier type already claimed the word. The result was a split concept:
+  // `area protegida` and `parque natural` resolved to nature_preserve while
+  // `reserva natural` — the most direct phrase of the three — resolved to
+  // hiking_area.
+  it.each([
+    ['reserva natural', 'nature_preserve'],
+    ['area protegida', 'nature_preserve'],
+    ['parque natural', 'nature_preserve'],
+    ['termas', 'hot_spring'],
+    ['aguas termais', 'hot_spring'],
+  ])('%s resolves to %s', (phrase, expected) => {
+    expect(inferPoiFromRules(phrase, 'pt-PT')).toBe(expected);
+  });
+
+  it('leaves the types that gave the keywords up still reachable', () => {
+    // hiking_area and spa lost a keyword each; neither may become
+    // unreachable as a result.
+    expect(inferPoiFromRules('trilho', 'pt-PT')).toBe('hiking_area');
+    expect(inferPoiFromRules('spa', 'pt-PT')).toBe('spa');
+  });
+});

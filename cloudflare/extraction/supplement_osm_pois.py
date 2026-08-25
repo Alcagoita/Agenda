@@ -152,7 +152,10 @@ TAG_TYPES: tuple[tuple[str, str, str], ...] = (
     ('leisure', 'spa', 'spa'),
     ('leisure', 'stadium', 'stadium'),
     ('building', 'synagogue', 'synagogue'),
-    ('leisure', 'pitch', 'tennis_court'),
+    # leisure=pitch alone is EVERY pitch — football, basketball, padel. On its
+    # own this typed every soccer field in the country as a tennis court.
+    # The fourth element is a required companion tag (KAN-408 review).
+    ('leisure', 'pitch', 'tennis_court', ('sport', 'tennis')),
     ('tourism', 'attraction', 'tourist_attraction'),
     ('leisure', 'water_park', 'water_park'),
     ('craft', 'winery', 'winery'),
@@ -321,8 +324,24 @@ def address_for(tags: dict[str, str]) -> str | None:
     return rendered or None
 
 
+def tag_rule_matches(tags: dict[str, str], rule: tuple) -> bool:
+    """One TAG_TYPES rule against one element's tags.
+
+    A rule is (key, value, poi_type) or (key, value, poi_type, (key, value))
+    where the fourth element is a companion tag that must ALSO match. Some
+    OSM concepts need two tags to be themselves: `leisure=pitch` is every
+    pitch there is, and only `sport=tennis` alongside it means a tennis
+    court (KAN-408 review).
+    """
+    key, value, _poi_type = rule[0], rule[1], rule[2]
+    if tags.get(key) != value:
+        return False
+    companion = rule[3] if len(rule) > 3 else None
+    return companion is None or tags.get(companion[0]) == companion[1]
+
+
 def types_for(tags: dict[str, str]) -> list[str]:
-    types = [poi_type for key, value, poi_type in TAG_TYPES if tags.get(key) == value]
+    types = [rule[2] for rule in TAG_TYPES if tag_rule_matches(tags, rule)]
     shop = tags.get('shop')
     if shop and shop not in EXCLUDED_SHOP_VALUES and 'store' not in types and shop not in {'supermarket', 'bakery', 'florist', 'ice_cream', 'tattoo', 'hairdresser', 'beauty'}:
         types.append('store')
@@ -604,7 +623,9 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
         'nwr["craft"~"^(brewery|winery)$"]',
         'nwr["historic"~"^(aqueduct|archaeological_site|castle|city_gate|fort|manor|memorial|monastery|monument|ruins|tower)$"]',
         'nwr["landuse"~"^(cemetery)$"]',
-        'nwr["leisure"~"^(bowling_alley|garden|golf_course|marina|nature_reserve|pitch|spa|stadium|water_park)$"]',
+        'nwr["leisure"~"^(bowling_alley|garden|golf_course|marina|nature_reserve|spa|stadium|water_park)$"]',
+        # pitch only with the sport that makes it a tennis court.
+        'nwr["leisure"="pitch"]["sport"="tennis"]',
         'nwr["man_made"~"^(bridge|lighthouse)$"]',
         'nwr["natural"~"^(beach|hot_spring|peak|water)$"]',
         'nwr["place"~"^(island|square)$"]',
