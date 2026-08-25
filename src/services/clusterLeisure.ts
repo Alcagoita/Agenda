@@ -7,10 +7,15 @@
  * accepts it, the card adds it to that one Maps handoff only.
  *
  * Detection is pure and cache-only. It reads rows the habitat cache already
- * holds — the leisure types ride along in the SAME Overpass request the
- * proximity engine already makes for the user's own POI types (see
+ * holds — the leisure types ride along in the SAME prefetch the proximity
+ * engine already makes for the user's own POI types (see
  * CLUSTER_LEISURE_TYPES and proximity.ts's prefetchTypes), so this feature
- * issues no request of its own and costs no Google call whatsoever.
+ * issues no request of its own.
+ *
+ * That prefetch is no longer an Overpass request: KAN-366 routed it through
+ * searchNearbyPlaces (our POI API first, Overpass second), and KAN-407 let
+ * the two heritage types through a filter that had been dropping them for
+ * lacking an OSM tag they never needed.
  *
  * COMMERCIAL NEUTRALITY (KAN-293 doctrine — monetize fulfilment, never
  * placement): nothing in this module takes a partner, sponsor, bid or

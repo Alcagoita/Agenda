@@ -50,7 +50,7 @@ import { normalize } from './poiInference';
 import { getCanonicalBrand } from './brandDictionary';
 import type { NearbyPlace } from './maps';
 import { getDistanceMeters, searchNearbyPlaces } from './maps';
-import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS } from '../types';
+import { POI_OSM_TAGS, SUPPLEMENTARY_OSM_TAGS, isPoiApiServableType } from '../types';
 import {
   inferRestaurantFoodTypeFromPlaceName,
   listRestaurantFoodTypes,
@@ -760,6 +760,24 @@ function isOsmMappable(poiType: string): boolean {
   return poiType in POI_OSM_TAGS || poiType in SUPPLEMENTARY_OSM_TAGS;
 }
 
+/**
+ * Types the prefetch below is allowed to ask for (KAN-407).
+ *
+ * The comment above describes why this used to be `isOsmMappable` alone, and
+ * that reason expired with KAN-366: the fetch is `searchNearbyPlaces` (our
+ * API first, Overpass second), and the freshness query counts an
+ * `fsq_place_id` row as coverage just like an `osm_id` one. A type our API
+ * can answer for no longer needs an OSM tag to escape being permanently
+ * stale — it just needed to be asked for.
+ *
+ * The runaway-refetch guard the OSM filter provided is preserved by
+ * `isPoiApiServableType`, which admits the imported vocabulary and still
+ * excludes free-text custom POI strings.
+ */
+function isPrefetchable(poiType: string): boolean {
+  return isOsmMappable(poiType) || isPoiApiServableType(poiType);
+}
+
 /** Refetch cooldown for a (poiType, area) pair that came back with zero OSM
  * results last time — a mapped type can legitimately have nothing nearby
  * (e.g. no bus stop in this suburb); without this, a sparse area would hit
@@ -845,7 +863,7 @@ export async function refreshHabitatCacheIfStale(
   poiTypes: string[],
   force = false,
 ): Promise<void> {
-  const mappableTypes = poiTypes.filter(isOsmMappable);
+  const mappableTypes = poiTypes.filter(isPrefetchable);
   if (mappableTypes.length === 0) { return; }
 
   try {

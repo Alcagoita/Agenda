@@ -27,10 +27,13 @@
  *     never invents an id for an unmatched place)
  *   - every exported function degrades to a safe default (never throws)
  *     when the underlying DB call itself throws
- *   - refreshHabitatCacheIfStale (KAN-238 review) pre-filters to OSM-mappable
- *     types before deciding what's stale — a custom-category string with no
- *     POI_OSM_TAGS mapping can never produce a row, so it must never keep
- *     "staleTypes" non-empty forever; a mapped type that legitimately
+ *   - refreshHabitatCacheIfStale (KAN-238 review) pre-filters to types some
+ *     source can actually answer for, before deciding what's stale — a
+ *     free-text POI string can never produce a row, so it must never keep
+ *     "staleTypes" non-empty forever. KAN-407 widened that filter from
+ *     "OSM-mappable" to "OSM-mappable OR servable by our API": the original
+ *     rule predated KAN-366 and was keeping out leisure types our own
+ *     database holds thousands of rows for; a mapped type that legitimately
  *     returns zero OSM results is throttled per (type, coarse area) instead
  *     of re-hitting Overpass on every single proximity tick; and
  *     enforceSizeBudget's full-table COUNT(*) is skipped when nothing was
@@ -997,6 +1000,37 @@ describe('refreshHabitatCacheIfStale', () => {
     expect(mockSearchNearbyPlaces).toHaveBeenCalledWith(
       ORIGIN.lat, ORIGIN.lng, ['atm'], PREFETCH_RADIUS, requestsFor(['atm']),
     );
+  });
+
+  it('asks for leisure types our API can answer even though OSM cannot (KAN-407)', async () => {
+    // historical_landmark and tourist_attraction have no OSM tag mapping, so
+    // the old mappable-only filter dropped them before any fetch — 1,865 and
+    // 128 rows in D1 that the leisure companion could never see. KAN-366 had
+    // already made the prefetch go through our API first; only the filter was
+    // still holding them out.
+    mockSearchNearbyPlaces.mockResolvedValue(
+      nearbyAnswer({ historical_landmark: [], tourist_attraction: [] }, 'cloudflare'),
+    );
+
+    await refreshHabitatCacheIfStale(
+      ORIGIN.lat, ORIGIN.lng, ['historical_landmark', 'tourist_attraction'],
+    );
+
+    expect(mockSearchNearbyPlaces).toHaveBeenCalledWith(
+      ORIGIN.lat, ORIGIN.lng,
+      ['historical_landmark', 'tourist_attraction'],
+      PREFETCH_RADIUS,
+      requestsFor(['historical_landmark', 'tourist_attraction']),
+    );
+  });
+
+  it('still refuses a free-text POI no source can answer for', async () => {
+    // The guard the OSM filter used to provide. A custom string matches
+    // nothing in either source, so admitting it would mean an empty answer
+    // and a retry on every cooldown, forever.
+    await refreshHabitatCacheIfStale(ORIGIN.lat, ORIGIN.lng, ['o meu sitio secreto']);
+
+    expect(mockSearchNearbyPlaces).not.toHaveBeenCalled();
   });
 
   it('skips enforceSizeBudget\'s full-table COUNT(*) when OSM returned zero results for every fetched type', async () => {
