@@ -39,6 +39,57 @@ import enrich_osm_cuisine
 # the authority, this is the request.
 OSM_SCOPE_BATCH_SIZE = 8
 
+def supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng):
+    """The per-Place OSM pass (KAN-394). Additive, and never fails the Place.
+
+    Before this, "mapped" meant two different things. A country-mapped Place
+    got Foursquare AND the OSM supplement — 75,491 OSM-only venues across PT,
+    the small cafes and talhos the open Foursquare dataset never had. An
+    on-demand Place got Foursquare alone, and reported the same `mapped`. A
+    user asking for Tokyo was quietly given a thinner database than a user in
+    Lisboa.
+
+    One Place is one bbox, which is exactly the unit `supplement_scope`
+    already claims and checkpoints for the country run — so this reuses it
+    rather than inventing a second path. The country's claim/lease machinery
+    is not reused: it exists to spread 307 municipality scopes across
+    container lifetimes, and a single scope has nothing to spread.
+
+    The bbox comes from the caller, not from `import_place`'s D1 lookup: at
+    this point in the flow the Place row has no extent yet, because the
+    build-complete callback is what records it.
+
+    **A failure here does not fail the Place.** The Foursquare rows are
+    already loaded and useful, so the choice is between a Place mapped with
+    one source and a Place with nothing. Overpass being rate limited is not
+    the Place's fault, and stranding it in `mapping` is the one outcome
+    KAN-387 was written to prevent. The shortfall is logged and the Place
+    completes; re-running the supplement later fills it in, because the write
+    is idempotent on the OSM element id.
+    """
+    try:
+        imports, stats, _renames = supplement_osm_pois.supplement_scope(
+            place_id, min_lat, max_lat, min_lng, max_lng,
+        )
+        # D1 first: a crash before returning re-runs the scope, which the
+        # element-id upsert makes harmless.
+        for statement in supplement_osm_pois.statements_for_pois(imports):
+            d1_client.execute(statement)
+        print(f"[run_job] {place_id}: OSM supplement added "
+              f"{stats.get('unique_rows_to_write', 0)} rows")
+        return stats
+    except enrich_osm_cuisine.OverpassRateLimited:
+        traceback.print_exc()
+        print(f'[run_job] {place_id}: Overpass rate limited — completing the '
+              'Place with Foursquare data only, OSM can be re-run later')
+        return None
+    except Exception:
+        traceback.print_exc()
+        print(f'[run_job] {place_id}: OSM supplement failed — completing the '
+              'Place with Foursquare data only')
+        return None
+
+
 def map_place(place_id):
     """The sole Foursquare -> global-POI loader, used by both modes."""
     print(f'[run_job] mapping place: {place_id}')
@@ -58,6 +109,10 @@ def map_place(place_id):
         result = classify(place_id, csv_path, sql_path)
         stage = 'd1_load'
         d1_client.execute_sql_file(result['sql_path'])
+        # KAN-394 — before the Place is reported mapped, so `mapped` means the
+        # same thing however the Place got here.
+        stage = 'osm_supplement'
+        supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng)
         stage = 'raw_extract_upload'
         r2_client.upload_file(csv_path, result['raw_extract_r2_key'])
         stage = 'export_upload'
