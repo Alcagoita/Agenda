@@ -6,8 +6,9 @@ import { getCopyLanguage, setCopyLanguage } from '../../src/constants/copy';
 import {
   CLUSTER_LEISURE_TYPES,
   POI_CATALOG, POI_GEOFENCE_RADIUS, POI_OSM_TAGS, PoiType,
+  TOURISM_GROUPS,
   QUICK_ACTIONABLE_POI_TYPES, SUPPLEMENTARY_OSM_TAGS, isPoiApiServableType,
-  osmTagValues, poiCatalogLabel,
+  osmTagValues, poiCatalogLabel, tourismGroupFor,
 } from '../../src/types';
 
 /**
@@ -120,9 +121,46 @@ describe('KAN-412 type reachability', () => {
       'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
       'car_rental', 'movie_theater', 'yoga_studio', 'playground',
       'electric_vehicle_charging_station',
+      // KAN-408 — these had it worse than a generic pin. GOOGLE_TYPE_ICON
+      // actively mapped museum and art_gallery to 'library', beach and
+      // historical_landmark to 'park', and church to 'library' — a wrong
+      // icon rather than an absent one.
+      'amusement_park', 'aquarium', 'art_gallery', 'beach',
+      'botanical_garden', 'bowling_alley', 'brewery', 'campground',
+      'casino', 'cemetery', 'church', 'community_center',
+      'cultural_center', 'golf_course', 'hiking_area', 'historical_landmark',
+      'mosque', 'museum', 'night_club', 'rv_park',
+      'spa', 'stadium', 'synagogue', 'tennis_court',
+      'tourist_attraction', 'water_park', 'winery', 'zoo',
+      'viewpoint', 'waterfall', 'river', 'mountain',
+      'lake', 'island', 'surf_spot', 'hot_spring',
+      'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+      'marina', 'theatre', 'music_venue',
     ];
     for (const type of selfDrawn) {
       expect(resolvePoiIconType(type)).toBe(type);
+    }
+  });
+
+  it('KAN-408 types are catalog-only, never quick-actionable', () => {
+    // Same call as KAN-412's ten. Tourism is something people reach for
+    // deliberately; the creation carousel stays short and stays errands.
+    const quick = new Set<string>(QUICK_ACTIONABLE_POI_TYPES);
+    const catalog = new Set(POI_CATALOG.map(e => e.type));
+    for (const type of [
+      'amusement_park', 'aquarium', 'art_gallery', 'beach', 'botanical_garden',
+      'bowling_alley', 'brewery', 'campground', 'casino', 'cemetery', 'church',
+      'community_center', 'cultural_center', 'golf_course', 'hiking_area',
+      'historical_landmark', 'mosque', 'museum', 'night_club', 'rv_park',
+      'spa', 'stadium', 'synagogue', 'tennis_court', 'tourist_attraction',
+      'water_park', 'winery', 'zoo',
+      'viewpoint', 'waterfall', 'river', 'mountain',
+      'lake', 'island', 'surf_spot', 'hot_spring',
+      'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+      'marina', 'theatre', 'music_venue',
+    ] as PoiType[]) {
+      expect(catalog.has(type)).toBe(true);
+      expect(quick.has(type)).toBe(false);
     }
   });
 
@@ -190,14 +228,9 @@ describe('KAN-412 type reachability', () => {
     const DELIBERATELY_UNREACHABLE = [
       // Searched by name at a specific address, never stumbled upon (KAN-412).
       'car_repair', 'dentist', 'hospital', 'medical_lab', 'physiotherapist',
-      // Owned by KAN-408 / KAN-410 — the Nature and Landmarks grouping.
-      // Deciding them here would decide them twice.
-      'amusement_park', 'aquarium', 'art_gallery', 'beach', 'botanical_garden',
-      'bowling_alley', 'brewery', 'campground', 'casino', 'cemetery', 'church',
-      'community_center', 'cultural_center', 'golf_course', 'hiking_area',
-      'historical_landmark', 'mosque', 'museum', 'night_club', 'rv_park',
-      'spa', 'stadium', 'synagogue', 'tennis_court', 'tourist_attraction',
-      'water_park', 'winery', 'zoo',
+      // KAN-408 decided this group: all 28 are now real, taggable PoiTypes.
+      // The list is 28 shorter than it was, which is the ticket's own
+      // acceptance criterion rather than an accident.
       // Deliberately dormant pending a use case (KAN-404).
       'lodging', 'hotel',
       // Transport. Same call as bus stops: a location without routes or
@@ -223,5 +256,57 @@ describe('KAN-412 type reachability', () => {
     const reach = reachable();
     const unreachable = classifierTypes().filter(t => !reach.has(t)).sort();
     expect(unreachable).toEqual(DELIBERATELY_UNREACHABLE);
+  });
+});
+
+describe('KAN-408 tourism groups', () => {
+  it('every grouped type is a real catalog type', () => {
+    const catalog = new Set(POI_CATALOG.map(e => e.type));
+    for (const type of Object.values(TOURISM_GROUPS).flat()) {
+      expect(catalog.has(type)).toBe(true);
+    }
+  });
+
+  it('no type belongs to two groups', () => {
+    // A place serves one kind of outing. Something in two would make
+    // "nature near here" and "landmarks near here" return the same row,
+    // which is the merged bucket this exists to replace.
+    const seen = new Map<string, string>();
+    for (const [group, types] of Object.entries(TOURISM_GROUPS)) {
+      for (const type of types) {
+        expect(seen.get(type)).toBeUndefined();
+        seen.set(type, group);
+      }
+    }
+  });
+
+  it('groups the material that was waiting in poi_candidate', () => {
+    // The concrete gap this pass closed: 1,292 Scenic Lookout rows had no
+    // type at all, and a miradouro is the draw.
+    expect(tourismGroupFor('viewpoint')).toBe('nature');
+    expect(tourismGroupFor('waterfall')).toBe('nature');
+    expect(tourismGroupFor('theatre')).toBe('culture');
+    expect(tourismGroupFor('lighthouse')).toBe('landmark');
+  });
+
+  it('keeps the three faiths together in one group', () => {
+    for (const type of ['church', 'mosque', 'synagogue']) {
+      expect(tourismGroupFor(type)).toBe('religion');
+    }
+  });
+
+  it('leaves entertainment types deliberately ungrouped', () => {
+    // Forcing a bowling alley into "Landmarks" to make the partition total
+    // would make the group mean less — and a group that means less is one a
+    // feature cannot act on. They stay taggable, just not tourism.
+    for (const type of ['bowling_alley', 'casino', 'night_club', 'spa', 'zoo']) {
+      expect(tourismGroupFor(type)).toBeNull();
+    }
+  });
+
+  it('resolves a group for the types that have one', () => {
+    expect(tourismGroupFor('beach')).toBe('nature');
+    expect(tourismGroupFor('historical_landmark')).toBe('historic');
+    expect(tourismGroupFor('pharmacy')).toBeNull();
   });
 });

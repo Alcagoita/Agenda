@@ -474,3 +474,87 @@ class AmbiguousConflictTest(unittest.TestCase):
 
         self.assertEqual(len(imports), 1)
         self.assertEqual(conflicts, [])
+
+
+class Kan408ImporterCoverageTest(unittest.TestCase):
+    """KAN-408 — every app type the importer claims to supply, it must ask for.
+
+    The app gaining a type does nothing on its own. If the Overpass query
+    never requests the tag, the type is one the app can express and the
+    database can never hold — the same defect KAN-412 named, from the other
+    side.
+    """
+
+    def test_every_tag_rule_is_actually_requested(self):
+        query = supplement.osm_query(41.0, 41.1, -8.5, -8.4)
+        for rule in supplement.TAG_TYPES:
+            key, value, poi_type = rule[0], rule[1], rule[2]
+            companion = rule[3] if len(rule) > 3 else None
+            if key == 'shop':
+                # The blanket shop selector covers every shop value.
+                self.assertIn('"shop"', query)
+                continue
+            self.assertIn(f'"{key}"', query, f'{key}={value} ({poi_type}) never requested')
+            self.assertIn(value, query, f'{key}={value} ({poi_type}) never requested')
+            if companion:
+                # A rule with a companion is only honest if the query carries
+                # it too — otherwise Overpass returns everything the rule
+                # then discards.
+                self.assertIn(f'["{companion[0]}"="{companion[1]}"]', query)
+
+    def test_the_nature_types_reach_the_importer(self):
+        # praia fluvial is the case that exposed this: Foursquare had 160
+        # typed `beach`, OSM had zero, because natural=beach was not asked
+        # for and no OSM beach could ever be imported.
+        mapped = {rule[2]: (rule[0], rule[1]) for rule in supplement.TAG_TYPES}
+        for poi_type, expected in [
+            ('beach', ('natural', 'beach')),
+            ('viewpoint', ('tourism', 'viewpoint')),
+            ('waterfall', ('waterway', 'waterfall')),
+            ('lighthouse', ('man_made', 'lighthouse')),
+            ('theatre', ('amenity', 'theatre')),
+        ]:
+            self.assertEqual(mapped.get(poi_type), expected, poi_type)
+
+    def test_the_query_never_asks_for_a_bare_key(self):
+        # `natural` alone would pull every tree and pond in the bbox. Only
+        # `shop` is deliberately blanket, and it predates this.
+        query = supplement.osm_query(41.0, 41.1, -8.5, -8.4)
+        for key in ('natural', 'tourism', 'historic', 'man_made', 'place', 'waterway', 'leisure', 'amenity'):
+            self.assertNotIn(f'nwr["{key}"]', query, f'{key} is requested unscoped')
+
+
+class CompoundTagRuleTest(unittest.TestCase):
+    """KAN-408 review — leisure=pitch alone is every pitch there is.
+
+    Without a companion tag this typed every soccer field in the country as
+    a tennis court. Some OSM concepts need two tags to be themselves.
+    """
+
+    def test_a_tennis_pitch_is_a_tennis_court(self):
+        self.assertIn('tennis_court', supplement.types_for(
+            {'leisure': 'pitch', 'sport': 'tennis'}))
+
+    def test_other_sports_on_the_same_tag_are_not(self):
+        for sport in ('soccer', 'basketball', 'padel', 'futsal'):
+            self.assertEqual(
+                supplement.types_for({'leisure': 'pitch', 'sport': sport}), [],
+                f'{sport} pitch classified as something')
+
+    def test_a_pitch_with_no_sport_is_not_a_tennis_court(self):
+        self.assertEqual(supplement.types_for({'leisure': 'pitch'}), [])
+
+    def test_the_query_asks_for_the_companion_too(self):
+        # Filtering after the fact would still work, but it would make
+        # Overpass return every pitch in the bbox to throw nearly all away.
+        query = supplement.osm_query(41.0, 41.1, -8.5, -8.4)
+        self.assertIn('["leisure"="pitch"]["sport"="tennis"]', query)
+        # ...and `pitch` must be gone from the broad leisure alternation.
+        broad = [part for part in query.split(';') if '"leisure"~' in part]
+        self.assertTrue(broad)
+        for part in broad:
+            self.assertNotIn('pitch', part)
+
+    def test_simple_rules_are_unaffected(self):
+        self.assertIn('beach', supplement.types_for({'natural': 'beach'}))
+        self.assertIn('cafe', supplement.types_for({'amenity': 'cafe'}))

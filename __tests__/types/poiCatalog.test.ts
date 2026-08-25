@@ -27,6 +27,18 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
   'car_rental', 'movie_theater', 'yoga_studio', 'playground',
   'electric_vehicle_charging_station',
+  // KAN-408
+  'amusement_park', 'aquarium', 'art_gallery', 'beach',
+  'botanical_garden', 'bowling_alley', 'brewery', 'campground',
+  'casino', 'cemetery', 'church', 'community_center',
+  'cultural_center', 'golf_course', 'hiking_area', 'historical_landmark',
+  'mosque', 'museum', 'night_club', 'rv_park',
+  'spa', 'stadium', 'synagogue', 'tennis_court',
+  'tourist_attraction', 'water_park', 'winery', 'zoo',
+  'viewpoint', 'waterfall', 'river', 'mountain',
+  'lake', 'island', 'surf_spot', 'hot_spring',
+  'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+  'marina', 'theatre', 'music_venue',
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
@@ -97,6 +109,17 @@ describe('POI_GOOGLE_TYPES', () => {
       'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
       'car_rental', 'movie_theater', 'yoga_studio', 'playground',
       'electric_vehicle_charging_station',
+      'amusement_park', 'aquarium', 'art_gallery', 'beach',
+      'botanical_garden', 'bowling_alley', 'brewery', 'campground',
+      'casino', 'cemetery', 'church', 'community_center',
+      'cultural_center', 'golf_course', 'hiking_area', 'historical_landmark',
+      'mosque', 'museum', 'night_club', 'rv_park',
+      'spa', 'stadium', 'synagogue', 'tennis_court',
+      'tourist_attraction', 'water_park', 'winery', 'zoo',
+      'viewpoint', 'waterfall', 'river', 'mountain',
+      'lake', 'island', 'surf_spot', 'hot_spring',
+      'nature_preserve', 'plaza', 'bridge', 'lighthouse',
+      'marina', 'theatre', 'music_venue',
     ];
     const googleBackedTypes = ALL_BUILT_IN_TYPES.filter(
       type => !notGoogleBacked.includes(type),

@@ -296,9 +296,12 @@ async function fetchOsmPlaces(
     // no single tag value — "a historic place" is castle OR monument OR ruins
     // — and picking one of them would silently drop the others (KAN-406).
     const values = osmTagValues(tag);
-    const selector = values.length === 1
+    const selector = (values.length === 1
       ? `["${tag.key}"="${values[0]}"]`
-      : `["${tag.key}"~"^(${values.join('|')})$"]`;
+      : `["${tag.key}"~"^(${values.join('|')})$"]`)
+      // A companion tag narrows the selector rather than replacing it, so
+      // Overpass never returns the elements we would only discard.
+      + (tag.where ? `["${tag.where.key}"="${tag.where.value}"]` : '');
     clauseEntries.push({ poiType, clause: `nwr${selector}(around:${radiusMeters},${lat},${lng});` });
   }
   if (clauseEntries.length === 0) { return result; }
@@ -341,6 +344,9 @@ async function fetchOsmPlaces(
         if (!tag) { continue; }
         const elementValue = el.tags[tag.key];
         if (elementValue == null || !osmTagValues(tag).includes(elementValue)) { continue; }
+        // Same companion the clause was built with — filtering without it
+        // would accept every pitch the query happened to return.
+        if (tag.where && el.tags[tag.where.key] !== tag.where.value) { continue; }
 
         result[poiType].push({
           osmId:          `${el.type}/${el.id}`,

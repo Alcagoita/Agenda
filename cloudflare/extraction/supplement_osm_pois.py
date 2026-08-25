@@ -111,6 +111,70 @@ TAG_TYPES: tuple[tuple[str, str, str], ...] = (
     ('leisure', 'playground', 'playground'),
     ('amenity', 'bar', 'bar'),
     ('amenity', 'pub', 'bar'),
+    # KAN-408. The app gained 43 Nature/Landmarks types and the importer knew
+    # none of them, so OSM could never supply one.
+    #
+    # Measured while checking praias fluviais: Foursquare had 160 of them
+    # typed 'beach' and OSM had ZERO. Every "praia fluvial" in osm_poi had
+    # arrived as 'park' or 'cafe' through some unrelated tag, because
+    # natural=beach was never asked for. Same defect KAN-412 named from the
+    # other side: a type the app knows and the query never requests.
+    ('tourism', 'theme_park', 'amusement_park'),
+    ('tourism', 'aquarium', 'aquarium'),
+    ('tourism', 'gallery', 'art_gallery'),
+    ('natural', 'beach', 'beach'),
+    ('leisure', 'garden', 'botanical_garden'),
+    ('leisure', 'bowling_alley', 'bowling_alley'),
+    ('craft', 'brewery', 'brewery'),
+    ('tourism', 'camp_site', 'campground'),
+    ('amenity', 'casino', 'casino'),
+    ('landuse', 'cemetery', 'cemetery'),
+    ('building', 'church', 'church'),
+    ('amenity', 'community_centre', 'community_center'),
+    ('amenity', 'arts_centre', 'cultural_center'),
+    ('leisure', 'golf_course', 'golf_course'),
+    ('leisure', 'nature_reserve', 'hiking_area'),
+    ('historic', 'castle', 'historical_landmark'),
+    ('historic', 'monument', 'historical_landmark'),
+    ('historic', 'memorial', 'historical_landmark'),
+    ('historic', 'ruins', 'historical_landmark'),
+    ('historic', 'archaeological_site', 'historical_landmark'),
+    ('historic', 'fort', 'historical_landmark'),
+    ('historic', 'manor', 'historical_landmark'),
+    ('historic', 'monastery', 'historical_landmark'),
+    ('historic', 'tower', 'historical_landmark'),
+    ('historic', 'city_gate', 'historical_landmark'),
+    ('historic', 'aqueduct', 'historical_landmark'),
+    ('building', 'mosque', 'mosque'),
+    ('tourism', 'museum', 'museum'),
+    ('amenity', 'nightclub', 'night_club'),
+    ('tourism', 'caravan_site', 'rv_park'),
+    ('leisure', 'spa', 'spa'),
+    ('leisure', 'stadium', 'stadium'),
+    ('building', 'synagogue', 'synagogue'),
+    # leisure=pitch alone is EVERY pitch — football, basketball, padel. On its
+    # own this typed every soccer field in the country as a tennis court.
+    # The fourth element is a required companion tag (KAN-408 review).
+    ('leisure', 'pitch', 'tennis_court', ('sport', 'tennis')),
+    ('tourism', 'attraction', 'tourist_attraction'),
+    ('leisure', 'water_park', 'water_park'),
+    ('craft', 'winery', 'winery'),
+    ('tourism', 'zoo', 'zoo'),
+    ('tourism', 'viewpoint', 'viewpoint'),
+    ('waterway', 'waterfall', 'waterfall'),
+    ('waterway', 'river', 'river'),
+    ('natural', 'peak', 'mountain'),
+    ('natural', 'water', 'lake'),
+    ('place', 'island', 'island'),
+    ('sport', 'surfing', 'surf_spot'),
+    ('natural', 'hot_spring', 'hot_spring'),
+    ('boundary', 'protected_area', 'nature_preserve'),
+    ('place', 'square', 'plaza'),
+    ('man_made', 'bridge', 'bridge'),
+    ('man_made', 'lighthouse', 'lighthouse'),
+    ('leisure', 'marina', 'marina'),
+    ('amenity', 'theatre', 'theatre'),
+    ('amenity', 'music_venue', 'music_venue'),
 )
 
 
@@ -260,8 +324,24 @@ def address_for(tags: dict[str, str]) -> str | None:
     return rendered or None
 
 
+def tag_rule_matches(tags: dict[str, str], rule: tuple) -> bool:
+    """One TAG_TYPES rule against one element's tags.
+
+    A rule is (key, value, poi_type) or (key, value, poi_type, (key, value))
+    where the fourth element is a companion tag that must ALSO match. Some
+    OSM concepts need two tags to be themselves: `leisure=pitch` is every
+    pitch there is, and only `sport=tennis` alongside it means a tennis
+    court (KAN-408 review).
+    """
+    key, value, _poi_type = rule[0], rule[1], rule[2]
+    if tags.get(key) != value:
+        return False
+    companion = rule[3] if len(rule) > 3 else None
+    return companion is None or tags.get(companion[0]) == companion[1]
+
+
 def types_for(tags: dict[str, str]) -> list[str]:
-    types = [poi_type for key, value, poi_type in TAG_TYPES if tags.get(key) == value]
+    types = [rule[2] for rule in TAG_TYPES if tag_rule_matches(tags, rule)]
     shop = tags.get('shop')
     if shop and shop not in EXCLUDED_SHOP_VALUES and 'store' not in types and shop not in {'supermarket', 'bakery', 'florist', 'ice_cream', 'tattoo', 'hairdresser', 'beauty'}:
         types.append('store')
@@ -519,7 +599,11 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
     # way locations usable alongside nodes without pretending bbox corners are
     # precise venue coordinates.
     selectors = [
-        'nwr["amenity"~"^(atm|cafe|pharmacy|fuel|bank|bureau_de_change|money_transfer|restaurant|fast_food|library|post_office|clinic|school|bar|pub)$"]',
+        # KAN-408 added `ice_cream` here. KAN-399 mapped amenity=ice_cream in
+        # TAG_TYPES but never added it to this selector, so the parlour you sit
+        # in could not be imported — only shop=ice_cream, which the blanket
+        # `shop` line happened to cover. Found by the coverage guard below.
+        'nwr["amenity"~"^(atm|cafe|pharmacy|fuel|bank|bureau_de_change|money_transfer|restaurant|fast_food|library|post_office|clinic|school|bar|pub|ice_cream)$"]',
         'nwr["office"="financial"]',
         # KAN-412. These carry types the app now has, and the classifier now
         # maps them — but a TAG_TYPES entry for a value the query never asks
@@ -530,6 +614,24 @@ def osm_query(min_lat: float, max_lat: float, min_lng: float, max_lng: float) ->
         'nwr["amenity"~"^(car_wash|car_rental|veterinary|cinema|charging_station)$"]',
         'nwr["leisure"~"^(fitness_centre|park|playground)$"]',
         'nwr["shop"]',
+        # KAN-408. Value-scoped, never a blanket key:  alone would
+        # pull every tree and pond in the bbox. Unnamed elements are dropped
+        # downstream, so the volume this adds is the named minority.
+        'nwr["amenity"~"^(arts_centre|casino|community_centre|music_venue|nightclub|theatre)$"]',
+        'nwr["boundary"~"^(protected_area)$"]',
+        'nwr["building"~"^(church|mosque|synagogue)$"]',
+        'nwr["craft"~"^(brewery|winery)$"]',
+        'nwr["historic"~"^(aqueduct|archaeological_site|castle|city_gate|fort|manor|memorial|monastery|monument|ruins|tower)$"]',
+        'nwr["landuse"~"^(cemetery)$"]',
+        'nwr["leisure"~"^(bowling_alley|garden|golf_course|marina|nature_reserve|spa|stadium|water_park)$"]',
+        # pitch only with the sport that makes it a tennis court.
+        'nwr["leisure"="pitch"]["sport"="tennis"]',
+        'nwr["man_made"~"^(bridge|lighthouse)$"]',
+        'nwr["natural"~"^(beach|hot_spring|peak|water)$"]',
+        'nwr["place"~"^(island|square)$"]',
+        'nwr["sport"~"^(surfing)$"]',
+        'nwr["tourism"~"^(aquarium|attraction|camp_site|caravan_site|gallery|museum|theme_park|viewpoint|zoo)$"]',
+        'nwr["waterway"~"^(river|waterfall)$"]',
     ]
     bbox = f'({min_lat},{min_lng},{max_lat},{max_lng})'
     return f'[out:json][timeout:170];({"".join(selector + bbox + ";" for selector in selectors)});out center;'

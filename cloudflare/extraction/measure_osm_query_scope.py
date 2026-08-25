@@ -61,7 +61,10 @@ from supplement_osm_pois import TAG_TYPES
 # Derived, never hand-listed: which shop values the classifier ALREADY maps.
 # Asserting this by hand is how a report claims bakeries are broken when a
 # rule for them has existed since KAN-399.
-MAPPED_SHOP = {value: poi_type for key, value, poi_type in TAG_TYPES if key == 'shop'}
+# TAG_TYPES rules are 3- or 4-tuples since KAN-408's review: the fourth
+# element is a companion tag that must also match. Indexed rather than
+# unpacked so a rule gaining one does not break this.
+MAPPED_SHOP = {rule[1]: rule[2] for rule in TAG_TYPES if rule[0] == 'shop'}
 
 # Polite spacing between counted queries. Overpass asks for well under one
 # request per second sustained; this is deliberately slower.

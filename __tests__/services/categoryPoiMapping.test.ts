@@ -53,7 +53,11 @@ describe('placeTypeLabel', () => {
   it('title-cases unknown type strings as a fallback', () => {
     // nail_salon is a catalog type now (KAN-401), so it takes its own
     // sentence-case copy rather than this fallback.
-    expect(placeTypeLabel('bowling_alley')).toBe('Bowling Alley');
+    // `bowling_alley` used to stand here and became a catalog type in
+    // KAN-408, taking its own sentence-case copy — the same thing that
+    // happened to nail_salon above. Picked a string no catalog will claim,
+    // so the next new type cannot quietly invalidate this again.
+    expect(placeTypeLabel('artisan_cheese_cave')).toBe('Artisan Cheese Cave');
     expect(placeTypeLabel('ice_cream_shop')).toBe('Ice Cream Shop');
   });
 });
