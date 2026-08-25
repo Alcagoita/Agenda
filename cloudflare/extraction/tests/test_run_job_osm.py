@@ -475,3 +475,92 @@ class SourceConflictQueueTest(unittest.TestCase):
             [self.conflict('ambiguous', 'fsq1'), self.conflict('ambiguous', 'fsq2')])
         self.assertIn("'fsq1'", statements[0])
         self.assertIn("'fsq2'", statements[0])
+
+
+class CommunityConflictTest(unittest.TestCase):
+    """KAN-390 review — a community row is a first-class conflict source.
+
+    `possible_renames` already reports against {foursquare, community}, and
+    the ambiguity path can match one too: `Hua Xin` is a community POI 7.8 m
+    from the OSM node whose import it caused to be skipped. A schema that
+    only admitted foursquare/openstreetmap would not have filtered those out
+    — their INSERT would fail, taking the scope with it.
+    """
+
+    def setUp(self):
+        self.saved = {n: getattr(run_job, n) for n in ('worker_client', 'd1_client', 'r2_client')}
+        self.original_scope = supplement_osm_pois.supplement_scope
+        self.original_corrections = supplement_osm_pois.source_corrections
+        supplement_osm_pois.source_corrections = lambda: {}
+        self.d1 = FakeD1()
+        self.r2 = FakeR2()
+        run_job.d1_client = self.d1
+        run_job.r2_client = self.r2
+
+    def tearDown(self):
+        for name, value in self.saved.items():
+            setattr(run_job, name, value)
+        supplement_osm_pois.supplement_scope = self.original_scope
+        supplement_osm_pois.source_corrections = self.original_corrections
+
+    @staticmethod
+    def community_conflict():
+        return supplement_osm_pois.PossibleRename(
+            osm_element_id='node/13196130054', osm_name='Hua Xin',
+            osm_lat=38.799, osm_lng=-9.1777, poi_type='restaurant',
+            source='community', source_id='community:4ed99b7b',
+            source_name='Hua Xin', source_lat=38.79903, source_lng=-9.17790,
+            distance_meters=7.8, severity='same_location',
+            conflict_class='ambiguous',
+        )
+
+    def test_the_schema_admits_a_community_source(self):
+        schema = os.path.join(
+            os.path.dirname(EXTRACTION_DIR), 'osm_source_conflict_schema.sql')
+        with open(schema, encoding='utf-8') as handle:
+            sql = handle.read()
+        self.assertIn("'community'", sql)
+        for source in ('foursquare', 'openstreetmap', 'community'):
+            self.assertIn(f"'{source}'", sql)
+
+    def test_a_community_conflict_reaches_the_generated_sql(self):
+        statements = supplement_osm_pois.statements_for_conflicts(
+            [self.community_conflict()], country_code='PT', place_id='osm-relation-5400891')
+        self.assertEqual(len(statements), 1)
+        self.assertIn("'community'", statements[0])
+        self.assertIn("'community:4ed99b7b'", statements[0])
+        self.assertIn('ON CONFLICT', statements[0])
+
+    def test_conflicts_are_written_before_the_country_scope_checkpoint(self):
+        # D1 first, then the checkpoint: a crash between them re-runs the
+        # scope, which the upsert makes harmless. The reverse order could
+        # mark a scope done having written no conflicts.
+        worker = FakeWorkerClient([scope('osm-relation-5400891')])
+        run_job.worker_client = worker
+        order = []
+
+        def behaviour(place_id, *_a, **_k):
+            return [], {'unique_rows_to_write': 0}, [self.community_conflict()]
+
+        supplement_osm_pois.supplement_scope = behaviour
+        original_execute = self.d1.execute
+
+        def record(statement):
+            if 'osm_source_conflict' in statement:
+                order.append('conflict_write')
+            return original_execute(statement)
+
+        self.d1.execute = record
+        original_completed = worker.osm_scope_completed
+
+        def completed(*args, **kwargs):
+            order.append('checkpoint')
+            return original_completed(*args, **kwargs)
+
+        worker.osm_scope_completed = completed
+
+        run_job.run_osm_supplement('PT', 'run-1')
+
+        self.assertIn('conflict_write', order)
+        self.assertIn('checkpoint', order)
+        self.assertLess(order.index('conflict_write'), order.index('checkpoint'))

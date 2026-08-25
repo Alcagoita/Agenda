@@ -26,7 +26,13 @@ CREATE TABLE IF NOT EXISTS osm_source_conflict (
   -- the type they share) — an element ambiguous between two candidates is
   -- two rows, because each is a separate thing to review.
   osm_element_id    TEXT NOT NULL,
-  source            TEXT NOT NULL CHECK (source IN ('foursquare', 'openstreetmap')),
+  -- All three, because all three can be the row an element conflicts with.
+  -- `possible_renames` already reports against {foursquare, community}, and
+  -- a community submission is exactly the kind of row this queue exists to
+  -- reconcile: "Hua Xin" is a community POI 7.8 m from the OSM node it
+  -- caused to be skipped. Omitting it does not filter those conflicts out —
+  -- it makes their INSERT fail, which fails the whole scope.
+  source            TEXT NOT NULL CHECK (source IN ('foursquare', 'openstreetmap', 'community')),
   source_id         TEXT NOT NULL,
   poi_type          TEXT NOT NULL,
 
