@@ -84,7 +84,7 @@ import WearNotificationModule from '../native/WearNotificationModule';
 import { Coordinates, getLastKnownPosition, getPositionLowAccuracy } from './geolocation';
 import { getDistanceMeters, searchNearbyPlaces, NearbyPlace, placeTypeLabel, PoiSearchSource, PoiCoverageStatus, isPoiSearchDegraded } from './maps';
 import { markAllPoiAlertsSeen } from './firestore';
-import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, Trip, MallSnapshot } from '../types';
+import { Task, ALL_POI_TYPES, CLUSTER_LEISURE_TYPES, HERO_RADIUS_M, Trip, MallSnapshot } from '../types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../constants/googlePlaceTypes';
 import { fireExitPrompt } from './notifications';
 import { markExitPromptSeen } from './firestore';
@@ -178,8 +178,8 @@ export type ProximityCallback = (
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Under this distance: show orange hero card + fire notification. */
-const HERO_RADIUS_M = 100;
+// HERO_RADIUS_M lives in ../types: NearbyCard needs the same number and
+// cannot take a runtime import from this module (KAN-419).
 
 /** Under this distance: show grey approaching card. Max search radius. */
 export const NEARBY_RADIUS = 400; // metres — exported for copy.ts reference

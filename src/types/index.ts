@@ -725,6 +725,33 @@ export function isPoiApiServableType(poiType: string): boolean {
     || (CLUSTER_LEISURE_TYPES as readonly string[]).includes(poiType);
 }
 
+/**
+ * Under this distance a place is "at your feet" — the orange hero zone.
+ *
+ * One authority, because two consumers decide the same thing with it and
+ * must never drift apart (KAN-419): `proximity.ts` picks the hero POI type,
+ * fires the notification and records the exit prompt; `NearbyCard` decides
+ * which tasks render as hero cards. The card ORs its own distance filter
+ * with the engine's verdict — `heroEntries.length > 0 || nearbyPoiType !==
+ * null` — so a divergence is incoherent either way round: a wider card
+ * radius renders heroes that never notified, a narrower one leaves the
+ * orange state on with no card to show.
+ *
+ * It lives here rather than in `proximity.ts` for a concrete reason. The
+ * card's only other link to the engine is `import type { PlacesMap }`,
+ * which TypeScript erases, so the card has no runtime dependency on the
+ * engine at all. Importing a *value* from `proximity.ts` would pull
+ * `@notifee/react-native` into the card's module graph, which fails outright
+ * under Jest. A dependency-light module both sides already use keeps them
+ * agreeing on the number without coupling their runtime graphs.
+ *
+ * Distinct from `NEARBY_RADIUS` (400), `HOME_RADIUS_M`, `HABITAT_RADIUS_M`
+ * and `POI_GEOFENCE_RADIUS` below — different quantities, never merged. Also
+ * distinct from `clusterLeisure.ts`'s `LEISURE_NEAR_STOP_RADIUS_M`, which is
+ * the same number and a different meaning.
+ */
+export const HERO_RADIUS_M = 100;
+
 /** Default geofence radius in metres per POI type. */
 export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   // KAN-408 — an area, not a shopfront: a beach or a hiking route is
