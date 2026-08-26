@@ -109,3 +109,119 @@ class CountryCodeValidationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CategoryMapPortabilityTest(unittest.TestCase):
+    """KAN-410 — promoting rows fixes Portugal; the map fixes everywhere else.
+
+    `extract_place`/`extract_country` filter Foursquare to the ids in
+    poiTypeCategories.json + the two subtype files. A category absent from
+    them is never downloaded, so it can never be promoted later. PT only has
+    these rows because KAN-404 ran one unfiltered extract by hand.
+
+    A type promoted here but missing from the map is therefore a type only
+    Portugal will ever have — and nothing reports it, because coverage still
+    reads `mapped`.
+    """
+
+    # Every leaf this ticket maps, and the type it must land on. Enumerated
+    # rather than counted: a total tells you something changed, this tells
+    # you WHAT, and it is the thing a reviewer can check against the ticket.
+    LEAF_TO_TYPE = {
+        'Scenic Lookout': 'viewpoint',
+        'Plaza': 'plaza', 'Pedestrian Plaza': 'plaza',
+        'Garden': 'botanical_garden', 'Sculpture Garden': 'botanical_garden',
+        'Music Venue': 'music_venue', 'Concert Hall': 'music_venue',
+        'Rock Club': 'music_venue',
+        'Theater': 'theatre', 'Performing Arts Venue': 'theatre',
+        'Amphitheater': 'theatre', 'Comedy Club': 'theatre',
+        'Monument': 'historical_landmark', 'Castle': 'historical_landmark',
+        'Palace': 'historical_landmark',
+        'River': 'river', 'Mountain': 'mountain', 'Bridge': 'bridge',
+        'Harbor or Marina': 'marina', 'Lake': 'lake', 'Surf Spot': 'surf_spot',
+        'Lighthouse': 'lighthouse', 'Waterfall': 'waterfall',
+        'Nature Preserve': 'nature_preserve', 'Hot Spring': 'hot_spring',
+        'Island': 'island', 'Soccer Stadium': 'stadium',
+    }
+
+    def setUp(self):
+        import analyse_poi_candidates as analyse
+        self.analyse = analyse
+        self.labels = analyse.mapped_category_labels()
+        # reachable_types() reads `type_relation` from LIVE D1. A unit test
+        # must not depend on the network, nor on production data being in any
+        # particular state — the bridges are stubbed with the two the
+        # docstring names, which is all this test needs to be meaningful.
+        self._real_pairs = analyse._type_relation_pairs
+        analyse._type_relation_pairs = lambda: [
+            ('fitness_center', 'gym'), ('grocery_store', 'supermarket'),
+        ]
+        self.reachable = analyse.reachable_types()
+
+    def tearDown(self):
+        self.analyse._type_relation_pairs = self._real_pairs
+
+    def test_the_union_parser_sees_every_type_this_ticket_needs(self):
+        # It split on the first `;` after the union began, including one
+        # inside a comment, and read 33 of 86 — silently. Every type declared
+        # after that point looked unreachable, which blocked its candidates
+        # from ever promoting.
+        union = self.analyse._union_types()
+        missing = sorted(set(self.LEAF_TO_TYPE.values()) - union)
+        self.assertEqual(missing, [], 'union parse truncated or types removed')
+        # A type declared FIRST and one declared LAST, so a truncation at
+        # either end is caught rather than only the tail.
+        self.assertIn('atm', union)
+        self.assertIn('music_venue', union)
+
+    def test_every_leaf_this_ticket_maps_resolves_to_its_type(self):
+        for leaf, expected in sorted(self.LEAF_TO_TYPE.items()):
+            self.assertEqual(self.labels.get(leaf), expected,
+                             f'{leaf} does not map to {expected}')
+            self.assertIn(expected, self.reachable, f'{expected} is unreachable')
+
+    def test_the_contaminated_leaf_stays_unmapped(self):
+        # `Bathing Area` reads like praia fluvial and holds real natural
+        # pools, but Foursquare also files beauty businesses there. Mapping
+        # it would answer a beach search with a nail salon. KAN-421 owns
+        # recovering the genuine rows behind a name-REJECT rule.
+        self.assertIsNone(self.labels.get('Bathing Area'))
+        import promote_poi_candidates as promote
+        self.assertIn('Bathing Area', promote.CONTAMINATED_LEAVES)
+
+    def test_the_extraction_filter_asks_for_every_mapped_id(self):
+        # Derived from the mapping files themselves rather than a magic
+        # number, so the assertion stays exact as the map grows.
+        import json
+        from category_ids import all_category_ids
+        # all_category_ids returns a sorted list, not a set.
+        ids = set(all_category_ids())
+        expected = set()
+        for filename in ('poiTypeCategories.json', 'storeSubtypeCategories.json',
+                         'foodSubtypeCategories.json'):
+            path = os.path.join(os.path.dirname(EXTRACTION_DIR), 'src', filename)
+            with open(path, encoding='utf-8') as handle:
+                mapping = json.load(handle)
+            for entry in mapping.values():
+                if 'category_id' in entry:
+                    expected.add(entry['category_id'])
+                for extra in entry.get('also', ()):
+                    expected.add(extra['category_id'])
+        self.assertEqual(ids, expected, 'the filter and the map disagree')
+
+    def test_a_multi_leaf_type_contributes_all_its_ids(self):
+        # `historical_landmark` is Monument AND Castle AND Palace. Reading
+        # only the primary would extract a third of the material and report
+        # success.
+        import json
+        from category_ids import all_category_ids
+        path = os.path.join(os.path.dirname(EXTRACTION_DIR), 'src',
+                            'poiTypeCategories.json')
+        with open(path, encoding='utf-8') as handle:
+            mapping = json.load(handle)
+        entry = mapping['historical_landmark']
+        names = {entry['category_name']} | {a['category_name'] for a in entry.get('also', ())}
+        self.assertTrue({'Monument', 'Castle', 'Palace'} <= names)
+        ids = set(all_category_ids())
+        for extra in entry.get('also', ()):
+            self.assertIn(extra['category_id'], ids)
