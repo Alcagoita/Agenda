@@ -30,6 +30,10 @@ export interface Env {
   // Cloudflare API token; BUILD_TRIGGER_SECRET is what it uses to call back
   // /internal/* (passed to it as an env var when started — see triggerBuild).
   EXTRACTION_CONTAINER: DurableObjectNamespace<ExtractionContainer>;
+  // The resolver class uses the same RPC surface in production and tests;
+  // this binding stays unbranded because the local Vitest runtime has no
+  // cloudflare:workers module to provide DurableObjectBranded.
+  NOMINATIM_RESOLVER?: DurableObjectNamespace<any>;
   BUILD_TRIGGER_SECRET?: string;
   // Foursquare Places Portal JWT (expires, manual renewal — see
   // cloudflare/README.md's Extraction pipeline section). Passed to the
@@ -671,15 +675,15 @@ async function findPlace(env: Env, lat: number, lng: number): Promise<PlaceRow |
 // Nominatim service the app already uses client-side (maps.ts), same
 // User-Agent policy requirement.
 //
-// No shared 1req/s throttle across isolates (would need a Durable Object or
-// KV-backed token bucket — real infra, out of scope here). Acceptable for
-// now: this only runs on a genuinely new Place resolution, which findPlace's
-// bbox fast-path and the app's own zero-check already make rare. Revisit
-// with a real global limiter before this traffic grows.
+// KAN-424 routes unresolved locations through NominatimResolver, which
+// serializes calls globally and caches stable place identities by digest.
 
 const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
 const NOMINATIM_USER_AGENT = 'BrushPoiBackend/1 (poi-api.brushaway.app)';
-const NOMINATIM_TIMEOUT_MS = 8_000;
+// KAN-424: three settlement-resolution attempts share this request budget.
+// A short per-attempt deadline keeps an uncovered-area recovery request
+// responsive when the external provider is slow or unavailable.
+const NOMINATIM_TIMEOUT_MS = 2_000;
 
 /**
  * Zoom levels to try, finest first. A single fixed zoom does not reliably
@@ -788,7 +792,7 @@ async function nominatimReverse(lat: number, lng: number, zoom: number): Promise
  * resolves cleanly — callers must treat that as "genuinely unknown, don't
  * record", not as an empty administrative area.
  */
-async function resolvePlaceIdentity(lat: number, lng: number): Promise<PlaceGeo | null> {
+async function resolvePlaceIdentityDirect(lat: number, lng: number): Promise<PlaceGeo | null> {
   for (const zoom of NOMINATIM_ZOOM_CANDIDATES) {
     const result = await nominatimReverse(lat, lng, zoom);
     if (!result) return null; // transport/parse failure — do not retry a coarser zoom on a broken call
@@ -808,6 +812,38 @@ async function resolvePlaceIdentity(lat: number, lng: number): Promise<PlaceGeo 
     }
   }
   return null;
+}
+
+type NominatimCacheEntry = { expiresAt: number; value: PlaceGeo | null };
+
+/** Coordinates are never persisted or used as a key: only this digest is. */
+async function coordinateCacheKey(lat: number, lng: number): Promise<string> {
+  const bytes = new TextEncoder().encode(`${lat.toFixed(5)},${lng.toFixed(5)}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+
+/** Global provider guard and bounded stable-result cache for coverage resolution. */
+export class NominatimResolver {
+  constructor(private readonly ctx: DurableObjectState, _env: Env) {}
+  private queue: Promise<unknown> = Promise.resolve();
+
+  async resolve(lat: number, lng: number): Promise<PlaceGeo | null> {
+    const run = this.queue.then(async () => {
+      const key = await coordinateCacheKey(lat, lng);
+      const cached = await this.ctx.storage.get<NominatimCacheEntry>(key);
+      if (cached && cached.expiresAt > Date.now()) return cached.value;
+      const lastCallAt = await this.ctx.storage.get<number>('last-nominatim-call-at') ?? 0;
+      const waitMs = Math.max(0, 1_000 - (Date.now() - lastCallAt));
+      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+      await this.ctx.storage.put('last-nominatim-call-at', Date.now());
+      const value = await resolvePlaceIdentityDirect(lat, lng);
+      if (value) await this.ctx.storage.put(key, { value, expiresAt: Date.now() + 86_400_000 });
+      return value;
+    });
+    this.queue = run.catch(() => undefined);
+    return run as Promise<PlaceGeo | null>;
+  }
 }
 
 /**
@@ -2342,7 +2378,10 @@ export default {
         return respondCoverageRequest(existing);
       }
 
-      const geo = await resolvePlaceIdentity(lat, lng);
+      const resolver = env.NOMINATIM_RESOLVER as any;
+      const geo = resolver
+        ? await resolver.getByName('global').resolve(lat, lng)
+        : await resolvePlaceIdentityDirect(lat, lng);
       if (!geo) {
         // Transport failure or an unresolvable point — genuinely unknown,
         // not a real Place. Don't fabricate a demand record without a

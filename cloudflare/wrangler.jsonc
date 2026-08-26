@@ -83,13 +83,17 @@
       {
         "name": "EXTRACTION_CONTAINER",
         "class_name": "ExtractionContainer"
+      },
+      {
+        "name": "NOMINATIM_RESOLVER",
+        "class_name": "NominatimResolver"
       }
     ]
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["ExtractionContainer"]
+      "new_sqlite_classes": ["ExtractionContainer", "NominatimResolver"]
     }
   ]
 }
