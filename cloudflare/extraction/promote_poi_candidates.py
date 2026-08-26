@@ -78,6 +78,18 @@ GEOGRAPHY_LEAVES = frozenset({
 # dropped, and this one may be revisited if a use case appears.
 NOT_WANTED_TYPES = frozenset({'school', 'clinic', 'financial_service'})
 
+# KAN-410. Foursquare leaves that LOOK like a clean mapping and are not.
+#
+#   Bathing Area — reads like "praia fluvial" and holds a genuine population
+#   of natural pools (Piscinas Naturais, Zona Balnear, Poça do Mata Sete),
+#   but Foursquare also files beauty businesses there: "All About Beauty",
+#   "Vida City SPA e Espaço ZEN", "Ervanária SaraNatura". Mapping it to
+#   `beach` would answer a beach search with a nail salon.
+#
+# Recovering the real ones needs the name as a REJECT filter, which is a
+# separate rule from anything here. Left unmapped rather than half-right.
+CONTAMINATED_LEAVES = frozenset({'Bathing Area'})
+
 # Product decision: load now, dormant until a use case exists.
 LODGING_LEAVES = frozenset({
     'Hotel', 'Hostel', 'Bed and Breakfast', 'Vacation Rental', 'Motel',

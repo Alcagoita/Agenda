@@ -45,7 +45,17 @@
   },
   "botanical_garden": {
     "category_id": "52e81612bcbc57f1066b7a22",
-    "category_name": "Botanical Garden"
+    "category_name": "Botanical Garden",
+    "also": [
+      {
+        "category_id": "4bf58dd8d48988d15a941735",
+        "category_name": "Garden"
+      },
+      {
+        "category_id": "4bf58dd8d48988d166941735",
+        "category_name": "Sculpture Garden"
+      }
+    ]
   },
   "bowling_alley": {
     "category_id": "4bf58dd8d48988d1e4931735",
@@ -165,7 +175,21 @@
   },
   "historical_landmark": {
     "category_id": "4deefb944765f83613cdba6e",
-    "category_name": "Historic and Protected Site"
+    "category_name": "Historic and Protected Site",
+    "also": [
+      {
+        "category_id": "4bf58dd8d48988d12d941735",
+        "category_name": "Monument"
+      },
+      {
+        "category_id": "50aaa49e4b90af0d42d5de11",
+        "category_name": "Castle"
+      },
+      {
+        "category_id": "52e81612bcbc57f1066b7a14",
+        "category_name": "Palace"
+      }
+    ]
   },
   "hospital": {
     "category_id": "4bf58dd8d48988d196941735",
@@ -272,7 +296,13 @@
   },
   "stadium": {
     "category_id": "4bf58dd8d48988d184941735",
-    "category_name": "Stadium"
+    "category_name": "Stadium",
+    "also": [
+      {
+        "category_id": "4bf58dd8d48988d188941735",
+        "category_name": "Soccer Stadium"
+      }
+    ]
   },
   "store": {
     "category_id": "4d4b7105d754a06378d81259",
@@ -390,5 +420,95 @@
   },
   "clothing_repair": {
     "category_name": "Clothing Alterations"
+  },
+  "viewpoint": {
+    "category_id": "4bf58dd8d48988d165941735",
+    "category_name": "Scenic Lookout"
+  },
+  "plaza": {
+    "category_id": "4bf58dd8d48988d164941735",
+    "category_name": "Plaza",
+    "also": [
+      {
+        "category_id": "52e81612bcbc57f1066b7a25",
+        "category_name": "Pedestrian Plaza"
+      }
+    ]
+  },
+  "music_venue": {
+    "category_id": "4bf58dd8d48988d1e5931735",
+    "category_name": "Music Venue",
+    "also": [
+      {
+        "category_id": "5032792091d4c4b30a586d5c",
+        "category_name": "Concert Hall"
+      },
+      {
+        "category_id": "4bf58dd8d48988d1e9931735",
+        "category_name": "Rock Club"
+      }
+    ]
+  },
+  "theatre": {
+    "category_id": "4bf58dd8d48988d137941735",
+    "category_name": "Theater",
+    "also": [
+      {
+        "category_id": "4bf58dd8d48988d1f2931735",
+        "category_name": "Performing Arts Venue"
+      },
+      {
+        "category_id": "56aa371be4b08b9a8d5734db",
+        "category_name": "Amphitheater"
+      },
+      {
+        "category_id": "4bf58dd8d48988d18e941735",
+        "category_name": "Comedy Club"
+      }
+    ]
+  },
+  "river": {
+    "category_id": "4eb1d4dd4b900d56c88a45fd",
+    "category_name": "River"
+  },
+  "mountain": {
+    "category_id": "4eb1d4d54b900d56c88a45fc",
+    "category_name": "Mountain"
+  },
+  "bridge": {
+    "category_id": "4bf58dd8d48988d1df941735",
+    "category_name": "Bridge"
+  },
+  "marina": {
+    "category_id": "4bf58dd8d48988d1e0941735",
+    "category_name": "Harbor or Marina"
+  },
+  "lake": {
+    "category_id": "4bf58dd8d48988d161941735",
+    "category_name": "Lake"
+  },
+  "surf_spot": {
+    "category_id": "4bf58dd8d48988d1e3941735",
+    "category_name": "Surf Spot"
+  },
+  "lighthouse": {
+    "category_id": "4bf58dd8d48988d15d941735",
+    "category_name": "Lighthouse"
+  },
+  "waterfall": {
+    "category_id": "56aa371be4b08b9a8d573560",
+    "category_name": "Waterfall"
+  },
+  "nature_preserve": {
+    "category_id": "52e81612bcbc57f1066b7a13",
+    "category_name": "Nature Preserve"
+  },
+  "hot_spring": {
+    "category_id": "4bf58dd8d48988d160941735",
+    "category_name": "Hot Spring"
+  },
+  "island": {
+    "category_id": "50aaa4314b90af0d42d5de10",
+    "category_name": "Island"
   }
 }

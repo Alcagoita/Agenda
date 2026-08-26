@@ -109,3 +109,66 @@ class CountryCodeValidationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CategoryMapPortabilityTest(unittest.TestCase):
+    """KAN-410 — promoting rows fixes Portugal; the map fixes everywhere else.
+
+    `extract_place`/`extract_country` filter Foursquare to the ids in
+    poiTypeCategories.json + the two subtype files. A category absent from
+    them is never downloaded, so it can never be promoted later. PT only has
+    these rows because KAN-404 ran one unfiltered extract by hand.
+
+    A type promoted here but missing from the map is therefore a type only
+    Portugal will ever have — and nothing reports it, because coverage still
+    reads `mapped`.
+    """
+
+    def setUp(self):
+        import analyse_poi_candidates as analyse
+        self.labels = analyse.mapped_category_labels()
+        self.reachable = analyse.reachable_types()
+
+    def test_the_union_parser_sees_every_type(self):
+        # It split on the first `;` after the union began, including one
+        # inside a comment, and read 33 of 86 — silently. Every type declared
+        # after that point looked unreachable, which blocked its candidates
+        # from ever promoting.
+        import analyse_poi_candidates as analyse
+        union = analyse._union_types()
+        self.assertGreater(len(union), 80, 'union parse truncated again')
+        for late in ('viewpoint', 'waterfall', 'lighthouse', 'music_venue'):
+            self.assertIn(late, union, f'{late} declared late and lost by the parser')
+
+    def test_every_leaf_this_ticket_maps_resolves_to_a_reachable_type(self):
+        for leaf in ['Scenic Lookout', 'Castle', 'Monument', 'Palace', 'Waterfall',
+                     'Bathing Area', 'Nature Preserve', 'Hot Spring', 'Island',
+                     'Lighthouse', 'Surf Spot', 'Harbor or Marina', 'Plaza',
+                     'Theater', 'Music Venue', 'Concert Hall', 'River', 'Mountain',
+                     'Lake', 'Bridge', 'Garden']:
+            poi_type = self.labels.get(leaf)
+            self.assertIsNotNone(poi_type, f'{leaf} is not in the category map')
+            self.assertIn(poi_type, self.reachable, f'{leaf} -> {poi_type} is unreachable')
+
+    def test_the_extraction_filter_asks_for_them(self):
+        # The half that makes this portable. Without it Madrid never
+        # downloads a castle, so there is nothing to promote there.
+        from category_ids import all_category_ids
+        ids = all_category_ids()
+        self.assertGreater(len(ids), 130, 'the filter did not widen')
+
+    def test_a_multi_leaf_type_contributes_all_its_ids(self):
+        # `historical_landmark` is Monument AND Castle AND Palace. Reading
+        # only the primary would extract a third of the material and report
+        # success.
+        import json, os
+        mapping = json.load(open(os.path.join(
+            os.path.dirname(EXTRACTION_DIR), 'src', 'poiTypeCategories.json')))
+        entry = mapping['historical_landmark']
+        names = {entry['category_name']} | {a['category_name'] for a in entry.get('also', ())}
+        for leaf in ('Monument', 'Castle', 'Palace'):
+            self.assertIn(leaf, names)
+        from category_ids import all_category_ids
+        ids = all_category_ids()
+        for extra in entry.get('also', ()):
+            self.assertIn(extra['category_id'], ids)

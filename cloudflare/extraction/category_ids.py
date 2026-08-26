@@ -15,7 +15,18 @@ CLOUDFLARE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def _category_ids(filename):
     path = os.path.join(CLOUDFLARE_DIR, 'src', filename)
     mapping = json.load(open(path))
-    return {v['category_id'] for v in mapping.values() if 'category_id' in v}
+    ids = set()
+    for entry in mapping.values():
+        # KAN-410 — a type may map to several Foursquare leaves. `museum` is
+        # one category; `historical_landmark` is Monument, Castle and Palace.
+        # Reading only the primary would extract a third of the material and
+        # report success.
+        if 'category_id' in entry:
+            ids.add(entry['category_id'])
+        for extra in entry.get('also', ()):
+            if 'category_id' in extra:
+                ids.add(extra['category_id'])
+    return ids
 
 def all_category_ids():
     ids = set()

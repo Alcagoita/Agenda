@@ -182,9 +182,10 @@ def mapped_category_labels():
                      'foodSubtypeCategories.json'):
         mapping = load_mapping(os.path.join(SRC_DIR, filename))
         for poi_type, entry in mapping.items():
-            name = entry.get('category_name')
-            if name:
-                labels.setdefault(name, poi_type)
+            for candidate in (entry, *entry.get('also', ())):
+                name = candidate.get('category_name')
+                if name:
+                    labels.setdefault(name, poi_type)
     return labels
 
 
@@ -251,7 +252,14 @@ def _union_types():
     source = os.path.join(os.path.dirname(CLOUDFLARE_DIR), 'src', 'types', 'index.ts')
     with open(source) as handle:
         text = handle.read()
-    union = text.split('export type PoiType =', 1)[1].split(';', 1)[0]
+    tail = text.split('export type PoiType =', 1)[1]
+    # Strip `//` comments BEFORE looking for the terminating semicolon. The
+    # union is documented heavily between its members, and a single `;` in
+    # any of that prose truncated the parse — it was reading 33 of 86 types,
+    # silently, which made every type declared after that point look
+    # unreachable and blocked its candidates from promoting (KAN-410).
+    uncommented = re.sub(r'//[^\n]*', '', tail)
+    union = uncommented.split(';', 1)[0]
     return frozenset(re.findall(r"'([a-z_]+)'", union))
 
 
