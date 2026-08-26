@@ -60,7 +60,13 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertEqual(poi.poi_types, ('restaurant',))
         self.assertEqual(poi.attributes, (('food_cuisine', 'portuguese'),))
 
-    def test_confident_nearby_same_name_is_skipped_but_different_name_is_admitted(self):
+    def test_a_matched_element_supersedes_the_foursquare_row_it_matched(self):
+        """KAN-427 reversed this. It used to assert the OSM row was dropped.
+
+        Both elements are now imported: one as a new place, one as the
+        current description of a place Foursquare already had. Only the
+        second carries a superseded id.
+        """
         existing = [
             supplement.Candidate('foursquare', 'fsq-santo', 'Santo Amaro', 'santo amaro', 39.80345, -8.10126, 'restaurant'),
         ]
@@ -68,9 +74,139 @@ class SupplementOsmPoisTest(unittest.TestCase):
             element(1, 'Santo Amaro', amenity='restaurant'),
             element(2, 'Lagar Restaurante', lat=39.80346, lng=-8.10127, amenity='restaurant'),
         ], existing, 39.80345)
-        self.assertEqual([poi.name for poi in imports], ['Lagar Restaurante'])
-        self.assertEqual(stats['matched_skipped'], 1)
+        self.assertEqual([poi.name for poi in imports], ['Santo Amaro', 'Lagar Restaurante'])
+        self.assertEqual([poi.superseded_fsq_place_id for poi in imports], ['fsq-santo', None])
+        self.assertEqual(stats['foursquare_superseded'], 1)
         self.assertEqual(stats['inserted'], 1)
+        # Nothing was skipped: `matched_skipped` now means an element dropped
+        # for a community or already-imported OSM row, not a Foursquare one.
+        self.assertEqual(stats.get('matched_skipped', 0), 0)
+
+    def test_the_foursquare_row_fills_only_the_fields_osm_lacks(self):
+        """OSM wins per field; Foursquare fills gaps. Never a wholesale swap.
+
+        The name is what OSM is here to correct, so it is never inherited.
+        Hours are what Foursquare reliably has and OSM tags rarely do, so
+        retiring the Foursquare row must not cost the app its hours.
+        """
+        existing = [
+            supplement.Candidate(
+                'foursquare', 'fsq-1', 'Lagar Restaurante Velho', 'lagar restaurante velho',
+                39.80345, -8.10126, 'restaurant',
+                brand='Grupo Lagar', address='Rua Velha 1', open_min=540, close_min=1320,
+                attributes=(('food_cuisine', 'italian'), ('store_kind', 'deli')),
+            ),
+        ]
+        imports, _, _ = supplement.classify_scope([
+            element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant', cuisine='portuguese'),
+        ], existing, 39.80345)
+
+        self.assertEqual(len(imports), 1)
+        merged = imports[0]
+        # OSM's own values are untouched.
+        self.assertEqual(merged.name, 'O Lagar')
+        self.assertIn(('food_cuisine', 'portuguese'), merged.attributes)
+        self.assertNotIn(('food_cuisine', 'italian'), merged.attributes)
+        # Foursquare fills what OSM did not have.
+        self.assertEqual(merged.brand, 'Grupo Lagar')
+        self.assertEqual(merged.open_min, 540)
+        self.assertEqual(merged.close_min, 1320)
+        self.assertEqual(merged.address, 'Rua Velha 1')
+        self.assertIn(('store_kind', 'deli'), merged.attributes)
+
+    def test_a_superseding_import_writes_the_retirement_and_the_hours(self):
+        poi = supplement.osm_poi_from_element(
+            element(2, 'O Lagar', amenity='restaurant'), {},
+        )
+        assert poi is not None
+        from dataclasses import replace as _replace
+        poi = _replace(poi, open_min=540, close_min=1320, superseded_fsq_place_id='fsq-1')
+
+        sql = ' '.join(supplement.statements_for_pois([poi]))
+
+        self.assertIn('INSERT INTO poi_source_correction', sql)
+        self.assertIn("'foursquare','fsq-1',0", sql)
+        # Never overwrite a human decision already in the registry.
+        self.assertIn('ON CONFLICT(source, source_id) DO NOTHING', sql)
+        # Whitespace-independent: any DO UPDATE on this conflict target would
+        # let the importer overwrite a human decision, however it is formatted.
+        self.assertNotIn('ON CONFLICT(source, source_id) DO UPDATE', sql)
+        # Hours are written as values, and a later refresh carrying none must
+        # not blank the ones inherited from the row this replaced.
+        self.assertIn(',540,1320)', sql.replace(' ', ''))
+
+    def test_every_inheritable_field_survives_a_later_empty_refresh(self):
+        """The inheritance would otherwise undo itself one refresh later.
+
+        Once an element supersedes a Foursquare row, that row is `visible = 0`
+        and the candidate loader skips it — so the next refresh of the same
+        element matches nothing and arrives with brand, address and hours all
+        empty. Every inheritable column has to be COALESCEd, or that refresh
+        blanks exactly what was inherited.
+        """
+        poi = supplement.osm_poi_from_element(element(2, 'O Lagar', amenity='restaurant'), {})
+        assert poi is not None
+        sql = ' '.join(supplement.statements_for_pois([poi]))
+
+        for column in ('brand', 'address', 'open_min', 'close_min'):
+            with self.subTest(column=column):
+                self.assertIn(f'{column} = COALESCE(excluded.{column}, {column})', sql)
+                self.assertNotIn(f'{column} = excluded.{column}', sql)
+
+    def test_a_refresh_without_attributes_keeps_the_inherited_ones(self):
+        """The blanket attribute delete was the sharpest form of the same bug.
+
+        An element arriving with no attributes must clear nothing; one
+        arriving with a cuisine clears only the cuisine it replaces.
+        """
+        bare = supplement.osm_poi_from_element(element(2, 'O Lagar', amenity='restaurant'), {})
+        assert bare is not None
+        self.assertNotIn('osm_poi_attribute', ' '.join(supplement.statements_for_pois([bare])))
+
+        typed = supplement.osm_poi_from_element(
+            element(3, 'O Lagar', amenity='restaurant', cuisine='portuguese'), {})
+        assert typed is not None
+        sql = ' '.join(supplement.statements_for_pois([typed]))
+        self.assertIn("dimension IN ('food_cuisine')", sql)
+        self.assertNotIn('DELETE FROM osm_poi_attribute WHERE osm_element_id IN', sql)
+
+    def test_an_import_that_supersedes_nothing_writes_no_retirement(self):
+        poi = supplement.osm_poi_from_element(element(2, 'O Lagar', amenity='restaurant'), {})
+        assert poi is not None
+        sql = ' '.join(supplement.statements_for_pois([poi]))
+        self.assertNotIn('poi_source_correction', sql)
+
+    def test_an_ambiguous_element_is_still_dropped_not_imported(self):
+        """Guard for the fall-through KAN-427 restructuring made possible.
+
+        Two indistinguishable candidates mean the element is dropped. Sharing
+        one import path between the matched and unmatched branches must not
+        let the ambiguous branch reach it.
+        """
+        existing = [
+            supplement.Candidate('foursquare', 'fsq-a', 'Casa Verde', 'casa verde', 39.80345, -8.10126, 'restaurant'),
+            supplement.Candidate('foursquare', 'fsq-b', 'Casa Verde', 'casa verde', 39.80345, -8.10127, 'restaurant'),
+        ]
+        imports, stats, conflicts = supplement.classify_scope([
+            element(1, 'Casa Verde', amenity='restaurant'),
+        ], existing, 39.80345)
+
+        self.assertEqual(imports, [])
+        self.assertEqual(stats['ambiguous_skipped'], 1)
+        self.assertEqual(stats.get('foursquare_superseded', 0), 0)
+        self.assertEqual(len(conflicts), 2)
+
+    def test_a_community_row_still_wins_and_the_element_is_dropped(self):
+        """A curated row is human-reviewed. OSM does not overrule a person."""
+        existing = [
+            supplement.Candidate('community', 'curated-1', 'Santo Amaro', 'santo amaro', 39.80345, -8.10126, 'restaurant'),
+        ]
+        imports, stats, _ = supplement.classify_scope([
+            element(1, 'Santo Amaro', amenity='restaurant'),
+        ], existing, 39.80345)
+        self.assertEqual(imports, [])
+        self.assertEqual(stats['matched_skipped'], 1)
+        self.assertEqual(stats.get('foursquare_superseded', 0), 0)
 
     def test_reordered_identity_terms_match_but_a_shared_surname_does_not(self):
         self.assertGreaterEqual(
@@ -102,9 +238,11 @@ class SupplementOsmPoisTest(unittest.TestCase):
             element(2, 'Café Rosa', amenity='cafe'),
         ], existing, 39.80345)
 
-        self.assertEqual([poi.name for poi in imports], ['Café Rosa'])
-        self.assertEqual(stats['matched_skipped'], 1)
-        self.assertEqual(stats['normalized_identity_matched_skipped'], 1)
+        # Both are imported since KAN-427, but only Ala Sul matched anything:
+        # it supersedes the Foursquare row, while Café Rosa is a new place.
+        self.assertEqual([poi.name for poi in imports], ['Café Ala Sul', 'Café Rosa'])
+        self.assertEqual([poi.superseded_fsq_place_id for poi in imports], ['ala-sul', None])
+        self.assertEqual(stats['normalized_identity_matched'], 1)
 
     def test_single_shared_identity_token_merges_only_at_close_range(self):
         """KAN-388's whole trade, stated as a test.
@@ -199,9 +337,11 @@ class SupplementOsmPoisTest(unittest.TestCase):
             element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
         ], existing, 39.80345)
 
-        self.assertEqual(imports, [])
-        self.assertEqual(stats['matched_skipped'], 1)
-        self.assertEqual(supplement.possible_renames(imports, existing), [])
+        # One venue, one surviving row — and since KAN-427 the surviving
+        # description is the OSM one, with the Foursquare row retired.
+        self.assertEqual([poi.name for poi in imports], ['O Lagar'])
+        self.assertEqual(imports[0].superseded_fsq_place_id, 'fsq-lagar')
+        self.assertEqual(stats['foursquare_superseded'], 1)
 
     def test_possible_renames_only_calculates_distance_for_nearby_same_type_rows(self):
         poi = supplement.osm_poi_from_element(
@@ -544,12 +684,16 @@ class AmbiguousConflictTest(unittest.TestCase):
             self.assertEqual(conflict.osm_element_id, 'node/1')
 
     def test_a_single_confident_match_is_not_a_conflict(self):
+        # One candidate is not ambiguous, so there is nothing to review. Since
+        # KAN-427 the element is imported and supersedes that candidate rather
+        # than being dropped — but the point here is still the empty conflict
+        # list, which is unchanged.
         imports, stats, conflicts = supplement.classify_scope(
             [self.element()], [self.candidate('fsq1', 'Café Central')], 41.5)
 
-        self.assertEqual(imports, [])
         self.assertEqual(stats.get('ambiguous_skipped', 0), 0)
         self.assertEqual(conflicts, [])
+        self.assertEqual([poi.superseded_fsq_place_id for poi in imports], ['fsq1'])
 
     def test_no_candidates_means_an_import_and_no_conflict(self):
         imports, _stats, conflicts = supplement.classify_scope(

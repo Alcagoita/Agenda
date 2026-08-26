@@ -215,6 +215,15 @@ class Candidate:
     lat: float
     lng: float
     poi_type: str
+    # KAN-427. A matched candidate is no longer only a reason to drop the OSM
+    # element — it is the row the OSM element replaces, so whatever it knows
+    # that OSM does not has to travel across. Default to empty so the many
+    # constructions that only care about identity stay unchanged.
+    brand: str | None = None
+    address: str | None = None
+    open_min: int | None = None
+    close_min: int | None = None
+    attributes: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -238,6 +247,15 @@ class OsmPoi:
     brand: str | None
     address: str | None
     attributes: tuple[tuple[str, str], ...]
+    # KAN-427. OSM tags carry opening hours rarely; Foursquare carries them
+    # often. When an OSM element replaces a Foursquare row these come across
+    # with it, so suppressing that row does not cost the app its hours.
+    open_min: int | None = None
+    close_min: int | None = None
+    # KAN-427. The Foursquare place this element replaces, if any. Carried on
+    # the row that causes the retirement rather than in a parallel list, so
+    # the two can never be written out of step.
+    superseded_fsq_place_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -514,6 +532,31 @@ class AmbiguousMatch:
     candidates: tuple
 
 
+def inherit_from_candidate(poi: OsmPoi, candidate: Candidate) -> OsmPoi:
+    """Per field: OSM's value wins, Foursquare fills the gaps (KAN-427).
+
+    "The OSM record survives" is about which description is current, not
+    about throwing a source away. OSM tags rarely carry opening hours and
+    Foursquare usually does, so a wholesale swap would trade a stale name
+    for missing hours — the same failure in the other direction. The name,
+    coordinates and types are never taken from the candidate: those are the
+    fields OSM is here to correct.
+    """
+    inherited = list(poi.attributes)
+    seen_dimensions = {dimension for dimension, _ in poi.attributes}
+    for dimension, value in candidate.attributes:
+        if dimension not in seen_dimensions:
+            inherited.append((dimension, value))
+    return replace(
+        poi,
+        brand=poi.brand or candidate.brand,
+        address=poi.address or candidate.address,
+        open_min=poi.open_min if poi.open_min is not None else candidate.open_min,
+        close_min=poi.close_min if poi.close_min is not None else candidate.close_min,
+        attributes=tuple(inherited),
+    )
+
+
 def confident_match(poi: OsmPoi, grid: dict[tuple[str, int, int], list[Candidate]], center_lat: float) -> Candidate | str | None:
     """Return an existing confident duplicate, ``ambiguous``, or None.
 
@@ -620,6 +663,39 @@ def candidate_bounds(min_lat: float, max_lat: float, min_lng: float, max_lng: fl
     return min_lat - lat_margin, max_lat + lat_margin, min_lng - lng_margin, max_lng + lng_margin
 
 
+def foursquare_attributes_in_box(box: str) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Foursquare's own attributes for one scope's neighbourhood (KAN-427).
+
+    Only the dimensions the app actually reads. A cuisine or a store kind is
+    part of what a place *is*, so it has to survive the Foursquare row being
+    suppressed — otherwise "OSM wins" would quietly cost the app a field OSM
+    never had.
+
+    The page is bounded on *places* and expanded with a LEFT JOIN, matching
+    the candidate loader. Paging on the joined rows instead would be wrong
+    twice over: `paged_query` advances with `source_id > last`, so a place
+    whose attribute rows straddled a page boundary would lose the remainder,
+    and a page of places that happened to have no attributes at all would
+    read as exhausted and end the scan early.
+    """
+    attributes: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for row in paged_query(lambda after: '''
+        WITH page AS (
+          SELECT fsq_place_id FROM poi WHERE %s AND fsq_place_id > %s ORDER BY fsq_place_id LIMIT 5000
+        )
+        SELECT page.fsq_place_id AS source_id, poi_attribute.dimension, poi_attribute.value
+        FROM page LEFT JOIN poi_attribute ON poi_attribute.fsq_place_id = page.fsq_place_id
+          AND poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
+        ORDER BY page.fsq_place_id
+    ''' % (box, sql_quote(after))):
+        if row['dimension'] is None:
+            continue
+        pair = (row['dimension'], row['value'])
+        if pair not in attributes[row['source_id']]:
+            attributes[row['source_id']].append(pair)
+    return {place: tuple(pairs) for place, pairs in attributes.items()}
+
+
 def existing_candidates_in_bbox(
     min_lat: float, max_lat: float, min_lng: float, max_lng: float,
     corrections: dict[tuple[str, str], SourceCorrection] | None = None,
@@ -641,18 +717,27 @@ def existing_candidates_in_bbox(
     lo_lat, hi_lat, lo_lng, hi_lng = candidate_bounds(min_lat, max_lat, min_lng, max_lng)
     box = f'lat BETWEEN {lo_lat} AND {hi_lat} AND lng BETWEEN {lo_lng} AND {hi_lng}'
     rows: list[Candidate] = []
+    # KAN-427 — read once, keyed by place, so the per-type rows below can each
+    # carry the same attribute set without a query per candidate.
+    attributes_by_place = foursquare_attributes_in_box(box)
     for row in paged_query(lambda after: '''
         WITH page AS (
-          SELECT fsq_place_id, name, dedupe_name, lat, lng
+          SELECT fsq_place_id, name, dedupe_name, lat, lng, brand, address, open_min, close_min
           FROM poi WHERE %s AND fsq_place_id > %s ORDER BY fsq_place_id LIMIT 5000
         )
-        SELECT page.fsq_place_id AS source_id, page.name, page.dedupe_name, page.lat, page.lng, poi_type.poi_type
+        SELECT page.fsq_place_id AS source_id, page.name, page.dedupe_name, page.lat, page.lng,
+               page.brand, page.address, page.open_min, page.close_min, poi_type.poi_type
         FROM page LEFT JOIN poi_type ON poi_type.fsq_place_id = page.fsq_place_id
         ORDER BY page.fsq_place_id
     ''' % (box, sql_quote(after))):
         correction = corrections.get(('foursquare', row['source_id']))
         if row['poi_type'] is not None and (correction is None or correction.visible):
-            rows.append(Candidate('foursquare', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'], row['poi_type']))
+            rows.append(Candidate(
+                'foursquare', row['source_id'], row['name'], row['dedupe_name'], row['lat'], row['lng'],
+                row['poi_type'], brand=row['brand'], address=row['address'],
+                open_min=row['open_min'], close_min=row['close_min'],
+                attributes=attributes_by_place.get(row['source_id'], ()),
+            ))
     for row in paged_query(lambda after: """
         SELECT poi_id AS source_id, name, dedupe_name, lat, lng, primary_poi_type AS poi_type
         FROM curated_poi WHERE status = 'active' AND %s AND poi_id > %s
@@ -776,17 +861,36 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
                     severity=conflict_severity(distance),
                     conflict_class='ambiguous',
                 ))
+            # Indistinguishable between two candidates means the element is
+            # dropped. That contract is unchanged by KAN-427, and the shared
+            # import below must never see it.
+            continue
         elif match is not None:
-            stats['matched_skipped'] += 1
             if normalized_identity_terms_match(poi.dedupe_name, match.dedupe_name):
-                stats['normalized_identity_matched_skipped'] += 1
+                stats['normalized_identity_matched'] += 1
+            if match.source != 'foursquare':
+                # A community row is human-reviewed and an already-imported
+                # OSM row is the same source: neither is a stale third-party
+                # record for this element to correct, so the element is still
+                # dropped and `matched_skipped` still describes what happened.
+                stats['matched_skipped'] += 1
+                continue
+            # KAN-427. Same spot, so the record with the current description
+            # survives — and that is OSM. Import the element carrying what
+            # the Foursquare row knew that OSM does not, and retire the
+            # Foursquare row rather than the OSM one.
+            poi = replace(
+                inherit_from_candidate(poi, match),
+                superseded_fsq_place_id=match.source_id,
+            )
+            stats['foursquare_superseded'] += 1
         else:
-            imports.append(poi)
             stats['inserted'] += 1
-            for poi_type in poi.poi_types:
-                grid.setdefault(grid_key(poi_type, poi.lat, poi.lng, grid_lng_deg), []).append(
-                    Candidate('openstreetmap', poi.osm_element_id, poi.name, poi.dedupe_name, poi.lat, poi.lng, poi_type),
-                )
+        imports.append(poi)
+        for poi_type in poi.poi_types:
+            grid.setdefault(grid_key(poi_type, poi.lat, poi.lng, grid_lng_deg), []).append(
+                Candidate('openstreetmap', poi.osm_element_id, poi.name, poi.dedupe_name, poi.lat, poi.lng, poi_type),
+            )
     stats['source_elements'] = len(seen_elements)
     return imports, dict(stats), ambiguous_conflicts
 
@@ -873,20 +977,72 @@ def statements_for_pois(pois: list[OsmPoi]) -> list[str]:
                 sql_quote(poi.osm_element_id), sql_quote(poi.name), sql_quote(poi.dedupe_name),
                 str(poi.lat), str(poi.lng), sql_quote(encode_geohash(poi.lat, poi.lng, 7)),
                 sql_quote(poi.primary_poi_type), sql_quote(poi.brand), sql_quote(poi.address),
-                sql_quote(now), sql_quote(now), 'NULL', 'NULL',
+                sql_quote(now), sql_quote(now),
+                'NULL' if poi.open_min is None else str(poi.open_min),
+                'NULL' if poi.close_min is None else str(poi.close_min),
             )) + ')'
             for poi in group
         )
+        # KAN-427 — every field that can be INHERITED is COALESCEd, never
+        # overwritten. This is not defensive style, it is required for the
+        # inheritance to survive at all: once an element supersedes a
+        # Foursquare row, that row is `visible = 0` and the candidate loader
+        # skips it, so the next refresh of the same element matches nothing
+        # and arrives with brand, address and hours all empty. A plain
+        # `= excluded` would blank exactly what this ticket just inherited,
+        # one refresh later.
+        #
+        # The cost is that an inherited value can no longer be cleared by OSM
+        # dropping its own. That is the right side to err on: the value came
+        # from a real source, and "OSM has no brand" and "OSM removed the
+        # brand" are indistinguishable here.
         statements.append('''INSERT INTO osm_poi
   (osm_element_id, name, dedupe_name, lat, lng, geohash, primary_poi_type, brand, address, imported_at, updated_at, open_min, close_min)
 VALUES ''' + values + '''
 ON CONFLICT(osm_element_id) DO UPDATE SET
   name = excluded.name, dedupe_name = excluded.dedupe_name, lat = excluded.lat, lng = excluded.lng,
-  geohash = excluded.geohash, primary_poi_type = excluded.primary_poi_type, brand = excluded.brand,
-  address = excluded.address, updated_at = excluded.updated_at;''')
+  geohash = excluded.geohash, primary_poi_type = excluded.primary_poi_type,
+  updated_at = excluded.updated_at,
+  brand = COALESCE(excluded.brand, brand), address = COALESCE(excluded.address, address),
+  open_min = COALESCE(excluded.open_min, open_min), close_min = COALESCE(excluded.close_min, close_min);''')
+        superseded = [poi for poi in group if poi.superseded_fsq_place_id]
+        if superseded:
+            # KAN-427 — retire the Foursquare row the element replaces. The
+            # API reads this registry per request and skips `visible = 0`,
+            # which is also why a later Foursquare re-import cannot quietly
+            # bring the stale row back.
+            #
+            # DO NOTHING, never DO UPDATE. This registry otherwise holds
+            # deliberate human decisions, and an operator who has explicitly
+            # set `visible = 1` on a row has overruled exactly this rule.
+            # An automated writer may add to the registry; it must never
+            # overwrite an entry already in it.
+            statements.append(
+                'INSERT INTO poi_source_correction (source, source_id, visible, review_note) VALUES ' + ','.join(
+                    "('foursquare'," + sql_quote(poi.superseded_fsq_place_id) + ",0," + sql_quote(
+                        f'KAN-427: superseded by OSM {poi.osm_element_id} at the same location') + ')'
+                    for poi in superseded
+                ) + ' ON CONFLICT(source, source_id) DO NOTHING;')
         ids = ','.join(sql_quote(poi.osm_element_id) for poi in group)
+        # Types come only ever from OSM tags — nothing is inherited into them,
+        # so a full replace per element stays correct.
         statements.append(f'DELETE FROM osm_poi_type WHERE osm_element_id IN ({ids});')
-        statements.append(f'DELETE FROM osm_poi_attribute WHERE osm_element_id IN ({ids});')
+        # KAN-427 — attributes are the same inheritance problem as the columns
+        # above, and a blanket delete is its sharpest form: a refresh that
+        # arrives with no attributes would wipe a `store_kind` inherited from
+        # the retired Foursquare row and never write it back. Clear only the
+        # dimensions this write actually replaces; an element contributing no
+        # attributes clears nothing.
+        replaced = [
+            (poi.osm_element_id, sorted({dimension for dimension, _ in poi.attributes}))
+            for poi in group if poi.attributes
+        ]
+        if replaced:
+            statements.append('DELETE FROM osm_poi_attribute WHERE ' + ' OR '.join(
+                '(osm_element_id = %s AND dimension IN (%s))' % (
+                    sql_quote(element_id), ','.join(sql_quote(d) for d in dimensions))
+                for element_id, dimensions in replaced
+            ) + ';')
         types = [(poi.osm_element_id, poi_type, rank) for poi in group for rank, poi_type in enumerate(poi.poi_types)]
         if types:
             statements.append('INSERT INTO osm_poi_type (osm_element_id, poi_type, rank) VALUES ' + ','.join(
