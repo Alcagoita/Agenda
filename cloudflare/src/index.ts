@@ -685,6 +685,8 @@ const NOMINATIM_USER_AGENT = 'BrushPoiBackend/1 (poi-api.brushaway.app)';
 // A short per-attempt deadline keeps an uncovered-area recovery request
 // responsive when the external provider is slow or unavailable.
 const NOMINATIM_TIMEOUT_MS = 2_000;
+const NOMINATIM_RESOLUTION_BUDGET_MS = 6_000;
+const NOMINATIM_REQUEST_INTERVAL_MS = 1_000;
 
 /**
  * Zoom levels to try, finest first. A single fixed zoom does not reliably
@@ -727,10 +729,10 @@ interface NominatimReverseResult {
   settlementName: string | null;
 }
 
-async function nominatimReverse(lat: number, lng: number, zoom: number): Promise<NominatimReverseResult | null> {
+async function nominatimReverse(lat: number, lng: number, zoom: number, timeoutMs = NOMINATIM_TIMEOUT_MS): Promise<NominatimReverseResult | null> {
   const url = `${NOMINATIM_REVERSE_URL}?lat=${lat}&lon=${lng}&format=jsonv2&zoom=${zoom}&addressdetails=1`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let data: unknown;
   try {
     const res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT }, signal: controller.signal });
@@ -796,11 +798,14 @@ async function nominatimReverse(lat: number, lng: number, zoom: number): Promise
 async function resolvePlaceIdentityDirect(
   lat: number,
   lng: number,
-  beforeRequest: () => Promise<void> = async () => {},
+  beforeRequest: () => Promise<boolean> = async () => true,
+  deadlineAt = Infinity,
 ): Promise<PlaceGeo | null> {
   for (const zoom of NOMINATIM_ZOOM_CANDIDATES) {
-    await beforeRequest();
-    const result = await nominatimReverse(lat, lng, zoom);
+    if (!await beforeRequest()) return null;
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return null;
+    const result = await nominatimReverse(lat, lng, zoom, Math.min(NOMINATIM_TIMEOUT_MS, remainingMs));
     if (!result) return null; // transport/parse failure — do not retry a coarser zoom on a broken call
     // address carrying no narrower settlement name than the feature's own
     // name means the feature itself already IS the settlement (the common
@@ -820,7 +825,7 @@ async function resolvePlaceIdentityDirect(
   return null;
 }
 
-type NominatimCacheEntry = { expiresAt: number; value: PlaceGeo | null };
+type NominatimCacheEntry = { expiresAt: number; value: PlaceGeo };
 
 /** Coordinates are never persisted or used as a key: only this digest is. */
 async function coordinateCacheKey(lat: number, lng: number): Promise<string> {
@@ -835,22 +840,55 @@ export class NominatimResolver {
   private queue: Promise<unknown> = Promise.resolve();
 
   async resolve(lat: number, lng: number): Promise<PlaceGeo | null> {
+    const deadlineAt = Date.now() + NOMINATIM_RESOLUTION_BUDGET_MS;
     const run = this.queue.then(async () => {
-      const key = await coordinateCacheKey(lat, lng);
+      const key = `cache:${await coordinateCacheKey(lat, lng)}`;
       const cached = await this.ctx.storage.get<NominatimCacheEntry>(key);
       if (cached && cached.expiresAt > Date.now()) return cached.value;
+      if (cached) await this.ctx.storage.delete(key);
+      if (Date.now() >= deadlineAt) return null;
       const beforeRequest = async () => {
         const lastCallAt = await this.ctx.storage.get<number>('last-nominatim-call-at') ?? 0;
-        const waitMs = Math.max(0, 1_000 - (Date.now() - lastCallAt));
+        const waitMs = Math.max(0, NOMINATIM_REQUEST_INTERVAL_MS - (Date.now() - lastCallAt));
+        if (Date.now() + waitMs >= deadlineAt) return false;
         if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+        if (Date.now() >= deadlineAt) return false;
         await this.ctx.storage.put('last-nominatim-call-at', Date.now());
+        return true;
       };
-      const value = await resolvePlaceIdentityDirect(lat, lng, beforeRequest);
-      if (value) await this.ctx.storage.put(key, { value, expiresAt: Date.now() + 86_400_000 });
+      const value = await resolvePlaceIdentityDirect(lat, lng, beforeRequest, deadlineAt);
+      if (value) {
+        const expiresAt = Date.now() + 86_400_000;
+        await this.ctx.storage.put(key, { value, expiresAt });
+        const scheduledAlarm = await this.ctx.storage.getAlarm();
+        if (scheduledAlarm === null || scheduledAlarm > expiresAt) await this.ctx.storage.setAlarm(expiresAt);
+      }
       return value;
     });
     this.queue = run.catch(() => undefined);
-    return run as Promise<PlaceGeo | null>;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<null>(resolve => {
+      deadlineTimer = setTimeout(() => resolve(null), NOMINATIM_RESOLUTION_BUDGET_MS);
+    });
+    try {
+      return await Promise.race([run as Promise<PlaceGeo | null>, deadline]);
+    } finally {
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+    }
+  }
+
+  /** Removes expired coordinate digests and schedules the next cache expiry. */
+  async alarm(): Promise<void> {
+    const entries = await this.ctx.storage.list<NominatimCacheEntry>({ prefix: 'cache:' });
+    let nextExpiry: number | null = null;
+    for (const [key, entry] of entries) {
+      if (entry.expiresAt <= Date.now()) {
+        await this.ctx.storage.delete(key);
+      } else if (nextExpiry === null || entry.expiresAt < nextExpiry) {
+        nextExpiry = entry.expiresAt;
+      }
+    }
+    if (nextExpiry !== null) await this.ctx.storage.setAlarm(nextExpiry);
   }
 }
 

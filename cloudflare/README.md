@@ -114,8 +114,9 @@ A request carrying a bearer token that fails verification is rejected with
   is normally short-lived now (promoted in the same request), so this
   mostly guards the case where `BUILD_TRIGGER_URL` isn't configured at all
   (local dev) and rows can't move past `none`.
-  Uncovered resolution has a six-second budget (three 2-second attempts), is
-  globally serialized through the Nominatim resolver Durable Object, and
+  Uncovered resolution has a six-second end-to-end budget (including Durable
+  Object queueing; each provider attempt is capped at two seconds), is globally
+  serialized through the Nominatim resolver Durable Object, and
   caches successful stable identities for 24 hours. Provider failures return
   `coverageStatus: 'none'` without creating a demand row.
 - `GET /manual-poi/meta`, `GET /manual-poi/duplicates`, and `POST
