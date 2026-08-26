@@ -33,6 +33,10 @@ jest.mock('../../src/services/sharing', () => ({
 }));
 
 jest.mock('../../src/services/firestore', () => ({
+  subscribeToActiveTasks: jest.fn((_uid: string, _today: string, onNext: (tasks: unknown[]) => void, onError: (error: Error) => void) => {
+    Promise.resolve(mockGetTasksForDate()).then(onNext, onError);
+    return jest.fn();
+  }),
   getTasksForDate:      (...args: unknown[]) => mockGetTasksForDate(...args),
   getCategories:        (...args: unknown[]) => mockGetCategories(...args),
   getUser:              (...args: unknown[]) => mockGetUser(...args),

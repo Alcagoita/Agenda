@@ -12,6 +12,7 @@ import {
   query,
   where,
   orderBy,
+  onSnapshot,
   Timestamp,
 } from '@react-native-firebase/firestore';
 import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
@@ -249,6 +250,21 @@ export async function ensureCurrentDay(
   const tasks = sortTasksByCreatedAt(filterActiveTasksForDate(mapSnapshotDocs<Task>(snap), today));
 
   return { tasks, persistence: Promise.resolve() };
+}
+
+/** One live active-task query; date eligibility stays client-side for legacy undated tasks. */
+export function subscribeToActiveTasks(
+  uid: string,
+  today: string,
+  onNext: (tasks: Task[]) => void,
+  onError: (error: Error) => void,
+): () => void {
+  return onSnapshot(
+    query(tasksRef(uid), where('done', '==', false), orderBy('createdAt', 'asc')),
+    { includeMetadataChanges: false },
+    snapshot => onNext(sortTasksByCreatedAt(filterActiveTasksForDate(mapSnapshotDocs<Task>(snapshot), today))),
+    onError,
+  );
 }
 
 /**

@@ -174,13 +174,13 @@ describe('SplashScreen', () => {
       expect(useAppStore.getState().bootData).not.toBeNull();
     });
 
-    it('still loads auxiliary boot data when the current-day read fails (non-fatal)', async () => {
+    it('does not publish an empty boot list when the current-day read fails', async () => {
       mockEnsureCurrentDay.mockRejectedValue(new Error('rollover boom'));
 
       render(<SplashScreen onExit={jest.fn()} />);
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-      expect(useAppStore.getState().bootData).not.toBeNull();
+      expect(useAppStore.getState().bootData).toBeNull();
     });
 
     it('stores partial boot data when an auxiliary offline read fails', async () => {

@@ -4,6 +4,7 @@ const mockGetDocs = jest.fn();
 const mockUpdateDoc = jest.fn().mockResolvedValue(undefined);
 const mockWhere = jest.fn((...args: unknown[]) => args);
 const mockQuery = jest.fn((...args: unknown[]) => args);
+const mockOnSnapshot = jest.fn();
 
 jest.mock('@react-native-firebase/firestore', () => ({
   getFirestore: jest.fn(),
@@ -20,11 +21,12 @@ jest.mock('@react-native-firebase/firestore', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
   where: (...args: unknown[]) => mockWhere(...args),
   orderBy: jest.fn(),
+  onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
   Timestamp: { now: jest.fn(() => ({ _isNow: true })) },
   runTransaction: jest.fn(),
 }));
 
-import { ensureCurrentDay, resolveDatedTaskHandoff, rolloverIncompleteTasks } from '../../src/services/firestore';
+import { ensureCurrentDay, resolveDatedTaskHandoff, rolloverIncompleteTasks, subscribeToActiveTasks } from '../../src/services/firestore';
 
 function doc(id: string, data: Record<string, unknown>) {
   return { id, data: () => data };
@@ -75,6 +77,28 @@ describe('KAN-363 active-list date behavior', () => {
   it('keeps the retired rollover export as a no-op for legacy callers', async () => {
     await rolloverIncompleteTasks('uid-1', TODAY);
     expect(mockGetDocs).not.toHaveBeenCalled();
+  });
+
+  it('keeps active tasks synchronized through one listener and exposes listener errors', () => {
+    const unsubscribe = jest.fn();
+    let listenerError: ((error: Error) => void) | undefined;
+    mockOnSnapshot.mockImplementation((_query, _options, onNext, onError) => {
+      listenerError = onError;
+      onNext({ docs: [doc('future', { title: 'Future', category: 'errands', done: false, scheduledDate: '2026-06-17', createdAt: { toMillis: () => 2 } })] });
+      return unsubscribe;
+    });
+    const onNext = jest.fn();
+    const onError = jest.fn();
+
+    const stop = subscribeToActiveTasks('uid-1', TODAY, onNext, onError);
+
+    expect(onNext).toHaveBeenCalledWith([expect.objectContaining({ id: 'future' })]);
+    expect(onError).not.toHaveBeenCalled();
+    const error = new Error('missing index');
+    listenerError!(error);
+    expect(onError).toHaveBeenCalledWith(error);
+    stop();
+    expect(unsubscribe).toHaveBeenCalled();
   });
 
   it('uses a normal queued write for an end-of-day action instead of a transaction', async () => {
