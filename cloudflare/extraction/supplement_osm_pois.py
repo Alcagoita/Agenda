@@ -49,11 +49,39 @@ SQL_BATCH_SIZE = 250
 # This deliberately small, evidence-led list supports trustworthy normalized
 # identities such as "Café Ala Sul" / "Ala Sul Café". It is not a Portuguese
 # venue taxonomy: expand it only from reviewed dry-run evidence.
+#
+# KAN-388 expanded it from the completed PT run (307 municipality scopes,
+# 161,797 flagged pairs). Two boundaries were drawn there and both matter:
+#
+#   * Food-service words only. A churrasqueira and a restaurante sharing a
+#     doorway are one venue, so the trade word is noise. Retail trade words
+#     are the opposite — dropping them collapsed "Talho do Marquês" and
+#     "Ourivesaria Marquês" into one butcher-jeweller, and "Óptica da Sé"
+#     into "Ourivesaria da Sé". Inside the coarse `store` bucket the trade
+#     word IS the type, so `talho`, `ourivesaria`, `livraria`, `papelaria`
+#     and `sapataria` stay out of this list on purpose.
+#   * Legal-form words (`lda`, `unipessoal`, `comércio`) identify a company
+#     registration, never a venue.
 NON_IDENTITY_NAME_TOKENS = frozenset({
     'a', 'as', 'bar', 'cafe', 'cafeteria', 'da', 'das', 'de', 'do', 'dos',
     'e', 'hamburgueria', 'loja', 'o', 'os', 'pastelaria', 'pizzeria', 'pub',
     'restaurant', 'restaurante', 'shop', 'store',
+    # KAN-388, food service.
+    'adega', 'bistro', 'caffe', 'cafetaria', 'cervejaria', 'churrascaria',
+    'churrasqueira', 'confeitaria', 'esplanada', 'gelataria', 'marisqueira',
+    'padaria', 'petisqueira', 'pizzaria', 'quiosque', 'residencial', 'snack',
+    'taberna', 'tasca', 'tasquinha',
+    # KAN-388, legal form and articles.
+    'associacao', 'com', 'comercio', 'cooperativa', 'el', 'em', 'la', 'lda',
+    'le', 'na', 'nas', 'no', 'nos', 'sociedade', 'the', 'um', 'uma',
+    'unipessoal',
 })
+
+# A single shared identity token is enough to merge only when the two rows
+# are practically on top of each other. 20 m is the existing `same_location`
+# severity boundary: a shared surname between two distinct businesses at 6 m
+# is implausible in a way it is not at 40 m.
+SINGLE_TOKEN_MATCH_METERS = 20.0
 
 # The public app's OSM tag policy, made explicit for server import.  ``shop``
 # needs special treatment: most concrete shop values are useful generic stores,
@@ -282,15 +310,75 @@ def run_d1_query(sql: str) -> list[dict]:
     return json.loads(result.stdout)[0]['results']
 
 
+def identity_tokens(normalized_name: str) -> Counter:
+    """What is left of a normalized name once it stops describing a category.
+
+    Single-character tokens go too. `normalize_text` turns "McDonald's" into
+    "mcdonald s" and "D'Italia" into "d italia", so a bare `s` or `d` is an
+    apostrophe artifact, and `C.` in "Papelaria C. Roque" is an initial.
+    Neither ever identifies a venue on its own (KAN-388).
+
+    Bare numbers go with them, and for the same reason: "28 Sabores do Mundo"
+    is not "28". Excluding them *here* rather than at the point of comparison
+    matters, because the core's SIZE gates whether a single shared token is
+    admissible at all. A number that can never be evidence must not inflate
+    that count — otherwise "Restaurante 12 Teimoso" and "Restaurante 34
+    Teimoso" both measure two tokens wide and their shared `teimoso` is never
+    considered.
+    """
+    return Counter(token for token in normalized_name.split()
+                   if token not in NON_IDENTITY_NAME_TOKENS
+                   and len(token) > 1 and not token.isdigit())
+
+
 def normalized_identity_terms_match(left: str, right: str) -> bool:
     """Match reordered multi-term business identities, never a shared word."""
     if left == right:
         return False
-    left_core = Counter(token for token in left.split() if token not in NON_IDENTITY_NAME_TOKENS)
-    right_core = Counter(token for token in right.split() if token not in NON_IDENTITY_NAME_TOKENS)
+    left_core = identity_tokens(left)
+    right_core = identity_tokens(right)
     # A one-term identity is too weak: Café Rosa and Alberto Rosa & Filhos can
     # be separate venues. Counter equality also preserves repeated terms.
     return sum(left_core.values()) >= 2 and left_core == right_core
+
+
+def single_identity_token_match(left: str, right: str, distance_meters: float) -> bool:
+    """One shared identity token, when the rows are metres apart (KAN-388).
+
+    `normalized_identity_terms_match` needs two terms, so "O Teimoso" and
+    "Restaurante Teimoso" — both reducing to {teimoso} — were imported twice.
+    `SequenceMatcher` does not rescue them either: "cafe rosa" / "rosa cafe"
+    scores 0.44 against a 0.72 threshold.
+
+    Distance was audit-only in the matching path before this; here it becomes
+    evidence, but only in this narrow shape and far inside the 75 m gate.
+    Two guards keep it narrow, both measured against the completed PT run:
+
+      * At least one side must reduce to a SINGLE identity token. Without
+        this, "Novo Banco" / "Banco Montepio" merge at 0.4 m on `banco`, and
+        "Noodle King" / "Burger King" at 2.6 m. The proposal as originally
+        written merged 1,066 pairs, roughly half of them wrong; with this
+        guard it merges 485, of which about 20 are wrong.
+      * A purely numeric token is not an identity, and `identity_tokens` has
+        already dropped it. "28 Sabores do Mundo" and "28" are not evidently
+        the same venue; "R3", "P4" and "L7" are, and stay matchable because
+        they are not all digits.
+    """
+    if distance_meters > SINGLE_TOKEN_MATCH_METERS:
+        return False
+    left_core, right_core = identity_tokens(left), identity_tokens(right)
+    if not left_core or not right_core:
+        return False
+    if min(len(left_core), len(right_core)) > 1:
+        return False
+    return bool(left_core.keys() & right_core.keys())
+
+
+def names_match(left: str, right: str, distance_meters: float) -> bool:
+    """The single duplicate-name verdict, so the matcher and the review
+    report can never disagree about what counts as the same venue."""
+    return (name_similarity(left, right) >= NAME_SIMILARITY_THRESHOLD
+            or single_identity_token_match(left, right, distance_meters))
 
 
 def name_similarity(left: str, right: str) -> float:
@@ -449,6 +537,12 @@ def confident_match(poi: OsmPoi, grid: dict[tuple[str, int, int], list[Candidate
                     if distance > MATCH_RADIUS_METERS:
                         continue
                     similarity = name_similarity(poi.dedupe_name, candidate.dedupe_name)
+                    if single_identity_token_match(poi.dedupe_name, candidate.dedupe_name, distance):
+                        # Scored at the threshold, never above it: a shared
+                        # single token is the weakest admissible evidence, so
+                        # a genuine strong name match always outranks it when
+                        # both are in play (KAN-388).
+                        similarity = max(similarity, NAME_SIMILARITY_THRESHOLD)
                     if similarity >= NAME_SIMILARITY_THRESHOLD:
                         scored.append((similarity, distance, candidate))
     if not scored:
@@ -723,7 +817,7 @@ def possible_renames(imports: Iterable[OsmPoi], candidates: Iterable[Candidate])
                 for dlng in (-1, 0, 1):
                     for candidate in source_grid.get((poi_type, bucket[1] + dlat, bucket[2] + dlng), ()):
                         distance = haversine_m(poi.lat, poi.lng, candidate.lat, candidate.lng)
-                        if distance > MATCH_RADIUS_METERS or name_similarity(poi.dedupe_name, candidate.dedupe_name) >= NAME_SIMILARITY_THRESHOLD:
+                        if distance > MATCH_RADIUS_METERS or names_match(poi.dedupe_name, candidate.dedupe_name, distance):
                             continue
                         key = (poi.osm_element_id, candidate.source, candidate.source_id, candidate.poi_type)
                         if key in seen:
