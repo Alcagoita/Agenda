@@ -1010,7 +1010,16 @@ type NearbyPoi = {
 
 interface NearbyQueryResult {
   results: Record<string, NearbyPoi[]>;
-  timings: { d1Ms: number; filterMs: number };
+  timings: {
+    d1Ms: number;
+    filterMs: number;
+    /** D1 rows before Worker-side de-duplication; never includes identity data. */
+    sourceRows: { foursquare: number; community: number; openstreetmap: number };
+    /** Unique visible candidates after source corrections and duplicate suppression. */
+    candidateCounts: { foursquare: number; community: number; openstreetmap: number };
+    /** Bucket entries returned to the client; one POI can correctly appear in multiple buckets. */
+    resultCount: number;
+  };
 }
 
 /**
@@ -1077,25 +1086,29 @@ async function queryNearbyPoiDb(
     osmRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
   }
   const d1StartedAt = performance.now();
-  const { results: rows } = await db.prepare(
-    `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
+  const [{ results: rows }, { results: curatedRows }, { results: osmRows }] = await Promise.all([
+    db.prepare(
+      `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
             poi.brand, poi.category_label, poi.raw_category_labels, poi.address,
             poi.open_min, poi.close_min, poi_type.poi_type AS matched_type
-            , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value
+            , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value,
+            poi_correction.visible AS correction_visible
      FROM poi
      INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
      LEFT JOIN poi_attribute ON poi_attribute.fsq_place_id = poi.fsq_place_id
        AND poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
+     LEFT JOIN poi_source_correction AS poi_correction
+       ON poi_correction.source = 'foursquare' AND poi_correction.source_id = poi.fsq_place_id
      WHERE (${geohashClauses.join(' OR ')}) AND (${poiRequestClauses.join(' OR ')})`,
-  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...poiRequestBinds).all<{
-    fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-    primary_poi_type: string; brand: string | null; category_label: string | null;
-    raw_category_labels: string | null;
-    address: string | null; open_min: number | null; close_min: number | null; matched_type: string;
-    attribute_dimension: string | null; attribute_value: string | null;
-  }>();
-  const { results: curatedRows } = await db.prepare(
-    `SELECT curated_poi.poi_id, curated_poi.dedupe_name, curated_poi.name, curated_poi.lat, curated_poi.lng,
+    ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...poiRequestBinds).all<{
+      fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+      primary_poi_type: string; brand: string | null; category_label: string | null;
+      raw_category_labels: string | null;
+      address: string | null; open_min: number | null; close_min: number | null; matched_type: string;
+      attribute_dimension: string | null; attribute_value: string | null; correction_visible: number | null;
+    }>(),
+    db.prepare(
+      `SELECT curated_poi.poi_id, curated_poi.dedupe_name, curated_poi.name, curated_poi.lat, curated_poi.lng,
             curated_poi.primary_poi_type, curated_poi.brand, curated_poi.address,
             curated_poi_attribute.dimension AS attribute_dimension, curated_poi_attribute.value AS attribute_value
      FROM curated_poi
@@ -1103,49 +1116,41 @@ async function queryNearbyPoiDb(
      WHERE curated_poi.status = 'active'
        AND (${curatedGeohashClauses.join(' OR ')})
        AND (${curatedRequestClauses.join(' OR ')})`,
-  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...curatedRequestBinds).all<{
-    poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-    primary_poi_type: string; brand: string | null; address: string | null;
-    attribute_dimension: string | null; attribute_value: string | null;
-  }>();
-  const { results: osmRows } = await db.prepare(
-    `SELECT osm_poi.osm_element_id, osm_poi.dedupe_name, osm_poi.name, osm_poi.lat, osm_poi.lng,
+    ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...curatedRequestBinds).all<{
+      poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+      primary_poi_type: string; brand: string | null; address: string | null;
+      attribute_dimension: string | null; attribute_value: string | null;
+    }>(),
+    db.prepare(
+      `SELECT osm_poi.osm_element_id, osm_poi.dedupe_name, osm_poi.name, osm_poi.lat, osm_poi.lng,
             osm_poi.primary_poi_type, osm_poi.brand, osm_poi.address, osm_poi.open_min, osm_poi.close_min,
             osm_poi_type.poi_type AS matched_type,
-            osm_poi_attribute.dimension AS attribute_dimension, osm_poi_attribute.value AS attribute_value
+            osm_poi_attribute.dimension AS attribute_dimension, osm_poi_attribute.value AS attribute_value,
+            osm_correction.visible AS correction_visible,
+            osm_correction.name_override AS correction_name_override,
+            osm_correction.dedupe_name_override AS correction_dedupe_name_override
      FROM osm_poi
      INNER JOIN osm_poi_type ON osm_poi_type.osm_element_id = osm_poi.osm_element_id
      LEFT JOIN osm_poi_attribute ON osm_poi_attribute.osm_element_id = osm_poi.osm_element_id
        AND osm_poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
+     LEFT JOIN poi_source_correction AS osm_correction
+       ON osm_correction.source = 'openstreetmap' AND osm_correction.source_id = osm_poi.osm_element_id
      WHERE (${osmGeohashClauses.join(' OR ')}) AND (${osmRequestClauses.join(' OR ')})`,
-  ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...osmRequestBinds).all<{
-    osm_element_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-    primary_poi_type: string; brand: string | null; address: string | null;
-    open_min: number | null; close_min: number | null; matched_type: string;
-    attribute_dimension: string | null; attribute_value: string | null;
-  }>();
-  // This registry holds deliberate source decisions: human-reviewed ones, and
-  // since KAN-427 the importer's own — when an OSM element is found at the
-  // same spot as a Foursquare row, the OSM record is the current one and the
-  // Foursquare row is retired here. Importer rows never overwrite a human's.
-  // Read it once per request rather than baking exceptions into the Worker, so
-  // a later Foursquare re-import cannot make a retired source row visible.
-  const { results: sourceCorrections } = await db.prepare(
-    `SELECT source, source_id, visible, name_override, dedupe_name_override
-     FROM poi_source_correction`,
-  ).all<{
-    source: 'foursquare' | 'openstreetmap'; source_id: string; visible: number;
-    name_override: string | null; dedupe_name_override: string | null;
-  }>();
+    ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...osmRequestBinds).all<{
+      osm_element_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+      primary_poi_type: string; brand: string | null; address: string | null;
+      open_min: number | null; close_min: number | null; matched_type: string;
+      attribute_dimension: string | null; attribute_value: string | null;
+      correction_visible: number | null; correction_name_override: string | null;
+      correction_dedupe_name_override: string | null;
+    }>(),
+  ]);
   const d1Ms = performance.now() - d1StartedAt;
 
   const filteringStartedAt = performance.now();
-  const correctionBySourceId = new Map(
-    sourceCorrections.map(correction => [`${correction.source}:${correction.source_id}`, correction]),
-  );
   const candidates = new Map<string, NearbyPoi & { dedupeName: string; matchedTypes: Set<string>; rawCategoryLabels: string | null }>();
   for (const row of rows) {
-    if (correctionBySourceId.get(`foursquare:${row.fsq_place_id}`)?.visible === 0) continue;
+    if (row.correction_visible === 0) continue;
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
     const candidateKey = `foursquare:${row.fsq_place_id}`;
@@ -1198,8 +1203,7 @@ async function queryNearbyPoiDb(
   }
 
   for (const row of osmRows) {
-    const correction = correctionBySourceId.get(`openstreetmap:${row.osm_element_id}`);
-    if (correction?.visible === 0) continue;
+    if (row.correction_visible === 0) continue;
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
     const candidateKey = `openstreetmap:${row.osm_element_id}`;
@@ -1212,10 +1216,10 @@ async function queryNearbyPoiDb(
       }
     } else {
       candidates.set(candidateKey, {
-        poi_id: row.osm_element_id, fsq_place_id: null, name: correction?.name_override ?? row.name, lat: row.lat, lng: row.lng,
+        poi_id: row.osm_element_id, fsq_place_id: null, name: row.correction_name_override ?? row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
         address: row.address, open_min: row.open_min, close_min: row.close_min,
-        source: 'openstreetmap', dedupeName: correction?.dedupe_name_override ?? row.dedupe_name,
+        source: 'openstreetmap', dedupeName: row.correction_dedupe_name_override ?? row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
@@ -1242,6 +1246,13 @@ async function queryNearbyPoiDb(
     }
   }
 
+  const candidateCounts = { foursquare: 0, community: 0, openstreetmap: 0 };
+  for (const candidate of candidates.values()) {
+    if (candidate.source === 'foursquare') candidateCounts.foursquare++;
+    else if (candidate.source === 'community') candidateCounts.community++;
+    else if (candidate.source === 'openstreetmap') candidateCounts.openstreetmap++;
+  }
+
   const result = Object.fromEntries(requestedSearches.map(request => [request.key, [] as NearbyPoi[]])) as Record<string, NearbyPoi[]>;
   const nearestCandidates = [...candidates.values()].sort((a, b) => a.distanceMeters - b.distanceMeters);
   for (const candidate of nearestCandidates) {
@@ -1266,7 +1277,17 @@ async function queryNearbyPoiDb(
       }
     }
   }
-  return { results: result, timings: { d1Ms, filterMs: performance.now() - filteringStartedAt } };
+  const resultCount = Object.values(result).reduce((count, bucket) => count + bucket.length, 0);
+  return {
+    results: result,
+    timings: {
+      d1Ms,
+      filterMs: performance.now() - filteringStartedAt,
+      sourceRows: { foursquare: rows.length, community: curatedRows.length, openstreetmap: osmRows.length },
+      candidateCounts,
+      resultCount,
+    },
+  };
 }
 
 function jsonWithServerTiming(data: unknown, timings: Record<string, number>): Response {
@@ -1282,11 +1303,16 @@ function jsonWithServerTiming(data: unknown, timings: Record<string, number>): R
 
 /** One in sixteen requests emits structured timing to Workers Logs. The event
  * intentionally includes no coordinates, identifiers, or user data. */
-function logNearbyTiming(timings: Record<string, number>): void {
+function logNearbyTiming(
+  timings: Record<string, number>,
+  sourceRows: NearbyQueryResult['timings']['sourceRows'],
+  candidateCounts: NearbyQueryResult['timings']['candidateCounts'],
+  resultCount: number,
+): void {
   const sample = new Uint8Array(1);
   crypto.getRandomValues(sample);
   if (sample[0] >= 16) return;
-  console.log(JSON.stringify({ event: 'poi_nearby_timing', ...timings }));
+  console.log(JSON.stringify({ event: 'poi_nearby_timing', ...timings, sourceRows, candidateCounts, resultCount }));
 }
 
 // KAN-346/355: ceiling on how many not-yet-mapped ('none') Places can be
@@ -2253,7 +2279,12 @@ export default {
       const searches = types.map(type => ({ key: type, type, attributeFilter: null, brand: null }));
       const { results, timings } = await queryNearbyPoiDb(env.REGISTRY_DB, lat, lng, radius, searches, limitPerType);
       const totalMs = performance.now() - startedAt;
-      logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
+      logNearbyTiming(
+        { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
+        timings.sourceRows,
+        timings.candidateCounts,
+        timings.resultCount,
+      );
       return jsonWithServerTiming(
         { results },
         { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
@@ -2283,7 +2314,12 @@ export default {
         findPlace(env, lat, lng),
       ]);
       const totalMs = performance.now() - startedAt;
-      logNearbyTiming({ d1: timings.d1Ms, filter: timings.filterMs, total: totalMs });
+      logNearbyTiming(
+        { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
+        timings.sourceRows,
+        timings.candidateCounts,
+        timings.resultCount,
+      );
       return jsonWithServerTiming(
         { results, placeName: areaNameForClient(place) },
         { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
