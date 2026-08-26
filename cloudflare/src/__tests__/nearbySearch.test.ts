@@ -71,11 +71,12 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: Fa
         if (trimmed.startsWith('SELECT poi.fsq_place_id')) {
           const results: unknown[] = [];
           for (const p of pois) {
+            const correction = sourceCorrections.find(candidate => candidate.source === 'foursquare' && candidate.source_id === p.fsq_place_id);
             const base = {
               fsq_place_id: p.fsq_place_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
               primary_poi_type: p.primary_poi_type ?? 'restaurant', brand: p.brand ?? null,
               category_label: p.category_label, raw_category_labels: p.raw_category_labels,
-              address: null, matched_type: p.primary_poi_type ?? 'restaurant',
+              address: null, matched_type: p.primary_poi_type ?? 'restaurant', correction_visible: correction?.visible ?? null,
             };
             const attributes = [
               ...(p.food_cuisine ?? []).map(value => ({ dimension: 'food_cuisine', value })),
@@ -112,10 +113,14 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: Fa
         if (trimmed.startsWith('SELECT osm_poi.osm_element_id')) {
           const results: unknown[] = [];
           for (const p of osmPois) {
+            const correction = sourceCorrections.find(candidate => candidate.source === 'openstreetmap' && candidate.source_id === p.osm_element_id);
             const base = {
               osm_element_id: p.osm_element_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
               primary_poi_type: p.primary_poi_type, brand: null, address: null,
               open_min: null, close_min: null, matched_type: p.primary_poi_type,
+              correction_visible: correction?.visible ?? null,
+              correction_name_override: correction?.name_override ?? null,
+              correction_dedupe_name_override: correction?.dedupe_name_override ?? null,
             };
             const cuisines = p.food_cuisine ?? [];
             if (cuisines.length === 0) {
@@ -127,9 +132,6 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: Fa
             }
           }
           return { results };
-        }
-        if (trimmed.startsWith('SELECT source, source_id, visible, name_override, dedupe_name_override')) {
-          return { results: sourceCorrections };
         }
         throw new Error(`fake D1 unhandled all(): ${trimmed}`);
       },
