@@ -5,33 +5,24 @@ Worker and D1 registry. It is for performance diagnosis; it must not be used
 to apply migrations, execute writes, change Worker configuration, or inspect
 location-level user activity.
 
-## 1. Create a least-privilege API token
+## 1. Use the approved Wrangler session
 
-In the Cloudflare dashboard, create a token restricted to the account that
-owns `brush-poi-registry` and `brush-poi-backend`.
+Use the existing authenticated Wrangler session for the account that owns
+`brush-poi-registry` and `brush-poi-backend`. KAN-426 performs only the
+read-only commands below; it does not need another credential or any dashboard
+change.
 
-Required account permissions:
-
-- **D1: Read** — permits read-only SQL, including `EXPLAIN QUERY PLAN`.
-- **Workers Tail: Read** — permits `wrangler tail` for the Worker.
-
-Do not add D1 Edit/Write, Workers Scripts Edit, R2 Write, or account-wide
-administrator permissions. Scope the token to the one production account;
-where resource scoping is available, restrict it to the POI database and
-Worker.
-
-Store the token in the operator's secret manager, never in this repository or
-`.dev.vars`. Set it only for the terminal session that needs it:
+Confirm the active account before any production diagnostic:
 
 ```sh
-export CLOUDFLARE_API_TOKEN='read-only-token-from-secret-manager'
 cd cloudflare
 npx wrangler whoami
 ```
 
-The expected result is an authenticated identity for the production account.
-If the account is not the one configured for `brush-poi-registry`, stop: do
-not run a query against a similarly named database in another account.
+The expected result is the production account configured for
+`brush-poi-registry`. If it is not, stop: do not run a query against a
+similarly named database in another account. Never place OAuth tokens or API
+keys in this repository or `.dev.vars`.
 
 ## 2. Approved D1 diagnostics
 
@@ -119,10 +110,9 @@ bounding-box `findPlace` lookup also scans `place`, but its standalone SQL
 time is currently below 1 ms at 490 rows. KAN-425 should retain its
 threshold-driven scope rather than redesigning that lookup prematurely.
 
-The account's existing OAuth session is sufficient for these diagnostics but
-has broader write permissions than this runbook permits. Create the scoped
-read-only token above before treating long-term observability access as
-complete.
+The existing approved OAuth session is the operational access method for this
+task. This runbook deliberately uses only read-only commands, regardless of
+the session's wider account permissions.
 
 ## References
 
