@@ -81,7 +81,9 @@ describe('KAN-363 active-list date behavior', () => {
 
   it('keeps active tasks synchronized through one listener and exposes listener errors', () => {
     const unsubscribe = jest.fn();
-    mockOnSnapshot.mockImplementation((_query, _options, onNext) => {
+    let listenerError: ((error: Error) => void) | undefined;
+    mockOnSnapshot.mockImplementation((_query, _options, onNext, onError) => {
+      listenerError = onError;
       onNext({ docs: [doc('future', { title: 'Future', category: 'errands', done: false, scheduledDate: '2026-06-17', createdAt: { toMillis: () => 2 } })] });
       return unsubscribe;
     });
@@ -92,6 +94,9 @@ describe('KAN-363 active-list date behavior', () => {
 
     expect(onNext).toHaveBeenCalledWith([expect.objectContaining({ id: 'future' })]);
     expect(onError).not.toHaveBeenCalled();
+    const error = new Error('missing index');
+    listenerError!(error);
+    expect(onError).toHaveBeenCalledWith(error);
     stop();
     expect(unsubscribe).toHaveBeenCalled();
   });

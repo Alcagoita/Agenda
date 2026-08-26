@@ -316,8 +316,10 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
       }
     } finally {
       if (!isStale()) {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        // Initial task readiness belongs to the live listener: clearing here
+        // would briefly render a false empty state before its cache/server
+        // snapshot (or recoverable error) arrives.
+        if (isRefresh) { setIsRefreshing(false); }
       }
     }
   }, [uid]);
