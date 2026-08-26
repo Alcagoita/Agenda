@@ -258,7 +258,7 @@ export type PoiCoverageStatus = 'none' | 'building' | 'ready';
 export interface PoiSearchResult {
   results: Record<string, NearbyPlace[]>;
   source: PoiSearchSource;
-  /** Only meaningful when source is 'cloudflare' or 'osm' (derived from the same /poi/all response either way) — undefined for a 'cache' answer, which doesn't consult Cloudflare's coverage state at all. */
+  /** Only meaningful when source is 'cloudflare' or 'osm' (derived from the POST /poi/nearby response either way) — undefined for a 'cache' answer, which doesn't consult Cloudflare's coverage state at all. */
   coverageStatus?: PoiCoverageStatus;
   /** Present only when coverageStatus is 'building' and the Worker has an ETA to offer — currently always undefined (no ETA data exists yet); kept in the shape now so KAN-348/349 don't need to touch this contract again once it does. */
   retryAfterSeconds?: number;

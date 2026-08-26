@@ -477,24 +477,6 @@ function inferCanonicalBrand(poiType: string, name: string): string | null {
   return null;
 }
 
-/** attribute+value are optional but must appear together — e.g. attribute=food_cuisine&value=sushi, or value=sushi,italian for an OR match. Capped at 2 values (matches the current real use case: a place tagged with two cuisines, not an open-ended list). */
-function parseAttributeFilter(url: URL): AttributeFilter | null | Response {
-  const dimension = url.searchParams.get('attribute');
-  const rawValue = url.searchParams.get('value');
-  if (!dimension && !rawValue) return null;
-  if (!dimension || !rawValue) {
-    return json({ error: 'attribute and value must be provided together' }, 400);
-  }
-  const values = [...new Set(rawValue.split(',').map(v => v.trim()).filter(v => v !== ''))];
-  if (values.length === 0) {
-    return json({ error: 'value must contain at least one non-empty value' }, 400);
-  }
-  if (values.length > 2) {
-    return json({ error: 'value accepts at most 2 comma-separated values' }, 400);
-  }
-  return { dimension, values };
-}
-
 /** Validates lat/lng are present, finite, and within real coordinate bounds — a value like lat=999 passed Number.isNaN before but was never a real coordinate. */
 function parseCoords(url: URL): ParsedCoords | Response {
   const lat = Number(url.searchParams.get('lat'));
@@ -918,79 +900,6 @@ export function buildAttributeFilterClause(filter: AttributeFilter): { clause: s
     }
   }
   return { clause: `(${orBranches.join(' OR ')})`, binds };
-}
-
-/**
- * KAN-335: a place can match more than one type (poi_type table, one row
- * per matched type), so filtering by type is an EXISTS subquery against
- * poi_type, not a column comparison on poi itself — a plain INNER JOIN
- * would return the same poi row once per matching poi_type row (e.g. a
- * place matching both searched types 'bakery' and 'cafe' would come back
- * twice); EXISTS just checks presence, never multiplies rows.
- *
- * Filters by geohash prefix first, type second (WHERE geohash range OR ...
- * EXISTS(...type check...)). Benchmarked against live Lisboa data (121
- * matching rows either way, same result set both forms): this ordering
- * averaged ~23ms vs ~38ms for a type-first JOIN (poi_type driving, geohash
- * filtered after) — consistently faster across repeated runs. KAN-355
- * renamed city_id -> place_id on this predicate; not re-benchmarked, since
- * it's the same column doing the same job under a new name — see
- * place_schema.sql's note on where this should be re-measured if that
- * assumption ever needs checking.
- *
- * Each prefix is expressed as an inclusive/exclusive lexical range rather
- * than `substr(geohash, 1, n)`: applying a function to the indexed column
- * prevents SQLite/D1 using idx_poi_place_geo beyond place_id. `~` sorts after
- * every base32 geohash character, so [prefix, prefix + '~') contains exactly
- * the full geohash subtree for that prefix and is index-sargable.
- */
-async function queryPoiDb(
-  db: D1Database,
-  lat: number,
-  lng: number,
-  radiusMeters: number,
-  poiType: string | null,
-  attributeFilter: AttributeFilter | null,
-) {
-  const precision = precisionForRadius(radiusMeters);
-  const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
-  const geohashClauses = prefixes.map(() => '(geohash >= ? AND geohash < ?)');
-
-  const types = poiType ? await typesForSearch(db, poiType) : null;
-  const typePlaceholders = types?.map(() => '?').join(',');
-
-  const clauses = [`(${geohashClauses.join(' OR ')})`];
-  const binds: unknown[] = [...prefixes.flatMap(prefix => [prefix, `${prefix}~`])];
-
-  if (types) {
-    clauses.push(
-      `EXISTS (SELECT 1 FROM poi_type WHERE poi_type.fsq_place_id = poi.fsq_place_id AND poi_type.poi_type IN (${typePlaceholders}))`,
-    );
-    binds.push(...types);
-  }
-
-  // Same EXISTS shape as the poi_type filter above — a place can carry more
-  // than one value per dimension (KAN-336), so this is presence, not a
-  // plain join that would multiply rows.
-  if (attributeFilter) {
-    const attr = buildAttributeFilterClause(attributeFilter);
-    clauses.push(attr.clause);
-    binds.push(...attr.binds);
-  }
-
-  const sql = `SELECT * FROM poi WHERE ${clauses.join(' AND ')}`;
-
-  const { results } = await db.prepare(sql).bind(...binds).all<{
-    fsq_place_id: string; name: string; lat: number; lng: number;
-    primary_poi_type: string; brand: string | null;
-    category_label: string | null; address: string | null;
-    open_min: number | null; close_min: number | null;
-  }>();
-
-  return results
-    .map(r => ({ ...r, distanceMeters: haversineMeters(lat, lng, r.lat, r.lng) }))
-    .filter(r => r.distanceMeters <= radiusMeters)
-    .sort((a, b) => a.distanceMeters - b.distanceMeters);
 }
 
 type NearbyPoi = {
@@ -2324,44 +2233,6 @@ export default {
         { results, placeName: areaNameForClient(place) },
         { d1: timings.d1Ms, filter: timings.filterMs, total: totalMs },
       );
-    }
-
-    // GET /poi?lat=&lng=&radius=&type=&attribute=&value=  — POIs of one type
-    // within a radius, optionally narrowed to 1-2 attribute values (e.g.
-    // type=restaurant&attribute=food_cuisine&value=sushi)
-    if (url.pathname === '/poi' && request.method === 'GET') {
-      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'poi');
-      if (limited) return limited;
-      const poiType = url.searchParams.get('type');
-      if (!poiType) return json({ error: 'type is required' }, 400);
-      const parsed = parseCoordsAndRadius(url);
-      if (parsed instanceof Response) return parsed;
-      const { lat, lng, radius } = parsed;
-      const attributeFilter = parseAttributeFilter(url);
-      if (attributeFilter instanceof Response) return attributeFilter;
-
-      const place = await findPlace(env, lat, lng);
-      if (!place || place.status !== 'mapped') {
-        return json({ covered: false, status: toApiStatus(place?.status ?? 'none'), results: [] });
-      }
-      const results = await queryPoiDb(env.REGISTRY_DB, lat, lng, radius, poiType, attributeFilter);
-      return json({ covered: true, cityId: place.place_id, results });
-    }
-
-    // GET /poi/all?lat=&lng=&radius=  — all cached POI types within a radius
-    if (url.pathname === '/poi/all' && request.method === 'GET') {
-      const limited = await enforceUserRateLimit(caller, env.POI_RATE_LIMITER, 'poiAll');
-      if (limited) return limited;
-      const parsed = parseCoordsAndRadius(url);
-      if (parsed instanceof Response) return parsed;
-      const { lat, lng, radius } = parsed;
-
-      const place = await findPlace(env, lat, lng);
-      if (!place || place.status !== 'mapped') {
-        return json({ covered: false, status: toApiStatus(place?.status ?? 'none'), results: [] });
-      }
-      const results = await queryPoiDb(env.REGISTRY_DB, lat, lng, radius, null, null);
-      return json({ covered: true, cityId: place.place_id, results });
     }
 
     // GET /coverage?lat=&lng=  — is this location ready / building / none?

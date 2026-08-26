@@ -9,7 +9,7 @@ import {
   MAX_RADIUS_METERS,
 } from '../geohash';
 
-/** Mirrors index.ts's queryPoiDb range clause: [prefix, prefix + '~'). */
+/** Mirrors index.ts's nearby-query range clause: [prefix, prefix + '~'). */
 function inRange(value: string, prefix: string): boolean {
   return value >= prefix && value < `${prefix}~`;
 }
@@ -21,7 +21,7 @@ const BASE32_ORDER = '0123456789bcdefghjkmnpqrstuvwxyz';
  * are truly within radiusMeters of (lat, lng), by real haversine distance —
  * independent of geohash entirely. Tests assert neighborPrefixes' candidate
  * set (post prefix-filter, pre haversine-filter — same two-stage pipeline
- * index.ts's queryPoiDb actually runs) is a superset of this ground truth.
+ * index.ts's nearby query actually runs) is a superset of this ground truth.
  */
 function trueMatches(lat: number, lng: number, radiusMeters: number, points: { lat: number; lng: number }[]) {
   return points.filter(p => haversineMeters(lat, lng, p.lat, p.lng) <= radiusMeters);
@@ -127,7 +127,7 @@ describe('requiredGridCells and the MAX_GRID_CELLS_PER_AXIS budget', () => {
 });
 
 /**
- * index.ts's queryPoiDb expresses each geohash prefix as a lexical range
+ * index.ts's nearby query expresses each geohash prefix as a lexical range
  * `geohash >= prefix AND geohash < prefix + '~'` rather than
  * `substr(geohash, 1, n) IN (...)`, so D1 can serve the filter from
  * idx_poi_city_geo (a function over the indexed column isn't sargable; a
