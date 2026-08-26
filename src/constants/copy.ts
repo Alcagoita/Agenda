@@ -179,6 +179,8 @@ const en = {
       untilDate
         ? `About ${mb} — I'll know it until ${untilDate}.`
         : `About ${mb} — I'll keep it fresh for about a month.`,
+    exactDownloadSizeLine: (size: string) => `This download is ${size}. Tap again to continue.`,
+    exactDownloadButton: (size: string) => `Download ${size}`,
     downloadButton:   'Learn this area',
     saveDatesButton:  'Save dates',
     saveAreaButton:   'Save area',
@@ -1454,6 +1456,8 @@ const ptPT: typeof en = {
       untilDate
         ? `Cerca de ${mb} — vou saber até ${untilDate}.`
         : `Cerca de ${mb} — vou manter isto atualizado durante cerca de um mês.`,
+    exactDownloadSizeLine: (size: string) => `Esta transferência tem ${size}. Toca novamente para continuar.`,
+    exactDownloadButton: (size: string) => `Descarregar ${size}`,
     downloadButton:   'Aprender esta zona',
     saveDatesButton:  'Guardar datas',
     saveAreaButton:   'Guardar zona',

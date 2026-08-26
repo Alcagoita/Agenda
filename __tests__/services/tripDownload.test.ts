@@ -36,6 +36,16 @@ jest.mock('../../src/services/firestore/trips', () => ({
   updateTrip: (...args: unknown[]) => mockUpdateTrip(...args),
 }));
 
+const mockCoverage = jest.fn();
+jest.mock('../../src/services/cloudflarePoiFunctions', () => ({
+  cloudflareCoverageProxy: (...args: unknown[]) => mockCoverage(...args),
+}));
+
+const mockImportExport = jest.fn();
+jest.mock('../../src/services/cloudflareTripExport', () => ({
+  importCloudflareTripExport: (...args: unknown[]) => mockImportExport(...args),
+}));
+
 const mockNetInfoFetch = jest.fn();
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
@@ -54,10 +64,13 @@ import {
   computeTripExpiresAt,
   shouldPreRefreshTrip,
   downloadTripArea,
+  downloadTripAreaWithCloudflare,
   downloadAreaSnapshot,
   refreshTripArea,
   checkAndRunTripPreRefresh,
   getAreaDownloadPoiTypes,
+  getCloudflareTripExportSize,
+  formatTripDownloadSize,
 } from '../../src/services/tripDownload';
 import { ALL_POI_TYPES } from '../../src/types';
 import { SUPPORTED_GOOGLE_PLACE_TYPES } from '../../src/constants/googlePlaceTypes';
@@ -84,6 +97,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
 beforeEach(() => {
   jest.clearAllMocks();
   mockNetInfoFetch.mockResolvedValue({ isConnected: true });
+  mockCoverage.mockResolvedValue({ status: 'none', placeId: null });
 });
 
 describe('TRIP_RADIUS_PRESETS', () => {
@@ -233,6 +247,63 @@ describe('downloadTripArea', () => {
   });
 });
 
+describe('downloadTripAreaWithCloudflare', () => {
+  it('imports a ready Cloudflare export instead of starting an OSM download', async () => {
+    mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    mockImportExport.mockResolvedValue(4);
+
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100))
+      .resolves.toMatchObject({ placesWritten: 4, cloudflareExport: { placeId: 'place-1', buildId: 'build-1' } });
+    expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+    expect(mockImportExport).toHaveBeenCalledWith('place-1', { lat: 1, lng: 2 }, 15_000, 'ta_1', 100, expect.any(Array));
+  });
+
+  it('falls back to OSM when coverage is not ready or the export fails', async () => {
+    mockCoverage.mockResolvedValueOnce({ status: 'building', placeId: 'place-1' });
+    mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100)).resolves.toMatchObject({ placesWritten: 1 });
+
+    mockCoverage.mockResolvedValueOnce({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    mockImportExport.mockRejectedValueOnce(new Error('export unavailable'));
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100)).resolves.toMatchObject({ placesWritten: 1 });
+  });
+
+  it('does not re-download an unchanged place build', async () => {
+    mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    const cached = { placeId: 'place-1', buildId: 'build-1', radiusMeters: 15_000, downloadedAt: 10 };
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100, cached))
+      .resolves.toEqual({ placesWritten: 0, cloudflareExport: cached });
+    expect(mockImportExport).not.toHaveBeenCalled();
+    expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+  });
+
+  it('reimports an unchanged build when the requested radius expands', async () => {
+    mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    mockImportExport.mockResolvedValue(8);
+    const cached = { placeId: 'place-1', buildId: 'build-1', radiusMeters: 15_000, downloadedAt: 10 };
+
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 40_000, 'ta_1', 100, cached))
+      .resolves.toMatchObject({ cloudflareExport: { placeId: 'place-1', buildId: 'build-1', radiusMeters: 40_000 } });
+
+    expect(mockImportExport).toHaveBeenCalledWith('place-1', { lat: 1, lng: 2 }, 40_000, 'ta_1', 100, expect.any(Array));
+  });
+});
+
+describe('getCloudflareTripExportSize', () => {
+  it('returns the exact ready R2 export size and leaves unavailable coverage undefined', async () => {
+    mockCoverage.mockResolvedValueOnce({ status: 'ready', placeId: 'place-1', buildId: 'build-1', exportBytes: 123_456 });
+    await expect(getCloudflareTripExportSize({ lat: 1, lng: 2 })).resolves.toBe(123_456);
+
+    mockCoverage.mockResolvedValueOnce({ status: 'building', placeId: 'place-1' });
+    await expect(getCloudflareTripExportSize({ lat: 1, lng: 2 })).resolves.toBeUndefined();
+  });
+
+  it('formats exact export sizes for the confirmation UI', () => {
+    expect(formatTripDownloadSize(123_456)).toBe('123 KB');
+    expect(formatTripDownloadSize(1_250_000)).toBe('1.3 MB');
+  });
+});
+
 describe('downloadAreaSnapshot (KAN-237 — shared by trip and mall snapshot downloads)', () => {
   it('requests exactly the given poiTypes (no union/derivation — caller decides the set)', async () => {
     mockSearchOsmPlaces.mockResolvedValue(SOME_PLACE);
@@ -274,6 +345,7 @@ describe('refreshTripArea', () => {
     expect(mockUpdateTrip).toHaveBeenCalledWith('uid-1', 'trip-1', {
       expiresAt: computeTripExpiresAt('2026-07-27'),
       preRefreshedAt: expect.any(Number),
+      cloudflareExport: undefined,
     });
   });
 });

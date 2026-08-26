@@ -23,6 +23,8 @@ export const POI_API_BASE_URL = 'https://poi-api.brushaway.app';
  * call — the app's ceiling for a POI request is unchanged by removing the hop.
  */
 const POI_API_TIMEOUT_MS = 8_000;
+/** Exports are multi-megabyte SQLite files, so they need a longer transport budget than a JSON search. */
+const POI_EXPORT_TIMEOUT_MS = 60_000;
 
 /** Thrown for any non-2xx response, so callers can tell HTTP failure from a transport error. */
 export class PoiApiError extends Error {
@@ -81,4 +83,27 @@ export function poiApiGet<T>(path: string): Promise<T> {
 
 export function poiApiPost<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: 'POST', body });
+}
+
+/** Fetches an authenticated binary POI export. The Worker streams its R2 body;
+ * this deliberately bypasses the JSON-only request helper above. */
+export async function poiApiGetBinary(path: string): Promise<Uint8Array> {
+  const authorization = await authHeader();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), POI_EXPORT_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${POI_API_BASE_URL}${path}`, {
+      headers: { Authorization: authorization },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const route = path.split('?')[0];
+      const text = await response.text().catch(() => '');
+      console.warn('[poiApi] binary request failed', route, response.status, text.slice(0, 200));
+      throw new PoiApiError(response.status, `POI API ${route} failed with ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  } finally {
+    clearTimeout(timer);
+  }
 }

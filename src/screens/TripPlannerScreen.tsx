@@ -33,7 +33,7 @@ import LoadingDots from '../components/LoadingDots';
 import MiniCalendar from '../components/MiniCalendar';
 import { useTripPlanner, TRIP_PREVIEW_WIDTH, TRIP_PREVIEW_HEIGHT } from '../hooks/useTripPlanner';
 import { computeTripPreviewZoom, buildTripPreviewCircle, TRIP_PREVIEW_STYLE_URL } from '../services/maps';
-import { TRIP_RADIUS_PRESETS, formatTripSizeMb } from '../services/tripDownload';
+import { TRIP_RADIUS_PRESETS, formatTripDownloadSize, formatTripSizeMb } from '../services/tripDownload';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { TripRadiusPreset } from '../types';
 import { todayISO, formatDateShort } from '../utils/date';
@@ -67,7 +67,7 @@ export default function TripPlannerScreen() {
   const {
     step, query, setQuery, suggestions, searching, selectDestination, destination,
     startDate, endDate, setStartDate, setEndDate, goToRadius, skipDates,
-    radiusKey, setRadiusKey, estimatedBytes, radiusMeters,
+    radiusKey, setRadiusKey, estimatedBytes, radiusMeters, exactDownloadBytes,
     confirmDownload, error, goBack, isEditing, editInitialStep,
   } = useTripPlanner(
     () => navigation.navigate(route.params?.doneReturnTo ?? 'PlacesIKnow'),
@@ -287,7 +287,9 @@ export default function TripPlannerScreen() {
             </View>
 
             <Text style={[styles.sizeEstimate, { color: palette.muted }]}>
-              {COPY.tripPlanner.sizeEstimateLine(formatTripSizeMb(estimatedBytes), untilDate)}
+              {exactDownloadBytes != null
+                ? COPY.tripPlanner.exactDownloadSizeLine(formatTripDownloadSize(exactDownloadBytes))
+                : COPY.tripPlanner.sizeEstimateLine(formatTripSizeMb(estimatedBytes), untilDate)}
             </Text>
 
             {!!error && <Text style={[styles.errorText, { color: palette.nearText }]}>{error}</Text>}
@@ -310,7 +312,11 @@ export default function TripPlannerScreen() {
 	            accessibilityRole="button"
 	            accessibilityLabel={isEditing ? COPY.tripPlanner.saveAreaButton : COPY.tripPlanner.downloadButton}>
 	            <Text style={[styles.ctaLabel, { color: palette.bg }]}>
-	              {isEditing ? COPY.tripPlanner.saveAreaButton : COPY.tripPlanner.downloadButton}
+              {isEditing
+                ? COPY.tripPlanner.saveAreaButton
+                : exactDownloadBytes != null
+                  ? COPY.tripPlanner.exactDownloadButton(formatTripDownloadSize(exactDownloadBytes))
+                  : COPY.tripPlanner.downloadButton}
 	            </Text>
 	          </Pressable>
 	        </View>

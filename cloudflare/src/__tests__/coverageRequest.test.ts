@@ -389,10 +389,10 @@ function createFakeDb(
 const API_KEY = 'test-key';
 const BUILD_SECRET = 'build-secret';
 
-function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[]; poiAttributeSeed?: FakePoiAttributeRow[] } = {}): Env {
+function makeEnv(seed: FakePlaceRow[] = [], opts: { countrySeed?: FakeCountryRow[]; buildLogSeed?: FakeBuildLogRow[]; poiSeed?: FakePoiRow[]; poiTypeSeed?: FakePoiTypeRow[]; poiAttributeSeed?: FakePoiAttributeRow[]; exportBytes?: number } = {}): Env {
   return {
     REGISTRY_DB: createFakeDb(seed, opts.countrySeed, opts.buildLogSeed, opts.poiSeed, opts.poiTypeSeed, opts.poiAttributeSeed),
-    POI_EXPORTS: {} as R2Bucket,
+    POI_EXPORTS: { head: vi.fn().mockResolvedValue(opts.exportBytes == null ? null : { size: opts.exportBytes }) } as unknown as R2Bucket,
     API_KEY,
     EXTRACTION_CONTAINER: {} as Env['EXTRACTION_CONTAINER'], // getContainer() itself is mocked — never really touches this
     BUILD_TRIGGER_SECRET: BUILD_SECRET,
@@ -568,6 +568,26 @@ describe('POST /poi/nearby', () => {
   });
 });
 
+describe('GET /coverage', () => {
+  it('returns the exact ready R2 export size without downloading the export', async () => {
+    const env = makeEnv([{
+      place_id: 'osm-relation-2897141', name: 'Lisboa', country_code: 'PT', place_kind: 'city',
+      min_lat: 38.0, max_lat: 39.0, min_lng: -10, max_lng: -8,
+      status: 'mapped', build_id: 'b1', mapped_at: '2026-01-01T00:00:00.000Z',
+      request_count: 0, first_requested_at: null, last_requested_at: null,
+    }], { exportBytes: 123_456 });
+
+    const res = await worker.fetch(new Request('https://poi-api.brushaway.app/coverage?lat=38.7223&lng=-9.1393', {
+      headers: { 'X-Api-Key': API_KEY },
+    }), env);
+
+    expect(await res.json()).toEqual({
+      status: 'ready', placeId: 'osm-relation-2897141', buildId: 'b1', exportBytes: 123_456,
+    });
+    expect((env.POI_EXPORTS.head as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('exports/osm-relation-2897141/b1.sqlite');
+  });
+});
+
 describe('POST /coverage/request', () => {
   it('returns ready without a new geocode call for an already-known mapped Place', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
@@ -579,9 +599,9 @@ describe('POST /coverage/request', () => {
     }]);
 
     const res = await worker.fetch(coverageRequest(38.7223, -9.1393), env);
-    const body = await res.json() as { coverageStatus: string; cityId: string };
+    const body = await res.json() as { coverageStatus: string; placeId: string };
 
-    expect(body).toEqual({ coverageStatus: 'ready', cityId: 'osm-relation-2897141' });
+    expect(body).toEqual({ coverageStatus: 'ready', placeId: 'osm-relation-2897141' });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -603,7 +623,7 @@ describe('POST /coverage/request', () => {
 
     const res = await worker.fetch(coverageRequest(41.15, -8.61), env);
 
-    expect(await res.json()).toEqual({ coverageStatus: 'ready', cityId: 'osm-relation-540089' });
+    expect(await res.json()).toEqual({ coverageStatus: 'ready', placeId: 'osm-relation-540089' });
   });
 
   it('KAN-354: records demand, promotes a brand new Place to mapping, and starts the extraction Container', async () => {
@@ -611,10 +631,10 @@ describe('POST /coverage/request', () => {
     const env = makeEnv();
 
     const res = await worker.fetch(coverageRequest(38.79, -9.38), env);
-    const body = await res.json() as { coverageStatus: string; cityId: string; retryAfterSeconds?: number };
+    const body = await res.json() as { coverageStatus: string; placeId: string; retryAfterSeconds?: number };
 
     expect(body.coverageStatus).toBe('building');
-    expect(body.cityId).toBe('osm-relation-1294136');
+    expect(body.placeId).toBe('osm-relation-1294136');
     expect(body.retryAfterSeconds).toBeGreaterThan(0);
 
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow> };
@@ -710,14 +730,14 @@ describe('POST /coverage/request', () => {
     const env = makeEnv();
 
     const res = await worker.fetch(coverageRequest(38.7223, -9.1393), env);
-    const body = await res.json() as { coverageStatus: string; cityId: string };
+    const body = await res.json() as { coverageStatus: string; placeId: string };
 
     const nominatimCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes('nominatim'));
     expect(nominatimCalls).toHaveLength(2);
     expect(String(nominatimCalls[0][0])).toContain('zoom=10');
     expect(String(nominatimCalls[1][0])).toContain('zoom=9');
     // Records the municipality's own stable id, not the freguesia's.
-    expect(body.cityId).toBe('osm-relation-2897141');
+    expect(body.placeId).toBe('osm-relation-2897141');
     const stored = (env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> }).rows.get('osm-relation-2897141');
     expect(stored?.name).toBe('Lisboa');
   });
@@ -733,9 +753,9 @@ describe('POST /coverage/request', () => {
     const env = makeEnv();
 
     const res = await worker.fetch(coverageRequest(-23.55, -46.63), env);
-    const body = await res.json() as { coverageStatus: string; cityId: string };
+    const body = await res.json() as { coverageStatus: string; placeId: string };
 
-    expect(body.cityId).toBe('osm-relation-7654321');
+    expect(body.placeId).toBe('osm-relation-7654321');
     const stored = (env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> }).rows.get('osm-relation-7654321');
     expect(stored?.name).toBe('São Paulo');
   });
@@ -748,9 +768,9 @@ describe('POST /coverage/request', () => {
     const env = makeEnv();
 
     const res = await worker.fetch(coverageRequest(38.7223, -9.1393), env);
-    const body = await res.json() as { coverageStatus: string; cityId: string | null };
+    const body = await res.json() as { coverageStatus: string; placeId: string | null };
 
-    expect(body).toEqual({ coverageStatus: 'none', cityId: null });
+    expect(body).toEqual({ coverageStatus: 'none', placeId: null });
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
     expect(fakeDb.rows.size).toBe(0);
   });
@@ -760,9 +780,9 @@ describe('POST /coverage/request', () => {
     const env = makeEnv();
 
     const res = await worker.fetch(coverageRequest(38.79, -9.38), env);
-    const body = await res.json() as { coverageStatus: string; cityId: string | null };
+    const body = await res.json() as { coverageStatus: string; placeId: string | null };
 
-    expect(body).toEqual({ coverageStatus: 'none', cityId: null });
+    expect(body).toEqual({ coverageStatus: 'none', placeId: null });
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> };
     expect(fakeDb.rows.size).toBe(0);
   });
@@ -776,7 +796,7 @@ describe('POST /coverage/request', () => {
 
     const res = await worker.fetch(coverageRequest(41.15, -8.61), env);
 
-    expect(await res.json()).toEqual({ coverageStatus: 'none', cityId: null });
+    expect(await res.json()).toEqual({ coverageStatus: 'none', placeId: null });
     const fakeDb = env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow>; countryRows: Map<string, FakeCountryRow> };
     expect(fakeDb.rows.size).toBe(0);
     expect(fakeDb.countryRows.size).toBe(0);

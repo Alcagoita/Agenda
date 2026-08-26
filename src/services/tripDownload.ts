@@ -28,6 +28,8 @@ import { searchOsmPlacesStrict } from './osmPlaces';
 import { writeTripAreaPlaces, HABITAT_BYTES_PER_ROW } from './habitatCache';
 import { updateTrip } from './firestore/trips';
 import { todayISO } from '../utils/date';
+import { cloudflareCoverageProxy } from './cloudflarePoiFunctions';
+import { importCloudflareTripExport } from './cloudflareTripExport';
 // ─── Radius presets ───────────────────────────────────────────────────────────
 
 /**
@@ -126,6 +128,14 @@ export function formatTripSizeMb(bytes: number): string {
   return mb < 1 ? '< 1 MB' : `${Math.round(mb)} MB`;
 }
 
+/** Exact R2 export size for the post-tap download confirmation. */
+export function formatTripDownloadSize(bytes: number): string {
+  if (bytes < 1_000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${Math.round(bytes / 1_000)} KB`;
+  const mb = bytes / 1_000_000;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
 // ─── Download orchestration ───────────────────────────────────────────────────
 
 /**
@@ -201,6 +211,62 @@ export async function downloadTripArea(
   return downloadAreaSnapshot(center, radiusMeters, cacheAreaId, expiresAt, poiTypes);
 }
 
+export type TripDownloadResult = {
+  placesWritten: number;
+  cloudflareExport?: NonNullable<Trip['cloudflareExport']>;
+};
+
+/**
+ * Looks up the exact R2 export size without downloading it. Undefined keeps
+ * the existing OSM path intact for uncovered/building destinations.
+ */
+export async function getCloudflareTripExportSize(
+  center: { lat: number; lng: number },
+): Promise<number | undefined> {
+  try {
+    const coverage = await cloudflareCoverageProxy(center.lat, center.lng);
+    return coverage.status === 'ready' && typeof coverage.exportBytes === 'number'
+      ? coverage.exportBytes
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Cloudflare is preferred for covered destinations; every unavailable or
+ * failed export falls back to the established OSM path without touching the
+ * existing cache until a complete replacement is ready. */
+export async function downloadTripAreaWithCloudflare(
+  center: { lat: number; lng: number },
+  radiusMeters: number,
+  cacheAreaId: string,
+  expiresAt: number,
+  cachedExport?: Trip['cloudflareExport'],
+): Promise<TripDownloadResult> {
+  try {
+    const coverage = await cloudflareCoverageProxy(center.lat, center.lng);
+    if (coverage.status === 'ready' && coverage.placeId && coverage.buildId) {
+      if (
+        cachedExport?.placeId === coverage.placeId
+        && cachedExport.buildId === coverage.buildId
+        && cachedExport.radiusMeters >= radiusMeters
+      ) {
+        return { placesWritten: 0, cloudflareExport: cachedExport };
+      }
+      const placesWritten = await importCloudflareTripExport(
+        coverage.placeId, center, radiusMeters, cacheAreaId, expiresAt, getAreaDownloadPoiTypes(),
+      );
+      return {
+        placesWritten,
+        cloudflareExport: { placeId: coverage.placeId, buildId: coverage.buildId, radiusMeters, downloadedAt: Date.now() },
+      };
+    }
+  } catch (error) {
+    console.warn('[tripDownload] Cloudflare export failed; falling back to OSM', error);
+  }
+  return { placesWritten: await downloadTripArea(center, radiusMeters, cacheAreaId, expiresAt) };
+}
+
 /**
  * Re-runs downloadTripArea for an existing trip (manual refresh from Places
  * I Know, or the day-before pre-refresh) and bumps its Firestore
@@ -211,13 +277,14 @@ export async function refreshTripArea(
   trip: Trip,
 ): Promise<void> {
   const expiresAt = computeTripExpiresAt(trip.endDate);
-  await downloadTripArea(
+  const result = await downloadTripAreaWithCloudflare(
     { lat: trip.centerLat, lng: trip.centerLng },
     trip.areaRadius,
     trip.cacheAreaId,
     expiresAt,
+    trip.cloudflareExport,
   );
-  await updateTrip(uid, trip.id, { expiresAt, preRefreshedAt: Date.now() });
+  await updateTrip(uid, trip.id, { expiresAt, preRefreshedAt: Date.now(), cloudflareExport: result.cloudflareExport });
 }
 
 /**
