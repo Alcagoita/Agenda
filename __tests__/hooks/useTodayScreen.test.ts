@@ -35,6 +35,10 @@ const mockClearBootData = jest.fn();
 let mockBootData: any = null;
 
 jest.mock('../../src/services/firestore', () => ({
+  subscribeToActiveTasks: jest.fn((_uid: string, _today: string, onNext: (tasks: unknown[]) => void, onError: (error: Error) => void) => {
+    Promise.resolve(mockGetTasksForDate()).then(onNext, onError);
+    return jest.fn();
+  }),
   getTasksForDate:      (...args: unknown[]) => mockGetTasksForDate(...args),
   ensureCurrentDay:     (...args: unknown[]) => mockEnsureCurrentDay(...args),
   filterActiveTasksForDate: (tasks: any[], today: string) => tasks.filter(task =>

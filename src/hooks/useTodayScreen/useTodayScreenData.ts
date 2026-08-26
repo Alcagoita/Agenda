@@ -16,7 +16,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import {
   getCategories,
-  ensureCurrentDay,
   getUserPreferences,
   getPoiPreferencesMap,
   getUser,
@@ -24,6 +23,7 @@ import {
   getInboxUnreadCount,
   getTrips,
   filterActiveTasksForDate,
+  subscribeToActiveTasks,
 } from '../../services/firestore';
 import { getMallSnapshot } from '../../services/mallSnapshots';
 import { getIncomingSharedTasksCount } from '../../services/sharing';
@@ -102,6 +102,9 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
   const [storeTuningEnabled, setStoreTuningEnabled]  = useState<boolean | undefined>(undefined);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [mallSnapshot, setMallSnapshot] = useState<MallSnapshot | null>(null);
+  const [listenerGeneration, setListenerGeneration] = useState(0);
+  const retryAttemptRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const latestTasksRef = useRef<Task[]>([]);
   const currentDayRef = useRef(todayISO());
@@ -222,7 +225,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
 
     try {
       const [
-        fetchedTasksResult,
         userDataResult,
         userPrefsResult,
         poiPrefsMapResult,
@@ -233,7 +235,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
         fetchedTripsResult,
         fetchedMallSnapshotResult,
       ] = await Promise.allSettled([
-        withTimeout(ensureCurrentDay(uid), 'tasks'),
         withTimeout(getUser(uid), 'user'),
         withTimeout(getUserPreferences(uid), 'userPrefs'),
         withTimeout(getPoiPreferencesMap(uid), 'poiPrefs'),
@@ -247,7 +248,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
 
       if (isStale()) { return; }
 
-      logFetchFailure('tasks', fetchedTasksResult);
       logFetchFailure('user', userDataResult);
       logFetchFailure('userPrefs', userPrefsResult);
       logFetchFailure('poiPrefs', poiPrefsMapResult);
@@ -257,16 +257,6 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
       logFetchFailure('socialInbox', socialUnreadResult);
       logFetchFailure('trips', fetchedTripsResult);
       logFetchFailure('mallSnapshot', fetchedMallSnapshotResult);
-
-      const cachedTasks = latestTasksRef.current;
-      if (fetchedTasksResult.status === 'fulfilled') {
-        setTasks(fetchedTasksResult.value.tasks);
-      } else {
-        setTasks(cachedTasks);
-      }
-      if (fetchedTasksResult.status === 'rejected' && cachedTasks.length === 0) {
-        setError(TASKS_LOAD_ERROR);
-      }
 
       const categories = categoriesResult.status === 'fulfilled'
         ? categoriesResult.value
@@ -336,14 +326,49 @@ export function useTodayScreenData(uid: string | undefined): TodayScreenData {
     loadData();
   }, [loadData]);
 
-  const refresh = useCallback(() => loadData(true), [loadData]);
+  const refresh = useCallback(async () => {
+    retryAttemptRef.current = 0;
+    setListenerGeneration(generation => generation + 1);
+    await loadData(true);
+  }, [loadData]);
+
+  // This is the sole long-lived active-task read. Firestore serves its local
+  // cache first, then pushes local and remote writes without focus/polling.
+  useEffect(() => {
+    if (!uid) { return; }
+    let active = true;
+    const unsubscribe = subscribeToActiveTasks(
+      uid,
+      currentDayRef.current,
+      nextTasks => {
+        if (!active) { return; }
+        retryAttemptRef.current = 0;
+        setTasks(nextTasks);
+        setError(null);
+        setIsLoading(false);
+      },
+      listenerError => {
+        if (!active) { return; }
+        console.warn('[useTodayScreenData] active-task listener failed', listenerError);
+        setError(TASKS_LOAD_ERROR);
+        setIsLoading(false);
+        const delay = Math.min(1_000 * 2 ** retryAttemptRef.current++, 30_000);
+        retryTimerRef.current = setTimeout(() => setListenerGeneration(generation => generation + 1), delay);
+      },
+    );
+    return () => {
+      active = false;
+      unsubscribe();
+      if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+    };
+  }, [uid, listenerGeneration]);
 
   const ensureCurrentDayForLifecycle = useCallback(async () => {
     const currentDay = todayISO();
     if (currentDay === currentDayRef.current) { return; }
     currentDayRef.current = currentDay;
-    await loadData(true);
-  }, [loadData]);
+    setListenerGeneration(generation => generation + 1);
+  }, []);
 
   // A foreground session can cross midnight without navigating away. Refresh
   // just after the local boundary so selected-date tasks leave the active list.

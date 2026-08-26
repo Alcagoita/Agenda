@@ -406,7 +406,13 @@ export default function SplashScreen({ onExit }: SplashScreenProps) {
         if (tripsResult.status === 'rejected') { console.warn('[SplashScreen] getTrips failed (non-critical)', tripsResult.reason); }
         if (mallSnapshotResult.status === 'rejected') { console.warn('[SplashScreen] getMallSnapshot failed (non-critical)', mallSnapshotResult.reason); }
 
-        const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : [];
+        // Do not publish a failed task read as a successful empty boot list.
+        // Today will establish its listener and show a recoverable error.
+        if (tasksResult.status === 'rejected') {
+          markReady();
+          return;
+        }
+        const tasks = tasksResult.value;
         const userData = userDataResult.status === 'fulfilled' ? userDataResult.value : null;
         const userPrefs = userPrefsResult.status === 'fulfilled' ? userPrefsResult.value : {};
         const poiPrefsMap = poiPrefsMapResult.status === 'fulfilled' ? poiPrefsMapResult.value : {};
