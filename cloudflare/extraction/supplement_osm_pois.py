@@ -317,9 +317,18 @@ def identity_tokens(normalized_name: str) -> Counter:
     "mcdonald s" and "D'Italia" into "d italia", so a bare `s` or `d` is an
     apostrophe artifact, and `C.` in "Papelaria C. Roque" is an initial.
     Neither ever identifies a venue on its own (KAN-388).
+
+    Bare numbers go with them, and for the same reason: "28 Sabores do Mundo"
+    is not "28". Excluding them *here* rather than at the point of comparison
+    matters, because the core's SIZE gates whether a single shared token is
+    admissible at all. A number that can never be evidence must not inflate
+    that count — otherwise "Restaurante 12 Teimoso" and "Restaurante 34
+    Teimoso" both measure two tokens wide and their shared `teimoso` is never
+    considered.
     """
     return Counter(token for token in normalized_name.split()
-                   if token not in NON_IDENTITY_NAME_TOKENS and len(token) > 1)
+                   if token not in NON_IDENTITY_NAME_TOKENS
+                   and len(token) > 1 and not token.isdigit())
 
 
 def normalized_identity_terms_match(left: str, right: str) -> bool:
@@ -350,9 +359,10 @@ def single_identity_token_match(left: str, right: str, distance_meters: float) -
         "Noodle King" / "Burger King" at 2.6 m. The proposal as originally
         written merged 1,066 pairs, roughly half of them wrong; with this
         guard it merges 485, of which about 20 are wrong.
-      * A purely numeric token is not an identity. "28 Sabores do Mundo" and
-        "28" are not evidently the same venue; "R3", "P4" and "L7" are, and
-        stay matchable because they are not all digits.
+      * A purely numeric token is not an identity, and `identity_tokens` has
+        already dropped it. "28 Sabores do Mundo" and "28" are not evidently
+        the same venue; "R3", "P4" and "L7" are, and stay matchable because
+        they are not all digits.
     """
     if distance_meters > SINGLE_TOKEN_MATCH_METERS:
         return False
@@ -361,7 +371,7 @@ def single_identity_token_match(left: str, right: str, distance_meters: float) -
         return False
     if min(len(left_core), len(right_core)) > 1:
         return False
-    return any(not token.isdigit() for token in left_core.keys() & right_core.keys())
+    return bool(left_core.keys() & right_core.keys())
 
 
 def names_match(left: str, right: str, distance_meters: float) -> bool:

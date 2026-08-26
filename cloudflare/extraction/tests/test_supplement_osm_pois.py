@@ -140,6 +140,20 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertFalse(supplement.single_identity_token_match('28 sabores do mundo', '28', 2.0))
         self.assertTrue(supplement.single_identity_token_match('r3', 'restaurante r3', 5.2))
 
+    def test_a_house_number_does_not_hide_the_identity_behind_it(self):
+        """A number is not evidence, so it must not gate the evidence either.
+
+        The core's size decides whether one shared token is admissible. If a
+        bare number counted toward that size, these two would each measure
+        two tokens wide and their shared `teimoso` would never be weighed —
+        a number blocking a match it is not allowed to contribute to.
+        """
+        self.assertEqual(set(supplement.identity_tokens('restaurante 12 teimoso')), {'teimoso'})
+        self.assertTrue(
+            supplement.single_identity_token_match('restaurante 12 teimoso', 'restaurante 34 teimoso', 6.0))
+        # Still no match when the number was the only thing they shared.
+        self.assertFalse(supplement.single_identity_token_match('restaurante 12 lagar', 'churrasqueira 12 forno', 6.0))
+
     def test_apostrophe_and_initial_artifacts_are_not_identity_tokens(self):
         # `normalize_text` leaves a bare `s` behind "McDonald's" and a bare
         # `d` behind "D'Italia"; `C.` in "Papelaria C. Roque" is an initial.
