@@ -91,22 +91,78 @@ class SupplementOsmPoisTest(unittest.TestCase):
         )
 
     def test_reordered_identity_name_is_skipped_but_shared_surname_is_imported(self):
+        # The surname pair sits ~55 m apart, outside KAN-388's 20 m window,
+        # so a single shared `rosa` is not enough to merge it.
         existing = [
             supplement.Candidate('foursquare', 'ala-sul', 'Ala Sul Café', 'ala sul cafe', 39.80345, -8.10126, 'cafe'),
-            supplement.Candidate('foursquare', 'rosa-family', 'Alberto Rosa & Filhos', 'alberto rosa filhos', 39.80355, -8.10126, 'cafe'),
+            supplement.Candidate('foursquare', 'rosa-family', 'Alberto Rosa & Filhos', 'alberto rosa filhos', 39.80395, -8.10126, 'cafe'),
         ]
         imports, stats, _ = supplement.classify_scope([
             element(1, 'Café Ala Sul', amenity='cafe'),
-            element(2, 'Café Rosa', lat=39.80355, amenity='cafe'),
+            element(2, 'Café Rosa', amenity='cafe'),
         ], existing, 39.80345)
 
         self.assertEqual([poi.name for poi in imports], ['Café Rosa'])
         self.assertEqual(stats['matched_skipped'], 1)
         self.assertEqual(stats['normalized_identity_matched_skipped'], 1)
 
+    def test_single_shared_identity_token_merges_only_at_close_range(self):
+        """KAN-388's whole trade, stated as a test.
+
+        "O Teimoso" and "Restaurante Teimoso" both reduce to {teimoso}, which
+        the two-term rule refuses; metres apart they are one venue. The cost
+        is the same shape: "Café Rosa" and "Alberto Rosa & Filhos" — a real
+        Odivelas pair — now merge too if they are ever within 20 m. Measured
+        across the completed PT run that trade is 478 merges at roughly 96%
+        precision, and the wrong ones stay correctable through
+        `poi_source_correction`.
+        """
+        self.assertTrue(supplement.single_identity_token_match('o teimoso', 'restaurante teimoso', 6.1))
+        self.assertFalse(supplement.single_identity_token_match('o teimoso', 'restaurante teimoso', 20.1))
+        self.assertTrue(supplement.single_identity_token_match('cafe rosa', 'alberto rosa filhos', 6.0))
+
+    def test_a_shared_category_word_is_never_an_identity(self):
+        """The failure the un-guarded proposal would have shipped.
+
+        Every pair here is metres apart and shares exactly one token, and
+        every one is two different businesses.
+        """
+        # Both sides carry two identity tokens, so neither is a single-token
+        # identity — this is what keeps rival banks and pharmacies apart.
+        self.assertFalse(supplement.single_identity_token_match('novo banco', 'banco montepio', 0.4))
+        self.assertFalse(supplement.single_identity_token_match('noodle king', 'burger king', 2.6))
+        self.assertFalse(
+            supplement.single_identity_token_match('farmacia nova de cerveira', 'farmacia correia de sampaio', 1.1))
+        # A retail trade word is the type, not noise: dropping it would fuse
+        # a butcher into a jeweller.
+        self.assertFalse(supplement.single_identity_token_match('talho do marques', 'ourivesaria marques', 5.4))
+        # A number alone does not identify a venue; an alphanumeric name does.
+        self.assertFalse(supplement.single_identity_token_match('28 sabores do mundo', '28', 2.0))
+        self.assertTrue(supplement.single_identity_token_match('r3', 'restaurante r3', 5.2))
+
+    def test_apostrophe_and_initial_artifacts_are_not_identity_tokens(self):
+        # `normalize_text` leaves a bare `s` behind "McDonald's" and a bare
+        # `d` behind "D'Italia"; `C.` in "Papelaria C. Roque" is an initial.
+        self.assertEqual(set(supplement.identity_tokens('mcdonald s')), {'mcdonald'})
+        self.assertEqual(set(supplement.identity_tokens('d italia pizzeria')), {'italia'})
+        self.assertFalse(supplement.single_identity_token_match('mcdonald s', 'queenmama s', 3.0))
+
+    def test_food_service_words_are_dropped_but_retail_trade_words_are_kept(self):
+        self.assertIn('churrasqueira', supplement.NON_IDENTITY_NAME_TOKENS)
+        self.assertIn('cervejaria', supplement.NON_IDENTITY_NAME_TOKENS)
+        self.assertIn('lda', supplement.NON_IDENTITY_NAME_TOKENS)
+        for retail in ('talho', 'ourivesaria', 'livraria', 'papelaria', 'sapataria', 'optica'):
+            self.assertNotIn(retail, supplement.NON_IDENTITY_NAME_TOKENS)
+        # Two food-service words over the same identity is now a match the
+        # existing two-term rule can make on its own, at any distance.
+        self.assertTrue(
+            supplement.normalized_identity_terms_match('churrasqueira vasco da gama', 'restaurante vasco da gama'))
+
     def test_differently_named_same_location_is_reported_but_still_admitted(self):
+        # Sharing no identity token, these stay two businesses at one address
+        # — the common case the report exists for.
         existing = [
-            supplement.Candidate('foursquare', 'fsq-lagar', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
+            supplement.Candidate('foursquare', 'fsq-fonseca', 'Adega Fonseca', 'adega fonseca', 39.80345, -8.10126, 'restaurant'),
         ]
         imports, _, _ = supplement.classify_scope([
             element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
@@ -118,7 +174,20 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].severity, 'same_location')
         self.assertEqual(rows[0].source, 'foursquare')
-        self.assertEqual(rows[0].source_name, 'Lagar Restaurante')
+        self.assertEqual(rows[0].source_name, 'Adega Fonseca')
+
+    def test_same_identity_at_one_address_is_merged_not_reported(self):
+        """The KAN-388 case end to end: "O Lagar" is "Lagar Restaurante"."""
+        existing = [
+            supplement.Candidate('foursquare', 'fsq-lagar', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
+        ]
+        imports, stats, _ = supplement.classify_scope([
+            element(2, 'O Lagar', lat=39.80346, lng=-8.10127, amenity='restaurant'),
+        ], existing, 39.80345)
+
+        self.assertEqual(imports, [])
+        self.assertEqual(stats['matched_skipped'], 1)
+        self.assertEqual(supplement.possible_renames(imports, existing), [])
 
     def test_possible_renames_only_calculates_distance_for_nearby_same_type_rows(self):
         poi = supplement.osm_poi_from_element(
@@ -126,7 +195,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
         )
         assert poi is not None
         candidates = [
-            supplement.Candidate('foursquare', 'nearby', 'Lagar Restaurante', 'lagar restaurante', 39.80345, -8.10126, 'restaurant'),
+            supplement.Candidate('foursquare', 'nearby', 'Adega Fonseca', 'adega fonseca', 39.80345, -8.10126, 'restaurant'),
             supplement.Candidate('foursquare', 'far-away', 'Other Restaurant', 'other restaurant', 40.80345, -8.10126, 'restaurant'),
             supplement.Candidate('community', 'wrong-type', 'Other Cafe', 'other cafe', 39.80345, -8.10126, 'cafe'),
         ]
