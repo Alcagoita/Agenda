@@ -64,7 +64,7 @@ accepted:
 
   | Routes | Budget |
   |---|---|
-  | `/poi`, `/poi/all`, `/poi/nearby` (GET + POST), `/coverage` | 30/min |
+  | `/poi/nearby` (GET + POST), `/coverage` | 30/min |
   | `/coverage/request`, `/export/:cityId` | 5/min |
 
   `/export` shares the tighter budget rather than the read one because each
@@ -81,10 +81,9 @@ accepted:
 A request carrying a bearer token that fails verification is rejected with
 401 outright — it never falls back to the API key.
 
-- `GET /poi?lat=&lng=&radius=&type=&attribute=&value=` — POIs of one type
-  within a radius, optionally narrowed to 1-2 `poi_attribute` values (e.g.
-  `type=restaurant&attribute=food_cuisine&value=sushi`)
-- `GET /poi/all?lat=&lng=&radius=` — all cached types within a radius
+- `GET /poi/nearby?lat=&lng=&radius=&types=` and `POST /poi/nearby` — the
+  supported nearby-POI search APIs. They include Foursquare, OpenStreetMap,
+  and curated community rows.
 - `GET /coverage?lat=&lng=` — `{status, cityId, buildId}` for this location.
   `buildId` (KAN-339) lets a client compare its locally cached download's
   build against the current one without fetching `/export/:cityId` just to
