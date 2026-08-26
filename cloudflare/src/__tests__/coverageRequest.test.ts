@@ -18,7 +18,7 @@ vi.mock('@cloudflare/containers', () => ({
   Container: class {},
 }));
 
-import worker, { type Env } from '../index';
+import worker, { NominatimResolver, type Env } from '../index';
 
 /**
  * Hand-rolled fake D1 — no @cloudflare/vitest-pool-workers/miniflare D1
@@ -441,10 +441,69 @@ function mockNominatim(body: unknown = NOMINATIM_RESPONSE) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 }));
 }
 
+function createResolverState(seed: Map<string, unknown> = new Map()) {
+  let alarm: number | null = null;
+  const storage = {
+    async get<T>(key: string): Promise<T | undefined> { return seed.get(key) as T | undefined; },
+    async put(key: string, value: unknown) { seed.set(key, value); },
+    async delete(key: string) { return seed.delete(key); },
+    async getAlarm() { return alarm; },
+    async setAlarm(nextAlarm: number) { alarm = nextAlarm; },
+    async list<T>(options: { prefix: string }) {
+      return new Map([...seed.entries()].filter(([key]) => key.startsWith(options.prefix))) as Map<string, T>;
+    },
+  };
+  return { state: { storage } as unknown as DurableObjectState, storage, seed, alarm: () => alarm };
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   mockGetContainer.mockClear();
   mockContainerStart.mockClear();
+});
+
+describe('NominatimResolver', () => {
+  it('caches a successful resolution and schedules expiry cleanup', async () => {
+    mockNominatim();
+    const { state, seed, alarm } = createResolverState();
+    const resolver = new NominatimResolver(state, {} as Env);
+
+    await expect(resolver.resolve(38.79, -9.38)).resolves.toMatchObject({ placeId: 'osm-relation-1294136' });
+    await expect(resolver.resolve(38.79, -9.38)).resolves.toMatchObject({ placeId: 'osm-relation-1294136' });
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect([...seed.keys()].some(key => key.startsWith('cache:'))).toBe(true);
+    expect(alarm()).toBeGreaterThan(Date.now());
+  });
+
+  it('returns none after six seconds when the resolver is still queued', async () => {
+    vi.useFakeTimers();
+    const { state } = createResolverState();
+    const resolver = new NominatimResolver(state, {} as Env);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}));
+
+    const active = resolver.resolve(38.79, -9.38);
+    const queued = resolver.resolve(38.8, -9.39);
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(active).resolves.toBeNull();
+    await expect(queued).resolves.toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('removes expired cache entries when its alarm fires', async () => {
+    const { state, seed, alarm } = createResolverState(new Map([
+      ['cache:expired', { expiresAt: Date.now() - 1, value: NOMINATIM_RESPONSE }],
+      ['cache:fresh', { expiresAt: Date.now() + 60_000, value: NOMINATIM_RESPONSE }],
+    ]));
+    const resolver = new NominatimResolver(state, {} as Env);
+
+    await resolver.alarm();
+
+    expect(seed.has('cache:expired')).toBe(false);
+    expect(alarm()).toBeGreaterThan(Date.now());
+  });
 });
 
 describe('GET /poi/nearby', () => {

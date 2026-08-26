@@ -83,6 +83,10 @@
       {
         "name": "EXTRACTION_CONTAINER",
         "class_name": "ExtractionContainer"
+      },
+      {
+        "name": "NOMINATIM_RESOLVER",
+        "class_name": "NominatimResolver"
       }
     ]
   },
@@ -90,6 +94,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["ExtractionContainer"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["NominatimResolver"]
     }
   ]
 }
