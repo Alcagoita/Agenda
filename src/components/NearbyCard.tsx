@@ -46,16 +46,16 @@ import { useTheme } from '../theme';
 import { spacing, radius } from '../theme/tokens';
 
 import { NearbyPlace, openInMaps, formatDistance, placeTypeLabel } from '../services/maps';
-import { PlacesMap } from '../services/proximity';
-import { Task } from '../types';
+import type { PlacesMap } from '../services/proximity';
+// Same HERO_RADIUS_M the proximity engine uses — one number, two consumers
+// that must agree (KAN-419).
+import { HERO_RADIUS_M, Task } from '../types';
 import { ChevronRightIcon, PoiIcon, RefreshIcon } from './AppIcon';
 import { logTap } from '../services/analytics';
 import { COPY } from '../constants/copy';
 import { restaurantPlacesForTask, restaurantTaskMatchesAnyPlace } from '../services/restaurantFoodTypes';
 import { storePlacesForTask, storeTaskMatchesAnyPlace } from '../services/storeSubtypes';
 
-// Distance threshold that separates the orange hero zone from the grey zone.
-const HERO_RADIUS_M = 100;
 
 function nearestDistanceForTask(task: Task, poiPlaces: PlacesMap): number {
   if (!task.poi) { return Number.POSITIVE_INFINITY; }
