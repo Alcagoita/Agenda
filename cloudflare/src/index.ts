@@ -30,10 +30,11 @@ export interface Env {
   // Cloudflare API token; BUILD_TRIGGER_SECRET is what it uses to call back
   // /internal/* (passed to it as an env var when started — see triggerBuild).
   EXTRACTION_CONTAINER: DurableObjectNamespace<ExtractionContainer>;
-  // The resolver class uses the same RPC surface in production and tests;
-  // this binding stays unbranded because the local Vitest runtime has no
-  // cloudflare:workers module to provide DurableObjectBranded.
-  NOMINATIM_RESOLVER?: DurableObjectNamespace<any>;
+  NOMINATIM_RESOLVER?: {
+    getByName(name: string): {
+      resolve(lat: number, lng: number): Promise<PlaceGeo | null>;
+    };
+  };
   BUILD_TRIGGER_SECRET?: string;
   // Foursquare Places Portal JWT (expires, manual renewal — see
   // cloudflare/README.md's Extraction pipeline section). Passed to the
@@ -792,8 +793,13 @@ async function nominatimReverse(lat: number, lng: number, zoom: number): Promise
  * resolves cleanly — callers must treat that as "genuinely unknown, don't
  * record", not as an empty administrative area.
  */
-async function resolvePlaceIdentityDirect(lat: number, lng: number): Promise<PlaceGeo | null> {
+async function resolvePlaceIdentityDirect(
+  lat: number,
+  lng: number,
+  beforeRequest: () => Promise<void> = async () => {},
+): Promise<PlaceGeo | null> {
   for (const zoom of NOMINATIM_ZOOM_CANDIDATES) {
+    await beforeRequest();
     const result = await nominatimReverse(lat, lng, zoom);
     if (!result) return null; // transport/parse failure — do not retry a coarser zoom on a broken call
     // address carrying no narrower settlement name than the feature's own
@@ -818,7 +824,7 @@ type NominatimCacheEntry = { expiresAt: number; value: PlaceGeo | null };
 
 /** Coordinates are never persisted or used as a key: only this digest is. */
 async function coordinateCacheKey(lat: number, lng: number): Promise<string> {
-  const bytes = new TextEncoder().encode(`${lat.toFixed(5)},${lng.toFixed(5)}`);
+  const bytes = new TextEncoder().encode(`${lat},${lng}`);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
 }
@@ -833,11 +839,13 @@ export class NominatimResolver {
       const key = await coordinateCacheKey(lat, lng);
       const cached = await this.ctx.storage.get<NominatimCacheEntry>(key);
       if (cached && cached.expiresAt > Date.now()) return cached.value;
-      const lastCallAt = await this.ctx.storage.get<number>('last-nominatim-call-at') ?? 0;
-      const waitMs = Math.max(0, 1_000 - (Date.now() - lastCallAt));
-      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-      await this.ctx.storage.put('last-nominatim-call-at', Date.now());
-      const value = await resolvePlaceIdentityDirect(lat, lng);
+      const beforeRequest = async () => {
+        const lastCallAt = await this.ctx.storage.get<number>('last-nominatim-call-at') ?? 0;
+        const waitMs = Math.max(0, 1_000 - (Date.now() - lastCallAt));
+        if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+        await this.ctx.storage.put('last-nominatim-call-at', Date.now());
+      };
+      const value = await resolvePlaceIdentityDirect(lat, lng, beforeRequest);
       if (value) await this.ctx.storage.put(key, { value, expiresAt: Date.now() + 86_400_000 });
       return value;
     });
@@ -2378,9 +2386,8 @@ export default {
         return respondCoverageRequest(existing);
       }
 
-      const resolver = env.NOMINATIM_RESOLVER as any;
-      const geo = resolver
-        ? await resolver.getByName('global').resolve(lat, lng)
+      const geo = env.NOMINATIM_RESOLVER
+        ? await env.NOMINATIM_RESOLVER.getByName('global').resolve(lat, lng)
         : await resolvePlaceIdentityDirect(lat, lng);
       if (!geo) {
         // Transport failure or an unresolvable point — genuinely unknown,

@@ -93,7 +93,11 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["ExtractionContainer", "NominatimResolver"]
+      "new_sqlite_classes": ["ExtractionContainer"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["NominatimResolver"]
     }
   ]
 }
