@@ -867,7 +867,7 @@ def classify_scope(elements: Iterable[dict], candidates: list[Candidate], center
             continue
         elif match is not None:
             if normalized_identity_terms_match(poi.dedupe_name, match.dedupe_name):
-                stats['normalized_identity_matched_skipped'] += 1
+                stats['normalized_identity_matched'] += 1
             if match.source != 'foursquare':
                 # A community row is human-reviewed and an already-imported
                 # OSM row is the same source: neither is a stale third-party
@@ -983,17 +983,27 @@ def statements_for_pois(pois: list[OsmPoi]) -> list[str]:
             )) + ')'
             for poi in group
         )
-        # KAN-427 — hours are now carried, so they join the update list. They
-        # are COALESCEd rather than overwritten: a later refresh of an element
-        # whose hours came from the Foursquare row it replaced must not blank
-        # them just because OSM still has none.
+        # KAN-427 — every field that can be INHERITED is COALESCEd, never
+        # overwritten. This is not defensive style, it is required for the
+        # inheritance to survive at all: once an element supersedes a
+        # Foursquare row, that row is `visible = 0` and the candidate loader
+        # skips it, so the next refresh of the same element matches nothing
+        # and arrives with brand, address and hours all empty. A plain
+        # `= excluded` would blank exactly what this ticket just inherited,
+        # one refresh later.
+        #
+        # The cost is that an inherited value can no longer be cleared by OSM
+        # dropping its own. That is the right side to err on: the value came
+        # from a real source, and "OSM has no brand" and "OSM removed the
+        # brand" are indistinguishable here.
         statements.append('''INSERT INTO osm_poi
   (osm_element_id, name, dedupe_name, lat, lng, geohash, primary_poi_type, brand, address, imported_at, updated_at, open_min, close_min)
 VALUES ''' + values + '''
 ON CONFLICT(osm_element_id) DO UPDATE SET
   name = excluded.name, dedupe_name = excluded.dedupe_name, lat = excluded.lat, lng = excluded.lng,
-  geohash = excluded.geohash, primary_poi_type = excluded.primary_poi_type, brand = excluded.brand,
-  address = excluded.address, updated_at = excluded.updated_at,
+  geohash = excluded.geohash, primary_poi_type = excluded.primary_poi_type,
+  updated_at = excluded.updated_at,
+  brand = COALESCE(excluded.brand, brand), address = COALESCE(excluded.address, address),
   open_min = COALESCE(excluded.open_min, open_min), close_min = COALESCE(excluded.close_min, close_min);''')
         superseded = [poi for poi in group if poi.superseded_fsq_place_id]
         if superseded:
@@ -1014,8 +1024,25 @@ ON CONFLICT(osm_element_id) DO UPDATE SET
                     for poi in superseded
                 ) + ' ON CONFLICT(source, source_id) DO NOTHING;')
         ids = ','.join(sql_quote(poi.osm_element_id) for poi in group)
+        # Types come only ever from OSM tags — nothing is inherited into them,
+        # so a full replace per element stays correct.
         statements.append(f'DELETE FROM osm_poi_type WHERE osm_element_id IN ({ids});')
-        statements.append(f'DELETE FROM osm_poi_attribute WHERE osm_element_id IN ({ids});')
+        # KAN-427 — attributes are the same inheritance problem as the columns
+        # above, and a blanket delete is its sharpest form: a refresh that
+        # arrives with no attributes would wipe a `store_kind` inherited from
+        # the retired Foursquare row and never write it back. Clear only the
+        # dimensions this write actually replaces; an element contributing no
+        # attributes clears nothing.
+        replaced = [
+            (poi.osm_element_id, sorted({dimension for dimension, _ in poi.attributes}))
+            for poi in group if poi.attributes
+        ]
+        if replaced:
+            statements.append('DELETE FROM osm_poi_attribute WHERE ' + ' OR '.join(
+                '(osm_element_id = %s AND dimension IN (%s))' % (
+                    sql_quote(element_id), ','.join(sql_quote(d) for d in dimensions))
+                for element_id, dimensions in replaced
+            ) + ';')
         types = [(poi.osm_element_id, poi_type, rank) for poi in group for rank, poi_type in enumerate(poi.poi_types)]
         if types:
             statements.append('INSERT INTO osm_poi_type (osm_element_id, poi_type, rank) VALUES ' + ','.join(

@@ -108,6 +108,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertIn(('food_cuisine', 'portuguese'), merged.attributes)
         self.assertNotIn(('food_cuisine', 'italian'), merged.attributes)
         # Foursquare fills what OSM did not have.
+        self.assertEqual(merged.brand, 'Grupo Lagar')
         self.assertEqual(merged.open_min, 540)
         self.assertEqual(merged.close_min, 1320)
         self.assertEqual(merged.address, 'Rua Velha 1')
@@ -127,11 +128,47 @@ class SupplementOsmPoisTest(unittest.TestCase):
         self.assertIn("'foursquare','fsq-1',0", sql)
         # Never overwrite a human decision already in the registry.
         self.assertIn('ON CONFLICT(source, source_id) DO NOTHING', sql)
-        self.assertNotIn('DO UPDATE SET\n  visible', sql)
+        # Whitespace-independent: any DO UPDATE on this conflict target would
+        # let the importer overwrite a human decision, however it is formatted.
+        self.assertNotIn('ON CONFLICT(source, source_id) DO UPDATE', sql)
         # Hours are written as values, and a later refresh carrying none must
         # not blank the ones inherited from the row this replaced.
         self.assertIn(',540,1320)', sql.replace(' ', ''))
-        self.assertIn('open_min = COALESCE(excluded.open_min, open_min)', sql)
+
+    def test_every_inheritable_field_survives_a_later_empty_refresh(self):
+        """The inheritance would otherwise undo itself one refresh later.
+
+        Once an element supersedes a Foursquare row, that row is `visible = 0`
+        and the candidate loader skips it — so the next refresh of the same
+        element matches nothing and arrives with brand, address and hours all
+        empty. Every inheritable column has to be COALESCEd, or that refresh
+        blanks exactly what was inherited.
+        """
+        poi = supplement.osm_poi_from_element(element(2, 'O Lagar', amenity='restaurant'), {})
+        assert poi is not None
+        sql = ' '.join(supplement.statements_for_pois([poi]))
+
+        for column in ('brand', 'address', 'open_min', 'close_min'):
+            with self.subTest(column=column):
+                self.assertIn(f'{column} = COALESCE(excluded.{column}, {column})', sql)
+                self.assertNotIn(f'{column} = excluded.{column}', sql)
+
+    def test_a_refresh_without_attributes_keeps_the_inherited_ones(self):
+        """The blanket attribute delete was the sharpest form of the same bug.
+
+        An element arriving with no attributes must clear nothing; one
+        arriving with a cuisine clears only the cuisine it replaces.
+        """
+        bare = supplement.osm_poi_from_element(element(2, 'O Lagar', amenity='restaurant'), {})
+        assert bare is not None
+        self.assertNotIn('osm_poi_attribute', ' '.join(supplement.statements_for_pois([bare])))
+
+        typed = supplement.osm_poi_from_element(
+            element(3, 'O Lagar', amenity='restaurant', cuisine='portuguese'), {})
+        assert typed is not None
+        sql = ' '.join(supplement.statements_for_pois([typed]))
+        self.assertIn("dimension IN ('food_cuisine')", sql)
+        self.assertNotIn('DELETE FROM osm_poi_attribute WHERE osm_element_id IN', sql)
 
     def test_an_import_that_supersedes_nothing_writes_no_retirement(self):
         poi = supplement.osm_poi_from_element(element(2, 'O Lagar', amenity='restaurant'), {})
@@ -205,7 +242,7 @@ class SupplementOsmPoisTest(unittest.TestCase):
         # it supersedes the Foursquare row, while Café Rosa is a new place.
         self.assertEqual([poi.name for poi in imports], ['Café Ala Sul', 'Café Rosa'])
         self.assertEqual([poi.superseded_fsq_place_id for poi in imports], ['ala-sul', None])
-        self.assertEqual(stats['normalized_identity_matched_skipped'], 1)
+        self.assertEqual(stats['normalized_identity_matched'], 1)
 
     def test_single_shared_identity_token_merges_only_at_close_range(self):
         """KAN-388's whole trade, stated as a test.
