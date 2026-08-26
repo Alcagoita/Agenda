@@ -1124,7 +1124,10 @@ async function queryNearbyPoiDb(
     open_min: number | null; close_min: number | null; matched_type: string;
     attribute_dimension: string | null; attribute_value: string | null;
   }>();
-  // This registry holds only deliberate, human-reviewed source decisions.
+  // This registry holds deliberate source decisions: human-reviewed ones, and
+  // since KAN-427 the importer's own — when an OSM element is found at the
+  // same spot as a Foursquare row, the OSM record is the current one and the
+  // Foursquare row is retired here. Importer rows never overwrite a human's.
   // Read it once per request rather than baking exceptions into the Worker, so
   // a later Foursquare re-import cannot make a retired source row visible.
   const { results: sourceCorrections } = await db.prepare(
