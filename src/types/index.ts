@@ -1180,6 +1180,8 @@ export interface Trip {
   cloudflareExport?: {
     placeId: string;
     buildId: string;
+    /** The largest area imported from this build; prevents reusing a smaller cache after radius expansion. */
+    radiusMeters: number;
     downloadedAt: number;
   };
   /**

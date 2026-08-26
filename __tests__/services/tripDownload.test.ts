@@ -270,11 +270,22 @@ describe('downloadTripAreaWithCloudflare', () => {
 
   it('does not re-download an unchanged place build', async () => {
     mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
-    const cached = { placeId: 'place-1', buildId: 'build-1', downloadedAt: 10 };
+    const cached = { placeId: 'place-1', buildId: 'build-1', radiusMeters: 15_000, downloadedAt: 10 };
     await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 15_000, 'ta_1', 100, cached))
       .resolves.toEqual({ placesWritten: 0, cloudflareExport: cached });
     expect(mockImportExport).not.toHaveBeenCalled();
     expect(mockSearchOsmPlaces).not.toHaveBeenCalled();
+  });
+
+  it('reimports an unchanged build when the requested radius expands', async () => {
+    mockCoverage.mockResolvedValue({ status: 'ready', placeId: 'place-1', buildId: 'build-1' });
+    mockImportExport.mockResolvedValue(8);
+    const cached = { placeId: 'place-1', buildId: 'build-1', radiusMeters: 15_000, downloadedAt: 10 };
+
+    await expect(downloadTripAreaWithCloudflare({ lat: 1, lng: 2 }, 40_000, 'ta_1', 100, cached))
+      .resolves.toMatchObject({ cloudflareExport: { placeId: 'place-1', buildId: 'build-1', radiusMeters: 40_000 } });
+
+    expect(mockImportExport).toHaveBeenCalledWith('place-1', { lat: 1, lng: 2 }, 40_000, 'ta_1', 100, expect.any(Array));
   });
 });
 

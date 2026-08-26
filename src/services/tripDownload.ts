@@ -246,7 +246,11 @@ export async function downloadTripAreaWithCloudflare(
   try {
     const coverage = await cloudflareCoverageProxy(center.lat, center.lng);
     if (coverage.status === 'ready' && coverage.placeId && coverage.buildId) {
-      if (cachedExport?.placeId === coverage.placeId && cachedExport.buildId === coverage.buildId) {
+      if (
+        cachedExport?.placeId === coverage.placeId
+        && cachedExport.buildId === coverage.buildId
+        && cachedExport.radiusMeters >= radiusMeters
+      ) {
         return { placesWritten: 0, cloudflareExport: cachedExport };
       }
       const placesWritten = await importCloudflareTripExport(
@@ -254,7 +258,7 @@ export async function downloadTripAreaWithCloudflare(
       );
       return {
         placesWritten,
-        cloudflareExport: { placeId: coverage.placeId, buildId: coverage.buildId, downloadedAt: Date.now() },
+        cloudflareExport: { placeId: coverage.placeId, buildId: coverage.buildId, radiusMeters, downloadedAt: Date.now() },
       };
     }
   } catch (error) {
