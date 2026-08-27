@@ -363,6 +363,13 @@ function createFakeDb(
             });
             return { meta: { changes: 1 } };
           }
+          // KAN-428: a completed build re-inserts every POI the new build
+          // lists, so /internal/build-complete now sweeps suppressed records
+          // back out. These tests hold no POI rows at all — the sweep is a
+          // no-op here, and only needs to not blow up the fake.
+          if (/^(DELETE FROM (poi_type|poi_attribute|poi|osm_poi)|UPDATE curated_poi SET)/.test(trimmed)) {
+            return { meta: { changes: 0 } };
+          }
           throw new Error(`fake D1: unhandled run() query: ${trimmed}`);
         },
       };
