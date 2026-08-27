@@ -149,10 +149,14 @@ A request carrying a bearer token that fails verification is rejected with
   present, so a stale build can be told apart from a genuinely bad record.
   Approval writes a `poi_suppression` row and immediately sweeps the record
   (and its `poi_type`/`poi_attribute` children) out of the served tables.
-  Suppression is keyed on `(source, source_id)` and is the reversible part:
-  delete the row and the next load restores the POI. Note the accepted limit
-  — a closed store that re-lists under a **new** `fsq_place_id` is a different
-  id and needs a fresh report.
+  Suppression is keyed on `(source, source_id)` and is the reversible part.
+  For a Foursquare or OpenStreetMap record, deleting that row is the whole
+  undo — the next load restores the POI. A community record needs one step
+  more: the sweep marks `curated_poi.status = 'removed'` rather than deleting
+  the row, so that has to be set back to `'active'` too. See "Community POI
+  removal setup (KAN-428)" below for the exact statements. Note the accepted
+  limit — a closed store that re-lists under a **new** `fsq_place_id` is a
+  different id and needs a fresh report.
 - `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?, status?, r2Key?}`
   — called by the extraction Job once a Place's rows are loaded (or failed);
   `cityId` targets `place.place_id` — kept as the field name for this

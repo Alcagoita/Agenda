@@ -60,7 +60,9 @@ export function parsePoiRemovalInput(value: unknown): PoiRemovalInput | { error:
     if (typeof body.contributorNote !== 'string') return { error: `contributorNote must be at most ${MAX_NOTE_LENGTH} characters` };
     const trimmed = body.contributorNote.trim();
     if (trimmed.length > MAX_NOTE_LENGTH) return { error: `contributorNote must be at most ${MAX_NOTE_LENGTH} characters` };
-    contributorNote = trimmed;
+    // A note of only whitespace is no note. Storing '' instead of NULL would
+    // make the reviewer UI render an empty "Contributor note" block.
+    contributorNote = trimmed || null;
   }
 
   return {

@@ -266,25 +266,50 @@ async function searchRemovablePois(
   // `dedupeTerm` has been through normalizePoiName, which strips everything
   // outside [a-z0-9 ] — so it cannot carry a LIKE wildcard.
   const prefix = `${dedupeTerm}%`;
+
+  // The LIMIT has to be applied to rows that are already near the centre.
+  // Without this box, a common prefix ("padaria") matches nationwide, the
+  // LIMIT truncates that set in whatever order the index yields, and the
+  // distance filter below can then discard every row that survived — so a
+  // POI that really is in the visitor's town reports as "not held".
+  //
+  // A latitude/longitude box rather than a geohash grid: the geohash helpers
+  // are built for the nearby hot path and cannot express this radius
+  // (precisionForRadius bottoms out at precision 5, ~4.9km cells, and
+  // neighborPrefixes caps the grid at MAX_GRID_CELLS_PER_AXIS), and SQLite
+  // would use only one index per table anyway — which needs to stay the
+  // dedupe_name one that makes the prefix match cheap. The box is a residual
+  // filter that shrinks the candidate set before LIMIT; it is not trying to
+  // be the access path.
+  const latDelta = POI_SEARCH_RADIUS_METERS / 111_195;
+  // Meridians converge toward the poles, so a degree of longitude covers
+  // fewer metres the further from the equator this runs. Clamped because
+  // cos() approaches zero at the poles.
+  const lngDelta = latDelta / Math.max(Math.cos(lat * Math.PI / 180), 0.01);
+  const box = [lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta];
+
   const [{ results: foursquareRows }, { results: osmRows }, { results: curatedRows }] = await Promise.all([
     db.prepare(
       `SELECT fsq_place_id AS poi_id, name, lat, lng, primary_poi_type, address FROM poi
        WHERE dedupe_name LIKE ?
+         AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
          AND NOT EXISTS (SELECT 1 FROM poi_suppression s WHERE s.source = 'foursquare' AND s.source_id = poi.fsq_place_id)
        LIMIT ?`,
-    ).bind(prefix, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
+    ).bind(prefix, ...box, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
     db.prepare(
       `SELECT osm_element_id AS poi_id, name, lat, lng, primary_poi_type, address FROM osm_poi
        WHERE dedupe_name LIKE ?
+         AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
          AND NOT EXISTS (SELECT 1 FROM poi_suppression s WHERE s.source = 'openstreetmap' AND s.source_id = osm_poi.osm_element_id)
        LIMIT ?`,
-    ).bind(prefix, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
+    ).bind(prefix, ...box, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
     db.prepare(
       `SELECT poi_id, name, lat, lng, primary_poi_type, address FROM curated_poi
        WHERE dedupe_name LIKE ? AND status = 'active'
+         AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
          AND NOT EXISTS (SELECT 1 FROM poi_suppression s WHERE s.source = 'community' AND s.source_id = curated_poi.poi_id)
        LIMIT ?`,
-    ).bind(prefix, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
+    ).bind(prefix, ...box, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
   ]);
 
   const tagged: Array<{ source: ManualPoiDuplicate['source']; row: RemovablePoiRow }> = [
@@ -1929,15 +1954,23 @@ export default {
       // A Foursquare record refreshed days ago is more likely a stale build
       // than a bad record, and the reviewer should be able to see that
       // before removing anything.
-      const freshness = await Promise.all(results.map(row => (
-        row.target_source === 'foursquare'
-          ? env.REGISTRY_DB.prepare('SELECT date_refreshed FROM poi WHERE fsq_place_id = ?')
-            .bind(row.target_id).first<{ date_refreshed: string }>()
-          : Promise.resolve(null)
-      )));
+      //
+      // One query for the whole page rather than one per row: this list runs
+      // to 100 rows, and a query each would be 100 round trips to satisfy a
+      // single screen.
+      const foursquareIds = [...new Set(
+        results.filter(row => row.target_source === 'foursquare').map(row => row.target_id),
+      )];
+      const freshness = new Map<string, string>();
+      if (foursquareIds.length) {
+        const { results: freshRows } = await env.REGISTRY_DB.prepare(
+          `SELECT fsq_place_id, date_refreshed FROM poi WHERE fsq_place_id IN (${foursquareIds.map(() => '?').join(',')})`,
+        ).bind(...foursquareIds).all<{ fsq_place_id: string; date_refreshed: string }>();
+        for (const row of freshRows) freshness.set(row.fsq_place_id, row.date_refreshed);
+      }
 
       return manualPoiJson(request, {
-        removals: results.map((row, index) => ({
+        removals: results.map(row => ({
           submissionId: row.submission_id,
           status: row.status,
           target: {
@@ -1946,8 +1979,8 @@ export default {
             name: row.target_name,
             poiType: row.target_poi_type,
             address: row.target_address,
-            dateRefreshed: freshness[index]?.date_refreshed ?? null,
-            stillPresent: row.target_source !== 'foursquare' ? null : freshness[index] !== null,
+            dateRefreshed: freshness.get(row.target_id) ?? null,
+            stillPresent: row.target_source !== 'foursquare' ? null : freshness.has(row.target_id),
           },
           reason: row.reason,
           contributorNote: row.contributor_note,

@@ -27,6 +27,13 @@ describe('parsePoiRemovalInput', () => {
     expect(isPoiRemovalInput(parsed) && parsed.contributorNote).toBeNull();
   });
 
+  it('treats a whitespace-only note as no note at all', () => {
+    // '' would reach the column as an empty string and make the reviewer UI
+    // render a blank "Contributor note" block.
+    const parsed = parsePoiRemovalInput({ ...valid, contributorNote: '   \n\t ' });
+    expect(isPoiRemovalInput(parsed) && parsed.contributorNote).toBeNull();
+  });
+
   it.each([
     ['google', 'targetSource must be foursquare, openstreetmap, or community'],
   ])('rejects %s as a source', (targetSource, error) => {
