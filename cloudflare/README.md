@@ -130,6 +130,33 @@ A request carrying a bearer token that fails verification is rejected with
   assertion in the Worker. Approval either creates a separate
   `community:<uuid>` curated POI or links the submission to an already-known
   nearby POI with the same normalized name; it never invents a Foursquare id.
+- `GET /manual-poi/search?name=&lat=&lng=` and `POST /manual-poi/removals` —
+  KAN-428's removal half of the same public surface, CORS-limited the same
+  way. A contributor does not know our coordinates or ids, so a removal names
+  a record picked from `search` rather than describing a place. Search matches
+  the **start** of the normalized name (that prefix is what
+  `idx_poi_canonical_identity` can serve), requires at least three characters,
+  bounds results to 30 km from the given centre, and caps them at 20 —
+  returning `{matches: []}` when we hold nothing, which is an answer rather
+  than an error. Unlike the submission routes, `search` requires no Turnstile
+  token: a token is single-use and the form searches repeatedly while the
+  contributor narrows the name. `POST /manual-poi/removals` does require one,
+  is rate-limited by the same hashed source IP, resolves the target against
+  live data before storing it, and creates only a `pending` row.
+- `GET /manual-poi/admin/removals` and `PATCH /manual-poi/admin/removals/:id`
+  — reviewer-only, Access-gated exactly like the submission routes. The list
+  reports each Foursquare target's `date_refreshed` and whether it is still
+  present, so a stale build can be told apart from a genuinely bad record.
+  Approval writes a `poi_suppression` row and immediately sweeps the record
+  (and its `poi_type`/`poi_attribute` children) out of the served tables.
+  Suppression is keyed on `(source, source_id)` and is the reversible part.
+  For a Foursquare or OpenStreetMap record, deleting that row is the whole
+  undo — the next load restores the POI. A community record needs one step
+  more: the sweep marks `curated_poi.status = 'removed'` rather than deleting
+  the row, so that has to be set back to `'active'` too. See "Community POI
+  removal setup (KAN-428)" below for the exact statements. Note the accepted
+  limit — a closed store that re-lists under a **new** `fsq_place_id` is a
+  different id and needs a fresh report.
 - `POST /internal/build-complete` `{cityId, buildId, rowsLoaded?, rowsSkipped?, status?, r2Key?}`
   — called by the extraction Job once a Place's rows are loaded (or failed);
   `cityId` targets `place.place_id` — kept as the field name for this
@@ -210,6 +237,27 @@ when `TURNSTILE_SECRET` is absent: every attempt receives HTTP 400 with
 `verification failed; please try again.` The public form can be deployed
 independently, but it will only become usable after the Worker and its D1
 migration are live.
+
+### Community POI removal setup (KAN-428)
+
+Apply `migrations/0027_poi_removal_suppression.sql` to `brush-poi-registry`
+and deploy this Worker before the website's removal tab ships. No new secrets,
+Access application or Turnstile widget is needed — removal reuses everything
+KAN-362 already set up above, including the same `manual_poi_submit` Turnstile
+action and the same reviewer allowlist.
+
+Two operational notes:
+
+- **Undoing a removal** is `DELETE FROM poi_suppression WHERE source = ? AND
+  source_id = ?`. The POI returns at that Place's next build. For a community
+  record, also set `curated_poi.status` back to `'active'` — the sweep marks
+  it rather than deleting it, so the row is still there.
+- **The sweep is not a one-off.** It runs on approval *and* on every
+  `/internal/build-complete`, because the loader's POI insert is
+  `INSERT OR IGNORE ... ON CONFLICT DO UPDATE` — without the second run, the
+  next Foursquare load for that Place would silently put every removed record
+  back. There is no `build_id` sweep in the loader today despite what
+  `schema.sql`'s header comment describes; do not rely on one.
 
 ### Known gaps in this token's permissions
 

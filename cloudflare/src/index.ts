@@ -2,6 +2,7 @@ import { encodeGeohash, haversineMeters, neighborPrefixes, precisionForRadius, r
 import { ContainerProxy, getContainer } from '@cloudflare/containers';
 import { ExtractionContainer } from './extractionContainer';
 import { MANUAL_POI_TYPES, MANUAL_SUBTYPE_FILTERS, normalizePoiName, parseManualPoiInput, isManualPoiInput, type ManualPoiAttribute } from './manualPoi';
+import { POI_REMOVAL_REASONS, parsePoiRemovalInput, isPoiRemovalInput, type PoiRemovalReason, type PoiRemovalSource } from './poiRemoval';
 import { bearerToken, verifyFirebaseIdToken } from './firebaseAuth';
 import {
   OSM_SCOPE_BATCH_SIZE, claimBatch, completeScope, countriesAwaitingBatch, failScope,
@@ -212,6 +213,193 @@ async function findManualPoiDuplicate(
     ...osmRows.map(row => ({ poiId: row.poi_id, source: 'openstreetmap' as const, name: row.name, lat: row.lat, lng: row.lng })),
   ];
   return candidates.find(candidate => haversineMeters(lat, lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS) ?? null;
+}
+
+// KAN-428: a contributor reporting a wrong POI knows a name and a city, not
+// our coordinates. Search is therefore name-first — `dedupe_name` leads
+// idx_poi_canonical_identity, so a prefix match is index-backed — and the
+// city centre only bounds what that match returns. The geohash helpers are
+// deliberately not reused here: they cap at MAX_RADIUS_METERS (4.5km)
+// because they serve the nearby hot path, and a city is far larger than
+// that.
+//
+// Matching on the *start* of the normalized name is a real constraint, not
+// an oversight: a substring match cannot use that index, and this endpoint
+// is browser-open. The form tells the contributor to type the beginning of
+// the name.
+const POI_SEARCH_RADIUS_METERS = 30_000;
+const POI_SEARCH_PER_SOURCE_LIMIT = 200;
+const POI_SEARCH_RESULT_LIMIT = 20;
+
+interface RemovablePoiRow {
+  poi_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  primary_poi_type: string;
+  address: string | null;
+}
+
+interface RemovablePoi {
+  source: ManualPoiDuplicate['source'];
+  id: string;
+  name: string;
+  poiType: string;
+  address: string | null;
+  distanceMeters: number;
+}
+
+/**
+ * Every record we hold whose name starts with `dedupeTerm`, within
+ * POI_SEARCH_RADIUS_METERS of the given centre, across all three sources.
+ *
+ * Records already suppressed are excluded — there is nothing left to report
+ * about them, and offering one would invite a second removal of the same
+ * thing.
+ */
+async function searchRemovablePois(
+  db: D1Database,
+  dedupeTerm: string,
+  lat: number,
+  lng: number,
+): Promise<RemovablePoi[]> {
+  // `dedupeTerm` has been through normalizePoiName, which strips everything
+  // outside [a-z0-9 ] — so it cannot carry a LIKE wildcard.
+  const prefix = `${dedupeTerm}%`;
+
+  // The LIMIT has to be applied to rows that are already near the centre.
+  // Without this box, a common prefix ("padaria") matches nationwide, the
+  // LIMIT truncates that set in whatever order the index yields, and the
+  // distance filter below can then discard every row that survived — so a
+  // POI that really is in the visitor's town reports as "not held".
+  //
+  // A latitude/longitude box rather than a geohash grid: the geohash helpers
+  // are built for the nearby hot path and cannot express this radius
+  // (precisionForRadius bottoms out at precision 5, ~4.9km cells, and
+  // neighborPrefixes caps the grid at MAX_GRID_CELLS_PER_AXIS), and SQLite
+  // would use only one index per table anyway — which needs to stay the
+  // dedupe_name one that makes the prefix match cheap. The box is a residual
+  // filter that shrinks the candidate set before LIMIT; it is not trying to
+  // be the access path.
+  const latDelta = POI_SEARCH_RADIUS_METERS / 111_195;
+  // Meridians converge toward the poles, so a degree of longitude covers
+  // fewer metres the further from the equator this runs. Clamped because
+  // cos() approaches zero at the poles.
+  const lngDelta = latDelta / Math.max(Math.cos(lat * Math.PI / 180), 0.01);
+  const box = [lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta];
+
+  const [{ results: foursquareRows }, { results: osmRows }, { results: curatedRows }] = await Promise.all([
+    db.prepare(
+      `SELECT fsq_place_id AS poi_id, name, lat, lng, primary_poi_type, address FROM poi
+       WHERE dedupe_name LIKE ?
+         AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+         AND NOT EXISTS (SELECT 1 FROM poi_suppression s WHERE s.source = 'foursquare' AND s.source_id = poi.fsq_place_id)
+       LIMIT ?`,
+    ).bind(prefix, ...box, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
+    db.prepare(
+      `SELECT osm_element_id AS poi_id, name, lat, lng, primary_poi_type, address FROM osm_poi
+       WHERE dedupe_name LIKE ?
+         AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+         AND NOT EXISTS (SELECT 1 FROM poi_suppression s WHERE s.source = 'openstreetmap' AND s.source_id = osm_poi.osm_element_id)
+       LIMIT ?`,
+    ).bind(prefix, ...box, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
+    db.prepare(
+      `SELECT poi_id, name, lat, lng, primary_poi_type, address FROM curated_poi
+       WHERE dedupe_name LIKE ? AND status = 'active'
+         AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+         AND NOT EXISTS (SELECT 1 FROM poi_suppression s WHERE s.source = 'community' AND s.source_id = curated_poi.poi_id)
+       LIMIT ?`,
+    ).bind(prefix, ...box, POI_SEARCH_PER_SOURCE_LIMIT).all<RemovablePoiRow>(),
+  ]);
+
+  const tagged: Array<{ source: ManualPoiDuplicate['source']; row: RemovablePoiRow }> = [
+    ...foursquareRows.map(row => ({ source: 'foursquare' as const, row })),
+    ...osmRows.map(row => ({ source: 'openstreetmap' as const, row })),
+    ...curatedRows.map(row => ({ source: 'community' as const, row })),
+  ];
+
+  return tagged
+    .map(({ source, row }) => ({
+      source,
+      id: row.poi_id,
+      name: row.name,
+      poiType: row.primary_poi_type,
+      address: row.address,
+      distanceMeters: Math.round(haversineMeters(lat, lng, row.lat, row.lng)),
+    }))
+    .filter(candidate => candidate.distanceMeters <= POI_SEARCH_RADIUS_METERS)
+    .sort((a, b) => a.distanceMeters - b.distanceMeters)
+    .slice(0, POI_SEARCH_RESULT_LIMIT);
+}
+
+/**
+ * The record a removal names, as we currently hold it — or null if we do not
+ * hold it at all.
+ *
+ * The submission stores this snapshot rather than trusting the name the
+ * browser posted, so what the reviewer reads is our own data.
+ */
+async function resolveRemovalTarget(
+  db: D1Database,
+  source: PoiRemovalSource,
+  id: string,
+): Promise<{ name: string; poiType: string; address: string | null } | null> {
+  const query = source === 'foursquare'
+    ? 'SELECT name, primary_poi_type, address FROM poi WHERE fsq_place_id = ?'
+    : source === 'openstreetmap'
+      ? 'SELECT name, primary_poi_type, address FROM osm_poi WHERE osm_element_id = ?'
+      : "SELECT name, primary_poi_type, address FROM curated_poi WHERE poi_id = ? AND status = 'active'";
+  const row = await db.prepare(query).bind(id).first<{ name: string; primary_poi_type: string; address: string | null }>();
+  return row ? { name: row.name, poiType: row.primary_poi_type, address: row.address } : null;
+}
+
+/**
+ * Takes every suppressed record back out of the served tables.
+ *
+ * Runs on approval (so a removal lands immediately) and again on
+ * /internal/build-complete (so the next Foursquare load does not quietly
+ * resurrect it — the loader's poi insert is INSERT OR IGNORE ... ON CONFLICT
+ * DO UPDATE, which would otherwise put the row straight back).
+ *
+ * Child rows go before their parent: poi_type and poi_attribute are keyed on
+ * fsq_place_id and would otherwise be orphaned by the parent delete.
+ *
+ * curated_poi is marked rather than deleted — it already models removal with
+ * a status column, and its row is the audit trail for a community
+ * contribution.
+ */
+async function sweepSuppressedPois(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM poi_type WHERE fsq_place_id IN (SELECT source_id FROM poi_suppression WHERE source = 'foursquare')"),
+    db.prepare("DELETE FROM poi_attribute WHERE fsq_place_id IN (SELECT source_id FROM poi_suppression WHERE source = 'foursquare')"),
+    db.prepare("DELETE FROM poi WHERE fsq_place_id IN (SELECT source_id FROM poi_suppression WHERE source = 'foursquare')"),
+    db.prepare("DELETE FROM osm_poi WHERE osm_element_id IN (SELECT source_id FROM poi_suppression WHERE source = 'openstreetmap')"),
+    db.prepare(
+      `UPDATE curated_poi SET
+         status = 'removed',
+         removed_at = (SELECT s.suppressed_at FROM poi_suppression s WHERE s.source = 'community' AND s.source_id = curated_poi.poi_id),
+         removed_by = (SELECT s.suppressed_by FROM poi_suppression s WHERE s.source = 'community' AND s.source_id = curated_poi.poi_id),
+         removal_reason = (SELECT s.reason FROM poi_suppression s WHERE s.source = 'community' AND s.source_id = curated_poi.poi_id)
+       WHERE status = 'active'
+         AND poi_id IN (SELECT source_id FROM poi_suppression WHERE source = 'community')`,
+    ),
+  ]);
+}
+
+interface PoiRemovalSubmissionRow {
+  submission_id: string;
+  target_source: PoiRemovalSource;
+  target_id: string;
+  target_name: string;
+  target_poi_type: string;
+  target_address: string | null;
+  reason: PoiRemovalReason;
+  contributor_note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  rejection_reason: string | null;
 }
 
 function manualPoiSubmissionResponse(row: Pick<ManualPoiSubmissionRow, 'submission_id' | 'status' | 'approved_poi_id'>) {
@@ -1508,6 +1696,7 @@ export default {
       return manualPoiJson(request, {
         poiTypes: MANUAL_POI_TYPES,
         subtypeFilters: MANUAL_SUBTYPE_FILTERS,
+        removalReasons: POI_REMOVAL_REASONS,
       });
     }
 
@@ -1662,6 +1851,206 @@ export default {
       return manualPoiJson(request, { submissionId, status: 'approved', approvedPoiId: poiId });
     }
 
+    // KAN-428 — removal. The contributor picks a record we already hold
+    // rather than describing one, so this read comes first.
+    //
+    // No Turnstile here, matching /manual-poi/duplicates: a Turnstile token
+    // is single-use, and the form searches repeatedly while the contributor
+    // narrows the name. Unlike /manual-poi/duplicates this does return ids
+    // and addresses, because picking the exact record is the whole point —
+    // the underlying data is openly licensed (Foursquare Apache 2.0, OSM
+    // ODbL), and the minimum term length plus the result cap keep it from
+    // being a bulk enumeration surface.
+    if (url.pathname === '/manual-poi/search' && request.method === 'GET') {
+      const dedupeTerm = normalizePoiName(url.searchParams.get('name') ?? '');
+      const lat = Number(url.searchParams.get('lat'));
+      const lng = Number(url.searchParams.get('lng'));
+      if (dedupeTerm.length < 3) {
+        return manualPoiJson(request, { error: 'name must be at least 3 characters' }, 400);
+      }
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+        return manualPoiJson(request, { error: 'lat and lng are required' }, 400);
+      }
+      const matches = await searchRemovablePois(env.REGISTRY_DB, dedupeTerm, lat, lng);
+      // An empty list is an answer, not a failure: if we do not hold it,
+      // there is nothing to remove and nothing to submit.
+      return manualPoiJson(request, { matches });
+    }
+
+    if (url.pathname === '/manual-poi/removals' && request.method === 'POST') {
+      const rawBody = await parseManualPoiJsonBody(request);
+      if (rawBody instanceof Response) return rawBody;
+      const parsed = parsePoiRemovalInput(rawBody);
+      if (!isPoiRemovalInput(parsed)) return manualPoiJson(request, { error: parsed.error }, 400);
+
+      // Same ordering as the add path: idempotency before a single-use
+      // Turnstile token or a rate-limit slot is spent, so a lost response is
+      // safe to retry.
+      const existing = await env.REGISTRY_DB.prepare(
+        'SELECT submission_id, status FROM poi_removal_submission WHERE idempotency_key = ?',
+      ).bind(parsed.idempotencyKey).first<Pick<PoiRemovalSubmissionRow, 'submission_id' | 'status'>>();
+      if (existing) {
+        return manualPoiJson(request, { submissionId: existing.submission_id, status: existing.status, idempotent: true });
+      }
+
+      // Resolve the target against what we actually hold. A removal for a
+      // record that is not there is not a removal — and this is also what
+      // stops a caller inventing an id and having a reviewer act on it.
+      const target = await resolveRemovalTarget(env.REGISTRY_DB, parsed.targetSource, parsed.targetId);
+      if (!target) return manualPoiJson(request, { error: 'that place is not one I know' }, 404);
+
+      const ipHash = await requestIpHash(request);
+      if (!await claimManualPoiRateLimit(env.REGISTRY_DB, ipHash)) {
+        return manualPoiJson(request, { error: 'too many submissions, try again later' }, 429);
+      }
+      if (!await verifyManualPoiTurnstile(request, env, parsed.turnstileToken)) {
+        return manualPoiJson(request, { error: 'verification failed; please try again' }, 400);
+      }
+
+      const submittedAt = new Date().toISOString();
+      const submissionId = crypto.randomUUID();
+      try {
+        await env.REGISTRY_DB.batch([
+          env.REGISTRY_DB.prepare(
+            `INSERT INTO poi_removal_submission
+               (submission_id, idempotency_key, target_source, target_id, target_name, target_poi_type, target_address,
+                reason, contributor_note, ip_hash, status, submitted_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+          ).bind(
+            submissionId, parsed.idempotencyKey, parsed.targetSource, parsed.targetId, target.name, target.poiType,
+            target.address, parsed.reason, parsed.contributorNote, ipHash, submittedAt,
+          ),
+          env.REGISTRY_DB.prepare(
+            'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ).bind(crypto.randomUUID(), 'removal', submissionId, 'submitted', 'public', JSON.stringify({ targetSource: parsed.targetSource, targetId: parsed.targetId, reason: parsed.reason }), submittedAt),
+        ]);
+      } catch (error) {
+        // idx_poi_removal_submission_pending_target: someone already reported
+        // this record and it is still waiting. That is one removal, not two.
+        const alreadyPending = await env.REGISTRY_DB.prepare(
+          "SELECT submission_id FROM poi_removal_submission WHERE target_source = ? AND target_id = ? AND status = 'pending'",
+        ).bind(parsed.targetSource, parsed.targetId).first<{ submission_id: string }>();
+        if (alreadyPending) {
+          return manualPoiJson(request, { submissionId: alreadyPending.submission_id, status: 'pending', alreadyReported: true });
+        }
+        throw error;
+      }
+      return manualPoiJson(request, { submissionId, status: 'pending' }, 202);
+    }
+
+    if (manualAdminPath === '/manual-poi/admin/removals' && request.method === 'GET') {
+      const reviewer = await verifyManualPoiAdmin(request, env);
+      if (!reviewer) return manualPoiJson(request, { error: 'forbidden' }, 403);
+      const status = url.searchParams.get('status') ?? 'pending';
+      if (status !== 'pending' && status !== 'approved' && status !== 'rejected') {
+        return manualPoiJson(request, { error: 'status must be pending, approved, or rejected' }, 400);
+      }
+      const { results } = await env.REGISTRY_DB.prepare(
+        `SELECT submission_id, target_source, target_id, target_name, target_poi_type, target_address, reason,
+                contributor_note, status, submitted_at, reviewed_at, reviewed_by, rejection_reason
+         FROM poi_removal_submission WHERE status = ? ORDER BY submitted_at ASC LIMIT 100`,
+      ).bind(status).all<PoiRemovalSubmissionRow>();
+
+      // A Foursquare record refreshed days ago is more likely a stale build
+      // than a bad record, and the reviewer should be able to see that
+      // before removing anything.
+      //
+      // One query for the whole page rather than one per row: this list runs
+      // to 100 rows, and a query each would be 100 round trips to satisfy a
+      // single screen.
+      const foursquareIds = [...new Set(
+        results.filter(row => row.target_source === 'foursquare').map(row => row.target_id),
+      )];
+      const freshness = new Map<string, string>();
+      if (foursquareIds.length) {
+        const { results: freshRows } = await env.REGISTRY_DB.prepare(
+          `SELECT fsq_place_id, date_refreshed FROM poi WHERE fsq_place_id IN (${foursquareIds.map(() => '?').join(',')})`,
+        ).bind(...foursquareIds).all<{ fsq_place_id: string; date_refreshed: string }>();
+        for (const row of freshRows) freshness.set(row.fsq_place_id, row.date_refreshed);
+      }
+
+      return manualPoiJson(request, {
+        removals: results.map(row => ({
+          submissionId: row.submission_id,
+          status: row.status,
+          target: {
+            source: row.target_source,
+            id: row.target_id,
+            name: row.target_name,
+            poiType: row.target_poi_type,
+            address: row.target_address,
+            dateRefreshed: freshness.get(row.target_id) ?? null,
+            stillPresent: row.target_source !== 'foursquare' ? null : freshness.has(row.target_id),
+          },
+          reason: row.reason,
+          contributorNote: row.contributor_note,
+          submittedAt: row.submitted_at,
+          reviewedAt: row.reviewed_at,
+          reviewedBy: row.reviewed_by,
+          rejectionReason: row.rejection_reason,
+        })),
+      });
+    }
+
+    const manualRemovalMatch = manualAdminPath.match(/^\/manual-poi\/admin\/removals\/([^/]+)$/);
+    if (manualRemovalMatch && request.method === 'PATCH') {
+      const reviewer = await verifyManualPoiAdmin(request, env);
+      if (!reviewer) return manualPoiJson(request, { error: 'forbidden' }, 403);
+      let submissionId: string;
+      try {
+        submissionId = decodeURIComponent(manualRemovalMatch[1]);
+      } catch {
+        return manualPoiJson(request, { error: 'submission id is invalid' }, 400);
+      }
+      if (!submissionId) return manualPoiJson(request, { error: 'submission id is required' }, 400);
+      const rawBody = await parseManualPoiJsonBody(request);
+      if (rawBody instanceof Response) return rawBody;
+      if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) return manualPoiJson(request, { error: 'body must be an object' }, 400);
+      const body = rawBody as Record<string, unknown>;
+      if (body.action !== 'approve' && body.action !== 'reject') return manualPoiJson(request, { error: 'action must be approve or reject' }, 400);
+      const reason = body.reason === undefined || body.reason === null ? null : typeof body.reason === 'string' ? body.reason.trim() : null;
+      if (body.reason !== undefined && body.reason !== null && (reason === null || reason.length > 600)) {
+        return manualPoiJson(request, { error: 'reason must be a string of at most 600 characters' }, 400);
+      }
+
+      const submission = await env.REGISTRY_DB.prepare('SELECT * FROM poi_removal_submission WHERE submission_id = ?')
+        .bind(submissionId).first<PoiRemovalSubmissionRow>();
+      if (!submission) return manualPoiJson(request, { error: 'removal not found' }, 404);
+      if (submission.status !== 'pending') return manualPoiJson(request, { error: 'removal has already been reviewed' }, 409);
+
+      const reviewedAt = new Date().toISOString();
+      if (body.action === 'reject') {
+        await env.REGISTRY_DB.batch([
+          env.REGISTRY_DB.prepare(
+            "UPDATE poi_removal_submission SET status = 'rejected', reviewed_at = ?, reviewed_by = ?, rejection_reason = ? WHERE submission_id = ? AND status = 'pending'",
+          ).bind(reviewedAt, reviewer, reason, submissionId),
+          env.REGISTRY_DB.prepare(
+            'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ).bind(crypto.randomUUID(), 'removal', submissionId, 'rejected', reviewer, JSON.stringify({ reason }), reviewedAt),
+        ]);
+        return manualPoiJson(request, { submissionId, status: 'rejected' });
+      }
+
+      // The tombstone goes in first, then the sweep reads it. Doing it in
+      // this order is what makes the removal survive the next import rather
+      // than only clearing the tables once.
+      await env.REGISTRY_DB.batch([
+        env.REGISTRY_DB.prepare(
+          `INSERT INTO poi_suppression (source, source_id, reason, submission_id, name, suppressed_at, suppressed_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(source, source_id) DO NOTHING`,
+        ).bind(submission.target_source, submission.target_id, submission.reason, submissionId, submission.target_name, reviewedAt, reviewer),
+        env.REGISTRY_DB.prepare(
+          "UPDATE poi_removal_submission SET status = 'approved', reviewed_at = ?, reviewed_by = ? WHERE submission_id = ? AND status = 'pending'",
+        ).bind(reviewedAt, reviewer, submissionId),
+        env.REGISTRY_DB.prepare(
+          'INSERT INTO manual_poi_audit (audit_id, target_kind, target_id, action, actor, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).bind(crypto.randomUUID(), 'removal', submissionId, 'approved', reviewer, JSON.stringify({ targetSource: submission.target_source, targetId: submission.target_id, reason: submission.reason }), reviewedAt),
+      ]);
+      await sweepSuppressedPois(env.REGISTRY_DB);
+      return manualPoiJson(request, { submissionId, status: 'approved', suppressed: { source: submission.target_source, id: submission.target_id } });
+    }
+
     // Internal, server-to-server only — its own stronger secret, not the
     // public X-Api-Key gate below.
     if (url.pathname === '/internal/build-complete' && request.method === 'POST') {
@@ -1748,6 +2137,16 @@ export default {
           body.buildId, body.cityId,
         ),
       ]);
+
+      // KAN-428: the load that just finished re-inserted every POI the new
+      // build lists, including any a reviewer has since removed — the
+      // loader's poi insert is INSERT OR IGNORE ... ON CONFLICT DO UPDATE,
+      // so a suppressed record comes straight back. Take them out again.
+      //
+      // Unconditional on this path, and before the row-count checks below: a
+      // mismatched cityId does not undo the load that already ran, and
+      // leaving resurrected rows served would be the worse failure.
+      await sweepSuppressedPois(env.REGISTRY_DB);
 
       if (placeResult.meta.changes !== 1) {
         // Silent no-op success previously masked a bad cityId (typo, unknown
