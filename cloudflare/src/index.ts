@@ -1685,6 +1685,9 @@ export default {
       // COALESCE keeps whatever the row already had (NULL on a first build)
       // rather than writing a partial/inconsistent extent.
       const hasExtent = [body.minLat, body.maxLat, body.minLng, body.maxLng].every(v => typeof v === 'number');
+      if (hasExtent && (body.minLng as number) > (body.maxLng as number)) {
+        return json({ error: 'minLng must be less than or equal to maxLng' }, 400);
+      }
 
       // A crashed/errored extraction run (classify_and_load.py raised, the
       // D1 load failed, etc.) previously had no way to close out its

@@ -10,8 +10,10 @@ Keep `findPlace`'s current linear lookup in production. Introduce a
    comparable 24-hour window.
 
 This prevents a migration based on anticipated global coverage rather than a
-current hot-path problem. On 2026-08-27, production had 490 rows and the
-current full scan took 0.91 ms in Western Europe.
+current hot-path problem. The latest read-only production diagnostic observed
+490 rows and a 0.91 ms standalone scan in Western Europe; it is a single
+sample, not comparable 24-hour p95 telemetry, so it does not determine whether
+the 5 ms trigger is met. Capture that completed p95 window before migration.
 
 ## Candidate design
 

@@ -34,7 +34,8 @@ describe('KAN-425 bucketed place-lookup design', () => {
     for (const [lat, lng] of [[38.75, -9.15], [38.5, -9.5], [39.5, -9.5]]) {
       expect(best(bucketed.all(latBucket(lat), lngBucket(lng), lat, lng) as Place[])).toBe(best(linear.all(lat, lng) as Place[]));
     }
-    const plan = db.prepare('EXPLAIN QUERY PLAN SELECT p.* FROM place_bucket b JOIN place p ON p.place_id = b.place_id WHERE b.lat_bucket = ? AND b.lng_bucket = ?').all(latBucket(38.75), lngBucket(-9.15)) as Array<{ detail: string }>;
-    expect(plan.some(step => step.detail.includes('SEARCH b USING COVERING INDEX'))).toBe(true);
+    const plan = db.prepare('EXPLAIN QUERY PLAN WITH candidate AS (SELECT place_id FROM place_bucket WHERE lat_bucket = ? AND lng_bucket = ?) SELECT p.* FROM candidate c JOIN place p ON p.place_id = c.place_id WHERE ? BETWEEN p.min_lat AND p.max_lat AND ? BETWEEN p.min_lng AND p.max_lng').all(latBucket(38.75), lngBucket(-9.15), 38.75, -9.15) as Array<{ detail: string }>;
+    expect(plan.some(step => step.detail.includes('SEARCH place_bucket USING COVERING INDEX'))).toBe(true);
+    expect(plan.some(step => step.detail.includes('SEARCH p USING INDEX'))).toBe(true);
   });
 });

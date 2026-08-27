@@ -900,6 +900,21 @@ describe('POST /coverage/request', () => {
 });
 
 describe('POST /internal/build-complete — failure path (KAN-354)', () => {
+  it('rejects a crossing longitude extent without changing the place', async () => {
+    const env = makeEnv([{
+      place_id: 'osm-relation-crossing', name: 'Crossing', country_code: 'PT', place_kind: null,
+      min_lat: null, max_lat: null, min_lng: null, max_lng: null,
+      status: 'mapping', build_id: null, mapped_at: null,
+      request_count: 1, first_requested_at: null, last_requested_at: null,
+    }]);
+    const res = await worker.fetch(internalRequest('/internal/build-complete', {
+      cityId: 'osm-relation-crossing', buildId: 'b-crossing', minLat: 10, maxLat: 11, minLng: 179, maxLng: -179,
+    }), env);
+
+    expect(res.status).toBe(400);
+    expect((env.REGISTRY_DB as unknown as { rows: Map<string, FakePlaceRow> }).rows.get('osm-relation-crossing')?.status).toBe('mapping');
+  });
+
   it('reverts place to none on a failed FIRST build (never previously mapped)', async () => {
     const env = makeEnv([{
       place_id: 'osm-relation-1', name: 'New Place', country_code: 'PT', place_kind: null,
