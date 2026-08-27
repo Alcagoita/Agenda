@@ -1933,7 +1933,19 @@ export default {
         if (alreadyPending) {
           return manualPoiJson(request, { submissionId: alreadyPending.submission_id, status: 'pending', alreadyReported: true });
         }
-        throw error;
+        // Anything else is ours, not the contributor's. Rethrowing let the
+        // exception escape the handler, and a Worker exception response
+        // carries no CORS headers — so the browser reported a server fault as
+        // a network failure, which is indistinguishable from a blocked origin
+        // and sent everyone hunting the wrong bug (this is exactly how the
+        // 0028 CHECK-constraint failure presented). Log it and answer with a
+        // real, CORS'd status instead.
+        console.error('[manual-poi] removal submission failed', {
+          targetSource: parsed.targetSource,
+          targetId: parsed.targetId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return manualPoiJson(request, { error: 'your report could not be saved; please try again' }, 500);
       }
       return manualPoiJson(request, { submissionId, status: 'pending' }, 202);
     }
