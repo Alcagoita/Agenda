@@ -9,6 +9,13 @@ import worker, { type Env } from '../index';
 
 const LISBON = { lat: 38.7223, lng: -9.1393 };
 
+/**
+ * Mirrors the CHECK constraint on manual_poi_audit.target_kind after
+ * migration 0028. Must stay in sync with the migrations — a value the Worker
+ * writes but this list omits is a production write that fails.
+ */
+const AUDIT_TARGET_KINDS = ['submission', 'curated_poi', 'removal'];
+
 interface PoiRow {
   id: string;
   name: string;
@@ -132,6 +139,14 @@ function fakeDb(tables: Tables): Env['REGISTRY_DB'] {
           });
         }
         if (trimmed.startsWith('INSERT INTO manual_poi_audit')) {
+          // The real column carries a CHECK constraint. Enforcing it here is
+          // the whole point: 0008 allowed only 'submission' and 'curated_poi',
+          // the removal routes write 'removal', and because this fake used to
+          // accept anything, 236 passing tests said nothing about a table that
+          // rejected every removal in production. See migration 0028.
+          if (!AUDIT_TARGET_KINDS.includes(args[1] as string)) {
+            throw new Error(`CHECK constraint failed: manual_poi_audit.target_kind = '${String(args[1])}'`);
+          }
           tables.audit.push({ target_kind: args[1], target_id: args[2], action: args[3], actor: args[4] });
         }
         if (trimmed.startsWith('INSERT INTO poi_suppression')) {
@@ -350,6 +365,41 @@ describe('POST /manual-poi/removals', () => {
     expect(second.status).toBe(200);
     await expect(second.json()).resolves.toMatchObject({ status: 'pending', alreadyReported: true });
     expect(tables.removals).toHaveLength(1);
+  });
+
+  it('writes an audit row the audit table will actually accept', async () => {
+    // Regression: manual_poi_audit.target_kind's CHECK allowed only
+    // 'submission' and 'curated_poi' (0008), so 'removal' violated it and
+    // every submission rolled back. Fixed by migration 0028.
+    const tables = emptyTables();
+    tables.poi.push(poi({ id: 'fsq-1', name: 'China Palace', dedupe_name: 'china palace' }));
+    verifiedTurnstile();
+
+    const response = await worker.fetch(request(), publicEnv(tables), CTX);
+
+    expect(response.status).toBe(202);
+    expect(tables.removals).toHaveLength(1);
+    expect(tables.audit).toContainEqual(expect.objectContaining({ target_kind: 'removal' }));
+  });
+
+  it('answers a database failure with a CORS-bearing 500, never an escaping throw', async () => {
+    // An exception escaping the handler returns without CORS headers, and the
+    // browser then reports a server fault as a network failure — the visitor
+    // is told to check their connection while the real fault is ours.
+    const tables = emptyTables();
+    tables.poi.push(poi({ id: 'fsq-1', name: 'China Palace', dedupe_name: 'china palace' }));
+    verifiedTurnstile();
+    const env = publicEnv(tables);
+    const db = env.REGISTRY_DB as unknown as { batch: () => Promise<unknown> };
+    db.batch = () => Promise.reject(new Error('D1_ERROR: something unexpected'));
+
+    const response = await worker.fetch(request(), env, CTX);
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://brushaway.app');
+    await expect(response.json()).resolves.toEqual({
+      error: 'your report could not be saved; please try again',
+    });
   });
 
   it('fails closed when Turnstile does not bind the token to this form', async () => {
