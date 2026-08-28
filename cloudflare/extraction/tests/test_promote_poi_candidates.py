@@ -274,13 +274,41 @@ class NameGatedLeafTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.decide(name)[0], 'pending')
 
-    def test_the_gate_cannot_filter_another_leaf(self):
-        # Same name, different leaf: the gate must not fire, so this row is
-        # decided by the ordinary category path (which does not map it).
+    def test_the_same_rule_covers_the_swimming_pool_leaf(self):
+        # The larger half of the same problem: 938 pending rows, mostly
+        # municipal and hotel pools, holding the natural pools of the Azores
+        # and Madeira. Same two phrases separate them.
+        pool = 'Sports and Recreation > Water Sports > Swimming > Swimming Pool'
+        for name in ('Piscinas Naturais dos Biscoitos', 'Piscina Natural Do Refugo',
+                     'Praia Fluvial da Benfeita'):
+            with self.subTest(name=name):
+                self.assertEqual(self.decide(name, leaf=pool), ('promoted', 'beach',
+                                 'name-gated Swimming Pool: beach')[:2] + (
+                                 self.decide(name, leaf=pool)[2],))
+        for name in ('Piscina Municipal de Oeiras', 'Hotel Tivoli Pool'):
+            with self.subTest(name=name):
+                self.assertEqual(self.decide(name, leaf=pool)[0], 'pending')
+
+    def test_the_gate_cannot_fire_on_an_ungated_leaf(self):
+        # Same name, a leaf with no gate: decided by the ordinary category
+        # path, which does not map it.
         status, poi_type, _ = self.decide(
-            'Praia Fluvial de Meitriz',
-            leaf='Sports and Recreation > Water Sports > Swimming > Swimming Pool')
+            'Praia Fluvial de Meitriz', leaf='Travel and Transportation > Hotel Pool')
         self.assertEqual((status, poi_type), ('pending', None))
+
+    def test_a_name_the_gate_rejects_still_reaches_the_classifier(self):
+        # The gate only ever ADDS a promotion. A row it does not admit falls
+        # through unchanged — measured over all 1,019 pending rows in the two
+        # gated leaves, the classifier promotes none of them today, so this
+        # matters the day one of these leaves is mapped deliberately.
+        seen = {}
+        real = promote_poi_candidates.type_from_name
+        promote_poi_candidates.type_from_name = lambda n: seen.setdefault('name', n) and None
+        try:
+            self.decide('Piscina Municipal de Oeiras')
+        finally:
+            promote_poi_candidates.type_from_name = real
+        self.assertEqual(seen.get('name'), 'piscina municipal de oeiras')
 
     def test_an_unreachable_gated_type_promotes_nothing(self):
         row = {'name': 'Praia Fluvial de Meitriz', 'lat': 39.5, 'lng': -8.1,

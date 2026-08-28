@@ -109,8 +109,15 @@ NOT_WANTED_TYPES = frozenset({'school', 'clinic', 'financial_service'})
 # Two phrases only, deliberately. `poço` is a well and `albufeira` a
 # reservoir — nobody swims there, and every term added past the point of
 # certainty is how this leaf gets contaminated again.
+# `Swimming Pool` is the same problem one leaf over, and the larger half of
+# it: 938 pending rows, overwhelmingly municipal and hotel pools, holding the
+# natural pools the Azores and Madeira are full of. It cannot be mapped as a
+# category any more than Bathing Area can, and the same two phrases separate
+# them.
+NATURAL_WATER_PHRASES = ('praia fluvial', 'piscina natural', 'piscinas naturais')
 NAME_GATED_LEAVES = {
-    'Bathing Area': ('beach', ('praia fluvial', 'piscina natural', 'piscinas naturais')),
+    'Bathing Area': ('beach', NATURAL_WATER_PHRASES),
+    'Swimming Pool': ('beach', NATURAL_WATER_PHRASES),
 }
 
 # Product decision: load now, dormant until a use case exists.
@@ -148,19 +155,19 @@ def decide(row, index, mapped_labels, reachable):
         return 'rejected', None, f'geography: {leaf}'
 
     # KAN-421. For a name-gated leaf the category is not evidence on its own,
-    # so the name decides and nothing downstream gets a second opinion — a
-    # beauty business here must not reach `type_from_name` and be promoted as
-    # something else. A row the name does not admit stays `pending`, exactly
-    # as it is today: leaving it is the status quo, whereas rejecting it
-    # would be a new decision this ticket was not asked to make.
+    # so the name is allowed to promote a row the category could not. The gate
+    # only ever ADDS a promotion: a name it does not admit falls through to
+    # the ordinary path below, unchanged.
+    #
+    # Measured before choosing that, over all 1,019 pending rows in the two
+    # gated leaves: the classifier promotes zero of them today, so blocking
+    # the fall-through would have changed nothing now and quietly broken the
+    # day someone maps one of these leaves deliberately.
     gate = NAME_GATED_LEAVES.get(leaf)
     if gate:
         gated_type, phrases = gate
-        if gated_type not in reachable:
-            return 'pending', None, None
-        if not any(normalized.startswith(phrase) for phrase in phrases):
-            return 'pending', None, None
-        return 'promoted', reachable[gated_type], f'name-gated {leaf}: {gated_type}'
+        if gated_type in reachable and any(normalized.startswith(p) for p in phrases):
+            return 'promoted', reachable[gated_type], f'name-gated {leaf}: {gated_type}'
 
     classifier_type = (type_from_labels(row['raw_category_labels'], mapped_labels)
                        or type_from_name(normalized))
