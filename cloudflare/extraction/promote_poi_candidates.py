@@ -166,7 +166,13 @@ def decide(row, index, mapped_labels, reachable):
     gate = NAME_GATED_LEAVES.get(leaf)
     if gate:
         gated_type, phrases = gate
-        if gated_type in reachable and any(normalized.startswith(p) for p in phrases):
+        # The phrase must end on a word boundary, not merely prefix the name:
+        # a bare `startswith` would admit "piscina naturalista" as a natural
+        # pool. `normalize_text` has already collapsed punctuation to spaces,
+        # so a following space is the whole test — plus the exact match, for
+        # the row named just "Piscinas Naturais".
+        if gated_type in reachable and any(
+                normalized == p or normalized.startswith(p + ' ') for p in phrases):
             return 'promoted', reachable[gated_type], f'name-gated {leaf}: {gated_type}'
 
     classifier_type = (type_from_labels(row['raw_category_labels'], mapped_labels)

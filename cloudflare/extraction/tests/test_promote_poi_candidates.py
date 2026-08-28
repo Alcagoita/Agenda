@@ -282,9 +282,9 @@ class NameGatedLeafTest(unittest.TestCase):
         for name in ('Piscinas Naturais dos Biscoitos', 'Piscina Natural Do Refugo',
                      'Praia Fluvial da Benfeita'):
             with self.subTest(name=name):
-                self.assertEqual(self.decide(name, leaf=pool), ('promoted', 'beach',
-                                 'name-gated Swimming Pool: beach')[:2] + (
-                                 self.decide(name, leaf=pool)[2],))
+                self.assertEqual(
+                    self.decide(name, leaf=pool),
+                    ('promoted', 'beach', 'name-gated Swimming Pool: beach'))
         for name in ('Piscina Municipal de Oeiras', 'Hotel Tivoli Pool'):
             with self.subTest(name=name):
                 self.assertEqual(self.decide(name, leaf=pool)[0], 'pending')
