@@ -86,9 +86,39 @@ NOT_WANTED_TYPES = frozenset({'school', 'clinic', 'financial_service'})
 #   "Vida City SPA e Espaço ZEN", "Ervanária SaraNatura". Mapping it to
 #   `beach` would answer a beach search with a nail salon.
 #
-# Recovering the real ones needs the name as a REJECT filter, which is a
-# separate rule from anything here. Left unmapped rather than half-right.
-CONTAMINATED_LEAVES = frozenset({'Bathing Area'})
+# KAN-421 recovers the real ones, and not the way KAN-410 assumed.
+#
+# A beauty-word REJECT list does not work here. Reading all 87 pending PT
+# rows, only ~26 are real; ~30 are the beauty businesses above, and ~28 are
+# neither — "Casa De Banho" (a toilet), "Eco Bathroom Vd Moses" (a bathroom
+# fixtures shop), "Infinity Pool" and "Jacuzzi" (hotel amenities), "Ponte
+# Sobre Tejo A13" (a bridge), "Braga, Portugal" (a town), "ATLANTIC OCEAN
+# SOUTH OF MADEIRA". Rejecting beauty words leaves every one of those
+# promoting as a beach — ~48% correct, worse than the "two thirds right"
+# this was split out to avoid. There is no finite list of not-a-bathing-area
+# words that covers bridges, towns, toilets and the ocean.
+#
+# What separates them is that a praia fluvial or a piscina natural carries
+# the phrase as its NAME, not as a description of somewhere nearby. So the
+# phrase must LEAD the name: "Praia Fluvial de Meitriz" is the place, while
+# "Bar da Praia Fluvial", "Ponte da Praia Fluvial", "Jardim da Praia Fluvial"
+# and "Campo de Jogos da Praia Fluvial" are a bar, a bridge, a garden and a
+# football pitch standing beside one. Across the whole candidate table that
+# rule keeps 105 of 111 phrase-bearing rows and drops exactly those six.
+#
+# Two phrases only, deliberately. `poço` is a well and `albufeira` a
+# reservoir — nobody swims there, and every term added past the point of
+# certainty is how this leaf gets contaminated again.
+# `Swimming Pool` is the same problem one leaf over, and the larger half of
+# it: 938 pending rows, overwhelmingly municipal and hotel pools, holding the
+# natural pools the Azores and Madeira are full of. It cannot be mapped as a
+# category any more than Bathing Area can, and the same two phrases separate
+# them.
+NATURAL_WATER_PHRASES = ('praia fluvial', 'piscina natural', 'piscinas naturais')
+NAME_GATED_LEAVES = {
+    'Bathing Area': ('beach', NATURAL_WATER_PHRASES),
+    'Swimming Pool': ('beach', NATURAL_WATER_PHRASES),
+}
 
 # Product decision: load now, dormant until a use case exists.
 LODGING_LEAVES = frozenset({
@@ -123,6 +153,27 @@ def decide(row, index, mapped_labels, reachable):
     leaf = leaf_of(row['raw_category_labels'])
     if leaf in GEOGRAPHY_LEAVES:
         return 'rejected', None, f'geography: {leaf}'
+
+    # KAN-421. For a name-gated leaf the category is not evidence on its own,
+    # so the name is allowed to promote a row the category could not. The gate
+    # only ever ADDS a promotion: a name it does not admit falls through to
+    # the ordinary path below, unchanged.
+    #
+    # Measured before choosing that, over all 1,019 pending rows in the two
+    # gated leaves: the classifier promotes zero of them today, so blocking
+    # the fall-through would have changed nothing now and quietly broken the
+    # day someone maps one of these leaves deliberately.
+    gate = NAME_GATED_LEAVES.get(leaf)
+    if gate:
+        gated_type, phrases = gate
+        # The phrase must end on a word boundary, not merely prefix the name:
+        # a bare `startswith` would admit "piscina naturalista" as a natural
+        # pool. `normalize_text` has already collapsed punctuation to spaces,
+        # so a following space is the whole test — plus the exact match, for
+        # the row named just "Piscinas Naturais".
+        if gated_type in reachable and any(
+                normalized == p or normalized.startswith(p + ' ') for p in phrases):
+            return 'promoted', reachable[gated_type], f'name-gated {leaf}: {gated_type}'
 
     classifier_type = (type_from_labels(row['raw_category_labels'], mapped_labels)
                        or type_from_name(normalized))

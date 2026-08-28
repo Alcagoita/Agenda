@@ -180,14 +180,18 @@ class CategoryMapPortabilityTest(unittest.TestCase):
                              f'{leaf} does not map to {expected}')
             self.assertIn(expected, self.reachable, f'{expected} is unreachable')
 
-    def test_the_contaminated_leaf_stays_unmapped(self):
-        # `Bathing Area` reads like praia fluvial and holds real natural
-        # pools, but Foursquare also files beauty businesses there. Mapping
-        # it would answer a beach search with a nail salon. KAN-421 owns
-        # recovering the genuine rows behind a name-REJECT rule.
+    def test_the_contaminated_leaf_is_gated_by_name_not_by_category(self):
+        # `Bathing Area` must never map as a category: it holds real natural
+        # pools alongside beauty businesses, hotel jacuzzis and a bridge.
+        # KAN-421 admits it only through the name gate, whose target type
+        # still has to be reachable or the gate would promote nothing.
         self.assertIsNone(self.labels.get('Bathing Area'))
         import promote_poi_candidates as promote
-        self.assertIn('Bathing Area', promote.CONTAMINATED_LEAVES)
+        gated_type, phrases = promote.NAME_GATED_LEAVES['Bathing Area']
+        self.assertEqual(gated_type, 'beach')
+        self.assertIn(gated_type, self.reachable)
+        self.assertEqual(set(phrases),
+                         {'praia fluvial', 'piscina natural', 'piscinas naturais'})
 
     def test_the_extraction_filter_asks_for_every_mapped_id(self):
         # Derived from the mapping files themselves rather than a magic
@@ -225,3 +229,93 @@ class CategoryMapPortabilityTest(unittest.TestCase):
         ids = set(all_category_ids())
         for extra in entry.get('also', ()):
             self.assertIn(extra['category_id'], ids)
+
+
+class NameGatedLeafTest(unittest.TestCase):
+    """KAN-421 — `Bathing Area` decided by the name, never by the category.
+
+    Every name below is a real row from the 87 pending PT candidates in that
+    leaf, so these assertions describe the data the rule actually meets.
+    """
+
+    # Only `beach` matters here, and hard-coding it keeps the test hermetic:
+    # the real reachable map is read from live D1.
+    REACHABLE = {'beach': 'beach'}
+
+    def decide(self, name, leaf='Landmarks and Outdoors > Bathing Area'):
+        row = {'name': name, 'lat': 39.5, 'lng': -8.1, 'raw_category_labels': leaf}
+        return promote_poi_candidates.decide(row, {}, {}, self.REACHABLE)
+
+    def test_the_genuine_natural_pools_promote_as_beach(self):
+        for name in ('Praia Fluvial de Meitriz', 'Praia Fluvial Senhora da Ribeira',
+                     'Piscinas Naturais de Mosteiros', 'Piscinas Naturais da Fajã Grande',
+                     'piscina natural negrito'):
+            with self.subTest(name=name):
+                status, poi_type, _ = self.decide(name)
+                self.assertEqual((status, poi_type), ('promoted', 'beach'))
+
+    def test_everything_else_in_the_leaf_stays_pending(self):
+        # Three distinct kinds of wrong, all filed under Bathing Area. The
+        # last two are why a beauty-word reject list was not enough.
+        for name in ('The Beauty Clinic', 'Vida City SPA e Espaço ZEN',   # beauty
+                     'Infinity Pool', 'Jacuzzi',                          # hotel amenities
+                     'Casa De Banho', 'Ponte Sobre Tejo A13',             # a toilet, a bridge
+                     'ATLANTIC OCEAN SOUTH OF MADEIRA', 'Braga, Portugal',
+                     'Albufeira De Borba', 'Poço Azul'):                  # reservoir, well
+            with self.subTest(name=name):
+                self.assertEqual(self.decide(name)[0], 'pending')
+
+    def test_the_phrase_must_lead_the_name(self):
+        # A bar, a bridge, a garden and a pitch beside a praia fluvial all
+        # carry the phrase. Only the place itself is named for it.
+        for name in ('Bar da Praia Fluvial Cristalina', 'Ponte da Praia Fluvial',
+                     'Jardim da Praia Fluvial', 'Campo de Jogos da Praia Fluvial',
+                     'Parque de Piscinas Naturais do Ourondo'):
+            with self.subTest(name=name):
+                self.assertEqual(self.decide(name)[0], 'pending')
+
+    def test_the_same_rule_covers_the_swimming_pool_leaf(self):
+        # The larger half of the same problem: 938 pending rows, mostly
+        # municipal and hotel pools, holding the natural pools of the Azores
+        # and Madeira. Same two phrases separate them.
+        pool = 'Sports and Recreation > Water Sports > Swimming > Swimming Pool'
+        for name in ('Piscinas Naturais dos Biscoitos', 'Piscina Natural Do Refugo',
+                     'Praia Fluvial da Benfeita'):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    self.decide(name, leaf=pool),
+                    ('promoted', 'beach', 'name-gated Swimming Pool: beach'))
+        for name in ('Piscina Municipal de Oeiras', 'Hotel Tivoli Pool'):
+            with self.subTest(name=name):
+                self.assertEqual(self.decide(name, leaf=pool)[0], 'pending')
+
+    def test_the_gate_cannot_fire_on_an_ungated_leaf(self):
+        # Same name, a leaf with no gate: decided by the ordinary category
+        # path, which does not map it.
+        status, poi_type, _ = self.decide(
+            'Praia Fluvial de Meitriz', leaf='Travel and Transportation > Hotel Pool')
+        self.assertEqual((status, poi_type), ('pending', None))
+
+    def test_a_name_the_gate_rejects_still_reaches_the_classifier(self):
+        # The gate only ever ADDS a promotion. A row it does not admit falls
+        # through unchanged — measured over all 1,019 pending rows in the two
+        # gated leaves, the classifier promotes none of them today, so this
+        # matters the day one of these leaves is mapped deliberately.
+        seen = {}
+        real = promote_poi_candidates.type_from_name
+        promote_poi_candidates.type_from_name = lambda n: seen.setdefault('name', n) and None
+        try:
+            self.decide('Piscina Municipal de Oeiras')
+        finally:
+            promote_poi_candidates.type_from_name = real
+        self.assertEqual(seen.get('name'), 'piscina municipal de oeiras')
+
+    def test_an_unreachable_gated_type_promotes_nothing(self):
+        row = {'name': 'Praia Fluvial de Meitriz', 'lat': 39.5, 'lng': -8.1,
+               'raw_category_labels': 'Landmarks and Outdoors > Bathing Area'}
+        status, poi_type, _ = promote_poi_candidates.decide(row, {}, {}, {})
+        self.assertEqual((status, poi_type), ('pending', None))
+
+    def test_the_decision_is_stable_when_repeated(self):
+        first = self.decide('Praia Fluvial de Meitriz')
+        self.assertEqual(first, self.decide('Praia Fluvial de Meitriz'))
