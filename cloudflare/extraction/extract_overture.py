@@ -138,8 +138,9 @@ def place_bbox(place_id):
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--bbox', nargs=4, type=float,
-                        metavar=('MIN_LAT', 'MAX_LAT', 'MIN_LNG', 'MAX_LNG'))
+    # One comma-separated value, not four positionals: western longitudes are
+    # negative and argparse reads a bare `-9.2545` as an option string.
+    parser.add_argument('--bbox', metavar='MIN_LAT,MAX_LAT,MIN_LNG,MAX_LNG')
     parser.add_argument('--place')
     parser.add_argument('--out', required=True)
     parser.add_argument('--release', default=OVERTURE_RELEASE)
@@ -147,7 +148,13 @@ def main(argv):
 
     if bool(args.bbox) == bool(args.place):
         raise SystemExit('give exactly one of --bbox or --place')
-    bounds = tuple(args.bbox) if args.bbox else place_bbox(args.place)
+    if args.bbox:
+        parts = [p.strip() for p in args.bbox.split(',')]
+        if len(parts) != 4:
+            raise SystemExit('--bbox needs MIN_LAT,MAX_LAT,MIN_LNG,MAX_LNG')
+        bounds = tuple(float(p) for p in parts)
+    else:
+        bounds = place_bbox(args.place)
 
     print(f'overture {args.release}: reading '
           f'lat {bounds[0]}..{bounds[1]} lng {bounds[2]}..{bounds[3]}',
