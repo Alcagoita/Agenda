@@ -26,12 +26,21 @@ Note `travel_service` is deliberately absent from the exclusions: there were
 10 rows within 100 m of one point in Baixa, and a travel agency may well be
 a real errand. That is a decision to make from data, not in advance.
 
+BBOX IS FOR PILOTS. COUNTRY IS FOR IMPORTS.
+
+extract_country is the shape a real import takes, and it matches
+extract.extract_country: one pull filtered on `country`, no per-municipality
+iteration. --bbox exists so a pilot can measure one town against a known
+truth list; it is not how Portugal gets loaded.
+
 Usage:
-  python3 extract_overture.py --bbox <min_lat> <max_lat> <min_lng> <max_lng> --out <csv>
+  python3 extract_overture.py --bbox MIN_LAT,MAX_LAT,MIN_LNG,MAX_LNG --out <csv>
   python3 extract_overture.py --place <place_id> --out <csv>
+  python3 extract_overture.py --country PT --out <csv>
 """
 import argparse
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -120,6 +129,58 @@ def extract_bbox(min_lat, max_lat, min_lng, max_lng, out_path,
     return out_path
 
 
+def extract_country(country_code, out_path, release=OVERTURE_RELEASE):
+    """Every named Overture place in one country. THE path for a full import.
+
+    Mirrors extract.extract_country deliberately: that function pulls a whole
+    country in one query filtered on `country`, and run_job partitions the
+    result afterwards. There is no per-municipality iteration anywhere in the
+    Foursquare path, which is why nothing there can double-count a place that
+    sits near a boundary.
+
+    A bbox pull cannot do this. A rectangle over an irregular border pulls in
+    neighbouring municipalities — and over a national border, another country
+    — while still missing anything outside the box. `addresses[].country` is
+    exact. Measured on the Odivelas box: 8,855 rows, every one carrying a
+    country, none null.
+
+    The GERS id is the primary key, so even a re-run over overlapping ground
+    inserts each place once. Country filtering is about asking the right
+    question, not about protecting against duplicates.
+    """
+    if not re.fullmatch(r'[A-Za-z]{2}', country_code or ''):
+        raise ValueError(
+            f'country_code must be two ASCII letters, got {country_code!r}')
+    excluded = ','.join("'%s'" % value for value in EXCLUDED_CATEGORIES)
+    connection = _connect()
+    connection.execute(
+        f"""
+        COPY (
+          SELECT id AS overture_id,
+                 names.primary AS name,
+                 ST_Y(geometry) AS lat,
+                 ST_X(geometry) AS lng,
+                 addresses[1].freeform AS address,
+                 addresses[1].locality AS locality,
+                 categories.primary AS category,
+                 basic_category,
+                 array_to_string(taxonomy.hierarchy, '|') AS category_path,
+                 confidence,
+                 array_to_string(list_distinct(
+                   list_transform(sources, s -> s.dataset)), '|') AS source_datasets
+          FROM read_parquet('{OVERTURE_PLACES % release}')
+          WHERE addresses[1].country = ?
+            AND names.primary IS NOT NULL
+            AND (basic_category IS NULL OR basic_category NOT IN ({excluded}))
+            AND (categories.primary IS NULL OR categories.primary NOT IN ({excluded}))
+        ) TO '{out_path}' (FORMAT CSV, HEADER)
+        """,
+        [country_code.upper()],
+    )
+    connection.close()
+    return out_path
+
+
 def place_bbox(place_id):
     """The stored bounds for one place, read through the same D1 path the
     rest of the extraction uses."""
@@ -142,12 +203,25 @@ def main(argv):
     # negative and argparse reads a bare `-9.2545` as an option string.
     parser.add_argument('--bbox', metavar='MIN_LAT,MAX_LAT,MIN_LNG,MAX_LNG')
     parser.add_argument('--place')
+    parser.add_argument('--country', metavar='ISO2',
+                        help='whole-country pull, the path a full import uses')
     parser.add_argument('--out', required=True)
     parser.add_argument('--release', default=OVERTURE_RELEASE)
     args = parser.parse_args(argv)
 
-    if bool(args.bbox) == bool(args.place):
-        raise SystemExit('give exactly one of --bbox or --place')
+    given = [bool(args.bbox), bool(args.place), bool(args.country)]
+    if sum(given) != 1:
+        raise SystemExit('give exactly one of --bbox, --place or --country')
+
+    if args.country:
+        print(f'overture {args.release}: reading country {args.country.upper()}',
+              file=sys.stderr)
+        extract_country(args.country, args.out, release=args.release)
+        with open(args.out) as handle:
+            rows = sum(1 for _ in handle) - 1
+        print(f'wrote {rows:,} rows to {args.out}', file=sys.stderr)
+        return 0
+
     if args.bbox:
         parts = [p.strip() for p in args.bbox.split(',')]
         if len(parts) != 4:
