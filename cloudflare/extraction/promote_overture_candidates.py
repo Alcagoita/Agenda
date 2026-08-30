@@ -39,8 +39,9 @@ from datetime import date, datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyse_poi_candidates import paged, query, reachable_types
 from classify_and_load import (
-    MAX_STATEMENT_BYTES, byte_len, encode_geohash, find_brand,
-    load_brand_dictionary, normalize_text, sql_escape, types_from_name,
+    MAX_STATEMENT_BYTES, build_alias_index, byte_len, encode_geohash, find_brand,
+    load_brand_dictionary, load_keyword_dictionary, match_keyword_subtypes,
+    normalize_text, sql_escape, types_from_name,
 )
 from opening_hours import hours_for_poi_type
 
@@ -80,21 +81,71 @@ NAME_OUTRANKS_CATEGORY = frozenset({
 })
 
 
+# KAN-431. Decided, not undecided. `pending` means "nobody has ruled on this
+# yet" and is a backlog to work through; these have been ruled on, and
+# leaving them pending would keep re-presenting settled questions as open.
+#
+# Lodging and vehicles are not errands Brush models at all. The medical set
+# is KAN-412's — searched for by name at an address, never stumbled upon.
+# The professional services are places you have an appointment with, not
+# places you pass. A dance or driving school is a course you enrol in, which
+# is not what `school` means here — and all 120 dance_school rows were
+# checked for gyms first, because a dance studio that is also a ginásio
+# would be a real errand. None was.
+REJECTED_CATEGORIES = frozenset({
+    'hotel', 'holiday_rental_home',
+    'dentist', 'hospital', 'diagnostic_services',
+    'automotive_repair', 'car_dealer',
+    'lawyer', 'insurance_agency', 'psychologist',
+    'community_services_non_profits',
+    'dance_school', 'driving_school',
+})
+
+# A housing development is a place NAME, not a place. Overture files these
+# under landmark_and_historical_building, where they become fake landmarks —
+# `Urbanização da Quinta Nova` is an estate, not a monument. Matched at the
+# start of the name only, so "Café da Urbanização X" is untouched: there the
+# word locates a real venue rather than naming the estate itself.
+REJECTED_NAME_PREFIXES = ('urbanizacao', 'urbanizacoes')
+
+
+def store_kind_alias_index():
+    """The app's own store-subtype keyword dictionary, indexed for matching.
+
+    `any` is excluded for the reason build_alias_index gives: it is a
+    catch-all, not a real subtype, and would win every match.
+    """
+    return build_alias_index(
+        load_keyword_dictionary('storeSubtypeDictionary.json'),
+        exclude_keys={'any'})
+
+
 def category_map():
     path = os.path.join(CLOUDFLARE_DIR, 'src', 'overtureCategories.json')
     with open(path) as handle:
         return {k: v for k, v in json.load(handle).items() if not k.startswith('_')}
 
 
-def decide(row, mapping, reachable, brand_dictionary):
+def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
     """(status, types, attributes, reason) for one candidate.
 
     `types` is ranked: the category's answer first, then anything the name
     adds. Rank 0 becomes primary_poi_type, which is what the app shows.
     """
+    if store_kind_aliases is None:
+        store_kind_aliases = store_kind_alias_index()
     normalized = normalize_text(row['name'] or '')
     if not normalized:
         return 'rejected', (), (), 'unnamed'
+
+    # Rejections come first, and the category outranks the name here. A
+    # dentist named "Clínica Farmácia Silva" is still a dentist; letting a
+    # name keyword rescue a category we have ruled out would reopen the
+    # decision one row at a time.
+    if row['category'] in REJECTED_CATEGORIES:
+        return 'rejected', (), (), f"rejected category: {row['category']}"
+    if normalized.startswith(REJECTED_NAME_PREFIXES):
+        return 'rejected', (), (), 'housing development, not a place'
 
     types, attributes, reason = [], [], None
     entry = mapping.get(row['category'])
@@ -132,14 +183,24 @@ def decide(row, mapping, reachable, brand_dictionary):
     if not types:
         return 'pending', (), (), None
 
-    # KAN-431. A bare `store` is promoted and then invisible. The Worker
+    # KAN-431. A bare `store` is promoted and then invisible: the Worker
     # resolves a subtype filter against the row's attributes and a store
     # task cannot exist without a subtype, so a row typed only `store` with
     # no store_kind answers no search that will ever be made for it.
     #
-    # This is mostly papelarias, which have no subtype to be given — there
-    # is no `stationery` in the store subtype list. Pending is the honest
-    # place for them: countable, and visible to whoever adds that subtype.
+    # Before giving up on one, ask the name — KAN-340's fallback, the same
+    # one classify_and_load runs for Foursquare rows tagged `store` with no
+    # category-derived kind. The dictionary already knows these words:
+    # `papelaria` is an alias of `books`, which is why 75 of them did not
+    # need a subtype invented, only looked up.
+    if 'store' in types and not any(d == 'store_kind' for d, _ in attributes):
+        for kind in match_keyword_subtypes(row['name'], store_kind_aliases):
+            attributes.append(('store_kind', kind))
+            reason = reason or f'name: store/{kind}'
+
+    # Still nothing, and `store` is all we have: it cannot be reached, so
+    # pending is the honest place for it — countable, and visible to
+    # whoever adds the missing subtype.
     if list(types) == ['store'] and not any(d == 'store_kind' for d, _ in attributes):
         return 'pending', (), (), None
 
@@ -203,6 +264,7 @@ def run(batch, out_dir, dry_run):
     mapping = category_map()
     reachable = reachable_types()
     brand_dictionary = load_brand_dictionary()
+    store_kind_aliases = store_kind_alias_index()
     refreshed = date.today().isoformat()
 
     stats = Counter()
@@ -221,7 +283,7 @@ def run(batch, out_dir, dry_run):
         where="promotion_status = 'pending'",
     ):
         status, types, attributes, reason = decide(
-            row, mapping, reachable, brand_dictionary)
+            row, mapping, reachable, brand_dictionary, store_kind_aliases)
         stats[status] += 1
         if status == 'promoted':
             by_type[types[0]] += 1

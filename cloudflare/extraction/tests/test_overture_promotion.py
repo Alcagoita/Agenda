@@ -69,18 +69,50 @@ class DecideTest(unittest.TestCase):
     def test_an_unmapped_category_with_a_silent_name_stays_pending(self):
         # Pending is countable, which is the point of staging: the next
         # mapping decision comes from what arrived, not from a taxonomy.
-        status, types, attributes, reason = self.decide('Quinta do Sol', 'hotel')
+        # Not `hotel`: that one has been ruled on and is now rejected.
+        # Pending is for categories nobody has decided about yet.
+        status, types, attributes, reason = self.decide(
+            'Junta de Freguesia', 'central_government_office')
         self.assertEqual(status, 'pending')
         self.assertEqual(types, ())
         self.assertIsNone(reason)
 
-    def test_a_bare_store_with_no_subtype_stays_pending(self):
-        # `papelaria` types as `store` from the name, and there is no
-        # `stationery` subtype to give it. Promoting it would create a row
-        # no search can reach; pending keeps it countable instead.
-        status, types, _, _ = self.decide('Papelaria Trevo', 'office_equipment')
+    def test_the_name_supplies_a_store_kind_the_category_could_not(self):
+        # KAN-340's fallback, the one classify_and_load already runs for
+        # Foursquare. `papelaria` is an alias of `books` in the app's own
+        # dictionary, so this subtype is looked up, never invented.
+        status, types, attributes, _ = self.decide('Papelaria Trevo', 'office_equipment')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('store',))
+        self.assertIn(('store_kind', 'books'), attributes)
+
+    def test_a_store_no_name_can_qualify_stays_pending(self):
+        # Reachability is the bar: a `store` with no subtype answers no
+        # search, so pending keeps it countable rather than invisible.
+        status, types, _, _ = self.decide('Zee', 'unmapped_category_xyz')
         self.assertEqual(status, 'pending')
         self.assertEqual(types, ())
+
+    def test_a_rejected_category_is_rejected_whatever_the_name_says(self):
+        # Letting a name keyword rescue a ruled-out category would reopen
+        # the decision one row at a time.
+        status, types, _, reason = self.decide('Clínica Farmácia Silva', 'dentist')
+        self.assertEqual(status, 'rejected')
+        self.assertEqual(types, ())
+        self.assertEqual(reason, 'rejected category: dentist')
+
+    def test_a_housing_development_is_not_a_landmark(self):
+        status, _, _, reason = self.decide(
+            'Urbanização da Quinta Nova', 'landmark_and_historical_building')
+        self.assertEqual(status, 'rejected')
+        self.assertEqual(reason, 'housing development, not a place')
+
+    def test_a_venue_inside_a_development_is_kept(self):
+        # The prefix match is what makes this safe: here the word locates a
+        # real café rather than naming the estate itself.
+        status, types, _, _ = self.decide('Café da Urbanização Nova', 'cafe')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types[0], 'cafe')
 
     def test_a_store_that_has_a_subtype_still_promotes(self):
         status, types, attributes, _ = self.decide('Movel Forte', 'hardware_store')
