@@ -90,7 +90,10 @@ def value_tuple(row):
 def batched(pieces):
     values, size = [], byte_len(INSERT_PREFIX) + 2
     for piece in pieces:
-        piece_size = byte_len(piece) + 1
+        # +2, not +1: join writes ',\n' between values. Undercounting by a
+        # byte per value lets a 500-value statement exceed the cap it is
+        # measured against.
+        piece_size = byte_len(piece) + 2
         if values and (size + piece_size > MAX_STATEMENT_BYTES
                        or len(values) >= MAX_VALUES_TERMS):
             yield INSERT_PREFIX + ',\n'.join(values) + ';\n'

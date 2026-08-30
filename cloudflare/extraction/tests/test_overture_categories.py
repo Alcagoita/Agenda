@@ -70,6 +70,31 @@ class OvertureCategoryMapTest(unittest.TestCase):
                 if 'food_cuisine' in entry:
                     self.assertEqual(entry['poi_type'], 'restaurant')
 
+    def test_a_store_entry_always_carries_a_store_kind(self):
+        """A `store` with no subtype is promoted and then unreachable.
+
+        attributeValueMatches() in the Worker resolves a subtype filter
+        against the row's attributes, and a store task cannot be created
+        without a subtype — so a `store` row carrying none matches no
+        search that will ever be made for it.
+
+        This removed `discount_store`, `department_store`, `specialty_store`
+        and `shopping`. None has an honest value in the subtype list, which
+        is the point: they mean "a shop, kind unknown", and the right place
+        for that is `pending`, where it stays countable.
+        """
+        for category, entry in sorted(self.mapping.items()):
+            if entry['poi_type'] == 'store':
+                with self.subTest(category=category):
+                    self.assertIn('store_kind', entry)
+
+    def test_swimming_pool_is_not_a_beach(self):
+        """KAN-421 decided a pool becomes a Bathing Area only when its NAME
+        says `praia fluvial` or `piscina natural`. A blanket category
+        mapping would make every municipal pool a beach, which is the
+        opposite of that decision."""
+        self.assertNotIn('swimming_pool', self.mapping)
+
     def test_entries_carry_nothing_but_the_three_known_keys(self):
         for category, entry in sorted(self.mapping.items()):
             with self.subTest(category=category):

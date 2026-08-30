@@ -157,7 +157,9 @@ def poi_values(row, poi_type, brand_dictionary, refreshed):
 def batched(prefix, pieces):
     values, size = [], byte_len(prefix) + 2
     for piece in pieces:
-        piece_size = byte_len(piece) + 1
+        # +2, not +1: join writes ',\n' between values. Same undercount as
+        # the loader had.
+        piece_size = byte_len(piece) + 2
         if values and (size + piece_size > MAX_STATEMENT_BYTES
                        or len(values) >= MAX_VALUES_TERMS):
             yield prefix + ',\n'.join(values) + ';\n'
@@ -260,6 +262,10 @@ def main(argv):
     parser.add_argument('--batch', type=int, default=10000)
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
+    # paged() uses this as its LIMIT. Zero returns no rows and the keyset
+    # cursor never advances, so the scan spins forever reporting nothing.
+    if args.batch < 1:
+        parser.error('--batch must be at least 1')
     run(args.batch, args.sql_out, args.dry_run)
     return 0
 

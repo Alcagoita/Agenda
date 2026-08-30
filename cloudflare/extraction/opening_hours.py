@@ -91,6 +91,13 @@ _TYPE_HOURS = {
     'grocery_store': (540, 1320),
     'bakery': (420, 1260),
     'store': (540, 1140),
+    # KAN-431. A talho, peixaria or florista keeps shop hours like any other
+    # retailer. Overture promotes all three, and without an entry here they
+    # inherit "always open" — the app showing a butcher open at 3am is the
+    # lying this table exists to prevent.
+    'butcher': (540, 1140),
+    'fishmonger': (540, 1140),
+    'florist': (540, 1140),
     # Dining.
     'cafe': (420, 1260),
     'coffee_shop': (420, 1260),

@@ -129,10 +129,6 @@
   "flowers_and_gifts_shop": { "poi_type": "florist" },
   "flowers_and_gifts_store": { "poi_type": "florist" },
   "florist": { "poi_type": "florist" },
-  "discount_store": { "poi_type": "store" },
-  "department_store": { "poi_type": "store" },
-  "specialty_store": { "poi_type": "store" },
-  "shopping": { "poi_type": "store" },
 
   "beauty_salon": { "poi_type": "salon" },
   "hair_salon": { "poi_type": "hairdresser" },
@@ -159,7 +155,6 @@
   "tennis_court": { "poi_type": "tennis_court" },
   "golf_course": { "poi_type": "golf_course" },
   "bowling_alley": { "poi_type": "bowling_alley" },
-  "swimming_pool": { "poi_type": "beach" },
 
   "banks": { "poi_type": "bank" },
   "bank_credit_union": { "poi_type": "bank" },

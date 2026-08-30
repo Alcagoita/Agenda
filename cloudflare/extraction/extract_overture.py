@@ -70,6 +70,17 @@ EXCLUDED_CATEGORIES = (
 )
 
 
+def _sql_literal(value):
+    """A single-quoted SQL string literal with apostrophes doubled.
+
+    DuckDB's COPY target cannot be a bound parameter, so out_path has to be
+    interpolated. A path containing an apostrophe — `/tmp/o'brien/pt.csv` is
+    a perfectly ordinary one — would otherwise close the literal early and
+    produce a syntax error at best.
+    """
+    return "'%s'" % str(value).replace("'", "''")
+
+
 def _connect():
     """DuckDB with the two extensions the Overture read needs.
 
@@ -121,7 +132,7 @@ def extract_bbox(min_lat, max_lat, min_lng, max_lng, out_path,
             AND names.primary IS NOT NULL
             AND (basic_category IS NULL OR basic_category NOT IN ({excluded}))
             AND (categories.primary IS NULL OR categories.primary NOT IN ({excluded}))
-        ) TO '{out_path}' (FORMAT CSV, HEADER)
+        ) TO {_sql_literal(out_path)} (FORMAT CSV, HEADER)
         """,
         [min_lat, max_lat, min_lng, max_lng],
     )
@@ -173,7 +184,7 @@ def extract_country(country_code, out_path, release=OVERTURE_RELEASE):
             AND names.primary IS NOT NULL
             AND (basic_category IS NULL OR basic_category NOT IN ({excluded}))
             AND (categories.primary IS NULL OR categories.primary NOT IN ({excluded}))
-        ) TO '{out_path}' (FORMAT CSV, HEADER)
+        ) TO {_sql_literal(out_path)} (FORMAT CSV, HEADER)
         """,
         [country_code.upper()],
     )
