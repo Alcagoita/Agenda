@@ -571,7 +571,12 @@ def classify(place_id, csv_path, out_sql_path):
     # (that's *why* it's classified as store), so 'any' must never compete in
     # the subtype scan or it always wins before a real specific subtype (e.g.
     # Bookstore) further down the same row's tag array ever gets checked.
-    store_reverse = {v['category_id']: k for k, v in store_subtypes.items() if k != 'any'}
+    # KAN-431: `if 'category_id' in v` because a subtype no longer has to be
+    # expressible as a source category id. Subtypes that came from Overture's
+    # own taxonomy carry no such id and simply have nothing to reverse-map
+    # here — the same guard category_ids.py has always had.
+    store_reverse = {v['category_id']: k for k, v in store_subtypes.items()
+                     if k != 'any' and 'category_id' in v}
     food_reverse = build_reverse_map(food_subtypes)
     brand_dictionary = load_brand_dictionary()
     financial_service_rules = load_financial_service_name_rules()

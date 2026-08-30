@@ -95,7 +95,11 @@ NAME_OUTRANKS_CATEGORY = frozenset({
 REJECTED_CATEGORIES = frozenset({
     'hotel', 'holiday_rental_home',
     'dentist', 'hospital', 'diagnostic_services',
-    'automotive_repair', 'car_dealer',
+    'automotive_repair',
+    # Every leaf under Overture's vehicle_dealer, the class car_dealer names.
+    'car_dealer', 'used_car_dealer', 'motorcycle_dealer', 'truck_dealer',
+    'boat_dealer', 'automobile_leasing', 'motorsport_vehicle_dealer',
+    'car_broker', 'commercial_vehicle_dealer', 'scooter_dealers',
     'lawyer', 'insurance_agency', 'psychologist',
     'community_services_non_profits',
     'dance_school', 'driving_school',

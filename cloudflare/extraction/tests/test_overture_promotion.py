@@ -81,7 +81,10 @@ class DecideTest(unittest.TestCase):
         # KAN-340's fallback, the one classify_and_load already runs for
         # Foursquare. `papelaria` is an alias of `books` in the app's own
         # dictionary, so this subtype is looked up, never invented.
-        status, types, attributes, _ = self.decide('Papelaria Trevo', 'office_equipment')
+        # A category Overture does not have. Its real shopping leaves are all
+        # mapped now, each keeping its own kind, so the fallback only has to
+        # cover what the source could not name at all.
+        status, types, attributes, _ = self.decide('Papelaria Trevo', 'unmapped_shop_xyz')
         self.assertEqual(status, 'promoted')
         self.assertEqual(types, ('store',))
         self.assertIn(('store_kind', 'books'), attributes)
@@ -131,7 +134,9 @@ class DecideTest(unittest.TestCase):
         # That rule protects OSM, where the alternative is admitting an
         # element nothing identified as a place. An Overture candidate is
         # already a known place; only its type is open.
-        status, types, _, reason = self.decide('Talho Halal Barakah', 'halal_restaurant')
+        # A category Overture does not have, so only the name can answer.
+        # Not a real food category: those are all mapped now, one to one.
+        status, types, _, reason = self.decide('Talho Halal Barakah', 'unmapped_category_xyz')
         self.assertEqual(status, 'promoted')
         self.assertEqual(types[0], 'butcher')
         self.assertEqual(reason, 'name: butcher')

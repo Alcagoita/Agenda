@@ -1,42 +1,273 @@
 {
-  "sushi": {
-    "category_id": "4bf58dd8d48988d1d2941735",
-    "category_name": "Sushi Restaurant"
+  "afghan": {
+    "category_name": "Afghan"
   },
-  "portuguese": {
-    "category_id": "4def73e84765ae376e57713a",
-    "category_name": "Portuguese Restaurant"
+  "african": {
+    "category_name": "African"
   },
-  "italian": {
-    "category_id": "4bf58dd8d48988d110941735",
-    "category_name": "Italian Restaurant"
+  "american": {
+    "category_name": "American"
+  },
+  "arabian": {
+    "category_name": "Arabian"
+  },
+  "argentine": {
+    "category_name": "Argentine"
+  },
+  "armenian": {
+    "category_name": "Armenian"
+  },
+  "asian": {
+    "category_name": "Asian"
+  },
+  "asian_fusion": {
+    "category_name": "Asian Fusion"
+  },
+  "australian": {
+    "category_name": "Australian"
+  },
+  "austrian": {
+    "category_name": "Austrian"
+  },
+  "bangladeshi": {
+    "category_name": "Bangladeshi"
+  },
+  "bar_and_grill": {
+    "category_name": "Bar And Grill"
+  },
+  "barbecue": {
+    "category_name": "Barbecue"
+  },
+  "basque": {
+    "category_name": "Basque"
+  },
+  "bistro": {
+    "category_name": "Bistro"
+  },
+  "brazilian": {
+    "category_name": "Brazilian"
+  },
+  "breakfast_and_brunch": {
+    "category_name": "Breakfast And Brunch"
+  },
+  "british": {
+    "category_name": "British"
+  },
+  "buffet": {
+    "category_name": "Buffet"
   },
   "burger": {
     "category_id": "4bf58dd8d48988d16c941735",
     "category_name": "Burger Joint"
   },
+  "chicken": {
+    "category_name": "Chicken"
+  },
+  "chinese": {
+    "category_name": "Chinese"
+  },
+  "colombian": {
+    "category_name": "Colombian"
+  },
+  "comfort_food": {
+    "category_name": "Comfort Food"
+  },
+  "delicatessen": {
+    "category_name": "Delicatessen"
+  },
+  "dim_sum": {
+    "category_name": "Dim Sum"
+  },
+  "diner": {
+    "category_name": "Diner"
+  },
+  "doner_kebab": {
+    "category_name": "Doner Kebab"
+  },
+  "eastern_european": {
+    "category_name": "Eastern European"
+  },
+  "empanadas": {
+    "category_name": "Empanadas"
+  },
+  "european": {
+    "category_name": "European"
+  },
+  "falafel": {
+    "category_name": "Falafel"
+  },
+  "filipino": {
+    "category_name": "Filipino"
+  },
+  "fish_and_chips": {
+    "category_name": "Fish And Chips"
+  },
+  "french": {
+    "category_name": "French"
+  },
+  "georgian": {
+    "category_name": "Georgian"
+  },
+  "german": {
+    "category_name": "German"
+  },
+  "greek": {
+    "category_name": "Greek"
+  },
+  "halal": {
+    "category_name": "Halal"
+  },
+  "hawaiian": {
+    "category_name": "Hawaiian"
+  },
   "healthy": {
     "category_id": "50aa9e744b90af0d42d5de0e",
     "category_name": "Health Food Store"
+  },
+  "hot_dog": {
+    "category_name": "Hot Dog"
   },
   "indian": {
     "category_id": "4bf58dd8d48988d10f941735",
     "category_name": "Indian Restaurant"
   },
-  "thai": {
-    "category_id": "4bf58dd8d48988d149941735",
-    "category_name": "Thai Restaurant"
+  "israeli": {
+    "category_name": "Israeli"
+  },
+  "italian": {
+    "category_id": "4bf58dd8d48988d110941735",
+    "category_name": "Italian Restaurant"
+  },
+  "japanese": {
+    "category_name": "Japanese"
+  },
+  "korean": {
+    "category_name": "Korean"
+  },
+  "kosher": {
+    "category_name": "Kosher"
+  },
+  "latin_american": {
+    "category_name": "Latin American"
+  },
+  "lebanese": {
+    "category_name": "Lebanese"
+  },
+  "live_and_raw_food": {
+    "category_name": "Live And Raw Food"
+  },
+  "malaysian": {
+    "category_name": "Malaysian"
+  },
+  "mediterranean": {
+    "category_name": "Mediterranean"
   },
   "mexican": {
     "category_id": "4bf58dd8d48988d1c1941735",
     "category_name": "Mexican Restaurant"
   },
+  "middle_eastern": {
+    "category_name": "Middle Eastern"
+  },
+  "moroccan": {
+    "category_name": "Moroccan"
+  },
+  "noodles": {
+    "category_name": "Noodles"
+  },
+  "pakistani": {
+    "category_name": "Pakistani"
+  },
+  "pan_asian": {
+    "category_name": "Pan Asian"
+  },
+  "pancake": {
+    "category_name": "Pancake"
+  },
+  "persian_iranian": {
+    "category_name": "Persian Iranian"
+  },
+  "peruvian": {
+    "category_name": "Peruvian"
+  },
+  "pizza": {
+    "category_name": "Pizza"
+  },
+  "poke": {
+    "category_name": "Poke"
+  },
+  "portuguese": {
+    "category_id": "4def73e84765ae376e57713a",
+    "category_name": "Portuguese Restaurant"
+  },
+  "salad": {
+    "category_name": "Salad"
+  },
+  "sandwich": {
+    "category_name": "Sandwich"
+  },
+  "scandinavian": {
+    "category_name": "Scandinavian"
+  },
+  "seafood": {
+    "category_name": "Seafood"
+  },
+  "soul_food": {
+    "category_name": "Soul Food"
+  },
+  "soup": {
+    "category_name": "Soup"
+  },
+  "south_african": {
+    "category_name": "South African"
+  },
+  "southern": {
+    "category_name": "Southern"
+  },
+  "spanish": {
+    "category_name": "Spanish"
+  },
   "steak": {
     "category_id": "4bf58dd8d48988d1cc941735",
     "category_name": "Steakhouse"
   },
+  "sushi": {
+    "category_id": "4bf58dd8d48988d1d2941735",
+    "category_name": "Sushi Restaurant"
+  },
+  "syrian": {
+    "category_name": "Syrian"
+  },
+  "taco": {
+    "category_name": "Taco"
+  },
+  "tapas": {
+    "category_name": "Tapas"
+  },
+  "texmex": {
+    "category_name": "Texmex"
+  },
+  "thai": {
+    "category_id": "4bf58dd8d48988d149941735",
+    "category_name": "Thai Restaurant"
+  },
+  "turkish": {
+    "category_name": "Turkish"
+  },
+  "ukrainian": {
+    "category_name": "Ukrainian"
+  },
+  "uzbek": {
+    "category_name": "Uzbek"
+  },
+  "vegan": {
+    "category_name": "Vegan"
+  },
   "vegetarian": {
     "category_id": "4bf58dd8d48988d1d3941735",
     "category_name": "Vegan and Vegetarian Restaurant"
+  },
+  "vietnamese": {
+    "category_name": "Vietnamese"
   }
 }

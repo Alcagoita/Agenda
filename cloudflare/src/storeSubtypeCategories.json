@@ -1,66 +1,282 @@
 {
+  "adult": {
+    "category_name": "Adult"
+  },
+  "antique": {
+    "category_name": "Antique"
+  },
   "any": {
     "category_id": "4d4b7105d754a06378d81259",
     "category_name": "Retail"
   },
-  "clothing": {
-    "category_id": "4bf58dd8d48988d103951735",
-    "category_name": "Clothing Store"
+  "art_supply": {
+    "category_name": "Art Supply"
   },
-  "shoes": {
-    "category_id": "4bf58dd8d48988d107951735",
-    "category_name": "Shoe Store"
+  "arts_and_crafts": {
+    "category_name": "Arts And Crafts"
   },
-  "electronics": {
-    "category_id": "4bf58dd8d48988d122951735",
-    "category_name": "Electronics Store"
+  "auction_house": {
+    "category_name": "Auction House"
   },
-  "furniture": {
-    "category_id": "4bf58dd8d48988d1f8941735",
-    "category_name": "Furniture and Home Store"
+  "auto_parts_and_supply": {
+    "category_name": "Auto Parts And Supply"
   },
-  "hardware": {
-    "category_id": "4bf58dd8d48988d112951735",
-    "category_name": "Hardware Store"
-  },
-  "jewelry": {
-    "category_id": "4bf58dd8d48988d111951735",
-    "category_name": "Jewelry Store"
-  },
-  "toys": {
-    "category_id": "4bf58dd8d48988d1f3941735",
-    "category_name": "Toy Store"
-  },
-  "sports": {
-    "category_id": "4bf58dd8d48988d1f2941735",
-    "category_name": "Sporting Goods Retail"
-  },
-  "home": {
-    "category_id": "4bf58dd8d48988d1f8941735",
-    "category_name": "Furniture and Home Store"
+  "baby_gear_and_furniture": {
+    "category_name": "Baby Gear And Furniture"
   },
   "beauty": {
     "category_id": "4bf58dd8d48988d10c951735",
     "category_name": "Cosmetics Store"
   },
-  "books": {
-    "category_id": "4bf58dd8d48988d114951735",
-    "category_name": "Bookstore"
-  },
   "bicycle": {
     "category_id": "4bf58dd8d48988d115951735",
     "category_name": "Bicycle Store"
   },
-  "pet": {
-    "category_id": "4bf58dd8d48988d100951735",
-    "category_name": "Pet Supplies Store"
+  "boat_parts_and_supply": {
+    "category_name": "Boat Parts And Supply"
+  },
+  "books": {
+    "category_id": "4bf58dd8d48988d114951735",
+    "category_name": "Bookstore"
+  },
+  "boutique": {
+    "category_name": "Boutique"
+  },
+  "bridal": {
+    "category_name": "Bridal"
+  },
+  "cannabis_dispensary": {
+    "category_name": "Cannabis Dispensary"
+  },
+  "car_stereo": {
+    "category_name": "Car Stereo"
+  },
+  "cards_and_stationery": {
+    "category_name": "Cards And Stationery"
+  },
+  "carpet": {
+    "category_name": "Carpet"
+  },
+  "cheese": {
+    "category_name": "Cheese"
+  },
+  "childrens_clothing": {
+    "category_name": "Childrens Clothing"
+  },
+  "clothing": {
+    "category_id": "4bf58dd8d48988d103951735",
+    "category_name": "Clothing Store"
+  },
+  "comic_books": {
+    "category_name": "Comic Books"
+  },
+  "costume": {
+    "category_name": "Costume"
+  },
+  "craft": {
+    "category_name": "Craft"
+  },
+  "custom_clothing": {
+    "category_name": "Custom Clothing"
+  },
+  "designer_clothing": {
+    "category_name": "Designer Clothing"
   },
   "drinks": {
     "category_id": "4bf58dd8d48988d186941735",
     "category_name": "Liquor Store"
   },
+  "drugstore": {
+    "category_name": "Drugstore"
+  },
+  "e_cigarette": {
+    "category_name": "E Cigarette"
+  },
+  "educational_supply": {
+    "category_name": "Educational Supply"
+  },
+  "electronics": {
+    "category_id": "4bf58dd8d48988d122951735",
+    "category_name": "Electronics Store"
+  },
+  "eyewear_and_optician": {
+    "category_name": "Eyewear And Optician"
+  },
+  "fabric": {
+    "category_name": "Fabric"
+  },
+  "fashion": {
+    "category_name": "Fashion"
+  },
+  "fashion_accessories": {
+    "category_name": "Fashion Accessories"
+  },
+  "flea_market": {
+    "category_name": "Flea Market"
+  },
+  "furniture": {
+    "category_id": "4bf58dd8d48988d1f8941735",
+    "category_name": "Furniture and Home Store"
+  },
+  "gift": {
+    "category_name": "Gift"
+  },
+  "gun_and_ammo": {
+    "category_name": "Gun And Ammo"
+  },
+  "handbag": {
+    "category_name": "Handbag"
+  },
+  "hardware": {
+    "category_id": "4bf58dd8d48988d112951735",
+    "category_name": "Hardware Store"
+  },
+  "hat": {
+    "category_name": "Hat"
+  },
+  "health_food": {
+    "category_name": "Health Food"
+  },
+  "hearing_aid_provider": {
+    "category_name": "Hearing Aid Provider"
+  },
+  "hobby": {
+    "category_name": "Hobby"
+  },
+  "home": {
+    "category_id": "4bf58dd8d48988d1f8941735",
+    "category_name": "Furniture and Home Store"
+  },
+  "hunting_and_fishing_supplies": {
+    "category_name": "Hunting And Fishing Supplies"
+  },
+  "jewelry": {
+    "category_id": "4bf58dd8d48988d111951735",
+    "category_name": "Jewelry Store"
+  },
+  "kitchen_supply": {
+    "category_name": "Kitchen Supply"
+  },
+  "lawn_mower": {
+    "category_name": "Lawn Mower"
+  },
+  "leather_goods": {
+    "category_name": "Leather Goods"
+  },
+  "lighting": {
+    "category_name": "Lighting"
+  },
+  "lingerie": {
+    "category_name": "Lingerie"
+  },
+  "luggage": {
+    "category_name": "Luggage"
+  },
+  "maternity_wear": {
+    "category_name": "Maternity Wear"
+  },
+  "mattress": {
+    "category_name": "Mattress"
+  },
+  "medical_supply": {
+    "category_name": "Medical Supply"
+  },
+  "mens_clothing": {
+    "category_name": "Mens Clothing"
+  },
+  "motorsports": {
+    "category_name": "Motorsports"
+  },
+  "music_and_dvd": {
+    "category_name": "Music And Dvd"
+  },
+  "musical_instrument": {
+    "category_name": "Musical Instrument"
+  },
+  "newspaper_and_magazines": {
+    "category_name": "Newspaper And Magazines"
+  },
+  "nursery_and_gardening": {
+    "category_name": "Nursery And Gardening"
+  },
+  "office_equipment": {
+    "category_name": "Office Equipment"
+  },
+  "orthopedic_shoe": {
+    "category_name": "Orthopedic Shoe"
+  },
+  "packing_supply": {
+    "category_name": "Packing Supply"
+  },
+  "party_supply": {
+    "category_name": "Party Supply"
+  },
+  "pawn": {
+    "category_name": "Pawn"
+  },
+  "pet": {
+    "category_id": "4bf58dd8d48988d100951735",
+    "category_name": "Pet Supplies Store"
+  },
   "phone": {
     "category_id": "4f04afc02fb6e1c99f3db0bc",
     "category_name": "Mobile Phone Store"
+  },
+  "photography_store_and_services": {
+    "category_name": "Photography Store And Services"
+  },
+  "safety_equipment": {
+    "category_name": "Safety Equipment"
+  },
+  "shoes": {
+    "category_id": "4bf58dd8d48988d107951735",
+    "category_name": "Shoe Store"
+  },
+  "souvenir": {
+    "category_name": "Souvenir"
+  },
+  "sports": {
+    "category_id": "4bf58dd8d48988d1f2941735",
+    "category_name": "Sporting Goods Retail"
+  },
+  "sunglasses": {
+    "category_name": "Sunglasses"
+  },
+  "swimwear": {
+    "category_name": "Swimwear"
+  },
+  "thrift": {
+    "category_name": "Thrift"
+  },
+  "tobacco": {
+    "category_name": "Tobacco"
+  },
+  "toys": {
+    "category_id": "4bf58dd8d48988d1f3941735",
+    "category_name": "Toy Store"
+  },
+  "trophy": {
+    "category_name": "Trophy"
+  },
+  "uniform": {
+    "category_name": "Uniform"
+  },
+  "used_vintage_and_consignment": {
+    "category_name": "Used Vintage And Consignment"
+  },
+  "video_game": {
+    "category_name": "Video Game"
+  },
+  "vinyl_record": {
+    "category_name": "Vinyl Record"
+  },
+  "vitamins_and_supplements": {
+    "category_name": "Vitamins And Supplements"
+  },
+  "watch": {
+    "category_name": "Watch"
+  },
+  "womens_clothing": {
+    "category_name": "Womens Clothing"
   }
 }
