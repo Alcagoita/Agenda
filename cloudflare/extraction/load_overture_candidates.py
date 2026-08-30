@@ -21,13 +21,20 @@ with no name cannot be matched, shown, or judged by a human later, and one
 with no position cannot be promoted into a geohash-indexed table. (In PT
 this drops nothing: all 440,594 Overture rows carry both.)
 
-Usage:
-  python3 load_overture_candidates.py <extract.csv> --sql-out <dir>
-  python3 load_overture_candidates.py <extract.csv> --sql-out <dir> --dry-run
+TWO WAYS TO RUN, AND WHEN EACH IS RIGHT
 
-Writes batched SQL rather than executing it, so the statements can be read
-before they touch production and applied with
-`wrangler d1 execute brush-poi-registry --remote --file <sql>`.
+  * In the extraction container, writing through d1.internal one sized
+    statement at a time. This is how the ~170k-row PT candidate load was
+    done (load_poi_candidates.load) and it is THE path for a country.
+  * As numbered .sql files for `wrangler d1 execute --file`, 500 statements
+    each, so a failure names the chunk that failed and the run resumes from
+    it. Fine for a pilot; a country is ~1,400 wrangler invocations, which is
+    not a thing to do from a laptop.
+
+Usage:
+  python3 load_overture_candidates.py <extract.csv>                  # container
+  python3 load_overture_candidates.py <extract.csv> --sql-out <dir>  # files
+  python3 load_overture_candidates.py <extract.csv> --sql-out <dir> --dry-run
 """
 import argparse
 import csv
@@ -101,28 +108,74 @@ def batched(pieces):
         yield INSERT_PREFIX + ',\n'.join(values) + ';\n'
 
 
+def load(csv_path):
+    """The country path: execute through the Worker's D1 binding directly.
+
+    Mirrors load_poi_candidates.load, including what it reports. `offered`
+    minus `inserted` is the number of rows D1 already had — for Overture
+    that is how boxes that overlap, or a re-run of a load that died
+    halfway, account for themselves. Both numbers are printed because
+    silence about the difference is what makes a partial load look complete.
+    """
+    import d1_client
+    offered = inserted = 0
+    for statement in batched(value_tuple(row) for row in candidate_rows(csv_path)):
+        meta = d1_client.execute(statement)
+        offered += statement.count('),(') + 1
+        inserted += (meta or {}).get('changes', 0)
+    total = d1_client.select('SELECT COUNT(*) AS n FROM overture_candidate')[0]['n']
+    print(f'[overture] {offered:,} rows offered, {inserted:,} newly inserted, '
+          f'{total:,} now in overture_candidate')
+    print('[overture] rows already present were ignored, not overwritten — '
+          'any promotion_status already set is untouched')
+    return {'offered': offered, 'inserted': inserted, 'table_total': total}
+
+
+def write_sql(csv_path, out_dir, statements_per_file=500):
+    """Numbered .sql files for `wrangler d1 execute --file`.
+
+    500 statements per file rather than one, matching load_poi_candidates:
+    a failure names the chunk, and every statement is INSERT OR IGNORE, so
+    re-running an already-applied chunk is a no-op.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    paths, handle, count, total = [], None, 0, 0
+    for statement in batched(value_tuple(row) for row in candidate_rows(csv_path)):
+        if handle is None or count >= statements_per_file:
+            if handle:
+                handle.close()
+            path = os.path.join(out_dir, f'candidates_{len(paths):04d}.sql')
+            paths.append(path)
+            handle = open(path, 'w')
+            count = 0
+        handle.write(statement)
+        count += 1
+        total += 1
+    if handle:
+        handle.close()
+    return paths, total
+
+
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('csv_path')
-    parser.add_argument('--sql-out', required=True)
+    parser.add_argument('--sql-out')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
 
-    rows = list(candidate_rows(args.csv_path))
-    statements = list(batched(value_tuple(row) for row in rows))
-    print(f'{len(rows):,} candidate rows -> {len(statements)} statements',
-          file=sys.stderr)
-
     if args.dry_run:
-        print('--dry-run: no SQL written', file=sys.stderr)
+        rows = sum(1 for _ in candidate_rows(args.csv_path))
+        print(f'--dry-run: {rows:,} candidate rows, nothing written',
+              file=sys.stderr)
         return 0
 
-    os.makedirs(args.sql_out, exist_ok=True)
-    for index, statement in enumerate(statements):
-        path = os.path.join(args.sql_out, f'{index:04d}_overture_candidate.sql')
-        with open(path, 'w') as handle:
-            handle.write(statement)
-    print(f'wrote {len(statements)} files to {args.sql_out}', file=sys.stderr)
+    if args.sql_out:
+        paths, total = write_sql(args.csv_path, args.sql_out)
+        print(f'{total:,} statements in {len(paths)} files -> {args.sql_out}',
+              file=sys.stderr)
+        return 0
+
+    load(args.csv_path)
     return 0
 
 

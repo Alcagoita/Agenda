@@ -28,6 +28,8 @@ import r2_client
 import worker_client
 import nominatim_client
 import extract
+import extract_overture
+import load_overture_candidates
 from classify_and_load import classify
 import settlement_registry
 import supplement_osm_pois
@@ -257,6 +259,69 @@ def run_country(country_code, run_id):
         worker_client.country_failed(country_code, run_id, stage, type(error).__name__)
         sys.exit(1)
 
+def run_overture_country(country_code):
+    """KAN-432. Stage a whole country of Overture places in `overture_candidate`.
+
+    WHAT IT BORROWS FROM run_country, AND WHY
+
+      * The source CSV goes to R2 BEFORE the load starts. run_country does
+        this so a stopped run can be finished without re-downloading, and
+        the same applies here: the extract is a pinned release, so an
+        artifact is reproducible evidence of exactly what was imported.
+      * The load is idempotent and resumable — INSERT OR IGNORE on the GERS
+        id — so a container that dies halfway is restarted, not audited.
+      * A completion audit that RAISES. run_country proves every source row
+        was loaded or deliberately skipped; the same equality holds here:
+        offered + dropped == source rows.
+
+    WHAT IT DELIBERATELY DOES NOT BORROW
+
+      * No locality resolution, no per-Place map_place, no generic pass.
+        Those exist because a Foursquare row is only findable through its
+        locality string. An Overture row carries a globally unique GERS id,
+        so identity is the primary key and dedupe is INSERT OR IGNORE.
+      * It does not call worker_client.country_source or country_complete.
+        Those belong to the Foursquare country ledger and flip `country`
+        state; this writes to a staging table and must not touch it — the
+        same rule load_poi_candidates.py follows for poi_candidate.
+      * IT DOES NOT PROMOTE. Promotion is one deliberate pass over the whole
+        staged set afterwards, never per-batch: promoting as batches land
+        would merge against a half-loaded table.
+    """
+    print(f'[run_job] overture country mode: {country_code}')
+    csv_path = os.path.join(extract.BUILD_DIR,
+                            f'overture_country_{country_code}.csv')
+    print(f'[run_job] extracting Overture release {extract_overture.OVERTURE_RELEASE}')
+    extract_overture.extract_country(country_code, csv_path)
+
+    with open(csv_path) as handle:
+        source_rows = sum(1 for _ in handle) - 1
+    print(f'[run_job] {source_rows:,} rows extracted')
+
+    # Before the load, not after: an interrupted load is resumed from this.
+    source_key = (f'country-sources/overture/{country_code}/'
+                  f'{extract_overture.OVERTURE_RELEASE}/{uuid.uuid4()}.csv')
+    r2_client.upload_file(csv_path, source_key)
+    print(f'[run_job] source archived at {source_key}')
+
+    result = load_overture_candidates.load(csv_path)
+
+    # The loader drops rows with no name or no position. They are not
+    # failures, but they have to be accounted for, or a silently truncated
+    # CSV looks like a complete import.
+    dropped = source_rows - result['offered']
+    print(f'[run_job] {dropped:,} rows dropped (no name or no position)')
+    if result['offered'] + dropped != source_rows:
+        raise RuntimeError(
+            f'overture country accounting failed: {result["offered"]} offered '
+            f'+ {dropped} dropped != {source_rows} source rows')
+    print(f'[run_job] overture {country_code} staged: '
+          f"{result['table_total']:,} rows in overture_candidate")
+    print('[run_job] nothing promoted — run promote_overture_candidates.py '
+          'once over the whole staged set')
+    return result
+
+
 def run_country_reconcile(country_code, run_id, source_key):
     """Finish only the generic/audit tail from an R2 country-source artifact."""
     stage = 'restore_country_source'
@@ -433,6 +498,8 @@ if __name__ == '__main__':
             print('COUNTRY_RUN_ID is required for country-reconcile', file=sys.stderr)
             sys.exit(2)
         run_country_reconcile(target.upper(), run_id, source_key)
+    elif mode == 'overture-country':
+        run_overture_country(target.upper())
     elif mode == 'settlements':
         run_settlement_registry(target.upper())
     elif mode == 'osm-country':
@@ -442,5 +509,5 @@ if __name__ == '__main__':
             sys.exit(2)
         run_osm_supplement(target.upper(), run_id)
     else:
-        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', or 'osm-country'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'overture-country', 'settlements', or 'osm-country'")
         sys.exit(2)
