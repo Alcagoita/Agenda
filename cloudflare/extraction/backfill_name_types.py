@@ -50,6 +50,15 @@ SOURCES = {
         'type_table': 'poi_type',
         'attribute_table': 'poi_attribute',
     },
+    # KAN-431. Same shape, same rules — an Overture row filed under a
+    # category that shrugged is the identical problem to an OSM row filed
+    # under a blanket `shop` selector, and the name is the identical fix.
+    'overture': {
+        'id_column': 'overture_id',
+        'poi_table': 'overture_poi',
+        'type_table': 'overture_poi_type',
+        'attribute_table': 'overture_poi_attribute',
+    },
 }
 
 

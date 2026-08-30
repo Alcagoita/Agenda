@@ -131,6 +131,18 @@ def decide(row, mapping, reachable, brand_dictionary):
 
     if not types:
         return 'pending', (), (), None
+
+    # KAN-431. A bare `store` is promoted and then invisible. The Worker
+    # resolves a subtype filter against the row's attributes and a store
+    # task cannot exist without a subtype, so a row typed only `store` with
+    # no store_kind answers no search that will ever be made for it.
+    #
+    # This is mostly papelarias, which have no subtype to be given — there
+    # is no `stationery` in the store subtype list. Pending is the honest
+    # place for them: countable, and visible to whoever adds that subtype.
+    if list(types) == ['store'] and not any(d == 'store_kind' for d, _ in attributes):
+        return 'pending', (), (), None
+
     return 'promoted', tuple(types), tuple(attributes), reason
 
 

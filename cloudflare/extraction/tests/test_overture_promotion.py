@@ -74,6 +74,20 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(types, ())
         self.assertIsNone(reason)
 
+    def test_a_bare_store_with_no_subtype_stays_pending(self):
+        # `papelaria` types as `store` from the name, and there is no
+        # `stationery` subtype to give it. Promoting it would create a row
+        # no search can reach; pending keeps it countable instead.
+        status, types, _, _ = self.decide('Papelaria Trevo', 'office_equipment')
+        self.assertEqual(status, 'pending')
+        self.assertEqual(types, ())
+
+    def test_a_store_that_has_a_subtype_still_promotes(self):
+        status, types, attributes, _ = self.decide('Movel Forte', 'hardware_store')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types[0], 'store')
+        self.assertIn(('store_kind', 'hardware'), attributes)
+
     def test_an_unnamed_row_is_rejected(self):
         status, types, _, reason = self.decide('   ', 'pharmacy')
         self.assertEqual(status, 'rejected')

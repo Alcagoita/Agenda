@@ -59,6 +59,10 @@ NAME_TYPE_KEYWORDS = {
     # cabeleireiro is hair for women and unisex, a salao is full service.
     'barbearia': 'barber', 'barbeiro': 'barber',
     'cabeleireiro': 'hairdresser', 'cabeleireira': 'hairdresser',
+    # KAN-431. The English form is common on Portuguese salon signage, and
+    # Overture files these under `spas` — 19 rows in the pilot alone were
+    # typed spa because no keyword claimed them.
+    'hairstudio': 'hairdresser', 'hair studio': 'hairdresser',
     'manicure': 'nail_salon', 'pedicure': 'nail_salon',
     'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',
     'restaurante': 'restaurant', 'churrasqueira': 'restaurant', 'marisqueira': 'restaurant',
