@@ -71,6 +71,13 @@ ESCALATE_THRESHOLD = 0.68
 # Both are real tenants. Neither should be decided by a threshold.
 REMOVE_ESCALATE_THRESHOLD = 0.55
 
+# A word this long is distinctive enough that two names sharing it are worth
+# a human look before either is retired. Five characters keeps out `caffe`,
+# `cafe`, `loja` and the other category words already in GENERIC_TOKENS,
+# while catching `bertrand` — "Livraria Bertrand" against the listed
+# "BERTRAND LIVREIROS" scored below every threshold and is the same shop.
+DISTINCTIVE_TOKEN_LENGTH = 5
+
 # A TENANT LIST IS AN AUTHORITY ONLY OVER WHAT IT COVERS.
 #
 # The two lists transcribed for this ticket are the operators' EATING PLACES
@@ -229,6 +236,26 @@ def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
             continue
         if score >= REMOVE_ESCALATE_THRESHOLD:
             escalate.append(('held vs tenant', row['name'], tenant['name'], score))
+            continue
+        # A shared DISTINCTIVE word is enough to stop a removal, even when
+        # the similarity score is low. "Livraria Bertrand" against the
+        # listed "BERTRAND LIVREIROS" scored under the floor because only
+        # one of two words matches — and it is the same bookshop.
+        #
+        # Only for removals: a shared word is weak evidence, too weak to
+        # merge two places on, but retiring a real shop is the worse error.
+        row_core = {t for t in tenant_key(row['name'], mall).split()
+                    if len(t) >= DISTINCTIVE_TOKEN_LENGTH}
+        shares_a_word = False
+        for candidate in tenants:
+            shared = row_core & {t for t in tenant_key(candidate, mall).split()
+                                 if len(t) >= DISTINCTIVE_TOKEN_LENGTH}
+            if shared:
+                escalate.append(('held vs tenant, shared word ' + '/'.join(sorted(shared)),
+                                 row['name'], candidate, score))
+                shares_a_word = True
+                break
+        if shares_a_word:
             continue
         remove.append(row)
     return {'confident': confident, 'escalate': escalate,

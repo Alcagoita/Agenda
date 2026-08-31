@@ -114,6 +114,26 @@ class CompareTest(unittest.TestCase):
         result = self.compare(['MCDONALD\'S'], [held('Tun Fon')])
         self.assertEqual([r['name'] for r in result['remove']], ['Tun Fon'])
 
+    def test_a_shared_distinctive_word_stops_a_removal(self):
+        """"Livraria Bertrand" is the listed "BERTRAND LIVREIROS".
+
+        It scored below every threshold — only one of two words matches —
+        and was proposed for removal. A shared long word is weak evidence,
+        too weak to merge two places on, but retiring a real shop is the
+        worse error, so it escalates instead.
+        """
+        result = self.compare(['BERTRAND LIVREIROS'],
+                              [held('Livraria Bertrand', 'store')],
+                              covers={'store'})
+        self.assertEqual(result['remove'], [])
+        self.assertTrue(any('bertrand' in e[0] for e in result['escalate']))
+
+    def test_a_row_with_no_long_words_can_still_be_removed(self):
+        # The guard must not swallow every removal: "Tun Fon" shares no
+        # distinctive word with anything on the list.
+        result = self.compare(['MCDONALD\'S'], [held('Tun Fon')])
+        self.assertEqual([r['name'] for r in result['remove']], ['Tun Fon'])
+
     def test_a_weak_pairing_is_escalated_rather_than_added(self):
         """`FEEL RIO` must not become "Ambientes do Rio".
 
