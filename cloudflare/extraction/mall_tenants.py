@@ -114,8 +114,17 @@ def mall_tokens(mall_name: str) -> frozenset:
 def tenant_key(name: str, mall: frozenset) -> str:
     """A tenant name reduced to what actually identifies it."""
     tokens = normalize_text(strip_accents(name)).split()
+    # Single LETTERS go — `normalize_text` turns "McDonald's" into
+    # "mcdonald s" and an initial in "Papelaria C. Roque" into "c", and
+    # neither identifies anything (KAN-388).
+    #
+    # Single DIGITS stay, because in a mall they are frequently the whole
+    # identity. "CAFÉ 3" reduced to `cafe`, which is contained in "Nosso
+    # Café" — scoring 0.90 and confidently taking that unit's floor, which
+    # is on a different level of Colombo.
     kept = [t for t in tokens
-            if t not in mall and t not in GENERIC_TOKENS and len(t) > 1]
+            if t not in mall and t not in GENERIC_TOKENS
+            and (len(t) > 1 or t.isdigit())]
     # Everything was noise — fall back to the full normalized name rather
     # than an empty key, which would match every other empty key.
     return ' '.join(kept) if kept else ' '.join(tokens)

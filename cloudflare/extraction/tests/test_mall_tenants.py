@@ -28,6 +28,20 @@ class TenantKeyTest(unittest.TestCase):
             mall_tenants.tenant_key('Amorino Gelato - Lisboa Vasco Da Gama', mall),
             'amorino gelato')
 
+    def test_a_digit_can_be_the_whole_identity(self):
+        """"CAFE 3" is not "Nosso Cafe".
+
+        Dropping single-character tokens left `cafe`, which is contained in
+        `nosso cafe` and scored 0.90 — a confident match to a unit on a
+        different floor of Colombo. Single letters are apostrophe artefacts
+        and initials; single digits are frequently the whole name.
+        """
+        mall = mall_tenants.mall_tokens('Centro Comercial Colombo')
+        self.assertEqual(mall_tenants.tenant_key('CAFE 3', mall), 'cafe 3')
+        _, score = mall_tenants.best_match(
+            'CAFE 3', [{'name': 'Nosso Cafe'}], mall)
+        self.assertLess(score, mall_tenants.CONFIDENT_THRESHOLD)
+
     def test_a_name_that_is_only_noise_keeps_its_words(self):
         # Stripping everything would leave an empty key, and empty keys
         # match each other perfectly.
