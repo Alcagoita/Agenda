@@ -6,7 +6,8 @@ breaking them first. Read this before changing a category map, a subtype
 list, or a name keyword.
 
 The numbers quoted are from the KAN-431 pilot: Odivelas, Lisboa and
-Alcobaça, 41,251 staged rows, 28,912 promoted.
+Alcobaça — 46,830 staged rows, 29,094 promoted, 12,157 pending, 5,579
+rejected.
 
 ---
 
@@ -146,6 +147,14 @@ viewpoints, waterfalls, islands, zoos, tourist attractions — live in its
 Those types are not "missing from Overture". They are somewhere else, and
 for now OSM supplies them. Check the theme before concluding a type is
 unavailable.
+
+**And check the other direction too: a type we hold may be junk.** The old
+source had 9 `tourist_attraction` rows in Lisboa against Overture's zero,
+which looked like a loss until they were read: `Parque Infantil Serafina`
+is a playground, `Gymboree` and `Space Radical Kids` are children's play
+centres, `Mural Dos Fadistas` is a mural. It was a bucket for things the
+classifier could not place. Overture types them correctly and separately,
+so zero is the right answer, not a gap. Compare the ROWS, never the counts.
 
 ## 10. Re-promotion, when a rule changes
 
