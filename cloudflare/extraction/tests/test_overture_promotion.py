@@ -179,10 +179,6 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(types[0], 'pharmacy')
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class ViewpointTest(DecideTest):
     """KAN-431 — a miradouro is recovered by name, but only on an outdoor host."""
 
@@ -202,3 +198,7 @@ class ViewpointTest(DecideTest):
     def test_a_bar_named_miradouro_does_not(self):
         _, types, _, _ = self.decide('Bar Miradouro', 'bar')
         self.assertNotIn('viewpoint', types)
+
+
+if __name__ == '__main__':
+    unittest.main()
