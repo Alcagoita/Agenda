@@ -54,11 +54,34 @@ NAME_TYPE_KEYWORDS = {
     # `tatoo` is a very common misspelling here. Word boundaries keep it from
     # firing inside unrelated words such as "PlantaToo".
     'tattoo': 'tattoo', 'tatoo': 'tattoo', 'tatuagem': 'tattoo', 'tatuagens': 'tattoo',
+    # KAN-431. No source has a category for either of these, so the name is
+    # the only thing that ever says so. Both are additive: a clothing shop
+    # that also takes in alterations stays a clothing shop.
+    'arranjos': 'clothing_repair', 'costura': 'clothing_repair',
+    'costureira': 'clothing_repair', 'costureiro': 'clothing_repair',
+    # `alfaiataria` is the shop; `alfaiate` is the person, and Portuguese
+    # business names use it as a metaphor — "Alfaiate da Web" is a web
+    # agency, "Adega do Alfaiates" a restaurant. Only the shop noun is safe.
+    'alfaiataria': 'clothing_repair',
+    'bainhas': 'clothing_repair',
+    # A tabacaria sells Jogos Santa Casa, and buying a ticket is the errand.
+    # Deliberately NOT `quiosque`: in Lisbon that is overwhelmingly a food
+    # and drink kiosk — bars, cafes, even a clothing chain trading as
+    # QUIOSQUE QSTORE — and only a handful sell anything to play.
+    'tabacaria': 'lottery',
+    # Brands, unusually, because the service is not in any name or category:
+    # these three repair phones alongside everything else they sell, and a
+    # user with a cracked screen needs to find them.
+    'iservices': 'phone_repair', 'worten': 'phone_repair', 'fnac': 'phone_repair',
     'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
     # KAN-401: four distinct errands. A barbearia is men's hair, a
     # cabeleireiro is hair for women and unisex, a salao is full service.
     'barbearia': 'barber', 'barbeiro': 'barber',
     'cabeleireiro': 'hairdresser', 'cabeleireira': 'hairdresser',
+    # KAN-431. The English form is common on Portuguese salon signage, and
+    # Overture files these under `spas` — 19 rows in the pilot alone were
+    # typed spa because no keyword claimed them.
+    'hairstudio': 'hairdresser', 'hair studio': 'hairdresser',
     'manicure': 'nail_salon', 'pedicure': 'nail_salon',
     'supermercado': 'supermarket', 'minimercado': 'supermarket', 'mercearia': 'supermarket',
     'restaurante': 'restaurant', 'churrasqueira': 'restaurant', 'marisqueira': 'restaurant',
@@ -567,7 +590,12 @@ def classify(place_id, csv_path, out_sql_path):
     # (that's *why* it's classified as store), so 'any' must never compete in
     # the subtype scan or it always wins before a real specific subtype (e.g.
     # Bookstore) further down the same row's tag array ever gets checked.
-    store_reverse = {v['category_id']: k for k, v in store_subtypes.items() if k != 'any'}
+    # KAN-431: `if 'category_id' in v` because a subtype no longer has to be
+    # expressible as a source category id. Subtypes that came from Overture's
+    # own taxonomy carry no such id and simply have nothing to reverse-map
+    # here — the same guard category_ids.py has always had.
+    store_reverse = {v['category_id']: k for k, v in store_subtypes.items()
+                     if k != 'any' and 'category_id' in v}
     food_reverse = build_reverse_map(food_subtypes)
     brand_dictionary = load_brand_dictionary()
     financial_service_rules = load_financial_service_name_rules()

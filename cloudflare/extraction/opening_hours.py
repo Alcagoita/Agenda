@@ -66,6 +66,76 @@ def hours_for_category_label(category_label):
     return (None, None)
 
 
+
+# ─── KAN-431: the same windows, keyed on our own type ──────────────────────
+#
+# `hours_for_category_label` matches Foursquare's label format
+# ("Dining and Drinking > Restaurant"). Overture names its categories
+# `portuguese_restaurant` and OSM tags them `amenity=restaurant`, so neither
+# can reach those rules — an Overture row would silently get "always open",
+# which is the one answer the app must not guess (a place shown as open when
+# it is closed is the app lying).
+#
+# So the windows are also reachable by `poi_type`, which is the app-level
+# concept every source resolves to. Same numbers as the rules above,
+# deliberately: this is a second door onto one decision, not a second policy.
+# A type absent here means "always open", exactly as an unmatched label does.
+_TYPE_HOURS = {
+    # Financial. A standalone ATM is 24h; a branch closes early (PT ~8:30–15:00).
+    'bank': (510, 900),
+    'financial_service': (510, 900),
+    'currency_exchange': (540, 1140),
+    'money_transfer': (540, 1140),
+    # Retail.
+    'supermarket': (540, 1320),
+    'grocery_store': (540, 1320),
+    'bakery': (420, 1260),
+    'store': (540, 1140),
+    # KAN-431. A talho, peixaria or florista keeps shop hours like any other
+    # retailer. Overture promotes all three, and without an entry here they
+    # inherit "always open" — the app showing a butcher open at 3am is the
+    # lying this table exists to prevent.
+    'butcher': (540, 1140),
+    'fishmonger': (540, 1140),
+    'florist': (540, 1140),
+    # Dining.
+    'cafe': (420, 1260),
+    'coffee_shop': (420, 1260),
+    'tea': (420, 1260),
+    'juice': (420, 1260),
+    'ice_cream': (420, 1260),
+    'restaurant': (660, 1380),
+    # Services.
+    'gym': (360, 1380),
+    'yoga_studio': (360, 1380),
+    'salon': (540, 1140),
+    'hairdresser': (540, 1140),
+    'barber': (540, 1140),
+    'nail_salon': (540, 1140),
+    'spa': (540, 1140),
+    'laundry': (540, 1140),
+    'car_wash': (540, 1140),
+    'car_rental': (540, 1140),
+    'veterinary_care': (540, 1140),
+    'clinic': (540, 1140),
+    # Civic and culture.
+    'post': (540, 1020),
+    'school': (540, 1020),
+    'library': (600, 1080),
+    'museum': (600, 1080),
+    'art_gallery': (600, 1080),
+    'movie_theater': (600, 1380),
+    'theatre': (600, 1380),
+}
+
+
+def hours_for_poi_type(poi_type):
+    """(open_min, close_min) for one of our types, or (None, None) for
+    'always open' — which covers pharmacies, bars, night clubs, churches,
+    lodging, transport and everything outdoors, all of which vary too much
+    to state without lying."""
+    return _TYPE_HOURS.get(poi_type, (None, None))
+
 def _backfill_sql():
     """Emits UPDATE statements that set open_min/close_min on existing poi rows
     by category_label, applying the table above. Only touches rows still NULL,
