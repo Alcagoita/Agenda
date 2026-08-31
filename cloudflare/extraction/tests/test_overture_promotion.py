@@ -181,3 +181,24 @@ class DecideTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ViewpointTest(DecideTest):
+    """KAN-431 — a miradouro is recovered by name, but only on an outdoor host."""
+
+    def test_a_landmark_named_miradouro_gains_viewpoint(self):
+        _, types, _, _ = self.decide(
+            'Miradouro da Senhora do Monte', 'landmark_and_historical_building')
+        self.assertEqual(types[0], 'historical_landmark')
+        self.assertIn('viewpoint', types)
+
+    def test_a_cafe_named_miradouro_does_not(self):
+        # The kiosk AT the viewpoint is not the viewpoint. Someone looking
+        # for a view must not be sent to a coffee counter.
+        _, types, _, _ = self.decide('Quiosque do Miradouro', 'coffee_shop')
+        self.assertEqual(types[0], 'cafe')
+        self.assertNotIn('viewpoint', types)
+
+    def test_a_bar_named_miradouro_does_not(self):
+        _, types, _, _ = self.decide('Bar Miradouro', 'bar')
+        self.assertNotIn('viewpoint', types)

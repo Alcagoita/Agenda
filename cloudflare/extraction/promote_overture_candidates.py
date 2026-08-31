@@ -113,6 +113,22 @@ REJECTED_CATEGORIES = frozenset({
 REJECTED_NAME_PREFIXES = ('urbanizacao', 'urbanizacoes')
 
 
+# KAN-431. Overture's places theme has no viewpoint category — scenic
+# features live in its `base` theme, which we do not import — so a miradouro
+# arrives typed as whatever built thing is standing there: a landmark, a
+# park, a plaza, a fountain.
+#
+# The name recovers it, but ONLY where the category already agrees the row
+# is an outdoor place. `Miradouro` is also a common name for the cafe or bar
+# AT the viewpoint, and typing "Quiosque do Miradouro" as a viewpoint would
+# send someone looking for a view to a counter selling coffee.
+VIEWPOINT_NAME = 'miradouro'
+VIEWPOINT_HOSTS = frozenset({
+    'historical_landmark', 'park', 'plaza', 'botanical_garden',
+    'nature_preserve', 'hiking_area',
+})
+
+
 def store_kind_alias_index():
     """The app's own store-subtype keyword dictionary, indexed for matching.
 
@@ -190,6 +206,13 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
             if inferred not in types:
                 types.append(inferred)
                 reason = reason or f'name: {inferred}'
+
+    # A miradouro, but only when the category already says outdoor place.
+    if (VIEWPOINT_NAME in normalized and 'viewpoint' in reachable
+            and types and types[0] in VIEWPOINT_HOSTS
+            and reachable['viewpoint'] not in types):
+        types.append(reachable['viewpoint'])
+        reason = reason or 'name: viewpoint'
 
     if not types:
         return 'pending', (), (), None
