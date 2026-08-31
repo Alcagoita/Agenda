@@ -160,6 +160,13 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
             attributes.append(('store_kind', entry['store_kind']))
         if entry.get('food_cuisine'):
             attributes.append(('food_cuisine', entry['food_cuisine']))
+        # KAN-431. One category, two errands. A tabacaria IS a tobacco shop
+        # and it is also where you buy a lottery ticket; a phone shop sells
+        # phones and repairs them. The extra type ranks after the category's
+        # own answer, so the primary type — what the app shows — never moves.
+        for extra in entry.get('also_types', ()):
+            if extra in reachable and reachable[extra] not in types:
+                types.append(reachable[extra])
 
     # The name may add, never replace. A category that mapped is the source's
     # considered answer; the name is an inference from a string.

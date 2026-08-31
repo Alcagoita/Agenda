@@ -99,7 +99,17 @@ class OvertureCategoryMapTest(unittest.TestCase):
         for category, entry in sorted(self.mapping.items()):
             with self.subTest(category=category):
                 self.assertLessEqual(set(entry),
-                                     {'poi_type', 'store_kind', 'food_cuisine'})
+                                     {'poi_type', 'store_kind', 'food_cuisine',
+                                      'also_types'})
+
+    def test_every_also_type_is_reachable(self):
+        """A second type nothing can search for is the same dead row as an
+        unreachable primary — it just hides better, behind a type that
+        does work."""
+        for category, entry in sorted(self.mapping.items()):
+            for extra in entry.get('also_types', ()):
+                with self.subTest(category=category, extra=extra):
+                    self.assertIn(extra, self.reachable)
 
     def test_the_deliberate_exclusions_stay_unmapped(self):
         """KAN-412 decided these are searched for by name at an address, never

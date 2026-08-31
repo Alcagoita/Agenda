@@ -64,6 +64,11 @@ NAME_TYPE_KEYWORDS = {
     # agency, "Adega do Alfaiates" a restaurant. Only the shop noun is safe.
     'alfaiataria': 'clothing_repair',
     'bainhas': 'clothing_repair',
+    # A tabacaria sells Jogos Santa Casa, and buying a ticket is the errand.
+    # Deliberately NOT `quiosque`: in Lisbon that is overwhelmingly a food
+    # and drink kiosk — bars, cafes, even a clothing chain trading as
+    # QUIOSQUE QSTORE — and only a handful sell anything to play.
+    'tabacaria': 'lottery',
     # Brands, unusually, because the service is not in any name or category:
     # these three repair phones alongside everything else they sell, and a
     # user with a cracked screen needs to find them.
