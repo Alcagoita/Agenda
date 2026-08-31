@@ -145,6 +145,14 @@ def best_match(target: str, candidates, mall: frozenset, key=lambda r: r['name']
         if left and right and min(len(left), len(right)) >= 6:
             if left == right or left in right or right in left:
                 score = max(score, 0.9)
+        # Word order is not identity either. "Jeronymo Cafe" is "Cafe
+        # Jeronymo" — we already held it in Colombo while the tenant list
+        # was proposing to ADD it, which is the duplicate this ticket exists
+        # to prevent. Compare the token sets, requiring the SAME set rather
+        # than an overlap so "Cafe 3" still cannot become "Nosso Cafe".
+        left_tokens, right_tokens = set(target_key.split()), set(candidate_key.split())
+        if left_tokens and left_tokens == right_tokens:
+            score = max(score, 0.95)
         if score > best_score:
             best, best_score = candidate, score
     return best, best_score
@@ -163,6 +171,7 @@ def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
     """
     mall = mall_tokens(mall_name)
     matched_held, confident, escalate, add = set(), [], [], []
+    claimed_osm = {}
 
     for tenant in tenants:
         row, score = best_match(tenant, held, mall)
@@ -177,6 +186,18 @@ def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
         # We do not hold it. Can OSM place it?
         osm_row, osm_score = best_match(tenant, osm, mall)
         if osm_score >= CONFIDENT_THRESHOLD:
+            # One OSM element cannot be two tenants. "NOORI LAB" and "NOORI
+            # POTS" are separate units that both resolve to a single element
+            # named "Noori"; adding both would place the same point twice.
+            # Neither is safe to pick automatically, so both go to a person.
+            claimed_by = claimed_osm.get(id(osm_row))
+            if claimed_by is not None:
+                escalate.append(('two tenants, one OSM element',
+                                 f'{claimed_by} / {tenant}', osm_row['name'],
+                                 osm_score))
+                add[:] = [(t, r) for t, r in add if t != claimed_by]
+                continue
+            claimed_osm[id(osm_row)] = tenant
             add.append((tenant, osm_row))
         elif osm_score >= ESCALATE_THRESHOLD:
             escalate.append(('tenant vs OSM', tenant, osm_row['name'], osm_score))

@@ -82,6 +82,34 @@ class CompareTest(unittest.TestCase):
         result = self.compare(['SUSHI CORNER'], [held('SushiCorner')])
         self.assertEqual(result['remove'], [])
 
+    def test_word_order_is_not_identity(self):
+        """"Jeronymo Cafe" is "Cafe Jeronymo".
+
+        We held it in Colombo while the tenant list proposed ADDing it — a
+        duplicate, which is the failure this ticket exists to prevent.
+        """
+        result = self.compare(['CAFE JERONYMO'], [held('Jeronymo Cafe')],
+                              osm=[{'name': 'Jeronymo'}])
+        self.assertEqual([t for t, row in result['add'] if row is not None], [])
+        self.assertEqual(result['remove'], [])
+
+    def test_the_same_token_set_is_required_not_an_overlap(self):
+        # Otherwise "Cafe 3" and "Nosso Cafe" would pair on a shared token.
+        mall = mall_tenants.mall_tokens('Centro Comercial Colombo')
+        _, score = mall_tenants.best_match('CAFE 3', [{'name': 'Nosso Cafe'}], mall)
+        self.assertLess(score, mall_tenants.CONFIDENT_THRESHOLD)
+
+    def test_two_tenants_cannot_share_one_osm_element(self):
+        """NOORI LAB and NOORI POTS both resolved to a single "Noori".
+
+        Adding both would place the same point twice. Neither is safe to
+        pick automatically.
+        """
+        result = self.compare(['NOORI LAB', 'NOORI POTS'], [],
+                              osm=[{'name': 'Noori'}])
+        self.assertEqual([t for t, row in result['add'] if row is not None], [])
+        self.assertTrue(any('one OSM element' in e[0] for e in result['escalate']))
+
     def test_an_unlisted_row_is_proposed_for_removal(self):
         result = self.compare(['MCDONALD\'S'], [held('Tun Fon')])
         self.assertEqual([r['name'] for r in result['remove']], ['Tun Fon'])
