@@ -235,3 +235,50 @@ list to work through rather than a mapping change.
 facial and a health spa are four errands, exactly as pizza and Italian are
 two cuisines. `spa` was the wrong bag for all four, and putting them there
 would have been invisible the moment it was done.
+
+
+## 13. An uncertain match is a question, never a guess
+
+**Prefer missing a place over holding it twice.** A gap is invisible and
+harmless. A duplicate shows the same shop twice in the Nearby list and makes
+the app look broken, which is the failure users actually notice.
+
+So when two names are similar but not obviously the same place, escalate it
+for a person to decide. Do not resolve it automatically in either
+direction — a weak match must not silently add a duplicate, and it must not
+silently retire a real place either.
+
+This is not hypothetical. Measuring Vasco da Gama against its operator's
+tenant list, single-token matching produced:
+
+| tenant list says | matched to | verdict |
+|---|---|---|
+| `FEEL RIO` | "Ambientes do Rio \| Lisbon" | wrong — shares only `rio` |
+| `LAS MUNS` | "La Casa de las Carcasas" | wrong — shares only `las` |
+| `AMORINO – GELATO AL NATURALE` | "Amorino Gelato - Lisboa Vasco Da Gama" | right, and a stricter matcher MISSED it |
+
+Both failure directions in one run. Loosen the matcher and it invents
+matches; tighten it and it loses real ones. There is no threshold that gets
+both, which is why the uncertain middle belongs to a human.
+
+**Mall names need their own normalisation.** A venue inside a shopping
+centre carries the mall, the city and the floor — "Lisboa Vasco Da Gama",
+"(PISO 1)" — and none of that identifies the tenant. Strip it before
+comparing: doing so moved measured recall from 41% to 51% without changing
+a single row.
+
+## 14. Correcting a place is two lists, not a merge
+
+When an authority (an operator's tenant list) is used to correct a
+footprint, the operation is exactly two lists applied separately:
+
+1. **REMOVE** what we hold that the authority does not contain
+2. **ADD** the named places we lack, and *only* those
+
+Never replace a row we already hold with another source's version of it.
+Never bulk-import everything the other source has inside the boundary. A
+footprint is not a licence to re-import an area — "we are missing these
+five" means five.
+
+Removal goes through `poi_source_correction` with a reason, never a hard
+delete, so a wrong call stays visible and reversible.
