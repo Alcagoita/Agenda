@@ -54,6 +54,20 @@ NAME_TYPE_KEYWORDS = {
     # `tatoo` is a very common misspelling here. Word boundaries keep it from
     # firing inside unrelated words such as "PlantaToo".
     'tattoo': 'tattoo', 'tatoo': 'tattoo', 'tatuagem': 'tattoo', 'tatuagens': 'tattoo',
+    # KAN-431. No source has a category for either of these, so the name is
+    # the only thing that ever says so. Both are additive: a clothing shop
+    # that also takes in alterations stays a clothing shop.
+    'arranjos': 'clothing_repair', 'costura': 'clothing_repair',
+    'costureira': 'clothing_repair', 'costureiro': 'clothing_repair',
+    # `alfaiataria` is the shop; `alfaiate` is the person, and Portuguese
+    # business names use it as a metaphor — "Alfaiate da Web" is a web
+    # agency, "Adega do Alfaiates" a restaurant. Only the shop noun is safe.
+    'alfaiataria': 'clothing_repair',
+    'bainhas': 'clothing_repair',
+    # Brands, unusually, because the service is not in any name or category:
+    # these three repair phones alongside everything else they sell, and a
+    # user with a cracked screen needs to find them.
+    'iservices': 'phone_repair', 'worten': 'phone_repair', 'fnac': 'phone_repair',
     'snack bar': 'cafe', 'snackbar': 'cafe', 'cafetaria': 'cafe', 'cafeteria': 'cafe',
     # KAN-401: four distinct errands. A barbearia is men's hair, a
     # cabeleireiro is hair for women and unisex, a salao is full service.
