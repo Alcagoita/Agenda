@@ -304,6 +304,7 @@ def run(batch, out_dir, dry_run):
     stats = Counter()
     by_type = Counter()
     unmapped = Counter()
+    unmapped_paths = {}
     poi_pieces, type_pieces, attribute_pieces = [], [], []
     promoted, rejected = [], []
 
@@ -312,7 +313,7 @@ def run(batch, out_dir, dry_run):
     for row in paged(
         'overture_candidate',
         ('overture_id', 'name', 'lat', 'lng', 'address', 'category',
-         'confidence', 'source_datasets'),
+         'category_path', 'confidence', 'source_datasets'),
         'overture_id', batch,
         where="promotion_status = 'pending'",
     ):
@@ -333,7 +334,9 @@ def run(batch, out_dir, dry_run):
         elif status == 'rejected':
             rejected.append((row['overture_id'], reason))
         else:
-            unmapped[row['category'] or '(none)'] += 1
+            key = row['category'] or '(none)'
+            unmapped[key] += 1
+            unmapped_paths.setdefault(key, row.get('category_path') or '')
 
     print(f"\nscanned   {sum(stats.values()):,}")
     print(f"promoted  {stats['promoted']:,}")
@@ -345,6 +348,19 @@ def run(batch, out_dir, dry_run):
     print(f'\nunmapped categories ({len(unmapped)}), top 20 — the mapping backlog:')
     for category, count in unmapped.most_common(20):
         print(f'  {count:7,}  {category}')
+
+    # The whole backlog, not the top of it. Printing 20 of 445 is how a
+    # category with real places in it stays invisible: nobody scrolls past
+    # the summary, and the only way anyone found the last few was guessing
+    # what to search for. The file is the country run's review list.
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+        backlog_path = os.path.join(out_dir, 'unmapped_categories.tsv')
+        with open(backlog_path, 'w') as handle:
+            handle.write('rows\tcategory\tcategory_path\n')
+            for category, count in unmapped.most_common():
+                handle.write(f'{count}\t{category}\t{unmapped_paths.get(category, "")}\n')
+        print(f'\nfull backlog ({len(unmapped)} categories) -> {backlog_path}')
 
     if dry_run:
         print('\n--dry-run: no SQL written')

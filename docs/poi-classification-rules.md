@@ -175,3 +175,54 @@ would be a real errand. Zero matched, so the rejection was safe.
 
 Volume never decides whether a type is included. It decides what to look at
 first.
+
+
+---
+
+## 12. The promotion is a whitelist, and that is the standing risk
+
+The extraction obeys "import everything, exclude a named few": it is an
+exclude list, and 46,830 rows staged from three municipalities.
+
+**The promotion does not.** `overtureCategories.json` is a whitelist, so a
+category nobody thought to add stays `pending` in silence. Every gap found
+during KAN-431 — toy shops, bicycle shops, liquor stores, kiosks, lottery,
+fountains, palaces, stadiums, auditoriums — was found by someone guessing
+what to search for. That does not scale to a country, and PT has 1,357
+categories against the pilot's ~600.
+
+So the promoter now writes **the entire unmapped backlog** to
+`unmapped_categories.tsv` beside its SQL, not the top 20 it prints. That
+file is the review list for a country run. Read it before declaring an
+import finished.
+
+### What is in the backlog, and why (measured on the pilot)
+
+| rows | group | verdict |
+|---|---|---|
+| 3,474 | `services_and_business` | B2B and offices. Correctly out. |
+| 2,153 | no category at all | Only names can resolve these. |
+| 1,649 | `travel_and_transportation` | Mostly parking, taxis, vehicle work, and rail/air the app has no type for. |
+| 1,124 | `health_care` | KAN-412's exclusions. |
+| 924 | `community_and_government` | Embassies, police, courts — no app type. |
+| 785 | `shopping` | The bare "a shop, kind unknown" leaves. |
+| 498 | **real errands with no app type** | **See below.** |
+
+### Categories that need a new PoiType
+
+These are places a person genuinely runs an errand at, and the app has no
+type for them. They stay pending rather than being folded into a
+neighbouring type, because folding is rule 1's mistake:
+
+`massage_therapy` 129 · `martial_arts_club` 97 · `laser_hair_removal` 45 ·
+`pilates_studio` 43 · `pet_groomer` 29 · `skin_care` 28 · `health_spa` 18 ·
+plus ~24 smaller ones — 498 rows, 31 categories.
+
+A new type is not free: it needs a catalog entry, an icon, and `en` +
+`pt-PT` copy before anyone can tag a task with it. That is why this is a
+list to work through rather than a mapping change.
+
+**Do not fold them in the meantime.** A massage, a laser hair removal, a
+facial and a health spa are four errands, exactly as pizza and Italian are
+two cuisines. `spa` was the wrong bag for all four, and putting them there
+would have been invisible the moment it was done.
