@@ -282,3 +282,33 @@ five" means five.
 
 Removal goes through `poi_source_correction` with a reason, never a hard
 delete, so a wrong call stays visible and reversible.
+
+
+## 15. A directory's silence is not always absence
+
+An operator's tenant list is the authority for what is in a centre — but it
+lists **units**, and a shop operating *inside* another shop is not a unit.
+
+Well's is in Vasco da Gama, inside Continente. It appears nowhere on the
+154-name directory, and a naive reading of that silence would have retired
+a pharmacy that is really there.
+
+So before retiring a row the list does not name, ask whether it could be a
+concession: a pharmacy or parapharmacy inside a supermarket, a coffee
+counter inside a bookshop, a bank desk inside a hypermarket, an optician
+inside a department store. These are common in Portugal and none of them
+gets its own line in a directory.
+
+The list is still the authority for units. It simply does not speak about
+what is inside one.
+
+## 16. Similar names are usually different shops
+
+`KIK`, `KIWOKO` and `Kiko` are three separate chains — discount clothing,
+pet supplies and cosmetics — and all three trade in the same centres. So do
+`Lanidor` and `PANDORA`, `Chicco` and `ECCO`, `Asics` and `iServices`.
+
+A matcher tuned to catch "Livraria Bertrand" against "BERTRAND LIVREIROS"
+will pair these too. That is the cost of catching the real ones, and it is
+why the middle band goes to a person rather than to a threshold: the
+default answer to a partial name match is NO.

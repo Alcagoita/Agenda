@@ -70,6 +70,9 @@
   "comic_books": {
     "category_name": "Comic Books"
   },
+  "copy_shop": {
+    "category_name": "Copy shop"
+  },
   "costume": {
     "category_name": "Costume"
   },
@@ -254,6 +257,9 @@
   "toys": {
     "category_id": "4bf58dd8d48988d1f3941735",
     "category_name": "Toy Store"
+  },
+  "travel_agency": {
+    "category_name": "Travel agency"
   },
   "trophy": {
     "category_name": "Trophy"
