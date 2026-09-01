@@ -59,6 +59,17 @@ the parapharmacy and the optician are different businesses at one address
 * `Brown Bar Benefit` — the Benefit bar inside Sephora, Colombo.
 * `Luggage Storage Lisbon` — real, in Gare do Oriente, not a mall unit.
 
+## Types that exist because a tenant needed them
+
+A shop whose type the app lacked used to be held back. It is not a reason to
+drop a real place — the type gets added.
+
+* `travel_agency` — AGÊNCIA ABREU and TOP ATLÂNTICO (both malls), Viagens El
+  Corte Inglés (Strada). These carried `store_kind=any` while the kind did
+  not exist; `any` is a generic store by another name, so it is not an
+  answer.
+* `copy_shop` — Centro de Cópias (Strada).
+
 ## Reading the operator's pages
 
 * **`Encerrado`** means closed RIGHT NOW — opening hours. It appears against
