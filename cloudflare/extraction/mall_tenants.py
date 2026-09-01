@@ -106,7 +106,31 @@ def strip_accents(value: str) -> str:
                    if not unicodedata.combining(c))
 
 
-def confirmed_pairs(path=None):
+def read_tenant_list(path):
+    """An operator list as (name, floor) pairs, skipping what is not open.
+
+    Format is `Name|Piso N`, with an optional third field. `|opening` marks
+    a unit the operator has announced but not opened — five at Vasco da
+    Gama. A shop that has not opened is a place that does not exist, so it
+    must not be matched or added; the rule was written in decisions.md and
+    enforced by hand, which is not enforcement.
+
+    A blank floor (`Name|`) means the operator publishes none.
+    """
+    tenants = []
+    for line in open(path):
+        cells = [c.strip() for c in line.rstrip('\n').split('|')]
+        name = cells[0].strip()
+        if not name:
+            continue
+        if any(c.lower() == 'opening' for c in cells[2:]):
+            continue
+        floor = cells[1] if len(cells) > 1 else ''
+        tenants.append((name, floor))
+    return tenants
+
+
+def confirmed_pairs(path=None, mall_name=None):
     """Pairs a person has already ruled the same shop.
 
     `compare` has no memory: it re-derives every match from scratch, so a
@@ -118,6 +142,12 @@ def confirmed_pairs(path=None):
     matches", which is the file a reviewer actually maintains. Parsing the
     document rather than a second machine-readable copy keeps one source of
     truth; a drifting copy would be worse than none.
+
+    Scoped by the table's third column. A ruling is about the shops in one
+    centre, not a fact about the names: `LEROY MERLIN` is `AKI` rebranded at
+    Colombo, and applying that anywhere else would merge two real shops that
+    happen to share a chain. Pass `mall_name` to get only the rulings given
+    for that centre plus the ones marked `both`; omit it to get all of them.
     """
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -135,8 +165,16 @@ def confirmed_pairs(path=None):
         if len(cells) < 2 or cells[0].startswith('---') or cells[0] == 'operator directory':
             continue
         tenant, holding = cells[0].strip('`'), cells[1].strip('`')
-        if tenant and holding:
-            pairs.setdefault(normalize_text(tenant), set()).add(normalize_text(holding))
+        if not (tenant and holding):
+            continue
+        where = cells[2].lower() if len(cells) > 2 else ''
+        if mall_name is not None and where and 'both' not in where:
+            # The mall column names the centre in prose ("Colombo — rebrand,
+            # renamed"), so match on the centre's own tokens rather than on
+            # the cell reading as a bare name.
+            if not (mall_tokens(mall_name) & set(normalize_text(where).split())):
+                continue
+        pairs.setdefault(normalize_text(tenant), set()).add(normalize_text(holding))
     return pairs
 
 
@@ -199,6 +237,27 @@ def best_match(target: str, candidates, mall: frozenset, key=lambda r: r['name']
     return best, best_score
 
 
+def _claim_held(claimed, row_name, tenant, confident, escalate, score):
+    """Record `tenant` as the owner of `row_name`, or escalate the clash.
+
+    Returns True when the claim stands. On a second claim the earlier
+    confident pairing is withdrawn — it was never more trustworthy than the
+    one now contesting it — and both units go to a person, because the row
+    we hold may be either of them or a duplicate of one.
+    """
+    previous = claimed.get(row_name)
+    if previous is None:
+        claimed[row_name] = tenant
+        confident.append((tenant, row_name, score))
+        return True
+    if previous == tenant:
+        return True
+    confident[:] = [c for c in confident if not (c[0] == previous and c[1] == row_name)]
+    escalate.append(('two tenants, one held row',
+                     f'{previous} / {tenant}', row_name, score))
+    return True
+
+
 def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
     """The three lists, plus the confident pairings for reporting.
 
@@ -213,7 +272,12 @@ def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
     mall = mall_tokens(mall_name)
     matched_held, confident, escalate, add = set(), [], [], []
     claimed_osm = {}
-    ruled = confirmed_pairs()
+    # One held row cannot be two tenants, for the same reason one OSM
+    # element cannot: the directory lists a chain twice and both entries
+    # match our single row, so the second silently takes a floor belonging
+    # to the first. Neither is safe to pick, so both go to a person.
+    claimed_held = {}
+    ruled = confirmed_pairs(mall_name=mall_name)
 
     for tenant in tenants:
         # A ruling already given is not a question. Take it before scoring.
@@ -221,13 +285,15 @@ def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
         if known:
             hit = next((r for r in held if normalize_text(r['name']) in known), None)
             if hit is not None:
-                confident.append((tenant, hit['name'], 1.0))
-                matched_held.add(hit['name'])
+                if _claim_held(claimed_held, hit['name'], tenant,
+                               confident, escalate, 1.0):
+                    matched_held.add(hit['name'])
                 continue
         row, score = best_match(tenant, held, mall)
         if score >= CONFIDENT_THRESHOLD:
-            confident.append((tenant, row['name'], score))
-            matched_held.add(row['name'])
+            if _claim_held(claimed_held, row['name'], tenant,
+                           confident, escalate, score):
+                matched_held.add(row['name'])
             continue
         if score >= ESCALATE_THRESHOLD:
             escalate.append(('tenant vs held', tenant, row['name'], score))

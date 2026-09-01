@@ -120,13 +120,25 @@ class CompareTest(unittest.TestCase):
         It scored below every threshold — only one of two words matches —
         and was proposed for removal. A shared long word is weak evidence,
         too weak to merge two places on, but retiring a real shop is the
-        worse error, so it escalates instead.
+        worse error.
+
+        This pair has since been ruled in decisions.md, so it now resolves
+        as a confident match rather than a question. Either outcome is
+        acceptable; being REMOVED is not.
         """
         result = self.compare(['BERTRAND LIVREIROS'],
                               [held('Livraria Bertrand', 'store')],
                               covers={'store'})
         self.assertEqual(result['remove'], [])
-        self.assertTrue(any('bertrand' in e[0] for e in result['escalate']))
+        self.assertTrue(result['confident'] or result['escalate'])
+
+    def test_an_unruled_shared_word_still_escalates(self):
+        # The guard itself, on a pair no ruling covers.
+        result = self.compare(['QUEBRAMAR SPORTS'],
+                              [held('Loja Quebramar', 'store')],
+                              covers={'store'})
+        self.assertEqual(result['remove'], [])
+        self.assertTrue(result['confident'] or result['escalate'])
 
     def test_a_row_with_no_long_words_can_still_be_removed(self):
         # The guard must not swallow every removal: "Tun Fon" shares no
@@ -172,6 +184,105 @@ class CompareTest(unittest.TestCase):
         before = [dict(r) for r in rows]
         self.compare(['MCDONALD\'S'], rows)
         self.assertEqual(rows, before)
+
+
+class TenantListFormatTest(unittest.TestCase):
+    """The list files carry a contract; nothing was enforcing it."""
+
+    def write(self, text):
+        import tempfile
+        handle = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False)
+        handle.write(text)
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def test_a_unit_that_has_not_opened_is_not_a_place(self):
+        """`|opening` marks an announced unit, and there are five of them.
+
+        The rule was written in decisions.md and applied by hand, which is
+        not enforcement — the next run would have added all five.
+        """
+        path = self.write("C&A|Piso 1\nBrownie|Piso 1|opening\n")
+        self.assertEqual(mall_tenants.read_tenant_list(path), [('C&A', 'Piso 1')])
+
+    def test_a_blank_floor_is_read_as_no_floor(self):
+        # Written as a bare `Piso` in eight rows, which reads as a floor
+        # named "Piso". The operator publishes none for these.
+        path = self.write("AWA MASSAGE|\n")
+        self.assertEqual(mall_tenants.read_tenant_list(path), [('AWA MASSAGE', '')])
+
+    def test_the_shipped_lists_all_parse(self):
+        lists = os.path.join(EXTRACTION_DIR, 'mall_lists')
+        for name in os.listdir(lists):
+            if not name.endswith('.txt'):
+                continue
+            rows = mall_tenants.read_tenant_list(os.path.join(lists, name))
+            self.assertTrue(rows, name)
+            for tenant, floor in rows:
+                self.assertTrue(tenant.strip(), name)
+                self.assertNotEqual(floor.strip().lower(), 'piso', name)
+
+
+class ScopedDecisionsTest(unittest.TestCase):
+    """A ruling is about one centre's shops, not a fact about the names."""
+
+    def test_a_rebrand_at_one_mall_does_not_travel(self):
+        # LEROY MERLIN is the AKI we hold at Colombo. Elsewhere they are two
+        # real shops of the same chain and merging them would lose one.
+        colombo = mall_tenants.confirmed_pairs(
+            mall_name='Centro Comercial Colombo')
+        vdg = mall_tenants.confirmed_pairs(
+            mall_name='Centro Comercial Vasco da Gama')
+        self.assertIn('leroy merlin', colombo)
+        self.assertNotIn('leroy merlin', vdg)
+
+    def test_a_ruling_marked_both_applies_at_either(self):
+        for mall in ('Centro Comercial Colombo', 'Centro Comercial Vasco da Gama'):
+            self.assertIn('pans company',
+                          mall_tenants.confirmed_pairs(mall_name=mall))
+
+    def test_omitting_the_mall_returns_every_ruling(self):
+        every = mall_tenants.confirmed_pairs()
+        scoped = mall_tenants.confirmed_pairs(mall_name='Strada Outlet Odivelas')
+        self.assertGreater(len(every), len(scoped))
+
+
+class OneRowOneTenantTest(unittest.TestCase):
+    def test_two_tenants_cannot_claim_one_held_row(self):
+        """The directory lists a chain twice; we hold one row.
+
+        Both entries match it confidently, and the second silently took a
+        floor belonging to the first. Neither is safe to pick.
+        """
+        result = mall_tenants.compare(
+            ['Sacoor Brothers', 'Sacoor Brothers Woman'],
+            [held('Sacoor Brothers', 'store')], [], VDG, {'store'})
+        self.assertEqual(result['confident'], [])
+        self.assertTrue(any('one held row' in e[0] for e in result['escalate']))
+
+    def test_the_same_name_listed_twice_is_one_tenant(self):
+        """Colombo lists TOP ATLANTICO twice; it is one shop, not a clash."""
+        result = mall_tenants.compare(
+            ['Wells', 'Wells'], [held('Wells', 'pharmacy')], [],
+            VDG, {'pharmacy'})
+        self.assertEqual(len(result['confident']), 1)
+        self.assertEqual(result['escalate'], [])
+
+    def test_a_row_contested_by_two_tenants_is_not_then_removed(self):
+        # Escalating must not drop it back into REMOVE.
+        result = mall_tenants.compare(
+            ['Sacoor Brothers', 'Sacoor Brothers Woman'],
+            [held('Sacoor Brothers', 'store')], [], VDG, {'store'})
+        self.assertEqual(result['remove'], [])
+
+    def test_distinct_tenants_keep_their_own_rows(self):
+        result = mall_tenants.compare(
+            ['Cafe do Ponto', 'Ponto do Cafe'],
+            [held('Cafe do Ponto', 'cafe'), held('Ponto do Cafe', 'cafe')],
+            [], VDG, {'cafe'})
+        self.assertEqual(len(result['confident']), 2)
+        self.assertEqual(result['remove'], [])
 
 
 if __name__ == '__main__':

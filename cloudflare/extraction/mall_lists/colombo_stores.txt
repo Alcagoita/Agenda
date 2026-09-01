@@ -12,7 +12,7 @@ AMIGO Stand|Piso -1
 AQUI A TUA REMODELAÇÃO|Piso 0
 AREA|Piso 0
 Avatim|Piso 1
-AWA MASSAGE|Piso
+AWA MASSAGE|
 B STRONG|Piso 2
 Bem Mais|Piso 0
 Benamôr|Piso 1
@@ -52,7 +52,7 @@ Copimática|Piso -1
 COPITRAJE|Piso 2
 CORTEFIEL|Piso 1
 Cortes de Lisboa|Piso -1
-COS|Piso
+COS|
 CTT-CORREIOS DE PORTUGAL|Piso 0
 CTT/BANCO CTT|Piso 0
 DECENIO MEDITERRANO|Piso 1
@@ -101,7 +101,7 @@ LACOSTE|Piso 1
 LANIDOR|Piso 1
 LEFTIES|Piso 1
 LEGO|Piso 0
-LEROY MERLIN|Piso
+LEROY MERLIN|
 LEVI'S|Piso 1
 LIBERJÓIA|Piso 0
 LION OF PORCHES|Piso 1
@@ -129,13 +129,13 @@ MYFORCE|Piso -1
 MYOS|Piso 0
 NAILS 4US|Piso 0
 NATURA|Piso 0
-NATURAPURA|Piso
+NATURAPURA|
 NESPRESSO|Piso 0
 New Balance|Piso 2
 New Era|Piso 2
 NIKE|Piso 2
 NOS|Piso 0
-NOS Stand|Piso
+NOS Stand|
 NOTE!|Piso 0
 NOVA CÂMBIOS|Piso 0
 O BOTICÁRIO|Piso 0
@@ -222,7 +222,7 @@ WHY NOT|Piso 1
 Widex – Especialistas em Audição|Piso 0
 Wiñk|Piso 0
 WOMEN'SECRET|Piso 1
-WORTEN|Piso
+WORTEN|
 WORTEN MOBILE|Piso 0
 WTF|Piso 0
 XIAOMI STORE PORTUGAL|Piso 0

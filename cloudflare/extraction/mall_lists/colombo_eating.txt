@@ -1,4 +1,4 @@
-100 MONTADITOS|Piso
+100 MONTADITOS|
 A Padaria Portuguesa|Piso 0
 Alentejo – Pão, Azeite, e Alho|Piso 2
 AMOR AOS PEDAÇOS|Piso 2
@@ -20,7 +20,7 @@ Gleba|Piso 0
 GUACAMOLE|Piso 2
 H3 – NEW HAMBURGOLOGY|Piso 2
 HÄAGEN-DAZS|Piso 2
-HAPPY FOOD|Piso
+HAPPY FOOD|
 ICE IT|Piso 2
 IOGU|Piso 2
 ITALIAN REPUBLIC|Piso 2
