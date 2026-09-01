@@ -49,6 +49,11 @@ function dbWithCandidate(): DatabaseSync {
   ]) {
     db.exec(readFileSync(join(ROOT, 'migrations', migration), 'utf8'));
   }
+  // curated_poi.floor comes from migration 0030, which nearby now selects.
+  // Only this one column is taken rather than the whole migration: 0030 also
+  // adds overture_poi.floor, and schema.sql already declares that, so
+  // replaying the file here fails on a duplicate column.
+  db.exec('ALTER TABLE curated_poi ADD COLUMN floor TEXT;');
 
   // A candidate sitting exactly where the search is pointed, carrying a
   // category we do map, with a name that reads like a real errand. If
@@ -94,7 +99,7 @@ describe('KAN-404 poi_candidate is invisible to nearby search', () => {
 
   it('stays invisible even when a promoted-looking status is set', async () => {
     // promotion_status is a note to humans, not a switch that publishes a
-    // row. Promotion is a copy into poi, and nothing else.
+    // row. Promotion is a copy into a serving table, and nothing else.
     const db = dbWithCandidate();
     db.exec("UPDATE poi_candidate SET promotion_status = 'promoted'");
     const { body } = await nearby(db, ['store']);
@@ -106,11 +111,11 @@ describe('KAN-404 poi_candidate is invisible to nearby search', () => {
     // that returns nothing at all.
     const db = dbWithCandidate();
     db.prepare(
-      `INSERT INTO poi (fsq_place_id, name, lat, lng, geohash, primary_poi_type,
-                        dedupe_name, date_refreshed)
-       VALUES ('real-1', 'Mercearia Boa', ?, ?, ?, 'store', 'merceariaboa', 't')`,
+      `INSERT INTO overture_poi (overture_id, name, lat, lng, geohash, primary_poi_type,
+                                 dedupe_name, imported_at, updated_at)
+       VALUES ('real-1', 'Mercearia Boa', ?, ?, ?, 'store', 'merceariaboa', 't', 't')`,
     ).run(LAT, LNG, 'eycs0');
-    db.prepare("INSERT INTO poi_type (fsq_place_id, poi_type, rank) VALUES ('real-1','store',0)").run();
+    db.prepare("INSERT INTO overture_poi_type (overture_id, poi_type, rank) VALUES ('real-1','store',0)").run();
     const { body } = await nearby(db, ['store']);
     expect(body).toContain('Mercearia Boa');
     expect(body).not.toContain('Talho Central');

@@ -1132,13 +1132,33 @@ async function typesForSearch(db: D1Database, poiType: string): Promise<string[]
  * classified poi_attribute rows exactly as before — this only adds the
  * umbrella cuisines that classification doesn't produce.
  */
+/**
+ * An umbrella cuisine, expanded to the classified cuisines it covers.
+ *
+ * These used to be substrings of Foursquare's own label path, matched against
+ * `poi.raw_category_labels`, because Foursquare's classification was too
+ * coarse to carry a cuisine of its own. Overture's is not: KAN-435 mapped 131
+ * Overture categories onto 87 cuisines one-to-one, so an umbrella is now a set
+ * of real values rather than a text search.
+ *
+ * `pizza` no longer includes Italian. The old group was
+ * `['Pizzeria', 'Italian Restaurant']`, which made Telepizza an Italian
+ * restaurant. Pizza and Italian are different cuisines and the app has both.
+ *
+ * A key here must not also be a classified cuisine with different meaning:
+ * `asian`, `seafood`, `brazilian` and `mediterranean` are themselves in the
+ * 87, and each expansion includes its own key so an exact match still works.
+ */
 const FOOD_CUISINE_LABEL_GROUPS: Record<string, string[]> = {
-  asian: ['Asian Restaurant'],
-  pizza: ['Pizzeria', 'Italian Restaurant'],
-  seafood: ['Seafood Restaurant'],
-  brazilian: ['Brazilian Restaurant'],
-  mediterranean: ['Mediterranean Restaurant'],
-  bbq: ['BBQ Joint'],
+  asian: ['asian', 'asian_fusion', 'pan_asian', 'chinese', 'japanese', 'korean',
+    'thai', 'vietnamese', 'filipino', 'malaysian', 'indian', 'pakistani',
+    'bangladeshi', 'dim_sum', 'noodles', 'sushi', 'poke'],
+  pizza: ['pizza'],
+  seafood: ['seafood', 'fish_and_chips'],
+  brazilian: ['brazilian'],
+  mediterranean: ['mediterranean', 'greek', 'spanish', 'portuguese', 'italian',
+    'turkish', 'lebanese', 'moroccan', 'tapas'],
+  bbq: ['barbecue', 'bar_and_grill', 'steak'],
 };
 
 /**
@@ -1157,32 +1177,44 @@ export function buildAttributeFilterClause(filter: AttributeFilter): { clause: s
     const fragments = filter.dimension === 'food_cuisine'
       ? FOOD_CUISINE_LABEL_GROUPS[value]
       : undefined;
-    if (fragments) {
-      for (const fragment of fragments) {
-        orBranches.push('poi.raw_category_labels LIKE ?');
-        binds.push(`%${fragment}%`);
-      }
-    } else {
+    // An umbrella expands to the classified cuisines it covers, and every
+    // branch is now the same EXISTS against the classified attribute. The
+    // old umbrella branch searched `poi.raw_category_labels` as text, which
+    // Overture does not have and which no longer needs approximating.
+    for (const classified of fragments ?? [value]) {
       orBranches.push(
-        'EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value = ?)',
+        'EXISTS (SELECT 1 FROM overture_poi_attribute WHERE overture_poi_attribute.overture_id = overture_poi.overture_id AND overture_poi_attribute.dimension = ? AND overture_poi_attribute.value = ?)',
       );
-      binds.push(filter.dimension, value);
+      binds.push(filter.dimension, classified);
     }
   }
   return { clause: `(${orBranches.join(' OR ')})`, binds };
 }
 
 type NearbyPoi = {
-  /** Stable API identity. Foursquare rows use their real fsq_place_id; curated and OSM rows use their source identity. */
+  /** Stable API identity. Every row uses its own source identity — a GERS id for Overture, an element id for OSM, a curated id for curated. */
   poi_id: string;
-  /** Present only when Foursquare supplied this POI. Never contains a generated id. */
+  /**
+   * Always null since KAN-438 retired Foursquare. Kept in the payload so
+   * installed clients that read the field keep parsing; it must never carry
+   * an id from another source, because the sources' ids are not
+   * interchangeable and mislabelling one corrupts licence provenance.
+   */
   fsq_place_id: string | null;
   name: string; lat: number; lng: number;
   primary_poi_type: string; brand: string | null;
   category_label: string | null; address: string | null;
   /** KAN-318: default opening window, minutes from local midnight; null = always open. */
   open_min: number | null; close_min: number | null;
-  source?: 'foursquare' | 'community' | 'manual' | 'openstreetmap';
+  /**
+   * Which floor of a building this is on, as the operator writes it ("-1",
+   * "2"). Null nearly everywhere: most places in the world have no floor
+   * worth stating. Inside a shopping centre it is the only thing that
+   * locates a shop, because four floors share one coordinate and GPS cannot
+   * separate them.
+   */
+  floor: string | null;
+  source?: 'overture' | 'community' | 'manual' | 'openstreetmap';
   distanceMeters: number;
   attributes: Record<string, string[]>;
 };
@@ -1193,9 +1225,9 @@ interface NearbyQueryResult {
     d1Ms: number;
     filterMs: number;
     /** D1 rows before Worker-side de-duplication; never includes identity data. */
-    sourceRows: { foursquare: number; community: number; openstreetmap: number };
+    sourceRows: { overture: number; community: number; openstreetmap: number };
     /** Unique visible candidates after source corrections and duplicate suppression. */
-    candidateCounts: { foursquare: number; community: number; openstreetmap: number };
+    candidateCounts: { overture: number; community: number; openstreetmap: number };
     /** Bucket entries returned to the client; one POI can correctly appear in multiple buckets. */
     resultCount: number;
   };
@@ -1203,25 +1235,28 @@ interface NearbyQueryResult {
 
 /**
  * KAN-344: matches one attribute value against a nearby-search candidate.
- * A food_cuisine value naming a group (pizza/asian/…) is matched against the
- * candidate's raw Foursquare label path — the same umbrella GET /poi resolves
- * in SQL via buildAttributeFilterClause — because those cuisines have no
- * classified poi_attribute row. Every other value matches a classified
- * poi_attribute value exactly as before.
+ *
+ * A food_cuisine value naming an umbrella (asian/mediterranean/…) matches any
+ * of the classified cuisines it covers; every other value matches its own
+ * classified value exactly. This resolves the same umbrellas as
+ * buildAttributeFilterClause does in SQL, and must stay in step with it.
+ *
+ * Until KAN-438 the umbrella branch searched the candidate's raw Foursquare
+ * label path. Overture carries no such path, so that branch matched nothing
+ * for every row and an umbrella request came back silently empty.
  */
 function attributeValueMatches(
   dimension: string,
   value: string,
   candidate: { attributes: Record<string, string[]>; rawCategoryLabels: string | null },
 ): boolean {
+  const held = candidate.attributes[dimension];
+  if (!held) return false;
   if (dimension === 'food_cuisine') {
-    const fragments = FOOD_CUISINE_LABEL_GROUPS[value];
-    if (fragments) {
-      const labels = candidate.rawCategoryLabels ?? '';
-      return fragments.some(fragment => labels.includes(fragment));
-    }
+    const covered = FOOD_CUISINE_LABEL_GROUPS[value];
+    if (covered) return covered.some(classified => held.includes(classified));
   }
-  return candidate.attributes[dimension]?.includes(value) ?? false;
+  return held.includes(value);
 }
 
 /**
@@ -1241,7 +1276,7 @@ async function queryNearbyPoiDb(
   const relatedTypes = await Promise.all(requestedSearches.map(request => typesForSearch(db, request.type)));
   const precision = precisionForRadius(radiusMeters);
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
-  const geohashClauses = prefixes.map(() => '(poi.geohash >= ? AND poi.geohash < ?)');
+  const geohashClauses = prefixes.map(() => '(overture_poi.geohash >= ? AND overture_poi.geohash < ?)');
   const curatedGeohashClauses = prefixes.map(() => '(curated_poi.geohash >= ? AND curated_poi.geohash < ?)');
   const osmGeohashClauses = prefixes.map(() => '(osm_poi.geohash >= ? AND osm_poi.geohash < ?)');
   // Keep a brand-only Gym/Bank request in D1's predicate. A generic request
@@ -1257,7 +1292,7 @@ async function queryNearbyPoiDb(
     const request = requestedSearches[index];
     const types = relatedTypes[index];
     const placeholders = types.map(() => '?').join(',');
-    poiRequestClauses.push(`(poi_type.poi_type IN (${placeholders})${request.brand ? ' AND poi.brand = ?' : ''})`);
+    poiRequestClauses.push(`(overture_poi_type.poi_type IN (${placeholders})${request.brand ? ' AND overture_poi.brand = ?' : ''})`);
     poiRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
     curatedRequestClauses.push(`(curated_poi.primary_poi_type IN (${placeholders})${request.brand ? ' AND curated_poi.brand = ?' : ''})`);
     curatedRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
@@ -1267,28 +1302,41 @@ async function queryNearbyPoiDb(
   const d1StartedAt = performance.now();
   const [{ results: rows }, { results: curatedRows }, { results: osmRows }] = await Promise.all([
     db.prepare(
-      `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
-            poi.brand, poi.category_label, poi.raw_category_labels, poi.address,
-            poi.open_min, poi.close_min, poi_type.poi_type AS matched_type
-            , poi_attribute.dimension AS attribute_dimension, poi_attribute.value AS attribute_value,
-            poi_correction.visible AS correction_visible
-     FROM poi
-     INNER JOIN poi_type ON poi_type.fsq_place_id = poi.fsq_place_id
-     LEFT JOIN poi_attribute ON poi_attribute.fsq_place_id = poi.fsq_place_id
-       AND poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
-     LEFT JOIN poi_source_correction AS poi_correction
-       ON poi_correction.source = 'foursquare' AND poi_correction.source_id = poi.fsq_place_id
+      // The base layer. `poi_source_correction` must be joined here for the
+      // same reason it is joined for OSM: KAN-435 retired 10 Overture rows
+      // that were the same shop twice under two GERS ids (Primark at 14 m,
+      // Intimissimi, Claire's, Burger King, Portugalia, Vitaminas, The North
+      // Face, adidas, Triumph, Farmacia). Without the join those duplicates
+      // ship, and a shop shown twice in Nearby is the failure users notice.
+      `SELECT overture_poi.overture_id, overture_poi.dedupe_name, overture_poi.name,
+            overture_poi.lat, overture_poi.lng, overture_poi.primary_poi_type,
+            overture_poi.brand, overture_poi.address, overture_poi.floor,
+            overture_poi.open_min, overture_poi.close_min,
+            overture_poi_type.poi_type AS matched_type,
+            overture_poi_attribute.dimension AS attribute_dimension,
+            overture_poi_attribute.value AS attribute_value,
+            overture_correction.visible AS correction_visible,
+            overture_correction.name_override AS correction_name_override,
+            overture_correction.dedupe_name_override AS correction_dedupe_name_override
+     FROM overture_poi
+     INNER JOIN overture_poi_type ON overture_poi_type.overture_id = overture_poi.overture_id
+     LEFT JOIN overture_poi_attribute ON overture_poi_attribute.overture_id = overture_poi.overture_id
+       AND overture_poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
+     LEFT JOIN poi_source_correction AS overture_correction
+       ON overture_correction.source = 'overture' AND overture_correction.source_id = overture_poi.overture_id
      WHERE (${geohashClauses.join(' OR ')}) AND (${poiRequestClauses.join(' OR ')})`,
     ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...poiRequestBinds).all<{
-      fsq_place_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-      primary_poi_type: string; brand: string | null; category_label: string | null;
-      raw_category_labels: string | null;
-      address: string | null; open_min: number | null; close_min: number | null; matched_type: string;
-      attribute_dimension: string | null; attribute_value: string | null; correction_visible: number | null;
+      overture_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+      primary_poi_type: string; brand: string | null;
+      address: string | null; floor: string | null;
+      open_min: number | null; close_min: number | null; matched_type: string;
+      attribute_dimension: string | null; attribute_value: string | null;
+      correction_visible: number | null; correction_name_override: string | null;
+      correction_dedupe_name_override: string | null;
     }>(),
     db.prepare(
       `SELECT curated_poi.poi_id, curated_poi.dedupe_name, curated_poi.name, curated_poi.lat, curated_poi.lng,
-            curated_poi.primary_poi_type, curated_poi.brand, curated_poi.address,
+            curated_poi.primary_poi_type, curated_poi.brand, curated_poi.address, curated_poi.floor,
             curated_poi_attribute.dimension AS attribute_dimension, curated_poi_attribute.value AS attribute_value
      FROM curated_poi
      LEFT JOIN curated_poi_attribute ON curated_poi_attribute.poi_id = curated_poi.poi_id
@@ -1297,7 +1345,7 @@ async function queryNearbyPoiDb(
        AND (${curatedRequestClauses.join(' OR ')})`,
     ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...curatedRequestBinds).all<{
       poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-      primary_poi_type: string; brand: string | null; address: string | null;
+      primary_poi_type: string; brand: string | null; address: string | null; floor: string | null;
       attribute_dimension: string | null; attribute_value: string | null;
     }>(),
     db.prepare(
@@ -1332,7 +1380,7 @@ async function queryNearbyPoiDb(
     if (row.correction_visible === 0) continue;
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
-    const candidateKey = `foursquare:${row.fsq_place_id}`;
+    const candidateKey = `overture:${row.overture_id}`;
     const existing = candidates.get(candidateKey);
     if (existing) {
       existing.matchedTypes.add(row.matched_type);
@@ -1342,16 +1390,21 @@ async function queryNearbyPoiDb(
       }
     } else {
       candidates.set(candidateKey, {
-        poi_id: row.fsq_place_id, fsq_place_id: row.fsq_place_id, name: row.name, lat: row.lat, lng: row.lng,
+        poi_id: row.overture_id, fsq_place_id: null,
+        name: row.correction_name_override ?? row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand,
-        category_label: row.category_label, address: row.address,
+        // Overture carries no equivalent of Foursquare's display category
+        // label, and inventing one from the type would be a claim the source
+        // does not make.
+        category_label: null, address: row.address, floor: row.floor,
         open_min: row.open_min, close_min: row.close_min,
-        source: 'foursquare', dedupeName: row.dedupe_name,
+        source: 'overture',
+        dedupeName: row.correction_dedupe_name_override ?? row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
         matchedTypes: new Set([row.matched_type]),
-        rawCategoryLabels: row.raw_category_labels,
+        rawCategoryLabels: null,
       });
     }
   }
@@ -1372,7 +1425,8 @@ async function queryNearbyPoiDb(
         primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
         // Community rows do not carry curated hours yet: NULL keeps KAN-318's
         // safe always-open behaviour rather than hiding an approved POI.
-        address: row.address, open_min: null, close_min: null, source: 'community', dedupeName: row.dedupe_name,
+        address: row.address, floor: row.floor,
+        open_min: null, close_min: null, source: 'community', dedupeName: row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
@@ -1397,7 +1451,13 @@ async function queryNearbyPoiDb(
       candidates.set(candidateKey, {
         poi_id: row.osm_element_id, fsq_place_id: null, name: row.correction_name_override ?? row.name, lat: row.lat, lng: row.lng,
         primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
-        address: row.address, open_min: row.open_min, close_min: row.close_min,
+        // osm_poi has no floor column. OSM's own `level` tag is not stored
+        // here, and it is not comparable across buildings anyway (Colombo
+        // agrees with the published Piso 55/55; Vasco da Gama runs one below
+        // in 30 of 35), so a floor for a mall unit comes from the operator
+        // via curated_poi, not from here.
+        address: row.address, floor: null,
+        open_min: row.open_min, close_min: row.close_min,
         source: 'openstreetmap', dedupeName: row.correction_dedupe_name_override ?? row.dedupe_name,
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
@@ -1407,27 +1467,49 @@ async function queryNearbyPoiDb(
     }
   }
 
-  // A later Foursquare import may use coordinates a few metres away from a
-  // supplemental/community row. Suppress that twin at read time so the user
-  // never gets duplicate nearby results. Foursquare wins, then a curated
-  // correction, while the source records remain available for audit.
-  const foursquareCandidates = [...candidates.values()].filter(candidate => candidate.source === 'foursquare');
-  const curatedCandidates = [...candidates.values()].filter(candidate => candidate.source === 'community');
+  // Two sources can hold the same shop at coordinates a few metres apart.
+  // Suppress the twin at read time so the user never sees one shop twice.
+  //
+  // THE ORDER IS BY MEASURED ACCURACY, AND IT USED TO BE BACKWARDS.
+  //
+  // It was Foursquare first, then curated, then OSM last, from when
+  // Foursquare was the base. Measured against two shopping centres'
+  // published tenant lists, that ranking is inverted: Foursquare scored 46%
+  // and 48% precision, Overture 60% and 70%, OSM 74% and 92%. So a stale
+  // Foursquare row was suppressing a correct OSM one 20 m away.
+  //
+  // Least authoritative first, so each source is suppressed by everything
+  // above it:
+  //
+  //   overture       the base — widest coverage, weakest per-row accuracy
+  //   openstreetmap  enrichment, and measurably more accurate
+  //   community      curated. Inside a mall this is the operator's own
+  //                  directory, which is the authority on what is in the
+  //                  building and on which floor, so nothing overrides it.
+  //
+  // The rule itself is unchanged and must stay: it matches on `dedupeName`
+  // plus proximity, never on source ids. An id identifies a row for a
+  // correction; it never decides which of two places a user sees.
+  const SUPPRESSION_ORDER = ['overture', 'openstreetmap', 'community'] as const;
+  const bySource = new Map<string, typeof candidates extends Map<string, infer V> ? V[] : never>();
+  for (const candidate of candidates.values()) {
+    const list = bySource.get(candidate.source ?? '') ?? [];
+    list.push(candidate);
+    bySource.set(candidate.source ?? '', list);
+  }
   for (const [key, candidate] of candidates) {
-    if (candidate.source === 'foursquare') continue;
-    // Preserve the established Foursquare-over-community precedence. An OSM
-    // supplement is lower priority than either existing source.
-    const suppressors = candidate.source === 'community'
-      ? foursquareCandidates
-      : [...foursquareCandidates, ...curatedCandidates];
+    const rank = SUPPRESSION_ORDER.indexOf(candidate.source as typeof SUPPRESSION_ORDER[number]);
+    if (rank < 0) continue;
+    const suppressors = SUPPRESSION_ORDER.slice(rank + 1)
+      .flatMap(source => bySource.get(source) ?? []);
     if (suppressors.some(primary => primary.dedupeName === candidate.dedupeName && haversineMeters(primary.lat, primary.lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS)) {
       candidates.delete(key);
     }
   }
 
-  const candidateCounts = { foursquare: 0, community: 0, openstreetmap: 0 };
+  const candidateCounts = { overture: 0, community: 0, openstreetmap: 0 };
   for (const candidate of candidates.values()) {
-    if (candidate.source === 'foursquare') candidateCounts.foursquare++;
+    if (candidate.source === 'overture') candidateCounts.overture++;
     else if (candidate.source === 'community') candidateCounts.community++;
     else if (candidate.source === 'openstreetmap') candidateCounts.openstreetmap++;
   }
@@ -1441,6 +1523,7 @@ async function queryNearbyPoiDb(
       primary_poi_type: candidate.primary_poi_type, brand: candidate.brand,
       category_label: candidate.category_label, address: candidate.address,
       open_min: candidate.open_min, close_min: candidate.close_min,
+      floor: candidate.floor,
       source: candidate.source,
       distanceMeters: candidate.distanceMeters, attributes: candidate.attributes,
     };
@@ -1462,7 +1545,7 @@ async function queryNearbyPoiDb(
     timings: {
       d1Ms,
       filterMs: performance.now() - filteringStartedAt,
-      sourceRows: { foursquare: rows.length, community: curatedRows.length, openstreetmap: osmRows.length },
+      sourceRows: { overture: rows.length, community: curatedRows.length, openstreetmap: osmRows.length },
       candidateCounts,
       resultCount,
     },

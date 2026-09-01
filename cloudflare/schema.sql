@@ -88,6 +88,54 @@ CREATE TABLE IF NOT EXISTS osm_poi_attribute (
   PRIMARY KEY (osm_element_id, dimension, value)
 );
 
+-- The serving base since KAN-438. Arrived by migrations 0029 and 0030 and was
+-- missing here, which is why the test harness — which loads this file rather
+-- than replaying migrations — could not see it.
+--
+-- `overture_id` is Overture's GERS id and is the primary key. Ids are never
+-- interchangeable across sources: each carries different licence terms, and
+-- mislabelling one corrupts both cross-source dedupe and provenance.
+CREATE TABLE IF NOT EXISTS overture_poi (
+  overture_id         TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  dedupe_name         TEXT NOT NULL,
+  lat                 REAL NOT NULL,
+  lng                 REAL NOT NULL,
+  geohash             TEXT NOT NULL,
+  primary_poi_type    TEXT NOT NULL,
+  brand               TEXT,
+  address             TEXT,
+  category            TEXT,
+  confidence          REAL,
+  source_datasets     TEXT,
+  open_min            INTEGER,
+  close_min           INTEGER,
+  imported_at         TEXT NOT NULL,
+  updated_at          TEXT NOT NULL,
+  -- TEXT, not INTEGER: floors go negative, and a unit spanning two levels
+  -- must be able to say so without another migration.
+  floor               TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_overture_poi_geo ON overture_poi (geohash);
+CREATE INDEX IF NOT EXISTS idx_overture_poi_brand_geo ON overture_poi (brand, geohash);
+CREATE INDEX IF NOT EXISTS idx_overture_poi_name ON overture_poi (dedupe_name);
+
+CREATE TABLE IF NOT EXISTS overture_poi_type (
+  overture_id TEXT NOT NULL REFERENCES overture_poi(overture_id),
+  poi_type    TEXT NOT NULL,
+  rank        INTEGER NOT NULL,
+  PRIMARY KEY (overture_id, poi_type)
+);
+CREATE INDEX IF NOT EXISTS idx_overture_poi_type_type_place
+  ON overture_poi_type (poi_type, overture_id);
+
+CREATE TABLE IF NOT EXISTS overture_poi_attribute (
+  overture_id TEXT NOT NULL REFERENCES overture_poi(overture_id),
+  dimension   TEXT NOT NULL,
+  value       TEXT NOT NULL,
+  PRIMARY KEY (overture_id, dimension, value)
+);
+
 CREATE TABLE IF NOT EXISTS osm_supplement_import (
   country_code          TEXT PRIMARY KEY REFERENCES country(country_code),
   status                TEXT NOT NULL CHECK (status IN ('none', 'mapping', 'mapped', 'failed')),

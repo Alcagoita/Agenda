@@ -9,53 +9,68 @@ vi.mock('@cloudflare/containers', () => ({
 
 import { buildAttributeFilterClause } from '../index';
 
-describe('buildAttributeFilterClause (KAN-344 cuisine groups)', () => {
-  it('matches a classified cuisine against poi_attribute, unchanged', () => {
+const EXISTS = 'EXISTS (SELECT 1 FROM overture_poi_attribute WHERE overture_poi_attribute.overture_id = overture_poi.overture_id AND overture_poi_attribute.dimension = ? AND overture_poi_attribute.value = ?)';
+
+describe('buildAttributeFilterClause (KAN-344 cuisine groups, KAN-438 on Overture)', () => {
+  it('matches a classified cuisine against the attribute table', () => {
     const { clause, binds } = buildAttributeFilterClause({ dimension: 'food_cuisine', values: ['sushi'] });
-    expect(clause).toContain('FROM poi_attribute');
-    expect(clause).not.toContain('raw_category_labels');
+    expect(clause).toBe(`(${EXISTS})`);
     expect(binds).toEqual(['food_cuisine', 'sushi']);
   });
 
-  it('resolves an umbrella group (asian) against the raw label path', () => {
+  it('resolves an umbrella group to the cuisines it covers', () => {
+    // Until KAN-438 this was a LIKE against Foursquare's own label path
+    // (`poi.raw_category_labels LIKE '%Asian Restaurant%'`). Overture has no
+    // such path, and its categories are classified one-to-one onto the app's
+    // 87 cuisines, so an umbrella is a set of real values rather than a text
+    // search.
     const { clause, binds } = buildAttributeFilterClause({ dimension: 'food_cuisine', values: ['asian'] });
-    expect(clause).toBe('(poi.raw_category_labels LIKE ?)');
-    expect(binds).toEqual(['%Asian Restaurant%']);
+    expect(clause.startsWith('(EXISTS')).toBe(true);
+    const values = binds.filter((_, index) => index % 2 === 1);
+    expect(values).toContain('asian');
+    expect(values).toContain('japanese');
+    expect(values).toContain('thai');
+    expect(binds.filter((_, index) => index % 2 === 0).every(d => d === 'food_cuisine')).toBe(true);
   });
 
-  it('pizza returns Pizzerias plus Italian restaurants', () => {
+  it('pizza is pizza, and no longer drags in Italian', () => {
+    // The old group was ['Pizzeria', 'Italian Restaurant'], which made
+    // Telepizza an Italian restaurant. They are different cuisines and the
+    // app carries both.
     const { clause, binds } = buildAttributeFilterClause({ dimension: 'food_cuisine', values: ['pizza'] });
-    expect(clause).toBe('(poi.raw_category_labels LIKE ? OR poi.raw_category_labels LIKE ?)');
-    expect(binds).toEqual(['%Pizzeria%', '%Italian Restaurant%']);
+    expect(clause).toBe(`(${EXISTS})`);
+    expect(binds).toEqual(['food_cuisine', 'pizza']);
   });
 
-  it('maps each straightforward 1:1 group to its own label fragment', () => {
-    for (const [value, fragment] of [
-      ['seafood', '%Seafood Restaurant%'],
-      ['brazilian', '%Brazilian Restaurant%'],
-      ['mediterranean', '%Mediterranean Restaurant%'],
-      ['bbq', '%BBQ Joint%'],
-    ] as const) {
-      const { clause, binds } = buildAttributeFilterClause({ dimension: 'food_cuisine', values: [value] });
-      expect(clause).toBe('(poi.raw_category_labels LIKE ?)');
-      expect(binds).toEqual([fragment]);
+  it('an umbrella always covers its own name', () => {
+    // `seafood`, `brazilian` and `mediterranean` are themselves among the 87
+    // classified cuisines, so a row classified exactly as one must still be
+    // found by a request for it.
+    for (const value of ['seafood', 'brazilian', 'mediterranean'] as const) {
+      const { binds } = buildAttributeFilterClause({ dimension: 'food_cuisine', values: [value] });
+      expect(binds.filter((_, index) => index % 2 === 1)).toContain(value);
     }
   });
 
   it('ORs a group value together with a classified value', () => {
     const { clause, binds } = buildAttributeFilterClause({ dimension: 'food_cuisine', values: ['asian', 'italian'] });
-    expect(clause).toBe(
-      '(poi.raw_category_labels LIKE ? OR EXISTS (SELECT 1 FROM poi_attribute WHERE poi_attribute.fsq_place_id = poi.fsq_place_id AND poi_attribute.dimension = ? AND poi_attribute.value = ?))',
-    );
-    expect(binds).toEqual(['%Asian Restaurant%', 'food_cuisine', 'italian']);
+    expect(clause.split(' OR ').length).toBeGreaterThan(2);
+    expect(binds.filter((_, index) => index % 2 === 1)).toContain('italian');
   });
 
   it('only applies groups on the food_cuisine dimension', () => {
     // 'pizza' is a group name, but under store_kind it must stay a plain
-    // poi_attribute lookup — groups are food-cuisine-only.
+    // attribute lookup — groups are food-cuisine-only.
     const { clause, binds } = buildAttributeFilterClause({ dimension: 'store_kind', values: ['pizza'] });
-    expect(clause).toContain('FROM poi_attribute');
-    expect(clause).not.toContain('raw_category_labels');
+    expect(clause).toBe(`(${EXISTS})`);
     expect(binds).toEqual(['store_kind', 'pizza']);
+  });
+
+  it('never reaches for a Foursquare column', () => {
+    for (const dimension of ['food_cuisine', 'store_kind'] as const) {
+      const { clause } = buildAttributeFilterClause({ dimension, values: ['asian', 'sushi'] });
+      expect(clause).not.toContain('raw_category_labels');
+      expect(clause).not.toContain('fsq_place_id');
+    }
   });
 });
