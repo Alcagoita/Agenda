@@ -20,6 +20,7 @@ The matcher scored these below its confident bar. They are the same shop.
 | `PANS & COMPANY` | `Pans and Company` | both |
 | `XIAOMI STORE PORTUGAL` | `Mi Store Portugal` | Colombo — renamed |
 | `LEROY MERLIN` | `AKI` | Colombo — rebrand, renamed |
+| `H3` | `H3 Hambúrguer Gourmet` | Strada — too short for the containment rule |
 
 ## Confirmed NOT matches — different businesses
 
@@ -31,7 +32,9 @@ is no.
 `Cinemas NOS` ≠ `Loja NOS` · `Lanidor` ≠ `PANDORA` · `Chicco` ≠ `ECCO` ·
 `Asics` ≠ `iServices` · `Elena Mirò` ≠ `CELEIRO` · `Loja Huawei` ≠
 `Hawkers` · `Inglot` ≠ `NOTE!` · `Macmoda` ≠ `MAC` · `Furla` ≠ `SFERA` ·
-`Carpisa` ≠ `Parfois` · `Hubside.Store` ≠ `SEASIDE` · `Western Union` ≠
+`Café do Ponto` ≠ `Ponto do Café` (Strada — two separate shops, however
+much the names invite merging) · `Carpisa` ≠ `Parfois` ·
+`Hubside.Store` ≠ `SEASIDE` · `Western Union` ≠
 `MISTER MINIT` · `Cacifo Locky` ≠ `FOOT LOCKER` · `Timberland` ≠
 `Silverland` · `Kiro` ≠ `Kiko` · `Mais Optica` ≠ `MultiOpticas`
 
@@ -39,7 +42,10 @@ is no.
 
 `Springfield` / `Springfield Woman` · `ZARA` / `Zara Home` ·
 `MANGO` / `MANGO TEEN` · `INTIMISSIMI` / `Intimissimi Uomo` ·
-`BOTA MINUTO` at Vasco da Gama (Piso -1 and Piso -1 GARE)
+`BOTA MINUTO` at Vasco da Gama (Piso -1 and Piso -1 GARE) ·
+`BigFoot` / `BigFoot Sport` at Strada — one shop with two doors, one row ·
+`Wells` / `Wells Ótica` at Strada — two shops sharing one unit, so TWO rows:
+the parapharmacy and the optician are different businesses at one address
 
 ## One unit listed under two names — keep ONE
 

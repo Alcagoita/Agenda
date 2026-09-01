@@ -106,6 +106,40 @@ def strip_accents(value: str) -> str:
                    if not unicodedata.combining(c))
 
 
+def confirmed_pairs(path=None):
+    """Pairs a person has already ruled the same shop.
+
+    `compare` has no memory: it re-derives every match from scratch, so a
+    pair scoring below the confident bar comes back as an open question
+    however many times it has been answered. `5 À SEC` against `5àSec` was
+    asked three times across three malls before this existed.
+
+    Read from mall_lists/decisions.md — the table rows under "Confirmed
+    matches", which is the file a reviewer actually maintains. Parsing the
+    document rather than a second machine-readable copy keeps one source of
+    truth; a drifting copy would be worse than none.
+    """
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'mall_lists', 'decisions.md')
+    if not os.path.exists(path):
+        return {}
+    pairs, in_section = {}, False
+    for line in open(path):
+        if line.startswith('## '):
+            in_section = line.strip().startswith('## Confirmed matches')
+            continue
+        if not in_section or not line.startswith('|'):
+            continue
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        if len(cells) < 2 or cells[0].startswith('---') or cells[0] == 'operator directory':
+            continue
+        tenant, holding = cells[0].strip('`'), cells[1].strip('`')
+        if tenant and holding:
+            pairs.setdefault(normalize_text(tenant), set()).add(normalize_text(holding))
+    return pairs
+
+
 def mall_tokens(mall_name: str) -> frozenset:
     """The mall's own name, as tokens to remove from its tenants' names.
 
@@ -179,8 +213,17 @@ def compare(tenants, held, osm, mall_name, covers=FOOD_TYPES):
     mall = mall_tokens(mall_name)
     matched_held, confident, escalate, add = set(), [], [], []
     claimed_osm = {}
+    ruled = confirmed_pairs()
 
     for tenant in tenants:
+        # A ruling already given is not a question. Take it before scoring.
+        known = ruled.get(normalize_text(tenant))
+        if known:
+            hit = next((r for r in held if normalize_text(r['name']) in known), None)
+            if hit is not None:
+                confident.append((tenant, hit['name'], 1.0))
+                matched_held.add(hit['name'])
+                continue
         row, score = best_match(tenant, held, mall)
         if score >= CONFIDENT_THRESHOLD:
             confident.append((tenant, row['name'], score))
