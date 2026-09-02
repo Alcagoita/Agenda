@@ -7,6 +7,9 @@
  * never connects to production or executes SQL by itself.
  */
 
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
 export const LEGACY_TYPES = Object.freeze([
   'bank', 'amusement_park', 'aquarium', 'art_gallery', 'beach', 'botanical_garden',
   'bridge', 'campground', 'cemetery', 'church', 'cultural_center', 'golf_course',
@@ -33,10 +36,25 @@ WHERE t.poi_type = ${selected}
                     AND earlier.poi_type IN (${allowed}) AND earlier.rank < t.rank)
   AND NOT EXISTS (SELECT 1 FROM poi_source_correction c
                   WHERE c.source = 'foursquare' AND c.source_id = p.fsq_place_id AND c.visible = 0);
-INSERT OR IGNORE INTO legacy_poi_type (source_id, poi_type, rank)
+;`;
+}
+
+export function copyLegacyTypesSql() {
+  const allowed = LEGACY_TYPES.map(quote).join(', ');
+  return `INSERT OR IGNORE INTO legacy_poi_type (source_id, poi_type, rank)
 SELECT t.fsq_place_id, t.poi_type, t.rank
 FROM poi_type_backup_20260829 t JOIN legacy_poi l ON l.source_id = t.fsq_place_id
-WHERE t.poi_type = ${selected};`;
+WHERE t.poi_type IN (${allowed});`;
+}
+
+export function verificationSql() {
+  const allowed = LEGACY_TYPES.map(quote).join(', ');
+  const scoped = `FROM poi_backup_20260829 p JOIN poi_type_backup_20260829 t ON t.fsq_place_id = p.fsq_place_id
+WHERE t.poi_type IN (${allowed})
+  AND NOT EXISTS (SELECT 1 FROM poi_type_backup_20260829 earlier WHERE earlier.fsq_place_id = t.fsq_place_id AND earlier.poi_type IN (${allowed}) AND earlier.rank < t.rank)
+  AND NOT EXISTS (SELECT 1 FROM poi_source_correction c WHERE c.source = 'foursquare' AND c.source_id = p.fsq_place_id AND c.visible = 0)`;
+  return `SELECT (SELECT COUNT(*) FROM legacy_poi) AS legacy_poi_count, (SELECT COUNT(*) ${scoped}) AS expected_legacy_poi_count;
+SELECT (SELECT COUNT(*) FROM legacy_poi_type) AS legacy_poi_type_count, (SELECT COUNT(*) FROM poi_type_backup_20260829 t JOIN legacy_poi l ON l.source_id = t.fsq_place_id WHERE t.poi_type IN (${allowed})) AS expected_legacy_poi_type_count;`;
 }
 
 export function deleteBatchSql(table, key, size = 1000) {
@@ -44,10 +62,12 @@ export function deleteBatchSql(table, key, size = 1000) {
   return `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} LIMIT ${size});`;
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   if (process.argv[2] !== '--sql') throw new Error('Usage: node scripts/legacyPoiTransition.mjs --sql');
   for (const type of LEGACY_TYPES) console.log(copyTypeSql(type));
-  console.log('-- Verify legacy_poi counts before running any DELETE batches.');
+  console.log(copyLegacyTypesSql());
+  console.log('-- Both count pairs below must match before running any DELETE batches.');
+  console.log(verificationSql());
   for (const [table, key] of [['poi_attribute', 'fsq_place_id'], ['poi_type', 'fsq_place_id'], ['poi', 'fsq_place_id'], ['poi_candidate', 'candidate_id'], ['osm_poi_attribute', 'osm_element_id'], ['osm_poi_type', 'osm_element_id'], ['osm_poi', 'osm_element_id']]) {
     console.log(deleteBatchSql(table, key));
   }

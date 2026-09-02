@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { LEGACY_TYPES, copyTypeSql, deleteBatchSql } from './legacyPoiTransition.mjs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { LEGACY_TYPES, copyTypeSql, copyLegacyTypesSql, deleteBatchSql, verificationSql } from './legacyPoiTransition.mjs';
 
 assert(LEGACY_TYPES.includes('historical_landmark'));
 assert(LEGACY_TYPES.includes('bank'));
@@ -7,5 +9,15 @@ assert(!LEGACY_TYPES.includes('atm'));
 assert(!LEGACY_TYPES.includes('restaurant'));
 assert.match(copyTypeSql('museum'), /poi_backup_20260829/);
 assert.match(copyTypeSql('museum'), /visible = 0/);
+assert.match(copyLegacyTypesSql(), /legacy_poi_type/);
+const verification = verificationSql();
+assert.match(verification, /legacy_poi_count/);
+assert.match(verification, /legacy_poi_type_count/);
+assert(!verification.includes('DELETE FROM'));
+const output = execFileSync(process.execPath, [fileURLToPath(new URL('./legacyPoiTransition.mjs', import.meta.url)), '--sql'], { encoding: 'utf8' });
+const firstDelete = output.indexOf('DELETE FROM');
+assert(firstDelete > -1);
+assert(output.indexOf('legacy_poi_count') < firstDelete);
+assert(output.indexOf('legacy_poi_type_count') < firstDelete);
 assert.throws(() => copyTypeSql('atm'));
 assert.equal(deleteBatchSql('poi', 'fsq_place_id', 500), 'DELETE FROM poi WHERE rowid IN (SELECT rowid FROM poi LIMIT 500);');
