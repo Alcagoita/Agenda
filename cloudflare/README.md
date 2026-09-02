@@ -83,7 +83,9 @@ A request carrying a bearer token that fails verification is rejected with
 
 - `GET /poi/nearby?lat=&lng=&radius=&types=` and `POST /poi/nearby` — the
   supported nearby-POI search APIs. They include Foursquare, OpenStreetMap,
-  and curated community rows.
+  curated community rows, and official MULTIBANCO ATM rows. Within the
+  Odivelas demo zone, an official MULTIBANCO ATM takes precedence over a
+  same-location lower-priority ATM source; both sources remain stored.
 - `GET /coverage?lat=&lng=` — `{status, cityId, buildId}` for this location.
   `buildId` (KAN-339) lets a client compare its locally cached download's
   build against the current one without fetching `/export/:cityId` just to
