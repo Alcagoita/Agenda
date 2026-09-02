@@ -82,6 +82,7 @@ interface FakeSettlementRegistryRow {
 interface FakePoiRow {
   overture_id: string; name: string; lat: number; lng: number; geohash: string;
   primary_poi_type: string; brand: string | null; category_label: string | null; address: string | null;
+  floor?: string | null; open_min?: number | null; close_min?: number | null;
 }
 
 interface FakePoiTypeRow { overture_id: string; poi_type: string; }
@@ -151,6 +152,9 @@ function createFakeDb(
               }
             }
             return { results: results as T[] };
+          }
+          if (trimmed.startsWith('SELECT legacy_poi.source_id')) {
+            return { results: [] as T[] };
           }
           // KAN-362 adds a second, curated source to the same radius search.
           // These existing tests seed only Foursquare rows, so its result is

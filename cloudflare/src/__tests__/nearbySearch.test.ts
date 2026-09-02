@@ -155,6 +155,7 @@ function fakeDb(
             ...p, dedupe_name: p.name.toLowerCase(), lat: LAT, lng: LNG, address: 'Odivelas', is_demo_zone: p.is_demo_zone ?? 0,
           })) };
         }
+        if (trimmed.startsWith('SELECT legacy_poi.source_id')) return { results: [] };
         throw new Error(`fake D1 unhandled all(): ${trimmed}`);
       },
     };
@@ -194,7 +195,7 @@ const names = (bucket: Array<{ name: string }> | undefined) => (bucket ?? []).ma
 describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
   it('uses the official MULTIBANCO ATM and suppresses the matching Odivelas source row', async () => {
     const res = await worker.fetch(nearbyRequest([{ key: 'atm', type: 'atm' }]), env([
-      { fsq_place_id: 'stale-atm', name: 'ATM', raw_category_labels: '', category_label: '', primary_poi_type: 'atm' },
+      { overture_id: 'stale-atm', name: 'ATM', primary_poi_type: 'atm' },
     ], [], [], [], [
       { source_id: 'multibanco:odivelas', name: 'MULTIBANCO', primary_poi_type: 'atm', is_demo_zone: 1 },
     ]), CTX);
@@ -207,12 +208,12 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
 
   it('does not suppress a non-demo-zone ATM source', async () => {
     const res = await worker.fetch(nearbyRequest([{ key: 'atm', type: 'atm' }]), env([
-      { fsq_place_id: 'existing-atm', name: 'ATM', raw_category_labels: '', category_label: '', primary_poi_type: 'atm' },
+      { overture_id: 'existing-atm', name: 'ATM', primary_poi_type: 'atm' },
     ], [], [], [], [
       { source_id: 'multibanco:outside', name: 'MULTIBANCO', primary_poi_type: 'atm' },
     ]), CTX);
     const body = await res.json() as { results: Record<string, Array<{ source: string }>> };
-    expect(body.results.atm.map(p => p.source).sort()).toEqual(['foursquare', 'multibanco']);
+    expect(body.results.atm.map(p => p.source).sort()).toEqual(['multibanco', 'overture']);
   });
 
   it('returns an OSM-only POI through the same nearby response', async () => {

@@ -120,6 +120,31 @@ CREATE INDEX IF NOT EXISTS idx_overture_poi_geo ON overture_poi (geohash);
 CREATE INDEX IF NOT EXISTS idx_overture_poi_brand_geo ON overture_poi (brand, geohash);
 CREATE INDEX IF NOT EXISTS idx_overture_poi_name ON overture_poi (dedupe_name);
 
+-- KAN-438. Frozen, deliberately narrow fallback copied from the 2026-08-29
+-- backup before active Foursquare rows are removed. It contains only banks
+-- and agreed heritage/cultural/nature/visitor types; never everyday commerce
+-- or ATMs, which are respectively Overture and MULTIBANCO responsibilities.
+CREATE TABLE IF NOT EXISTS legacy_poi (
+  source_id           TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  dedupe_name         TEXT NOT NULL,
+  lat                 REAL NOT NULL,
+  lng                 REAL NOT NULL,
+  geohash             TEXT NOT NULL,
+  primary_poi_type    TEXT NOT NULL,
+  address             TEXT,
+  imported_at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_legacy_poi_geo ON legacy_poi (geohash);
+CREATE INDEX IF NOT EXISTS idx_legacy_poi_name ON legacy_poi (dedupe_name);
+CREATE TABLE IF NOT EXISTS legacy_poi_type (
+  source_id TEXT NOT NULL REFERENCES legacy_poi(source_id),
+  poi_type TEXT NOT NULL,
+  rank INTEGER NOT NULL,
+  PRIMARY KEY (source_id, poi_type)
+);
+CREATE INDEX IF NOT EXISTS idx_legacy_poi_type_type ON legacy_poi_type (poi_type, source_id);
+
 CREATE TABLE IF NOT EXISTS overture_poi_type (
   overture_id TEXT NOT NULL REFERENCES overture_poi(overture_id),
   poi_type    TEXT NOT NULL,
