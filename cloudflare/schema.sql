@@ -184,6 +184,39 @@ CREATE TABLE IF NOT EXISTS osm_supplement_scope (
 CREATE INDEX IF NOT EXISTS idx_osm_supplement_scope_claim
   ON osm_supplement_scope (country_code, status, lease_expires_at);
 
+-- KAN-440 — official MULTIBANCO ATM source.  This mirrors migration 0031 so
+-- the in-memory D1 test database exercises the production schema.
+CREATE TABLE IF NOT EXISTS multibanco_poi (
+  source_id TEXT PRIMARY KEY, name TEXT NOT NULL, dedupe_name TEXT NOT NULL,
+  lat REAL NOT NULL, lng REAL NOT NULL, geohash TEXT NOT NULL,
+  primary_poi_type TEXT NOT NULL CHECK (primary_poi_type = 'atm'), address TEXT NOT NULL,
+  parish TEXT, store_type TEXT, campaign TEXT, source_url TEXT NOT NULL,
+  raw_payload_json TEXT NOT NULL, fetched_at TEXT NOT NULL, imported_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, is_demo_zone INTEGER NOT NULL DEFAULT 0 CHECK (is_demo_zone IN (0, 1))
+);
+CREATE INDEX IF NOT EXISTS idx_multibanco_poi_geo ON multibanco_poi (geohash);
+CREATE TABLE IF NOT EXISTS multibanco_import_staging (
+  source_id TEXT PRIMARY KEY, source_name TEXT NOT NULL CHECK (source_name = 'multibanco'),
+  municipality_relation_id INTEGER NOT NULL, source_url TEXT NOT NULL, request_bounds_json TEXT NOT NULL,
+  raw_payload_json TEXT NOT NULL, fetched_at TEXT NOT NULL, published_poi_id TEXT NOT NULL, published_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS multibanco_import (
+  country_code TEXT PRIMARY KEY REFERENCES country(country_code),
+  status TEXT NOT NULL CHECK (status IN ('none', 'mapping', 'mapped', 'failed')),
+  active_run_id TEXT, started_at TEXT, completed_at TEXT, batch_worker_id TEXT,
+  batch_lease_expires_at TEXT, backoff_until TEXT,
+  cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK (cancel_requested IN (0, 1)), last_error TEXT
+);
+CREATE TABLE IF NOT EXISTS multibanco_import_scope (
+  country_code TEXT NOT NULL REFERENCES country(country_code), place_id TEXT NOT NULL REFERENCES place(place_id),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  worker_id TEXT, lease_expires_at TEXT, completed_at TEXT, attempts INTEGER NOT NULL DEFAULT 0,
+  published INTEGER NOT NULL DEFAULT 0, rejected INTEGER NOT NULL DEFAULT 0, duplicates INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT, PRIMARY KEY (country_code, place_id)
+);
+CREATE INDEX IF NOT EXISTS idx_multibanco_import_scope_claim
+  ON multibanco_import_scope (country_code, status, lease_expires_at);
+
 -- KAN-386: reviewed source decisions are applied at read time so a later
 -- Foursquare reload cannot reintroduce a venue that was replaced by a more
 -- accurate OSM record. Raw source rows remain available for audit.

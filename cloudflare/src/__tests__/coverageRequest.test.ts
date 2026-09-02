@@ -164,6 +164,11 @@ function createFakeDb(
           if (trimmed.startsWith('SELECT osm_poi.osm_element_id')) {
             return { results: [] as T[] };
           }
+          // KAN-440 adds the official MULTIBANCO source. These fixtures are
+          // intentionally Foursquare-only unless a dedicated test supplies it.
+          if (trimmed.startsWith('SELECT source_id, dedupe_name, name, lat, lng, primary_poi_type, address, is_demo_zone')) {
+            return { results: [] as T[] };
+          }
           if (trimmed.startsWith('SELECT source, source_id, visible, name_override, dedupe_name_override')) {
             return { results: [] as T[] };
           }

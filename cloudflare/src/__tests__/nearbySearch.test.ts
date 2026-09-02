@@ -46,6 +46,13 @@ interface FakeOsmPoi {
   food_cuisine?: string[];
 }
 
+interface FakeMultibancoPoi {
+  source_id: string;
+  name: string;
+  primary_poi_type: string;
+  is_demo_zone?: number;
+}
+
 interface FakeSourceCorrection {
   source: 'overture' | 'openstreetmap';
   source_id: string;
@@ -57,7 +64,10 @@ interface FakeSourceCorrection {
 const LAT = 38.72;
 const LNG = -9.14;
 
-function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [], sourceCorrections: FakeSourceCorrection[] = []): Env['REGISTRY_DB'] {
+function fakeDb(
+  pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [],
+  sourceCorrections: FakeSourceCorrection[] = [], multibancoPois: FakeMultibancoPoi[] = [],
+): Env['REGISTRY_DB'] {
   const prepare = (sql: string) => {
     const trimmed = sql.trim();
     const stmt = {
@@ -140,6 +150,11 @@ function fakeDb(pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: Fa
           }
           return { results };
         }
+        if (trimmed.startsWith('SELECT source_id, dedupe_name, name, lat, lng, primary_poi_type, address, is_demo_zone')) {
+          return { results: multibancoPois.map(p => ({
+            ...p, dedupe_name: p.name.toLowerCase(), lat: LAT, lng: LNG, address: 'Odivelas', is_demo_zone: p.is_demo_zone ?? 0,
+          })) };
+        }
         throw new Error(`fake D1 unhandled all(): ${trimmed}`);
       },
     };
@@ -165,8 +180,11 @@ function nearbyRequest(requests: unknown[]) {
   });
 }
 
-function env(pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [], sourceCorrections: FakeSourceCorrection[] = []): Env {
-  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois, sourceCorrections) } as unknown as Env;
+function env(
+  pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [],
+  sourceCorrections: FakeSourceCorrection[] = [], multibancoPois: FakeMultibancoPoi[] = [],
+): Env {
+  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois, sourceCorrections, multibancoPois) } as unknown as Env;
 }
 
 const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
@@ -174,6 +192,29 @@ const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as Execut
 const names = (bucket: Array<{ name: string }> | undefined) => (bucket ?? []).map(p => p.name).sort();
 
 describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
+  it('uses the official MULTIBANCO ATM and suppresses the matching Odivelas source row', async () => {
+    const res = await worker.fetch(nearbyRequest([{ key: 'atm', type: 'atm' }]), env([
+      { fsq_place_id: 'stale-atm', name: 'ATM', raw_category_labels: '', category_label: '', primary_poi_type: 'atm' },
+    ], [], [], [], [
+      { source_id: 'multibanco:odivelas', name: 'MULTIBANCO', primary_poi_type: 'atm', is_demo_zone: 1 },
+    ]), CTX);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Record<string, Array<{ poi_id: string; source: string }>> };
+    expect(body.results.atm).toEqual([
+      expect.objectContaining({ poi_id: 'multibanco:odivelas', source: 'multibanco' }),
+    ]);
+  });
+
+  it('does not suppress a non-demo-zone ATM source', async () => {
+    const res = await worker.fetch(nearbyRequest([{ key: 'atm', type: 'atm' }]), env([
+      { fsq_place_id: 'existing-atm', name: 'ATM', raw_category_labels: '', category_label: '', primary_poi_type: 'atm' },
+    ], [], [], [], [
+      { source_id: 'multibanco:outside', name: 'MULTIBANCO', primary_poi_type: 'atm' },
+    ]), CTX);
+    const body = await res.json() as { results: Record<string, Array<{ source: string }>> };
+    expect(body.results.atm.map(p => p.source).sort()).toEqual(['foursquare', 'multibanco']);
+  });
+
   it('returns an OSM-only POI through the same nearby response', async () => {
     const res = await worker.fetch(nearbyRequest([
       { key: 'restaurant', type: 'restaurant' },
