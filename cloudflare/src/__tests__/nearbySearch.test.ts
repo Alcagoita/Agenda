@@ -30,6 +30,9 @@ interface FakePoi {
   financial_service_kind?: string[];
   primary_poi_type?: string;
   brand?: string | null;
+  floor?: string | null;
+  open_min?: number | null;
+  close_min?: number | null;
 }
 
 interface FakeCuratedPoi {
@@ -53,6 +56,12 @@ interface FakeMultibancoPoi {
   is_demo_zone?: number;
 }
 
+interface FakeLegacyPoi {
+  source_id: string;
+  name: string;
+  primary_poi_type: string;
+}
+
 interface FakeSourceCorrection {
   source: 'overture' | 'openstreetmap';
   source_id: string;
@@ -66,7 +75,7 @@ const LNG = -9.14;
 
 function fakeDb(
   pois: FakePoi[], curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [],
-  sourceCorrections: FakeSourceCorrection[] = [], multibancoPois: FakeMultibancoPoi[] = [],
+  sourceCorrections: FakeSourceCorrection[] = [], multibancoPois: FakeMultibancoPoi[] = [], legacyPois: FakeLegacyPoi[] = [],
 ): Env['REGISTRY_DB'] {
   const prepare = (sql: string) => {
     const trimmed = sql.trim();
@@ -89,7 +98,7 @@ function fakeDb(
             const base = {
               overture_id: p.overture_id, dedupe_name: p.name.toLowerCase(), name: p.name, lat: LAT, lng: LNG,
               primary_poi_type: p.primary_poi_type ?? 'restaurant', brand: p.brand ?? null,
-              address: null, floor: null, open_min: null, close_min: null,
+              address: null, floor: p.floor ?? null, open_min: p.open_min ?? null, close_min: p.close_min ?? null,
               matched_type: p.primary_poi_type ?? 'restaurant',
               correction_visible: correction?.visible ?? null,
               correction_name_override: correction?.name_override ?? null,
@@ -155,7 +164,9 @@ function fakeDb(
             ...p, dedupe_name: p.name.toLowerCase(), lat: LAT, lng: LNG, address: 'Odivelas', is_demo_zone: p.is_demo_zone ?? 0,
           })) };
         }
-        if (trimmed.startsWith('SELECT legacy_poi.source_id')) return { results: [] };
+        if (trimmed.startsWith('SELECT legacy_poi.source_id')) {
+          return { results: legacyPois.map(p => ({ ...p, dedupe_name: p.name.toLowerCase(), lat: LAT, lng: LNG, address: null, matched_type: p.primary_poi_type })) };
+        }
         throw new Error(`fake D1 unhandled all(): ${trimmed}`);
       },
     };
@@ -183,9 +194,9 @@ function nearbyRequest(requests: unknown[]) {
 
 function env(
   pois: FakePoi[] = POIS, curatedPois: FakeCuratedPoi[] = [], osmPois: FakeOsmPoi[] = [],
-  sourceCorrections: FakeSourceCorrection[] = [], multibancoPois: FakeMultibancoPoi[] = [],
+  sourceCorrections: FakeSourceCorrection[] = [], multibancoPois: FakeMultibancoPoi[] = [], legacyPois: FakeLegacyPoi[] = [],
 ): Env {
-  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois, sourceCorrections, multibancoPois) } as unknown as Env;
+  return { API_KEY: 'test-key', REGISTRY_DB: fakeDb(pois, curatedPois, osmPois, sourceCorrections, multibancoPois, legacyPois) } as unknown as Env;
 }
 
 const CTX = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;

@@ -144,10 +144,10 @@ function createFakeDb(
               const attributes = poiAttributeSeed.filter(attribute => attribute.overture_id === type.overture_id);
               if (!poi) continue;
               if (attributes.length === 0) {
-                results.push({ ...poi, floor: null, open_min: null, close_min: null, matched_type: type.poi_type, attribute_dimension: null, attribute_value: null });
+                results.push({ ...poi, floor: poi.floor ?? null, open_min: poi.open_min ?? null, close_min: poi.close_min ?? null, matched_type: type.poi_type, attribute_dimension: null, attribute_value: null });
               } else {
                 for (const attribute of attributes) {
-                  results.push({ ...poi, floor: null, open_min: null, close_min: null, matched_type: type.poi_type, attribute_dimension: attribute.dimension, attribute_value: attribute.value });
+                  results.push({ ...poi, floor: poi.floor ?? null, open_min: poi.open_min ?? null, close_min: poi.close_min ?? null, matched_type: type.poi_type, attribute_dimension: attribute.dimension, attribute_value: attribute.value });
                 }
               }
             }

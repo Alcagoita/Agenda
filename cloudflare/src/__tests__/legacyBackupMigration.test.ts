@@ -23,10 +23,16 @@ function preparedDb() {
     CREATE TABLE poi_type_backup_20260829 (fsq_place_id TEXT, poi_type TEXT, rank INTEGER);
     INSERT INTO poi_backup_20260829 (fsq_place_id, name, dedupe_name, lat, lng, geohash, primary_poi_type, date_refreshed)
     VALUES ('museum-1', 'Museu', 'museu', 38.7, -9.1, 'eycsx', 'museum', '2026-08-29'),
+           ('bank-1', 'Banco', 'banco', 38.7, -9.1, 'eycsx', 'bank', '2026-08-29'),
+           ('hidden-1', 'Fechado', 'fechado', 38.7, -9.1, 'eycsx', 'museum', '2026-08-29'),
            ('cafe-1', 'Café', 'cafe', 38.7, -9.1, 'eycsx', 'cafe', '2026-08-29'),
            ('atm-1', 'ATM', 'atm', 38.7, -9.1, 'eycsx', 'atm', '2026-08-29');
     INSERT INTO poi_type_backup_20260829 (fsq_place_id, poi_type, rank)
-    VALUES ('museum-1', 'museum', 0), ('cafe-1', 'cafe', 0), ('atm-1', 'atm', 0);
+    VALUES ('museum-1', 'historical_landmark', 0), ('museum-1', 'museum', 1),
+           ('bank-1', 'bank', 0), ('hidden-1', 'museum', 0),
+           ('cafe-1', 'cafe', 0), ('atm-1', 'atm', 0);
+    INSERT INTO poi_source_correction (source, source_id, visible, review_note)
+    VALUES ('foursquare', 'hidden-1', 0, 'source retired');
   `);
   return db;
 }
@@ -35,8 +41,15 @@ describe('KAN-438 selected backup preservation', () => {
   it('retains only agreed Outings types and leaves the immutable backups intact', () => {
     const db = preparedDb();
     db.exec(MIGRATION);
-    expect(db.prepare('SELECT source_id FROM legacy_poi').all()).toEqual([{ source_id: 'museum-1' }]);
-    expect(db.prepare('SELECT COUNT(*) AS c FROM poi_backup_20260829').get()).toEqual({ c: 3 });
+    expect(db.prepare('SELECT source_id, primary_poi_type FROM legacy_poi ORDER BY source_id').all()).toEqual([
+      { source_id: 'bank-1', primary_poi_type: 'bank' },
+      { source_id: 'museum-1', primary_poi_type: 'historical_landmark' },
+    ]);
+    expect(db.prepare("SELECT poi_type, rank FROM legacy_poi_type WHERE source_id = 'museum-1' ORDER BY rank").all()).toEqual([
+      { poi_type: 'historical_landmark', rank: 0 },
+      { poi_type: 'museum', rank: 1 },
+    ]);
+    expect(db.prepare('SELECT COUNT(*) AS c FROM poi_backup_20260829').get()).toEqual({ c: 5 });
     expect(db.prepare('SELECT COUNT(*) AS c FROM poi').get()).toEqual({ c: 0 });
   });
 });
