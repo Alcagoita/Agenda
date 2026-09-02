@@ -84,30 +84,47 @@ def locator_url(min_lat: float, max_lat: float, min_lng: float, max_lng: float, 
     return f'{LOCATOR_URL}?{urlencode({"action": LOCATOR_ACTION, "nelat": max_lat, "nelng": max_lng, "swlat": min_lat, "swlng": min_lng, "zoom": zoom})}'
 
 
-def fetch_markers(min_lat: float, max_lat: float, min_lng: float, max_lng: float) -> tuple[str, list[dict[str, Any]]]:
+def fetch_markers(min_lat: float, max_lat: float, min_lng: float, max_lng: float) -> tuple[str, list[object]]:
     # Kept local so parser/SQL unit tests do not need the Container's runtime
     # HTTP dependency installed.
     import requests
     url = locator_url(min_lat, max_lat, min_lng, max_lng)
-    response = requests.get(url, headers={'User-Agent': 'Brush MULTIBANCO importer/1.0 (support@brushaway.app)'}, timeout=30)
-    if response.status_code in (429, 503):
-        raise LocatorRateLimited(f'locator returned {response.status_code}')
-    response.raise_for_status()
-    declared_length = response.headers.get('content-length')
-    if declared_length and int(declared_length) > MAX_RESPONSE_BYTES:
-        raise ValueError('locator response exceeds the safe viewport limit')
-    if len(response.content) > MAX_RESPONSE_BYTES:
-        raise ValueError('locator response exceeds the safe viewport limit')
-    payload = response.json()
-    if not isinstance(payload, list):
-        raise ValueError('locator response is not a marker array')
-    return url, [entry for entry in payload if isinstance(entry, dict)]
+    response = requests.get(
+        url,
+        headers={'User-Agent': 'Brush MULTIBANCO importer/1.0 (support@brushaway.app)'},
+        timeout=30,
+        stream=True,
+    )
+    try:
+        if response.status_code in (429, 503):
+            raise LocatorRateLimited(f'locator returned {response.status_code}')
+        response.raise_for_status()
+        declared_length = response.headers.get('content-length')
+        if declared_length and int(declared_length) > MAX_RESPONSE_BYTES:
+            raise ValueError('locator response exceeds the safe viewport limit')
+
+        payload_bytes = bytearray()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if len(payload_bytes) + len(chunk) > MAX_RESPONSE_BYTES:
+                raise ValueError('locator response exceeds the safe viewport limit')
+            payload_bytes.extend(chunk)
+        payload = json.loads(payload_bytes)
+        if not isinstance(payload, list):
+            raise ValueError('locator response is not a marker array')
+        return url, payload
+    finally:
+        # This runs before ValueError propagates, promptly releasing a stream
+        # whose declared or actual body exceeded the viewport safety cap.
+        response.close()
 
 
-def parse_markers(raw_markers: list[dict[str, Any]]) -> tuple[list[Marker], int, int]:
+def parse_markers(raw_markers: list[object]) -> tuple[list[Marker], int, int]:
     records: dict[str, Marker] = {}
     rejected = duplicates = 0
     for raw in raw_markers:
+        if not isinstance(raw, dict):
+            rejected += 1
+            continue
         name, address = optional_text(raw.get('name')), optional_text(raw.get('address'))
         try:
             lat, lng = float(raw.get('lat')), float(raw.get('lng'))

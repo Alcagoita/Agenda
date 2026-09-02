@@ -2511,13 +2511,12 @@ export default {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
       const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
-      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
-        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) || body.countryCode.toUpperCase() !== 'PT') {
+        return json({ error: 'countryCode must be PT' }, 400);
       }
       const countryCode = body.countryCode.toUpperCase();
       const queued = await queueMultibancoImport(env, countryCode, Date.now());
       if ('error' in queued) return json({ error: queued.error }, 409);
-      if (queued.counts.total === 0) return json({ error: 'no bounded municipality scopes; import settlement metadata first' }, 409);
       if (queued.started && queued.runId) triggerBuild(env, ctx, 'multibanco-country', countryCode, undefined, queued.runId);
       return json({ ok: true, status: 'mapping', started: queued.started, seeded: queued.seeded, counts: queued.counts });
     }

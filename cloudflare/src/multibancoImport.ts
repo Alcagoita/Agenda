@@ -85,6 +85,18 @@ export async function queueMultibancoImport(env: Env, countryCode: string, now: 
     .bind(countryCode).first<{ status: string }>();
   if (!country || country.status !== 'mapped') return { started: false, seeded: 0, error: 'country must be mapped first' as const };
   const seeded = await seedMultibancoScopes(env, countryCode);
+  const counts = await multibancoScopeCounts(env, countryCode, now);
+  if (counts.total === 0) {
+    // No new run is created here. Clean up an impossible legacy mapping row
+    // too, so a release callback can never later finalize it as a run.
+    await env.REGISTRY_DB.prepare(
+      `UPDATE multibanco_import SET status = 'failed', active_run_id = NULL,
+         completed_at = ?, batch_worker_id = NULL, batch_lease_expires_at = NULL,
+         backoff_until = NULL, last_error = 'no bounded municipality scopes'
+       WHERE country_code = ? AND status = 'mapping'`,
+    ).bind(iso(now), countryCode).run();
+    return { started: false, seeded, error: 'no bounded municipality scopes; import settlement metadata first' as const };
+  }
   const runId = crypto.randomUUID();
   await env.REGISTRY_DB.prepare(
     `INSERT INTO multibanco_import (country_code, status, active_run_id, started_at, completed_at, cancel_requested)
@@ -100,7 +112,6 @@ export async function queueMultibancoImport(env: Env, countryCode: string, now: 
   const run = await env.REGISTRY_DB.prepare(
     'SELECT status, active_run_id, cancel_requested FROM multibanco_import WHERE country_code = ?',
   ).bind(countryCode).first<{ status: string; active_run_id: string | null; cancel_requested: number }>();
-  const counts = await multibancoScopeCounts(env, countryCode, now);
   return { started: run?.active_run_id === runId && counts.claimable > 0, seeded, runId: run?.active_run_id ?? null, counts };
 }
 
@@ -156,7 +167,8 @@ export async function failMultibancoScope(env: Env, options: {
   countryCode: string; placeId: string; workerId: string; error: string;
 }): Promise<boolean> {
   const result = await env.REGISTRY_DB.prepare(
-    `UPDATE multibanco_import_scope SET status = CASE WHEN attempts >= ${MULTIBANCO_MAX_ATTEMPTS} THEN 'failed' ELSE 'pending' END,
+    `UPDATE multibanco_import_scope SET attempts = attempts + 1,
+       status = CASE WHEN attempts + 1 >= ${MULTIBANCO_MAX_ATTEMPTS} THEN 'failed' ELSE 'pending' END,
        worker_id = NULL, lease_expires_at = NULL, last_error = ?
      WHERE country_code = ? AND place_id = ? AND worker_id = ? AND status = 'running'`,
   ).bind(options.error.slice(0, 1_000), options.countryCode, options.placeId, options.workerId).run();

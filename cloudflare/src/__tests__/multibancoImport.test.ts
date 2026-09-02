@@ -79,4 +79,41 @@ describe('KAN-440 MULTIBANCO import job', () => {
     const scope = db.prepare('SELECT status, attempts FROM multibanco_import_scope').get() as { status: string; attempts: number };
     expect(scope).toEqual({ status: 'pending', attempts: 0 });
   });
+
+  it('rejects non-Portugal queues and does not leave a zero-scope run mapping', async () => {
+    const foreign = await worker.fetch(post('/internal/multibanco/queue', { countryCode: 'ES' }), envFor(testDb()));
+    expect(foreign.status).toBe(400);
+
+    const db = testDb(0);
+    const empty = await worker.fetch(post('/internal/multibanco/queue', { countryCode: 'PT' }), envFor(db), CTX);
+    expect(empty.status).toBe(409);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM multibanco_import').get()).toEqual({ count: 0 });
+
+    db.prepare(`INSERT INTO multibanco_import (country_code, status, active_run_id, started_at, cancel_requested)
+      VALUES ('PT', 'mapping', 'orphaned-run', '2026-09-02T00:00:00.000Z', 0)`).run();
+    const recovered = await worker.fetch(post('/internal/multibanco/queue', { countryCode: 'PT' }), envFor(db), CTX);
+    expect(recovered.status).toBe(409);
+    expect(db.prepare('SELECT status, active_run_id FROM multibanco_import WHERE country_code = ?').get('PT'))
+      .toEqual({ status: 'failed', active_run_id: null });
+  });
+
+  it('parks a scope after the configured number of reported failures', async () => {
+    const db = testDb(1);
+    const env = envFor(db);
+    await worker.fetch(post('/internal/multibanco/queue', { countryCode: 'PT' }), env, CTX);
+    const runId = (mockStart.mock.calls.at(-1)?.[0] as { envVars: { MULTIBANCO_RUN_ID: string } }).envVars.MULTIBANCO_RUN_ID;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const claim = await (await worker.fetch(post('/internal/multibanco/claim', {
+        countryCode: 'PT', runId, workerId: 'w1', batchSize: 1,
+      }), env, CTX)).json<{ scopes: Array<{ placeId: string }> }>();
+      expect(claim.scopes).toHaveLength(1);
+      expect((await worker.fetch(post('/internal/multibanco/scope-result', {
+        countryCode: 'PT', placeId: claim.scopes[0].placeId, workerId: 'w1', status: 'failed', error: 'temporary error',
+      }), env, CTX)).status).toBe(200);
+    }
+
+    expect(db.prepare('SELECT status, attempts FROM multibanco_import_scope').get())
+      .toEqual({ status: 'failed', attempts: 3 });
+  });
 });
