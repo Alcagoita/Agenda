@@ -177,6 +177,12 @@ A request carrying a bearer token that fails verification is rejected with
 - `POST /internal/country-progress` `{countryCode}` — called by a
   country-mode Job once per Place it finishes, incrementing
   `country.place_count` so progress is visible before the whole run ends.
+- `POST /internal/multibanco/queue` `{countryCode}` — KAN-440's operational
+  official-ATM importer. It requires a mapped country with bounded
+  municipality metadata, runs small paced Container batches, and checkpoints
+  every completed viewport in D1. `GET /internal/multibanco/status` reports
+  durable progress; `POST /internal/multibanco/cancel` cooperatively stops a
+  run. The locator is never called from the mobile app.
 - `POST /internal/settlement-registry/queue` `{countryCode}` — after a
   country is `mapped`, starts the separate KAN-378 metadata-only job. It
   imports bounded OSM settlement areas into `place` for coverage and area

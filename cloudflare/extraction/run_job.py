@@ -20,6 +20,7 @@ API token or R2 keys needed here. Required environment:
 """
 import os
 import sys
+import time
 import traceback
 import uuid
 
@@ -32,12 +33,14 @@ from classify_and_load import classify
 import settlement_registry
 import supplement_osm_pois
 import enrich_osm_cuisine
+import multibanco_import
 
 # KAN-387. Municipalities per container invocation, processed serially —
 # Overpass politeness, and small enough that a dead instance loses little.
 # The Worker caps this too (OSM_SCOPE_BATCH_SIZE in osmSupplement.ts); it is
 # the authority, this is the request.
 OSM_SCOPE_BATCH_SIZE = 8
+MULTIBANCO_SCOPE_BATCH_SIZE = 8
 
 def supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng, country_code=None):
     """The per-Place OSM pass (KAN-394). Additive, and never fails the Place.
@@ -407,6 +410,43 @@ def run_osm_supplement(country_code, run_id):
     print(f"[run_job] batch {outcome}: {completed_scopes} of {len(scopes)} scopes this batch, "
           f"{counts.get('completed')}/{counts.get('total')} overall, finalized={released.get('finalized')}")
 
+
+def run_multibanco_import(country_code, run_id):
+    """Fetch a paced, bounded locator batch and checkpoint each scope."""
+    os.environ['D1_INTERNAL'] = '1'
+    worker_id = str(uuid.uuid4())
+    claim = worker_client.multibanco_claim_batch(country_code, run_id, worker_id, MULTIBANCO_SCOPE_BATCH_SIZE)
+    scopes = claim.get('scopes') or []
+    if not claim.get('locked'):
+        print(f'[run_job] MULTIBANCO {country_code}: no claimable batch')
+        return
+    if not scopes:
+        print(f"[run_job] MULTIBANCO {country_code}: finalized={worker_client.multibanco_batch_release(country_code, run_id, worker_id).get('finalized')}")
+        return
+    outcome = 'done'
+    for scope in scopes:
+        try:
+            source_url, raw = multibanco_import.fetch_markers(scope['minLat'], scope['maxLat'], scope['minLng'], scope['maxLng'])
+            markers, rejected, duplicates = multibanco_import.parse_markers(raw)
+            fetched_at = multibanco_import.utc_now()
+            bounds = {'minLat': scope['minLat'], 'maxLat': scope['maxLat'], 'minLng': scope['minLng'], 'maxLng': scope['maxLng']}
+            for marker in markers:
+                for statement in multibanco_import.statements_for_marker(marker, scope['placeId'], source_url, bounds, fetched_at):
+                    d1_client.execute(statement)
+            if not worker_client.multibanco_scope_completed(country_code, scope['placeId'], worker_id, len(markers), rejected, duplicates):
+                raise RuntimeError('scope checkpoint was rejected')
+            # Never burst requests merely because the upstream was fast.
+            time.sleep(multibanco_import.REQUEST_INTERVAL_SECONDS)
+        except multibanco_import.LocatorRateLimited:
+            traceback.print_exc()
+            outcome = 'rate_limited'
+            break
+        except Exception as error:
+            traceback.print_exc()
+            worker_client.multibanco_scope_failed(country_code, scope['placeId'], worker_id, f'{type(error).__name__}: {error}')
+    released = worker_client.multibanco_batch_release(country_code, run_id, worker_id, outcome)
+    print(f"[run_job] MULTIBANCO {country_code}: {outcome}, {released.get('counts', {}).get('completed')}/{released.get('counts', {}).get('total')} scopes")
+
 if __name__ == '__main__':
     os.makedirs(extract.BUILD_DIR, exist_ok=True)
     mode = os.environ.get('MODE')
@@ -441,6 +481,12 @@ if __name__ == '__main__':
             print('OSM_SUPPLEMENT_RUN_ID is required for osm-country mode', file=sys.stderr)
             sys.exit(2)
         run_osm_supplement(target.upper(), run_id)
+    elif mode == 'multibanco-country':
+        run_id = os.environ.get('MULTIBANCO_RUN_ID')
+        if not run_id:
+            print('MULTIBANCO_RUN_ID is required for multibanco-country mode', file=sys.stderr)
+            sys.exit(2)
+        run_multibanco_import(target.upper(), run_id)
     else:
-        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', or 'osm-country'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', 'osm-country', or 'multibanco-country'")
         sys.exit(2)
