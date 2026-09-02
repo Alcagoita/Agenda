@@ -9,6 +9,12 @@ import {
   parkExhaustedScopes, releaseBatch, requestCancel, retryFailedScopes, scopeCounts,
   seedScopes, startScope, supplementStatus, type OsmScopeErrorClass,
 } from './osmSupplement';
+import {
+  MULTIBANCO_SCOPE_BATCH_SIZE, cancelMultibancoImport, claimMultibancoBatch,
+  completeMultibancoScope, failMultibancoScope, multibancoImportStatus,
+  multibancoImportsAwaitingBatch, multibancoScopeCounts, queueMultibancoImport,
+  releaseMultibancoBatch,
+} from './multibancoImport';
 import brandDictionary from '../../src/constants/brandDictionary.json';
 import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
 
@@ -1182,7 +1188,7 @@ type NearbyPoi = {
   category_label: string | null; address: string | null;
   /** KAN-318: default opening window, minutes from local midnight; null = always open. */
   open_min: number | null; close_min: number | null;
-  source?: 'foursquare' | 'community' | 'manual' | 'openstreetmap';
+  source?: 'foursquare' | 'community' | 'manual' | 'openstreetmap' | 'multibanco';
   distanceMeters: number;
   attributes: Record<string, string[]>;
 };
@@ -1193,9 +1199,9 @@ interface NearbyQueryResult {
     d1Ms: number;
     filterMs: number;
     /** D1 rows before Worker-side de-duplication; never includes identity data. */
-    sourceRows: { foursquare: number; community: number; openstreetmap: number };
+    sourceRows: { foursquare: number; community: number; openstreetmap: number; multibanco: number };
     /** Unique visible candidates after source corrections and duplicate suppression. */
-    candidateCounts: { foursquare: number; community: number; openstreetmap: number };
+    candidateCounts: { foursquare: number; community: number; openstreetmap: number; multibanco: number };
     /** Bucket entries returned to the client; one POI can correctly appear in multiple buckets. */
     resultCount: number;
   };
@@ -1244,6 +1250,7 @@ async function queryNearbyPoiDb(
   const geohashClauses = prefixes.map(() => '(poi.geohash >= ? AND poi.geohash < ?)');
   const curatedGeohashClauses = prefixes.map(() => '(curated_poi.geohash >= ? AND curated_poi.geohash < ?)');
   const osmGeohashClauses = prefixes.map(() => '(osm_poi.geohash >= ? AND osm_poi.geohash < ?)');
+  const multibancoGeohashClauses = prefixes.map(() => '(multibanco_poi.geohash >= ? AND multibanco_poi.geohash < ?)');
   // Keep a brand-only Gym/Bank request in D1's predicate. A generic request
   // for the same type legitimately broadens its own bucket, but a sole
   // branded request never materialises unrelated candidates in Worker memory.
@@ -1253,6 +1260,8 @@ async function queryNearbyPoiDb(
   const curatedRequestBinds: unknown[] = [];
   const osmRequestClauses: string[] = [];
   const osmRequestBinds: unknown[] = [];
+  const multibancoRequestClauses: string[] = [];
+  const multibancoRequestBinds: unknown[] = [];
   for (let index = 0; index < requestedSearches.length; index++) {
     const request = requestedSearches[index];
     const types = relatedTypes[index];
@@ -1263,9 +1272,11 @@ async function queryNearbyPoiDb(
     curatedRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
     osmRequestClauses.push(`(osm_poi_type.poi_type IN (${placeholders})${request.brand ? ' AND osm_poi.brand = ?' : ''})`);
     osmRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
+    multibancoRequestClauses.push(`(multibanco_poi.primary_poi_type IN (${placeholders}))`);
+    multibancoRequestBinds.push(...types);
   }
   const d1StartedAt = performance.now();
-  const [{ results: rows }, { results: curatedRows }, { results: osmRows }] = await Promise.all([
+  const [{ results: rows }, { results: curatedRows }, { results: osmRows }, { results: multibancoRows }] = await Promise.all([
     db.prepare(
       `SELECT poi.fsq_place_id, poi.dedupe_name, poi.name, poi.lat, poi.lng, poi.primary_poi_type,
             poi.brand, poi.category_label, poi.raw_category_labels, poi.address,
@@ -1293,6 +1304,7 @@ async function queryNearbyPoiDb(
      FROM curated_poi
      LEFT JOIN curated_poi_attribute ON curated_poi_attribute.poi_id = curated_poi.poi_id
      WHERE curated_poi.status = 'active'
+       AND curated_poi.poi_id NOT LIKE 'multibanco:%'
        AND (${curatedGeohashClauses.join(' OR ')})
        AND (${curatedRequestClauses.join(' OR ')})`,
     ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...curatedRequestBinds).all<{
@@ -1323,11 +1335,21 @@ async function queryNearbyPoiDb(
       correction_visible: number | null; correction_name_override: string | null;
       correction_dedupe_name_override: string | null;
     }>(),
+    db.prepare(
+      `SELECT source_id, dedupe_name, name, lat, lng, primary_poi_type, address, is_demo_zone
+       FROM multibanco_poi
+       WHERE (${multibancoGeohashClauses.join(' OR ')}) AND (${multibancoRequestClauses.join(' OR ')})`,
+    ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...multibancoRequestBinds).all<{
+      source_id: string; dedupe_name: string; name: string; lat: number; lng: number;
+      primary_poi_type: string; address: string; is_demo_zone: number;
+    }>(),
   ]);
   const d1Ms = performance.now() - d1StartedAt;
 
   const filteringStartedAt = performance.now();
-  const candidates = new Map<string, NearbyPoi & { dedupeName: string; matchedTypes: Set<string>; rawCategoryLabels: string | null }>();
+  const candidates = new Map<string, NearbyPoi & {
+    dedupeName: string; matchedTypes: Set<string>; rawCategoryLabels: string | null; demoZone: boolean;
+  }>();
   for (const row of rows) {
     if (row.correction_visible === 0) continue;
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
@@ -1351,7 +1373,7 @@ async function queryNearbyPoiDb(
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
         matchedTypes: new Set([row.matched_type]),
-        rawCategoryLabels: row.raw_category_labels,
+        rawCategoryLabels: row.raw_category_labels, demoZone: false,
       });
     }
   }
@@ -1376,7 +1398,7 @@ async function queryNearbyPoiDb(
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
-        matchedTypes: new Set([row.primary_poi_type]), rawCategoryLabels: null,
+        matchedTypes: new Set([row.primary_poi_type]), rawCategoryLabels: null, demoZone: false,
       });
     }
   }
@@ -1402,8 +1424,32 @@ async function queryNearbyPoiDb(
         distanceMeters, attributes: row.attribute_dimension && row.attribute_value
           ? { [row.attribute_dimension]: [row.attribute_value] }
           : {},
-        matchedTypes: new Set([row.matched_type]), rawCategoryLabels: null,
+        matchedTypes: new Set([row.matched_type]), rawCategoryLabels: null, demoZone: false,
       });
+    }
+  }
+
+  for (const row of multibancoRows) {
+    const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
+    if (distanceMeters > radiusMeters) continue;
+    candidates.set(`multibanco:${row.source_id}`, {
+      poi_id: row.source_id, fsq_place_id: null, name: row.name, lat: row.lat, lng: row.lng,
+      primary_poi_type: row.primary_poi_type, brand: null, category_label: null, address: row.address,
+      open_min: null, close_min: null, source: 'multibanco', dedupeName: row.dedupe_name,
+      distanceMeters, attributes: {}, matchedTypes: new Set([row.primary_poi_type]), rawCategoryLabels: null,
+      demoZone: row.is_demo_zone === 1,
+    });
+  }
+
+  // Odivelas rollout: official MULTIBANCO ATMs take precedence at the same
+  // physical location. The lower-priority source remains stored for audit.
+  const officialDemoAtms = [...candidates.values()].filter(candidate =>
+    candidate.source === 'multibanco' && candidate.demoZone && candidate.primary_poi_type === 'atm');
+  for (const [key, candidate] of candidates) {
+    if (candidate.source === 'multibanco' || candidate.primary_poi_type !== 'atm') continue;
+    if (officialDemoAtms.some(official =>
+      haversineMeters(official.lat, official.lng, candidate.lat, candidate.lng) <= MANUAL_POI_DUPLICATE_DISTANCE_METERS)) {
+      candidates.delete(key);
     }
   }
 
@@ -1414,7 +1460,7 @@ async function queryNearbyPoiDb(
   const foursquareCandidates = [...candidates.values()].filter(candidate => candidate.source === 'foursquare');
   const curatedCandidates = [...candidates.values()].filter(candidate => candidate.source === 'community');
   for (const [key, candidate] of candidates) {
-    if (candidate.source === 'foursquare') continue;
+    if (candidate.source === 'foursquare' || candidate.source === 'multibanco') continue;
     // Preserve the established Foursquare-over-community precedence. An OSM
     // supplement is lower priority than either existing source.
     const suppressors = candidate.source === 'community'
@@ -1425,11 +1471,12 @@ async function queryNearbyPoiDb(
     }
   }
 
-  const candidateCounts = { foursquare: 0, community: 0, openstreetmap: 0 };
+  const candidateCounts = { foursquare: 0, community: 0, openstreetmap: 0, multibanco: 0 };
   for (const candidate of candidates.values()) {
     if (candidate.source === 'foursquare') candidateCounts.foursquare++;
     else if (candidate.source === 'community') candidateCounts.community++;
     else if (candidate.source === 'openstreetmap') candidateCounts.openstreetmap++;
+    else if (candidate.source === 'multibanco') candidateCounts.multibanco++;
   }
 
   const result = Object.fromEntries(requestedSearches.map(request => [request.key, [] as NearbyPoi[]])) as Record<string, NearbyPoi[]>;
@@ -1462,7 +1509,7 @@ async function queryNearbyPoiDb(
     timings: {
       d1Ms,
       filterMs: performance.now() - filteringStartedAt,
-      sourceRows: { foursquare: rows.length, community: curatedRows.length, openstreetmap: osmRows.length },
+      sourceRows: { foursquare: rows.length, community: curatedRows.length, openstreetmap: osmRows.length, multibanco: multibancoRows.length },
       candidateCounts,
       resultCount,
     },
@@ -1550,7 +1597,7 @@ const OSM_SCOPE_ERROR_CLASSES = new Set<OsmScopeErrorClass>([
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
-  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country',
+  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country' | 'multibanco-country',
   target: string,
   countrySourceR2Key?: string,
   countryRunId?: string,
@@ -1566,6 +1613,7 @@ function triggerBuild(
       ...(countrySourceR2Key ? { COUNTRY_SOURCE_R2_KEY: countrySourceR2Key } : {}),
       ...(countryRunId ? { COUNTRY_RUN_ID: countryRunId } : {}),
       ...(mode === 'osm-country' ? { D1_INTERNAL: '1', OSM_SUPPLEMENT_RUN_ID: countryRunId ?? '' } : {}),
+      ...(mode === 'multibanco-country' ? { D1_INTERNAL: '1', MULTIBANCO_RUN_ID: countryRunId ?? '' } : {}),
     },
   }).catch(async (error) => {
     // A detached promise is cancelled when the Worker finishes the request.
@@ -1583,6 +1631,10 @@ function triggerBuild(
     } else if (mode === 'osm-country') {
       await env.REGISTRY_DB.prepare(
         "UPDATE osm_supplement_import SET status = 'failed', completed_at = ?, last_error = ? WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?",
+      ).bind(new Date().toISOString(), 'container start failed', target, countryRunId ?? '').run();
+    } else if (mode === 'multibanco-country') {
+      await env.REGISTRY_DB.prepare(
+        "UPDATE multibanco_import SET status = 'failed', completed_at = ?, last_error = ? WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?",
       ).bind(new Date().toISOString(), 'container start failed', target, countryRunId ?? '').run();
     } else {
       await env.REGISTRY_DB.prepare(
@@ -1678,6 +1730,20 @@ export default {
         continue;
       }
       triggerBuild(env, ctx, 'osm-country', country.country_code, undefined, country.active_run_id);
+    }
+    for (const country of await multibancoImportsAwaitingBatch(env, now)) {
+      if (!country.active_run_id) continue;
+      const counts = await multibancoScopeCounts(env, country.country_code, now);
+      if (counts.claimable === 0) {
+        if (counts.running === 0) {
+          await releaseMultibancoBatch(env, {
+            countryCode: country.country_code, runId: country.active_run_id,
+            workerId: 'cron', outcome: 'done', now,
+          });
+        }
+        continue;
+      }
+      triggerBuild(env, ctx, 'multibanco-country', country.country_code, undefined, country.active_run_id);
     }
   },
 
@@ -2435,6 +2501,105 @@ export default {
       }
       const cancelled = await requestCancel(env, body.countryCode.toUpperCase(), Date.now());
       if (!cancelled) return json({ error: 'no run is mapping for that country' }, 409);
+      return json({ ok: true });
+    }
+
+    // KAN-440 — start the official ATM source independently of the existing
+    // Foursquare/OSM pipelines. A batch processes municipality bboxes with a
+    // durable lease; cron resumes it until every scope is fresh.
+    if (url.pathname === '/internal/multibanco/queue' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) || body.countryCode.toUpperCase() !== 'PT') {
+        return json({ error: 'countryCode must be PT' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const queued = await queueMultibancoImport(env, countryCode, Date.now());
+      if ('error' in queued) return json({ error: queued.error }, 409);
+      if (queued.started && queued.runId) triggerBuild(env, ctx, 'multibanco-country', countryCode, undefined, queued.runId);
+      return json({ ok: true, status: 'mapping', started: queued.started, seeded: queued.seeded, counts: queued.counts });
+    }
+
+    if (url.pathname === '/internal/multibanco/claim' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.runId !== 'string' || !body.runId || typeof body.workerId !== 'string' || !body.workerId) {
+        return json({ error: 'invalid MULTIBANCO claim payload' }, 400);
+      }
+      const batchSize = Number.isSafeInteger(body.batchSize) ? body.batchSize as number : MULTIBANCO_SCOPE_BATCH_SIZE;
+      return json({ ok: true, ...await claimMultibancoBatch(env, {
+        countryCode: body.countryCode.toUpperCase(), runId: body.runId, workerId: body.workerId, batchSize, now: Date.now(),
+      }) });
+    }
+
+    if (url.pathname === '/internal/multibanco/scope-result' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.placeId !== 'string' || !body.placeId || typeof body.workerId !== 'string' || !body.workerId ||
+          (body.status !== 'completed' && body.status !== 'failed')) {
+        return json({ error: 'invalid MULTIBANCO scope-result payload' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      let ok: boolean;
+      if (body.status === 'completed') {
+        const fields = ['published', 'rejected', 'duplicates'] as const;
+        if (fields.some(field => !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
+          return json({ error: 'scope counts must be non-negative integers' }, 400);
+        }
+        ok = await completeMultibancoScope(env, {
+          countryCode, placeId: body.placeId, workerId: body.workerId, now: Date.now(),
+          published: body.published as number, rejected: body.rejected as number, duplicates: body.duplicates as number,
+        });
+      } else {
+        ok = await failMultibancoScope(env, {
+          countryCode, placeId: body.placeId, workerId: body.workerId,
+          error: typeof body.error === 'string' ? body.error : 'unknown',
+        });
+      }
+      if (!ok) return json({ error: 'scope is not leased by this worker' }, 409);
+      return json({ ok: true });
+    }
+
+    if (url.pathname === '/internal/multibanco/batch-release' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode) ||
+          typeof body.runId !== 'string' || !body.runId || typeof body.workerId !== 'string' || !body.workerId ||
+          (body.outcome !== 'done' && body.outcome !== 'rate_limited')) {
+        return json({ error: 'invalid MULTIBANCO batch-release payload' }, 400);
+      }
+      return json({ ok: true, ...await releaseMultibancoBatch(env, {
+        countryCode: body.countryCode.toUpperCase(), runId: body.runId, workerId: body.workerId,
+        outcome: body.outcome, now: Date.now(),
+      }) });
+    }
+
+    if (url.pathname === '/internal/multibanco/status' && request.method === 'GET') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const countryCode = (url.searchParams.get('countryCode') ?? '').toUpperCase();
+      if (!/^[A-Z]{2}$/.test(countryCode)) return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      const status = await multibancoImportStatus(env, countryCode, Date.now());
+      if (!status) return json({ error: `no MULTIBANCO import for '${countryCode}'` }, 404);
+      return json(status);
+    }
+
+    if (url.pathname === '/internal/multibanco/cancel' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
+        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      }
+      if (!await cancelMultibancoImport(env, body.countryCode.toUpperCase(), Date.now())) {
+        return json({ error: 'no MULTIBANCO run is mapping for that country' }, 409);
+      }
       return json({ ok: true });
     }
 

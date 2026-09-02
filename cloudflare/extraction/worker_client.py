@@ -167,3 +167,31 @@ def osm_batch_release(country_code, run_id, worker_id, outcome='done', completed
         'workerId': worker_id, 'outcome': outcome,
         'completedScopes': completed_scopes,
     })
+
+
+# KAN-440. Same D1-owned checkpoint boundary as the OSM supplement; the
+# Container carries no Cloudflare token and never owns job state itself.
+def multibanco_claim_batch(country_code, run_id, worker_id, batch_size):
+    return _post('/internal/multibanco/claim', {
+        'countryCode': country_code, 'runId': run_id, 'workerId': worker_id, 'batchSize': batch_size,
+    })
+
+
+def multibanco_scope_completed(country_code, place_id, worker_id, published, rejected, duplicates):
+    return _post('/internal/multibanco/scope-result', {
+        'countryCode': country_code, 'placeId': place_id, 'workerId': worker_id, 'status': 'completed',
+        'published': published, 'rejected': rejected, 'duplicates': duplicates,
+    })
+
+
+def multibanco_scope_failed(country_code, place_id, worker_id, error):
+    return _post('/internal/multibanco/scope-result', {
+        'countryCode': country_code, 'placeId': place_id, 'workerId': worker_id, 'status': 'failed',
+        'error': str(error)[:1_000],
+    })
+
+
+def multibanco_batch_release(country_code, run_id, worker_id, outcome='done'):
+    return _post('/internal/multibanco/batch-release', {
+        'countryCode': country_code, 'runId': run_id, 'workerId': worker_id, 'outcome': outcome,
+    })
