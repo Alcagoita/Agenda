@@ -80,12 +80,13 @@ interface FakeSettlementRegistryRow {
 }
 
 interface FakePoiRow {
-  fsq_place_id: string; name: string; lat: number; lng: number; geohash: string;
+  overture_id: string; name: string; lat: number; lng: number; geohash: string;
   primary_poi_type: string; brand: string | null; category_label: string | null; address: string | null;
+  floor?: string | null; open_min?: number | null; close_min?: number | null;
 }
 
-interface FakePoiTypeRow { fsq_place_id: string; poi_type: string; }
-interface FakePoiAttributeRow { fsq_place_id: string; dimension: string; value: string; }
+interface FakePoiTypeRow { overture_id: string; poi_type: string; }
+interface FakePoiAttributeRow { overture_id: string; dimension: string; value: string; }
 
 function createFakeDb(
   seed: FakePlaceRow[] = [],
@@ -136,21 +137,24 @@ function createFakeDb(
           if (trimmed.startsWith('SELECT search_type, include_type FROM type_relation')) {
             return { results: [] as T[] };
           }
-          if (trimmed.startsWith('SELECT poi.fsq_place_id')) {
+          if (trimmed.startsWith('SELECT overture_poi.overture_id')) {
             const results: Array<FakePoiRow & { matched_type: string; attribute_dimension: string | null; attribute_value: string | null }> = [];
             for (const type of poiTypeSeed) {
-              const poi = poiSeed.find(row => row.fsq_place_id === type.fsq_place_id);
-              const attributes = poiAttributeSeed.filter(attribute => attribute.fsq_place_id === type.fsq_place_id);
+              const poi = poiSeed.find(row => row.overture_id === type.overture_id);
+              const attributes = poiAttributeSeed.filter(attribute => attribute.overture_id === type.overture_id);
               if (!poi) continue;
               if (attributes.length === 0) {
-                results.push({ ...poi, matched_type: type.poi_type, attribute_dimension: null, attribute_value: null });
+                results.push({ ...poi, floor: poi.floor ?? null, open_min: poi.open_min ?? null, close_min: poi.close_min ?? null, matched_type: type.poi_type, attribute_dimension: null, attribute_value: null });
               } else {
                 for (const attribute of attributes) {
-                  results.push({ ...poi, matched_type: type.poi_type, attribute_dimension: attribute.dimension, attribute_value: attribute.value });
+                  results.push({ ...poi, floor: poi.floor ?? null, open_min: poi.open_min ?? null, close_min: poi.close_min ?? null, matched_type: type.poi_type, attribute_dimension: attribute.dimension, attribute_value: attribute.value });
                 }
               }
             }
             return { results: results as T[] };
+          }
+          if (trimmed.startsWith('SELECT legacy_poi.source_id')) {
+            return { results: [] as T[] };
           }
           // KAN-362 adds a second, curated source to the same radius search.
           // These existing tests seed only Foursquare rows, so its result is
@@ -522,29 +526,32 @@ describe('GET /poi/nearby', () => {
   it('searches global POIs without a Place lookup, returns typed nearest buckets, and limits each bucket', async () => {
     const env = makeEnv([], {
       poiSeed: [
-        { fsq_place_id: 'cafe-near', name: 'Near Cafe', lat: 38.7223, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
-        { fsq_place_id: 'both', name: 'Cafe Pharmacy', lat: 38.7225, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
-        { fsq_place_id: 'cafe-far', name: 'Far Cafe', lat: 38.7231, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
-        { fsq_place_id: 'cafe-outside-radius', name: 'Outside Cafe', lat: 38.7273, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
-        { fsq_place_id: 'pharmacy-far', name: 'Far Pharmacy', lat: 38.7228, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'pharmacy', brand: null, category_label: null, address: null },
+        { overture_id: 'cafe-near', name: 'Near Cafe', lat: 38.7223, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { overture_id: 'both', name: 'Cafe Pharmacy', lat: 38.7225, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { overture_id: 'cafe-far', name: 'Far Cafe', lat: 38.7231, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { overture_id: 'cafe-outside-radius', name: 'Outside Cafe', lat: 38.7273, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'cafe', brand: null, category_label: null, address: null },
+        { overture_id: 'pharmacy-far', name: 'Far Pharmacy', lat: 38.7228, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'pharmacy', brand: null, category_label: null, address: null },
       ],
       poiTypeSeed: [
-        { fsq_place_id: 'cafe-near', poi_type: 'cafe' },
-        { fsq_place_id: 'both', poi_type: 'cafe' },
-        { fsq_place_id: 'both', poi_type: 'pharmacy' },
-        { fsq_place_id: 'cafe-far', poi_type: 'cafe' },
-        { fsq_place_id: 'cafe-outside-radius', poi_type: 'cafe' },
-        { fsq_place_id: 'pharmacy-far', poi_type: 'pharmacy' },
+        { overture_id: 'cafe-near', poi_type: 'cafe' },
+        { overture_id: 'both', poi_type: 'cafe' },
+        { overture_id: 'both', poi_type: 'pharmacy' },
+        { overture_id: 'cafe-far', poi_type: 'cafe' },
+        { overture_id: 'cafe-outside-radius', poi_type: 'cafe' },
+        { overture_id: 'pharmacy-far', poi_type: 'pharmacy' },
       ],
     });
 
     const res = await worker.fetch(apiRequest('/poi/nearby?lat=38.7223&lng=-9.1393&radius=500&types=cafe,pharmacy&limitPerType=2'), env);
     expect(res.status).toBe(200);
     expect(res.headers.get('Server-Timing')).toContain('d1;dur=');
-    const body = await res.json() as { results: Record<string, Array<{ fsq_place_id: string }>> };
-    expect(body.results.cafe.map(poi => poi.fsq_place_id)).toEqual(['cafe-near', 'both']);
-    expect(body.results.pharmacy.map(poi => poi.fsq_place_id)).toEqual(['both', 'pharmacy-far']);
-    expect(body.results.cafe.map(poi => poi.fsq_place_id)).not.toContain('cafe-outside-radius');
+    const body = await res.json() as { results: Record<string, Array<{ poi_id: string; fsq_place_id: string | null }>> };
+    expect(body.results.cafe.map(poi => poi.poi_id)).toEqual(['cafe-near', 'both']);
+    expect(body.results.pharmacy.map(poi => poi.poi_id)).toEqual(['both', 'pharmacy-far']);
+    expect(body.results.cafe.map(poi => poi.poi_id)).not.toContain('cafe-outside-radius');
+    // Foursquare is retired; the field stays in the payload for installed
+    // clients but must never carry another source's id.
+    expect(body.results.cafe.every(poi => poi.fsq_place_id === null)).toBe(true);
   });
 
   it('requires requested types and a bounded per-type limit', async () => {
@@ -576,8 +583,8 @@ describe('POST /poi/nearby', () => {
         request_count: 0, first_requested_at: null, last_requested_at: null,
       },
     ], {
-      poiSeed: [{ fsq_place_id: 'store', name: 'Store', lat: 38.7549, lng: -9.1887, geohash: 'eyc', primary_poi_type: 'store', brand: null, category_label: null, address: null }],
-      poiTypeSeed: [{ fsq_place_id: 'store', poi_type: 'store' }],
+      poiSeed: [{ overture_id: 'store', name: 'Store', lat: 38.7549, lng: -9.1887, geohash: 'eyc', primary_poi_type: 'store', brand: null, category_label: null, address: null }],
+      poiTypeSeed: [{ overture_id: 'store', poi_type: 'store' }],
     });
     const request = { radius: 200, limitPerRequest: 20, requests: [{ key: 'store', type: 'store' }] };
 
@@ -591,16 +598,16 @@ describe('POST /poi/nearby', () => {
   it('returns independently limited subtype buckets and the stored subtype attribute', async () => {
     const env = makeEnv([], {
       poiSeed: [
-        { fsq_place_id: 'sushi-near', name: 'Sushi Near', lat: 38.7223, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'restaurant', brand: null, category_label: null, address: null },
-        { fsq_place_id: 'vegetarian-near', name: 'Veg Near', lat: 38.7224, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'restaurant', brand: null, category_label: null, address: null },
+        { overture_id: 'sushi-near', name: 'Sushi Near', lat: 38.7223, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'restaurant', brand: null, category_label: null, address: null },
+        { overture_id: 'vegetarian-near', name: 'Veg Near', lat: 38.7224, lng: -9.1393, geohash: 'eyc', primary_poi_type: 'restaurant', brand: null, category_label: null, address: null },
       ],
       poiTypeSeed: [
-        { fsq_place_id: 'sushi-near', poi_type: 'restaurant' },
-        { fsq_place_id: 'vegetarian-near', poi_type: 'restaurant' },
+        { overture_id: 'sushi-near', poi_type: 'restaurant' },
+        { overture_id: 'vegetarian-near', poi_type: 'restaurant' },
       ],
       poiAttributeSeed: [
-        { fsq_place_id: 'sushi-near', dimension: 'food_cuisine', value: 'sushi' },
-        { fsq_place_id: 'vegetarian-near', dimension: 'food_cuisine', value: 'vegetarian' },
+        { overture_id: 'sushi-near', dimension: 'food_cuisine', value: 'sushi' },
+        { overture_id: 'vegetarian-near', dimension: 'food_cuisine', value: 'vegetarian' },
       ],
     });
 
@@ -613,11 +620,11 @@ describe('POST /poi/nearby', () => {
     }), env);
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { results: Record<string, Array<{ fsq_place_id: string; attributes: Record<string, string[]> }>> };
+    const body = await res.json() as { results: Record<string, Array<{ poi_id: string; attributes: Record<string, string[]> }>> };
     expect(body.results.sushi).toHaveLength(1);
     expect(body.results.vegetarian).toHaveLength(1);
-    expect(body.results.sushi[0]).toMatchObject({ fsq_place_id: 'sushi-near', attributes: { food_cuisine: ['sushi'] } });
-    expect(body.results.vegetarian[0]).toMatchObject({ fsq_place_id: 'vegetarian-near', attributes: { food_cuisine: ['vegetarian'] } });
+    expect(body.results.sushi[0]).toMatchObject({ poi_id: 'sushi-near', attributes: { food_cuisine: ['sushi'] } });
+    expect(body.results.vegetarian[0]).toMatchObject({ poi_id: 'vegetarian-near', attributes: { food_cuisine: ['vegetarian'] } });
   });
 
   it('rejects arbitrary attribute dimensions and values', async () => {
