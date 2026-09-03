@@ -12,20 +12,31 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyse_poi_candidates import reachable_types
-from classify_and_load import load_brand_dictionary
-from promote_overture_candidates import category_map, decide
+from classify_and_load import load_brand_dictionary, load_financial_service_name_rules
+from promote_overture_candidates import (
+    category_map, decide, food_cuisine_alias_index, store_brand_index,
+    store_kind_alias_index,
+)
 
 
 def unresolved_rows(csv_path):
     mapping, reachable, brands = category_map(), reachable_types(), load_brand_dictionary()
+    store_kinds = store_kind_alias_index()
+    food_cuisines = food_cuisine_alias_index()
+    financial_rules = load_financial_service_name_rules()
+    store_brands = store_brand_index()
     with open(csv_path, newline='') as handle:
         for row in csv.DictReader(handle):
-            status, types, attributes, reason = decide(row, mapping, reachable, brands)
+            status, types, attributes, reason = decide(
+                row, mapping, reachable, brands, store_kinds, food_cuisines,
+                financial_rules, store_brands)
             if status != 'promoted':
                 yield row, status, reason or 'no reachable type'
 
 
 def write_report(csv_path, out_path):
+    if os.path.realpath(csv_path) == os.path.realpath(out_path):
+        raise ValueError('csv_path and out_path must be different files')
     counts = Counter()
     with open(out_path, 'w', newline='') as handle:
         writer = csv.writer(handle, delimiter='\t')
