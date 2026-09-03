@@ -181,6 +181,18 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(types[0], 'butcher')
         self.assertEqual(reason, 'name: butcher')
 
+    def test_brand_supplies_a_kind_only_for_a_shopping_shrug(self):
+        status, types, attributes, reason = self.decide('Zara Chiado', 'shopping')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('store',))
+        self.assertIn(('store_kind', 'clothing'), attributes)
+        self.assertEqual(reason, 'brand: store/clothing')
+
+    def test_brand_does_not_rescue_a_non_shop_category(self):
+        status, types, _, _ = self.decide('IKEA Parking', 'parking')
+        self.assertEqual(status, 'pending')
+        self.assertEqual(types, ())
+
     def test_the_name_adds_to_a_mapped_category_but_never_outranks_it(self):
         # The category mapped, so it stays rank 0 — rank 0 becomes
         # primary_poi_type, which is what the app shows.

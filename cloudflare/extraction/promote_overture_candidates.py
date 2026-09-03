@@ -39,7 +39,7 @@ from datetime import date, datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyse_poi_candidates import paged, query, reachable_types
 from classify_and_load import (
-    MAX_STATEMENT_BYTES, build_alias_index, byte_len, encode_geohash, find_brand,
+    MAX_STATEMENT_BYTES, brand_form_matches, build_alias_index, byte_len, encode_geohash, find_brand,
     financial_service_classification, load_brand_dictionary,
     load_financial_service_name_rules, load_keyword_dictionary,
     match_keyword_subtypes, normalize_text, replaces_generic_store, sql_escape,
@@ -153,6 +153,19 @@ def food_cuisine_alias_index():
     return build_alias_index(load_keyword_dictionary('restaurantFoodDictionary.json'))
 
 
+def store_brand_index():
+    dictionary = load_keyword_dictionary('storeSubtypeDictionary.json')
+    return [(kind, brand, normalize_text(brand)) for kind, entry in dictionary.items()
+            if kind != 'any' for brand in entry.get('stores', [])]
+
+
+def store_kind_from_brand(name, index):
+    normalized = normalize_text(name or '')
+    matched = {kind for kind, brand, normalized_brand in index
+               if brand_form_matches(normalized_brand, normalized, name, brand)}
+    return next(iter(matched)) if len(matched) == 1 else None
+
+
 def is_non_multibanco_atm(name):
     normalized = normalize_text(name or '')
     padded = f' {normalized} '
@@ -166,7 +179,7 @@ def category_map():
 
 
 def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
-           food_cuisine_aliases=None, financial_service_rules=None):
+           food_cuisine_aliases=None, financial_service_rules=None, store_brands=None):
     """(status, types, attributes, reason) for one candidate.
 
     `types` is ranked: the category's answer first, then anything the name
@@ -178,6 +191,8 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
         food_cuisine_aliases = food_cuisine_alias_index()
     if financial_service_rules is None:
         financial_service_rules = load_financial_service_name_rules()
+    if store_brands is None:
+        store_brands = store_brand_index()
     normalized = normalize_text(row['name'] or '')
     if not normalized:
         return 'rejected', (), (), 'unnamed'
@@ -224,6 +239,13 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
             reason = f'financial service: {service_type}'
         if financial_service_kind:
             attributes.append(('financial_service_kind', financial_service_kind))
+
+    if not types and row['category'] in ('shopping', None):
+        kind = store_kind_from_brand(row['name'], store_brands)
+        if kind and 'store' in reachable:
+            types.append(reachable['store'])
+            attributes.append(('store_kind', kind))
+            reason = f'brand: store/{kind}'
 
     # The name may add, never replace. A category that mapped is the source's
     # considered answer; the name is an inference from a string.
@@ -351,6 +373,7 @@ def run(batch, out_dir, dry_run):
     store_kind_aliases = store_kind_alias_index()
     food_cuisine_aliases = food_cuisine_alias_index()
     financial_service_rules = load_financial_service_name_rules()
+    store_brands = store_brand_index()
     refreshed = date.today().isoformat()
 
     stats = Counter()
@@ -371,7 +394,7 @@ def run(batch, out_dir, dry_run):
     ):
         status, types, attributes, reason = decide(
             row, mapping, reachable, brand_dictionary, store_kind_aliases,
-            food_cuisine_aliases, financial_service_rules)
+            food_cuisine_aliases, financial_service_rules, store_brands)
         stats[status] += 1
         if status == 'promoted':
             by_type[types[0]] += 1
