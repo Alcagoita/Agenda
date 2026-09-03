@@ -112,6 +112,24 @@ class PagedCursorTest(unittest.TestCase):
                 os.environ['D1_INTERNAL'] = previous
         self.assertEqual(seen, ['SELECT poi_type FROM type_relation'])
 
+    def test_overture_mode_uses_the_d1_binding_when_the_generic_flag_is_absent(self):
+        fake_d1 = types.SimpleNamespace(select=lambda _sql: [{'poi_type': 'cafe'}])
+        old_mode, old_internal = os.environ.get('MODE'), os.environ.get('D1_INTERNAL')
+        os.environ['MODE'] = 'overture-country'
+        os.environ.pop('D1_INTERNAL', None)
+        try:
+            with mock.patch.dict(sys.modules, {'d1_client': fake_d1}):
+                self.assertEqual(A.query('SELECT poi_type FROM type_relation'), [{'poi_type': 'cafe'}])
+        finally:
+            if old_mode is None:
+                os.environ.pop('MODE', None)
+            else:
+                os.environ['MODE'] = old_mode
+            if old_internal is None:
+                os.environ.pop('D1_INTERNAL', None)
+            else:
+                os.environ['D1_INTERNAL'] = old_internal
+
 
 if __name__ == '__main__':
     unittest.main()

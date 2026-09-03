@@ -67,7 +67,11 @@ def query(sql, attempts=5):
     on a blip after several minutes of work, which is how the first run of
     this script ended.
     """
-    if os.environ.get('D1_INTERNAL') == '1':
+    # `D1_INTERNAL` is the generic binding signal.  `MODE` is also passed by
+    # the Worker and is the authoritative job identity: keep it as a second
+    # guard because a container env-var propagation regression must never
+    # send a national import back to workstation-only npx.
+    if os.environ.get('D1_INTERNAL') == '1' or os.environ.get('MODE') == 'overture-country':
         import d1_client
         return d1_client.select(sql)
 
