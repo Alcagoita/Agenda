@@ -55,14 +55,22 @@ GRID_DEG = MATCH_RADIUS_METERS / 111_000
 
 
 def query(sql, attempts=5):
-    """Read-only, through wrangler. This runs from a workstation, not the
-    container, so d1.internal does not resolve here.
+    """Read-only, through the container binding or Wrangler.
+
+    The country importer runs this module inside the extraction container,
+    where there is deliberately no Node/Wrangler installation.  Its D1
+    outbound binding is the correct read path there; workstation tools keep
+    using Wrangler below.
 
     Retried with backoff: a full pass is ~50 CLI calls in quick succession
     and the API intermittently refuses one. Without this the whole scan dies
     on a blip after several minutes of work, which is how the first run of
     this script ended.
     """
+    if os.environ.get('D1_INTERNAL') == '1':
+        import d1_client
+        return d1_client.select(sql)
+
     for attempt in range(attempts):
         result = subprocess.run(
             ['npx', 'wrangler', 'd1', 'execute', 'brush-poi-registry', '--remote',
