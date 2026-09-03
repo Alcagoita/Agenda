@@ -1284,7 +1284,6 @@ async function queryNearbyPoiDb(
   const prefixes = neighborPrefixes(lat, lng, precision, radiusMeters);
   const geohashClauses = prefixes.map(() => '(overture_poi.geohash >= ? AND overture_poi.geohash < ?)');
   const curatedGeohashClauses = prefixes.map(() => '(curated_poi.geohash >= ? AND curated_poi.geohash < ?)');
-  const osmGeohashClauses = prefixes.map(() => '(osm_poi.geohash >= ? AND osm_poi.geohash < ?)');
   const multibancoGeohashClauses = prefixes.map(() => '(multibanco_poi.geohash >= ? AND multibanco_poi.geohash < ?)');
   const legacyGeohashClauses = prefixes.map(() => '(legacy_poi.geohash >= ? AND legacy_poi.geohash < ?)');
   // Keep a brand-only Gym/Bank request in D1's predicate. A generic request
@@ -1294,8 +1293,6 @@ async function queryNearbyPoiDb(
   const poiRequestBinds: unknown[] = [];
   const curatedRequestClauses: string[] = [];
   const curatedRequestBinds: unknown[] = [];
-  const osmRequestClauses: string[] = [];
-  const osmRequestBinds: unknown[] = [];
   const multibancoRequestClauses: string[] = [];
   const multibancoRequestBinds: unknown[] = [];
   const legacyRequestClauses: string[] = [];
@@ -1308,15 +1305,13 @@ async function queryNearbyPoiDb(
     poiRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
     curatedRequestClauses.push(`(curated_poi.primary_poi_type IN (${placeholders})${request.brand ? ' AND curated_poi.brand = ?' : ''})`);
     curatedRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
-    osmRequestClauses.push(`(osm_poi_type.poi_type IN (${placeholders})${request.brand ? ' AND osm_poi.brand = ?' : ''})`);
-    osmRequestBinds.push(...types, ...(request.brand ? [request.brand] : []));
     multibancoRequestClauses.push(`(multibanco_poi.primary_poi_type IN (${placeholders}))`);
     multibancoRequestBinds.push(...types);
     legacyRequestClauses.push(`(legacy_poi_type.poi_type IN (${placeholders}))`);
     legacyRequestBinds.push(...types);
   }
   const d1StartedAt = performance.now();
-  const [{ results: rows }, { results: curatedRows }, { results: osmRows }, { results: multibancoRows }, { results: legacyRows }] = await Promise.all([
+  const [{ results: rows }, { results: curatedRows }, { results: multibancoRows }, { results: legacyRows }] = await Promise.all([
     db.prepare(
       // The base layer. `poi_source_correction` must be joined here for the
       // same reason it is joined for OSM: KAN-435 retired 10 Overture rows
@@ -1364,29 +1359,6 @@ async function queryNearbyPoiDb(
       poi_id: string; dedupe_name: string; name: string; lat: number; lng: number;
       primary_poi_type: string; brand: string | null; address: string | null; floor: string | null;
       attribute_dimension: string | null; attribute_value: string | null;
-    }>(),
-    db.prepare(
-      `SELECT osm_poi.osm_element_id, osm_poi.dedupe_name, osm_poi.name, osm_poi.lat, osm_poi.lng,
-            osm_poi.primary_poi_type, osm_poi.brand, osm_poi.address, osm_poi.open_min, osm_poi.close_min,
-            osm_poi_type.poi_type AS matched_type,
-            osm_poi_attribute.dimension AS attribute_dimension, osm_poi_attribute.value AS attribute_value,
-            osm_correction.visible AS correction_visible,
-            osm_correction.name_override AS correction_name_override,
-            osm_correction.dedupe_name_override AS correction_dedupe_name_override
-     FROM osm_poi
-     INNER JOIN osm_poi_type ON osm_poi_type.osm_element_id = osm_poi.osm_element_id
-     LEFT JOIN osm_poi_attribute ON osm_poi_attribute.osm_element_id = osm_poi.osm_element_id
-       AND osm_poi_attribute.dimension IN ('food_cuisine', 'store_kind', 'financial_service_kind')
-     LEFT JOIN poi_source_correction AS osm_correction
-       ON osm_correction.source = 'openstreetmap' AND osm_correction.source_id = osm_poi.osm_element_id
-     WHERE (${osmGeohashClauses.join(' OR ')}) AND (${osmRequestClauses.join(' OR ')})`,
-    ).bind(...prefixes.flatMap(prefix => [prefix, `${prefix}~`]), ...osmRequestBinds).all<{
-      osm_element_id: string; dedupe_name: string; name: string; lat: number; lng: number;
-      primary_poi_type: string; brand: string | null; address: string | null;
-      open_min: number | null; close_min: number | null; matched_type: string;
-      attribute_dimension: string | null; attribute_value: string | null;
-      correction_visible: number | null; correction_name_override: string | null;
-      correction_dedupe_name_override: string | null;
     }>(),
     db.prepare(
       `SELECT source_id, dedupe_name, name, lat, lng, primary_poi_type, address, is_demo_zone
@@ -1472,62 +1444,18 @@ async function queryNearbyPoiDb(
     }
   }
 
-  for (const row of osmRows) {
-    if (row.correction_visible === 0) continue;
-    const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
-    if (distanceMeters > radiusMeters) continue;
-    const candidateKey = `openstreetmap:${row.osm_element_id}`;
-    const existing = candidates.get(candidateKey);
-    if (existing) {
-      existing.matchedTypes.add(row.matched_type);
-      if (row.attribute_dimension && row.attribute_value) {
-        const values = existing.attributes[row.attribute_dimension] ??= [];
-        if (!values.includes(row.attribute_value)) values.push(row.attribute_value);
-      }
-    } else {
-      candidates.set(candidateKey, {
-        poi_id: row.osm_element_id, fsq_place_id: null, name: row.correction_name_override ?? row.name, lat: row.lat, lng: row.lng,
-        primary_poi_type: row.primary_poi_type, brand: row.brand, category_label: null,
-        // osm_poi has no floor column. OSM's own `level` tag is not stored
-        // here, and it is not comparable across buildings anyway (Colombo
-        // agrees with the published Piso 55/55; Vasco da Gama runs one below
-        // in 30 of 35), so a floor for a mall unit comes from the operator
-        // via curated_poi, not from here.
-        address: row.address, floor: null,
-        open_min: row.open_min, close_min: row.close_min,
-        source: 'openstreetmap', dedupeName: row.correction_dedupe_name_override ?? row.dedupe_name,
-        distanceMeters, attributes: row.attribute_dimension && row.attribute_value
-          ? { [row.attribute_dimension]: [row.attribute_value] }
-          : {},
-        matchedTypes: new Set([row.matched_type]), rawCategoryLabels: null, demoZone: false,
-      });
-    }
-  }
-
   // Two sources can hold the same shop at coordinates a few metres apart.
   // Suppress the twin at read time so the user never sees one shop twice.
   //
-  // THE ORDER IS BY MEASURED ACCURACY, AND IT USED TO BE BACKWARDS.
-  //
-  // It was Foursquare first, then curated, then OSM last, from when
-  // Foursquare was the base. Measured against two shopping centres'
-  // published tenant lists, that ranking is inverted: Foursquare scored 46%
-  // and 48% precision, Overture 60% and 70%, OSM 74% and 92%. So a stale
-  // Foursquare row was suppressing a correct OSM one 20 m away.
-  //
   // Least authoritative first, so each source is suppressed by everything
-  // above it:
-  //
-  //   overture       the base — widest coverage, weakest per-row accuracy
-  //   openstreetmap  enrichment, and measurably more accurate
-  //   community      curated. Inside a mall this is the operator's own
-  //                  directory, which is the authority on what is in the
-  //                  building and on which floor, so nothing overrides it.
+  // above it. Overture is the national base and curated mall tenants remain
+  // authoritative for a building and its floor. General OSM rows are kept
+  // out of this path while their offline review is in progress (KAN-442).
   //
   // The rule itself is unchanged and must stay: it matches on `dedupeName`
   // plus proximity, never on source ids. An id identifies a row for a
   // correction; it never decides which of two places a user sees.
-  const SUPPRESSION_ORDER = ['legacy', 'overture', 'openstreetmap', 'community'] as const;
+  const SUPPRESSION_ORDER = ['legacy', 'overture', 'community'] as const;
   for (const row of multibancoRows) {
     const distanceMeters = haversineMeters(lat, lng, row.lat, row.lng);
     if (distanceMeters > radiusMeters) continue;
@@ -1590,7 +1518,6 @@ async function queryNearbyPoiDb(
   for (const candidate of candidates.values()) {
     if (candidate.source === 'overture') candidateCounts.overture++;
     else if (candidate.source === 'community') candidateCounts.community++;
-    else if (candidate.source === 'openstreetmap') candidateCounts.openstreetmap++;
     else if (candidate.source === 'multibanco') candidateCounts.multibanco++;
     else if (candidate.source === 'legacy') candidateCounts.legacy++;
   }
@@ -1626,7 +1553,7 @@ async function queryNearbyPoiDb(
     timings: {
       d1Ms,
       filterMs: performance.now() - filteringStartedAt,
-      sourceRows: { overture: rows.length, community: curatedRows.length, openstreetmap: osmRows.length, multibanco: multibancoRows.length, legacy: legacyRows.length },
+      sourceRows: { overture: rows.length, community: curatedRows.length, openstreetmap: 0, multibanco: multibancoRows.length, legacy: legacyRows.length },
       candidateCounts,
       resultCount,
     },
@@ -2440,57 +2367,10 @@ export default {
     if (url.pathname === '/internal/osm-supplement/queue' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      const body = await request.json<{ countryCode?: unknown; retryFailed?: unknown }>().catch(() => null);
-      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
-        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
-      }
-      const countryCode = body.countryCode.toUpperCase();
-      const country = await env.REGISTRY_DB.prepare('SELECT status FROM country WHERE country_code = ?')
-        .bind(countryCode).first<{ status: string }>();
-      if (!country) return json({ error: `no country row for '${countryCode}'` }, 404);
-      if (country.status !== 'mapped') return json({ error: 'country must be mapped before OSM supplementation' }, 409);
-      const registry = await env.REGISTRY_DB.prepare('SELECT status FROM settlement_registry_import WHERE country_code = ?')
-        .bind(countryCode).first<{ status: string }>();
-      if (registry?.status !== 'mapped') return json({ error: 'settlement registry must be mapped before OSM supplementation' }, 409);
-      const runId = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const started = await env.REGISTRY_DB.prepare(
-        `INSERT INTO osm_supplement_import
-           (country_code, status, active_run_id, started_at, completed_at, source_elements, inserted_rows, matched_skipped, ambiguous_skipped, last_error)
-         VALUES (?, 'mapping', ?, ?, NULL, 0, 0, 0, 0, NULL)
-         ON CONFLICT(country_code) DO UPDATE SET
-           status = 'mapping', active_run_id = excluded.active_run_id, started_at = excluded.started_at,
-           completed_at = NULL, source_elements = 0, inserted_rows = 0, matched_skipped = 0,
-           ambiguous_skipped = 0, failed_scopes = 0, last_error = NULL,
-           batch_worker_id = NULL, batch_lease_expires_at = NULL,
-           backoff_until = NULL, backoff_seconds = 0, cancel_requested = 0
-         WHERE osm_supplement_import.status IN ('none', 'failed', 'mapped')`,
-      ).bind(countryCode, runId, now).run();
-      let seeded = 0;
-      let retried = 0;
-      // Un-parking failures is useful mid-run too — a run already mapping is
-      // the most likely moment to notice them — so it is not gated on having
-      // started a new run. The scopes simply become claimable and the next
-      // cron tick picks them up.
-      if (body.retryFailed === true) retried = await retryFailedScopes(env, countryCode);
-      if (started.meta.changes === 1) {
-        seeded = await seedScopes(env, countryCode);
-        const counts = await scopeCounts(env, countryCode, Date.now());
-        if (counts.total === 0) {
-          // Refuse rather than silently "map" a country with no bounded
-          // municipalities — the same refusal import_country made, moved to
-          // where it can still be reported to the caller.
-          await env.REGISTRY_DB.prepare(
-            `UPDATE osm_supplement_import SET status = 'failed', completed_at = ?, last_error = ?
-             WHERE country_code = ? AND active_run_id = ?`,
-          ).bind(now, 'no bounded municipality registry; import settlement metadata first', countryCode, runId).run();
-          return json({ error: `country '${countryCode}' has no bounded municipality scopes` }, 409);
-        }
-        triggerBuild(env, ctx, 'osm-country', countryCode, undefined, runId);
-      }
-      const state = await env.REGISTRY_DB.prepare('SELECT status, active_run_id FROM osm_supplement_import WHERE country_code = ?')
-        .bind(countryCode).first<{ status: string; active_run_id: string | null }>();
-      return json({ ok: true, status: state?.status ?? 'none', started: started.meta.changes === 1, seeded, retried });
+      // KAN-442: Overture is the nationwide base. Existing OSM rows remain
+      // temporarily for the offline review queue, but no new country-wide
+      // OSM import may be started.
+      return json({ error: 'OSM supplementation is retired; use Overture and curated mall tenants' }, 410);
     }
 
     // The container's batch loop. Each call takes the country lock and hands

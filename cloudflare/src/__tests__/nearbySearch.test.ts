@@ -17,11 +17,9 @@ import worker, { type Env } from '../index';
  * one SELECT per source) — brittle to a query-text change by design, the
  * tradeoff for exercising the real handler without SQLite.
  *
- * KAN-438 moved the base source from Foursquare to Overture and inverted the
- * suppression order, so several of these assert the opposite of what they
- * used to. Measured against two malls' published tenant lists, Foursquare
- * scored 46% and 48% precision, Overture 60% and 70%, OSM 74% and 92% — a
- * stale Foursquare row was suppressing a correct OSM one 20 m away.
+ * KAN-438 moved the base source from Foursquare to Overture. KAN-442 keeps
+ * retained OSM rows out of nearby results while they are reviewed offline;
+ * curated mall tenants remain available through the community source.
  */
 interface FakePoi {
   overture_id: string;
@@ -227,21 +225,16 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     expect(body.results.atm.map(p => p.source).sort()).toEqual(['multibanco', 'overture']);
   });
 
-  it('returns an OSM-only POI through the same nearby response', async () => {
+  it('does not return retained OSM rows through the nearby response', async () => {
     const res = await worker.fetch(nearbyRequest([
       { key: 'restaurant', type: 'restaurant' },
     ]), env([], [], [{ osm_element_id: 'node/5335674113', name: 'Santo Amaro', primary_poi_type: 'restaurant' }]), CTX);
     expect(res.status).toBe(200);
     const body = await res.json() as { results: Record<string, Array<{ poi_id: string; fsq_place_id: string | null; source: string }>> };
-    expect(body.results.restaurant).toEqual([
-      expect.objectContaining({ poi_id: 'node/5335674113', fsq_place_id: null, source: 'openstreetmap' }),
-    ]);
+    expect(body.results.restaurant).toEqual([]);
   });
 
-  it('keeps the OSM record when it duplicates an Overture row', async () => {
-    // The inversion. This asserted the Foursquare row won; OSM measured 74%
-    // and 92% precision against two malls' tenant lists against Overture's
-    // 60% and 70%, so the more accurate source is the one the user sees.
+  it('keeps the Overture record when a retained OSM row duplicates it', async () => {
     const res = await worker.fetch(nearbyRequest([
       { key: 'restaurant', type: 'restaurant' },
     ]), env([
@@ -252,7 +245,7 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { results: Record<string, Array<{ poi_id: string; source: string }>> };
     expect(body.results.restaurant).toEqual([
-      expect.objectContaining({ poi_id: 'node/5335674113', source: 'openstreetmap' }),
+      expect.objectContaining({ poi_id: 'ovt-santo-amaro', source: 'overture' }),
     ]);
   });
 
@@ -272,7 +265,7 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     ]);
   });
 
-  it('uses a reviewed OSM replacement instead of its suppressed Overture source', async () => {
+  it('does not expose an OSM replacement after Overture has been suppressed', async () => {
     const res = await worker.fetch(nearbyRequest([
       { key: 'restaurant', type: 'restaurant' },
     ]), env([
@@ -285,9 +278,7 @@ describe('POST /poi/nearby — KAN-344 cuisine groups end-to-end', () => {
     ]), CTX);
     expect(res.status).toBe(200);
     const body = await res.json() as { results: Record<string, Array<{ name: string; source: string }>> };
-    expect(body.results.restaurant).toEqual([
-      expect.objectContaining({ name: 'Lagar', source: 'openstreetmap' }),
-    ]);
+    expect(body.results.restaurant).toEqual([]);
   });
 
   it('hides a reviewed duplicate OSM element and keeps its Overture original', async () => {
