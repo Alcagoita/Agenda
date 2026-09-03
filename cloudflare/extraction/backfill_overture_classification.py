@@ -7,6 +7,8 @@ the rules at promotion time and must not be read back row-by-row.
 """
 import os
 import sys
+import argparse
+import re
 
 from analyse_poi_candidates import reachable_types
 from backfill_name_types import run_d1_query, sql_string
@@ -14,8 +16,10 @@ from classify_and_load import load_brand_dictionary
 from promote_overture_candidates import category_map, decide
 
 
-def rows_for_backfill():
-    return run_d1_query('''
+def rows_for_backfill(imported_before):
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})', imported_before):
+        raise ValueError('--imported-before must be an ISO-8601 timestamp')
+    return run_d1_query(f'''
         SELECT p.overture_id, p.name, p.category, p.primary_poi_type,
                group_concat(DISTINCT t.poi_type) AS types,
                COALESCE(MAX(t.rank), -1) AS max_rank,
@@ -23,6 +27,7 @@ def rows_for_backfill():
         FROM overture_poi p
         LEFT JOIN overture_poi_type t ON t.overture_id = p.overture_id
         LEFT JOIN overture_poi_attribute a ON a.overture_id = p.overture_id
+        WHERE p.imported_at < {sql_string(imported_before)}
         GROUP BY p.overture_id
     ''')
 
@@ -47,7 +52,8 @@ def statements(rows):
             continue
         if status != 'promoted':
             continue
-        replacement = existing_types == {'store'} and 'store' not in types
+        replacement = (existing_types == {'store'} and 'store' not in types
+                       and ('store_kind' not in {dimension for dimension, _ in existing_attributes}))
         if replacement:
             yield (f"DELETE FROM overture_poi_type WHERE overture_id = {identifier} "
                    "AND poi_type = 'store' AND NOT EXISTS (SELECT 1 FROM overture_poi_attribute "
@@ -69,7 +75,11 @@ def statements(rows):
 
 
 def main():
-    for statement in statements(rows_for_backfill()):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--imported-before', required=True,
+                        help='exclusive ISO-8601 cutoff separating the pilot from the country import')
+    args = parser.parse_args()
+    for statement in statements(rows_for_backfill(args.imported_before)):
         print(statement, end='')
 
 

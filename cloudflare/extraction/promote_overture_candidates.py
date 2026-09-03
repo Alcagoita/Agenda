@@ -155,7 +155,8 @@ def food_cuisine_alias_index():
 
 def is_non_multibanco_atm(name):
     normalized = normalize_text(name or '')
-    return any(operator in normalized for operator in NON_MULTIBANCO_ATM_OPERATORS)
+    padded = f' {normalized} '
+    return any(f' {operator} ' in padded for operator in NON_MULTIBANCO_ATM_OPERATORS)
 
 
 def category_map():
