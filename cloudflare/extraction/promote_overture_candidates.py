@@ -40,8 +40,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyse_poi_candidates import paged, query, reachable_types
 from classify_and_load import (
     MAX_STATEMENT_BYTES, build_alias_index, byte_len, encode_geohash, find_brand,
-    load_brand_dictionary, load_keyword_dictionary, match_keyword_subtypes,
-    normalize_text, sql_escape, types_from_name,
+    financial_service_classification, load_brand_dictionary,
+    load_financial_service_name_rules, load_keyword_dictionary,
+    match_keyword_subtypes, normalize_text, replaces_generic_store, sql_escape,
+    types_from_name,
 )
 from opening_hours import hours_for_poi_type
 
@@ -112,6 +114,13 @@ REJECTED_CATEGORIES = frozenset({
 # word locates a real venue rather than naming the estate itself.
 REJECTED_NAME_PREFIXES = ('urbanizacao', 'urbanizacoes')
 
+# KAN-436. The official Multibanco feed is the authoritative source for
+# Portugal's Multibanco machines. Overture's generic `atms` category cannot
+# distinguish those machines from a bank branch or a non-Multibanco operator,
+# so it must not create a second copy. Keep only an explicit, named operator
+# that the official feed does not cover.
+NON_MULTIBANCO_ATM_OPERATORS = frozenset({'euronet'})
+
 
 # KAN-431. Overture's places theme has no viewpoint category — scenic
 # features live in its `base` theme, which we do not import — so a miradouro
@@ -140,13 +149,23 @@ def store_kind_alias_index():
         exclude_keys={'any'})
 
 
+def food_cuisine_alias_index():
+    return build_alias_index(load_keyword_dictionary('restaurantFoodDictionary.json'))
+
+
+def is_non_multibanco_atm(name):
+    normalized = normalize_text(name or '')
+    return any(operator in normalized for operator in NON_MULTIBANCO_ATM_OPERATORS)
+
+
 def category_map():
     path = os.path.join(CLOUDFLARE_DIR, 'src', 'overtureCategories.json')
     with open(path) as handle:
         return {k: v for k, v in json.load(handle).items() if not k.startswith('_')}
 
 
-def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
+def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
+           food_cuisine_aliases=None, financial_service_rules=None):
     """(status, types, attributes, reason) for one candidate.
 
     `types` is ranked: the category's answer first, then anything the name
@@ -154,6 +173,10 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
     """
     if store_kind_aliases is None:
         store_kind_aliases = store_kind_alias_index()
+    if food_cuisine_aliases is None:
+        food_cuisine_aliases = food_cuisine_alias_index()
+    if financial_service_rules is None:
+        financial_service_rules = load_financial_service_name_rules()
     normalized = normalize_text(row['name'] or '')
     if not normalized:
         return 'rejected', (), (), 'unnamed'
@@ -184,6 +207,23 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
             if extra in reachable and reachable[extra] not in types:
                 types.append(reachable[extra])
 
+    # The official Multibanco import owns Portugal's Multibanco ATM coverage.
+    # A generic Overture ATM is therefore either a duplicate or too ambiguous
+    # to publish. An explicitly named independent operator remains useful.
+    if 'atm' in types and not is_non_multibanco_atm(row['name']):
+        return 'rejected', (), (), 'ATM reserved for official Multibanco source'
+
+    service_type, financial_service_kind = financial_service_classification(
+        row['name'], (), financial_service_rules)
+    if service_type:
+        if 'bank' in types:
+            types.remove('bank')
+        if service_type in reachable and reachable[service_type] not in types:
+            types.append(reachable[service_type])
+            reason = f'financial service: {service_type}'
+        if financial_service_kind:
+            attributes.append(('financial_service_kind', financial_service_kind))
+
     # The name may add, never replace. A category that mapped is the source's
     # considered answer; the name is an inference from a string.
     #
@@ -197,6 +237,10 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
     # the category is simply wrong.
     named = [reachable[t] for t in types_from_name(normalized, tuple(types))
              if t in reachable]
+    if replaces_generic_store(types, named,
+                              any(dimension == 'store_kind' for dimension, _ in attributes)):
+        types = named
+        reason = f'name replaces generic store: {types[0]}'
     if named and row['category'] in NAME_OUTRANKS_CATEGORY:
         # The coarse hair/beauty bucket: the name decides, and goes first.
         types = named + [t for t in types if t not in named]
@@ -231,6 +275,11 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None):
         for kind in match_keyword_subtypes(row['name'], store_kind_aliases):
             attributes.append(('store_kind', kind))
             reason = reason or f'name: store/{kind}'
+
+    if 'restaurant' in types and not any(d == 'food_cuisine' for d, _ in attributes):
+        for cuisine in match_keyword_subtypes(row['name'], food_cuisine_aliases):
+            attributes.append(('food_cuisine', cuisine))
+            reason = reason or f'name: restaurant/{cuisine}'
 
     # Still nothing, and `store` is all we have: it cannot be reached, so
     # pending is the honest place for it — countable, and visible to
@@ -299,6 +348,8 @@ def run(batch, out_dir, dry_run):
     reachable = reachable_types()
     brand_dictionary = load_brand_dictionary()
     store_kind_aliases = store_kind_alias_index()
+    food_cuisine_aliases = food_cuisine_alias_index()
+    financial_service_rules = load_financial_service_name_rules()
     refreshed = date.today().isoformat()
 
     stats = Counter()
@@ -318,7 +369,8 @@ def run(batch, out_dir, dry_run):
         where="promotion_status = 'pending'",
     ):
         status, types, attributes, reason = decide(
-            row, mapping, reachable, brand_dictionary, store_kind_aliases)
+            row, mapping, reachable, brand_dictionary, store_kind_aliases,
+            food_cuisine_aliases, financial_service_rules)
         stats[status] += 1
         if status == 'promoted':
             by_type[types[0]] += 1
