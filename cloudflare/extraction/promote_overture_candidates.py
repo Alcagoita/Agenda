@@ -387,6 +387,101 @@ def _status_update_statement(batch, status):
     )
 
 
+def _country_page(rows, mapping, reachable, brand_dictionary, store_kind_aliases,
+                  food_cuisine_aliases, financial_service_rules, store_brands,
+                  refreshed):
+    """Decide one bounded page without retaining the national result set."""
+    stats = Counter()
+    poi_pieces, type_pieces, attribute_pieces = [], [], []
+    promoted, rejected = [], []
+    for row in rows:
+        status, types, attributes, reason = decide(
+            row, mapping, reachable, brand_dictionary, store_kind_aliases,
+            food_cuisine_aliases, financial_service_rules, store_brands)
+        stats[status] += 1
+        if status == 'promoted':
+            promoted.append((row['overture_id'], reason))
+            poi_pieces.append(poi_values(row, types[0], brand_dictionary, refreshed))
+            for rank, poi_type in enumerate(types):
+                type_pieces.append(
+                    f"({sql_escape(row['overture_id'])},{sql_escape(poi_type)},{rank})")
+            for dimension, value in attributes:
+                attribute_pieces.append(
+                    f"({sql_escape(row['overture_id'])},{sql_escape(dimension)},"
+                    f"{sql_escape(value)})")
+        elif status == 'rejected':
+            rejected.append((row['overture_id'], reason))
+    return stats, poi_pieces, type_pieces, attribute_pieces, promoted, rejected
+
+
+def run_country(batch, country_source_r2_key):
+    """Promote one source in restartable pages through individual D1 writes.
+
+    The serving rows are inserted before the candidate status changes.  A
+    stopped page is therefore harmless: its INSERT OR IGNORE writes replay,
+    then its still-pending candidates are marked on the next run.
+    """
+    import d1_client
+
+    mapping = category_map()
+    reachable = reachable_types()
+    brand_dictionary = load_brand_dictionary()
+    store_kind_aliases = store_kind_alias_index()
+    food_cuisine_aliases = food_cuisine_alias_index()
+    financial_service_rules = load_financial_service_name_rules()
+    store_brands = store_brand_index()
+    refreshed = date.today().isoformat()
+    stats = Counter()
+    where = (
+        "promotion_status = 'pending' AND country_source_r2_key = "
+        f"{sql_escape(country_source_r2_key)}")
+    rows = paged(
+        'overture_candidate',
+        ('overture_id', 'name', 'lat', 'lng', 'address', 'category',
+         'category_path', 'confidence', 'source_datasets'),
+        'overture_id', batch, where=where)
+
+    page = []
+    for row in rows:
+        page.append(row)
+        if len(page) == batch:
+            _promote_country_page(
+                page, mapping, reachable, brand_dictionary, store_kind_aliases,
+                food_cuisine_aliases, financial_service_rules, store_brands,
+                refreshed, stats, d1_client)
+            page = []
+    if page:
+        _promote_country_page(
+            page, mapping, reachable, brand_dictionary, store_kind_aliases,
+            food_cuisine_aliases, financial_service_rules, store_brands,
+            refreshed, stats, d1_client)
+    return dict(stats)
+
+
+def _promote_country_page(page, mapping, reachable, brand_dictionary,
+                           store_kind_aliases, food_cuisine_aliases,
+                           financial_service_rules, store_brands, refreshed,
+                           stats, d1_client):
+    decided = _country_page(
+        page, mapping, reachable, brand_dictionary, store_kind_aliases,
+        food_cuisine_aliases, financial_service_rules, store_brands, refreshed)
+    page_stats, poi_pieces, type_pieces, attribute_pieces, promoted, rejected = decided
+    for prefix, pieces in (
+        (POI_INSERT_PREFIX, poi_pieces),
+        (TYPE_INSERT_PREFIX, type_pieces),
+        (ATTRIBUTE_INSERT_PREFIX, attribute_pieces),
+    ):
+        for statement in batched(prefix, pieces):
+            d1_client.execute(statement)
+    # Status is the checkpoint and must be last.  Never put this in a D1
+    # batch with the writes above: a national-sized atomic transaction is
+    # precisely what exhausted D1 memory.
+    for status, decisions in (('promoted', promoted), ('rejected', rejected)):
+        for statement in status_updates(decisions, status):
+            d1_client.execute(statement)
+    stats.update(page_stats)
+
+
 def run(batch, out_dir, dry_run, country_source_r2_key=None):
     mapping = category_map()
     reachable = reachable_types()

@@ -105,15 +105,44 @@ def batched(pieces):
         yield INSERT_PREFIX + ',\n'.join(values) + ';\n'
 
 
+def _with_country_source(statement):
+    """Keep a retry attached to the immutable archive that supplied it."""
+    return statement[:-2] + (
+        ' ON CONFLICT(overture_id) DO UPDATE SET country_source_r2_key = '
+        'COALESCE(overture_candidate.country_source_r2_key, excluded.country_source_r2_key);\n'
+    )
+
+
+def load(csv_path, country_source_r2_key):
+    """Stream a country archive through one bounded D1 write at a time.
+
+    This is the same transport model that completed the Foursquare country
+    load.  The SQL statement is bounded by ``MAX_STATEMENT_BYTES``; making
+    many of those statements one atomic D1 batch exhausts D1 memory.
+    """
+    import d1_client
+
+    offered = inserted = 0
+
+    def values():
+        nonlocal offered
+        for row in candidate_rows(csv_path, country_source_r2_key):
+            offered += 1
+            yield value_tuple(row)
+
+    for statement in batched(values()):
+        meta = d1_client.execute(_with_country_source(statement))
+        inserted += (meta or {}).get('changes', 0)
+    print(f'{offered:,} candidate rows offered; {inserted:,} D1 changes', file=sys.stderr)
+    return offered
+
+
 def write_sql(csv_path, sql_out, dry_run=False, country_source_r2_key=None):
     """Write idempotent candidate SQL and return the number of usable rows."""
     rows = list(candidate_rows(csv_path, country_source_r2_key))
     statements = list(batched(value_tuple(row) for row in rows))
     if country_source_r2_key:
-        statements = [statement[:-2] + (
-            ' ON CONFLICT(overture_id) DO UPDATE SET country_source_r2_key = '
-            'COALESCE(overture_candidate.country_source_r2_key, excluded.country_source_r2_key);\n'
-        ) for statement in statements]
+        statements = [_with_country_source(statement) for statement in statements]
     print(f'{len(rows):,} candidate rows -> {len(statements)} statements', file=sys.stderr)
     if dry_run:
         print('--dry-run: no SQL written', file=sys.stderr)

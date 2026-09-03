@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 EXTRACTION_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, EXTRACTION_DIR)
@@ -86,6 +87,20 @@ class CandidateRowsTest(unittest.TestCase):
         self.assertEqual(staged[0][7], 'drugstore')
         self.assertEqual(staged[0][8], 'health|pharmacy')
         self.assertEqual(staged[0][10], 'Overture|meta')
+
+    def test_country_load_streams_one_bounded_statement_at_a_time(self):
+        import d1_client
+        import load_overture_candidates as loader
+        path = _csv([_row(overture_id='gers-1'), _row(overture_id='gers-2')])
+        try:
+            with mock.patch.object(d1_client, 'execute', return_value={'changes': 1}) as execute:
+                self.assertEqual(loader.load(path, 'overture-country-sources/PT/run.csv'), 2)
+            self.assertEqual(execute.call_count, 1)
+            statement = execute.call_args.args[0]
+            self.assertIn('ON CONFLICT(overture_id) DO UPDATE', statement)
+            self.assertIn('overture-country-sources/PT/run.csv', statement)
+        finally:
+            os.unlink(path)
 
 
 if __name__ == '__main__':

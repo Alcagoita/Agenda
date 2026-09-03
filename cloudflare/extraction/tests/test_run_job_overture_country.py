@@ -62,10 +62,11 @@ class FakeR2:
 
 class FakeD1:
     def __init__(self):
-        self.files = []
+        self.queries = []
 
-    def execute_sql_file(self, path):
-        self.files.append(os.path.basename(path))
+    def execute(self, sql):
+        self.queries.append(sql)
+        return {'changes': 1}
 
     def select(self, _sql):
         return [{'promotion_status': 'promoted', 'count': 1}]
@@ -89,34 +90,33 @@ class OvertureCountryRunTest(unittest.TestCase):
             'worker_client', 'r2_client', 'd1_client')}
         self.extract = run_job.extract_overture.extract_country
         self.report = run_job.report_overture_backlog.write_report
-        self.stage = run_job.load_overture_candidates.write_sql
-        self.promote = run_job.promote_overture_candidates.run
+        self.stage = run_job.load_overture_candidates.load
+        self.promote = run_job.promote_overture_candidates.run_country
         self.build_dir = run_job.extract.BUILD_DIR
         self.temp = tempfile.TemporaryDirectory()
         run_job.extract.BUILD_DIR = self.temp.name
         self.worker, self.r2, self.d1 = FakeWorker(), FakeR2(), FakeD1()
         run_job.worker_client, run_job.r2_client, run_job.d1_client = self.worker, self.r2, self.d1
+        self.stage_calls, self.promote_calls = [], []
         def report(_csv, out):
             write_text(out, 'report\n')
-        def stage(_csv, out, **_kwargs):
-            os.makedirs(out, exist_ok=True)
-            write_text(os.path.join(out, '00.sql'), 'INSERT;')
+        def stage(csv_path, source_key):
+            self.stage_calls.append((csv_path, source_key))
             return 1
-        def promote(_batch, out, _dry, *_args):
-            os.makedirs(out, exist_ok=True)
-            write_text(os.path.join(out, '01.sql'), 'UPDATE;')
+        def promote(batch, source_key):
+            self.promote_calls.append((batch, source_key))
             return {'promoted': 1, 'rejected': 0, 'pending': 0}
         run_job.report_overture_backlog.write_report = report
-        run_job.load_overture_candidates.write_sql = stage
-        run_job.promote_overture_candidates.run = promote
+        run_job.load_overture_candidates.load = stage
+        run_job.promote_overture_candidates.run_country = promote
 
     def tearDown(self):
         for name, value in self.originals.items():
             setattr(run_job, name, value)
         run_job.extract_overture.extract_country = self.extract
         run_job.report_overture_backlog.write_report = self.report
-        run_job.load_overture_candidates.write_sql = self.stage
-        run_job.promote_overture_candidates.run = self.promote
+        run_job.load_overture_candidates.load = self.stage
+        run_job.promote_overture_candidates.run_country = self.promote
         run_job.extract.BUILD_DIR = self.build_dir
         self.temp.cleanup()
 
@@ -125,7 +125,9 @@ class OvertureCountryRunTest(unittest.TestCase):
         run_job.run_overture_country('PT', 'run-1')
         self.assertEqual(self.r2.uploads[0][1], 'overture-country-sources/PT/run-1.csv')
         self.assertEqual(self.worker.source[0][2], 'overture-country-sources/PT/run-1.csv')
-        self.assertEqual(self.d1.files, ['00.sql', '01.sql'])
+        self.assertEqual(self.stage_calls[0][1], 'overture-country-sources/PT/run-1.csv')
+        self.assertEqual(self.promote_calls, [(run_job.OVERTURE_PROMOTION_PAGE_SIZE,
+                                               'overture-country-sources/PT/run-1.csv')])
         self.assertEqual(self.worker.complete[0][3]['source_rows'], 1)
         self.assertEqual(self.worker.complete[0][3]['staged_rows'], 1)
         self.assertEqual(self.worker.failed, [])
