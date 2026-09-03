@@ -104,6 +104,23 @@ def batched(pieces):
         yield INSERT_PREFIX + ',\n'.join(values) + ';\n'
 
 
+def write_sql(csv_path, sql_out, dry_run=False):
+    """Write idempotent candidate SQL and return the number of usable rows."""
+    rows = list(candidate_rows(csv_path))
+    statements = list(batched(value_tuple(row) for row in rows))
+    print(f'{len(rows):,} candidate rows -> {len(statements)} statements', file=sys.stderr)
+    if dry_run:
+        print('--dry-run: no SQL written', file=sys.stderr)
+        return len(rows)
+    os.makedirs(sql_out, exist_ok=True)
+    for index, statement in enumerate(statements):
+        path = os.path.join(sql_out, f'{index:04d}_overture_candidate.sql')
+        with open(path, 'w') as handle:
+            handle.write(statement)
+    print(f'wrote {len(statements)} files to {sql_out}', file=sys.stderr)
+    return len(rows)
+
+
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('csv_path')
@@ -111,21 +128,7 @@ def main(argv):
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args(argv)
 
-    rows = list(candidate_rows(args.csv_path))
-    statements = list(batched(value_tuple(row) for row in rows))
-    print(f'{len(rows):,} candidate rows -> {len(statements)} statements',
-          file=sys.stderr)
-
-    if args.dry_run:
-        print('--dry-run: no SQL written', file=sys.stderr)
-        return 0
-
-    os.makedirs(args.sql_out, exist_ok=True)
-    for index, statement in enumerate(statements):
-        path = os.path.join(args.sql_out, f'{index:04d}_overture_candidate.sql')
-        with open(path, 'w') as handle:
-            handle.write(statement)
-    print(f'wrote {len(statements)} files to {args.sql_out}', file=sys.stderr)
+    write_sql(args.csv_path, args.sql_out, args.dry_run)
     return 0
 
 

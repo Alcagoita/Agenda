@@ -195,3 +195,25 @@ def multibanco_batch_release(country_code, run_id, worker_id, outcome='done'):
     return _post('/internal/multibanco/batch-release', {
         'countryCode': country_code, 'runId': run_id, 'workerId': worker_id, 'outcome': outcome,
     })
+
+
+def overture_country_source(country_code, run_id, raw_extract_r2_key, source_rows):
+    return _post('/internal/overture-country/source', {
+        'countryCode': country_code, 'runId': run_id,
+        'rawExtractR2Key': raw_extract_r2_key, 'sourceRows': source_rows,
+    })
+
+
+def overture_country_complete(country_code, run_id, backlog_report_r2_key, stats):
+    return _post('/internal/overture-country/complete', {
+        'countryCode': country_code, 'runId': run_id, 'backlogReportR2Key': backlog_report_r2_key,
+        'sourceRows': stats['source_rows'], 'stagedRows': stats['staged_rows'],
+        'droppedRows': stats['dropped_rows'], 'promotedRows': stats['promoted_rows'],
+        'rejectedRows': stats['rejected_rows'], 'pendingRows': stats['pending_rows'],
+    })
+
+
+def overture_country_failed(country_code, run_id, error):
+    return _post('/internal/overture-country/failed', {
+        'countryCode': country_code, 'runId': run_id, 'error': str(error)[:1_000],
+    })

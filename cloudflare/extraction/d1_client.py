@@ -28,6 +28,24 @@ def execute(sql):
         raise D1Error(f'D1 reported failure: {data.get("error")}')
     return data.get('meta')
 
+def execute_many(statements):
+    """Execute at most 50 generated writes in one D1 batch request.
+
+    The country importer still creates bounded SQL statements, but batching
+    their transport avoids turning a 440k-row import into thousands of HTTP
+    round trips against the Worker/D1 binding.
+    """
+    statements = list(statements)
+    if not statements or len(statements) > 50:
+        raise ValueError('execute_many requires 1 to 50 statements')
+    res = requests.post(D1_URL, json={'sqls': statements}, timeout=60)
+    if not res.ok:
+        raise D1Error(f'D1 outbound batch failed ({res.status_code}): {res.text[:1000]}')
+    data = res.json()
+    if not data.get('success'):
+        raise D1Error(f'D1 reported batch failure: {data.get("error")}')
+    return data.get('meta')
+
 def select(sql):
     """Run a read-only SELECT through the Worker binding and return rows."""
     res = requests.post(D1_URL, json={'sql': sql, 'mode': 'all'}, timeout=30)
@@ -44,5 +62,5 @@ def execute_sql_file(path):
     with open(path) as f:
         content = f.read()
     statements = [s.strip() for s in content.split(';\n') if s.strip()]
-    for stmt in statements:
-        execute(stmt + ';')
+    for start in range(0, len(statements), 50):
+        execute_many(stmt + ';' for stmt in statements[start:start + 50])
