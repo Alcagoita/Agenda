@@ -15,6 +15,10 @@ import {
   multibancoImportsAwaitingBatch, multibancoScopeCounts, queueMultibancoImport,
   releaseMultibancoBatch,
 } from './multibancoImport';
+import {
+  checkpointOvertureCountrySource, completeOvertureCountryImport, failOvertureCountryImport,
+  overtureCountryImportStatus, queueOvertureCountryImport,
+} from './overtureCountryImport';
 import brandDictionary from '../../src/constants/brandDictionary.json';
 import financialServiceKindDictionary from '../../src/constants/financialServiceKindDictionary.json';
 
@@ -1641,7 +1645,7 @@ const OSM_SCOPE_ERROR_CLASSES = new Set<OsmScopeErrorClass>([
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
-  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country' | 'multibanco-country',
+  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country' | 'multibanco-country' | 'overture-country',
   target: string,
   countrySourceR2Key?: string,
   countryRunId?: string,
@@ -1658,6 +1662,7 @@ function triggerBuild(
       ...(countryRunId ? { COUNTRY_RUN_ID: countryRunId } : {}),
       ...(mode === 'osm-country' ? { D1_INTERNAL: '1', OSM_SUPPLEMENT_RUN_ID: countryRunId ?? '' } : {}),
       ...(mode === 'multibanco-country' ? { D1_INTERNAL: '1', MULTIBANCO_RUN_ID: countryRunId ?? '' } : {}),
+      ...(mode === 'overture-country' ? { D1_INTERNAL: '1', OVERTURE_COUNTRY_RUN_ID: countryRunId ?? '' } : {}),
     },
   }).catch(async (error) => {
     // A detached promise is cancelled when the Worker finishes the request.
@@ -1680,6 +1685,8 @@ function triggerBuild(
       await env.REGISTRY_DB.prepare(
         "UPDATE multibanco_import SET status = 'failed', completed_at = ?, last_error = ? WHERE country_code = ? AND status = 'mapping' AND active_run_id = ?",
       ).bind(new Date().toISOString(), 'container start failed', target, countryRunId ?? '').run();
+    } else if (mode === 'overture-country') {
+      await failOvertureCountryImport(env, target, countryRunId ?? '', 'container start failed', Date.now());
     } else {
       await env.REGISTRY_DB.prepare(
         "UPDATE country SET status = 'none' WHERE country_code = ? AND status = 'mapping'",
@@ -2351,6 +2358,79 @@ export default {
       const place = await env.REGISTRY_DB.prepare('SELECT * FROM place WHERE place_id = ?')
         .bind(body.placeId).first<PlaceRow>();
       return json({ ok: true, status: place ? toApiStatus(place.status) : 'none' });
+    }
+
+    // KAN-443 — Portugal's Overture country import is deliberately separate
+    // from the retired Foursquare country state.  Its source is first made
+    // immutable in R2, and retries reuse that checkpoint instead of reading a
+    // changing upstream release again.
+    if (url.pathname === '/internal/overture-country/queue' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.toUpperCase() !== 'PT') {
+        return json({ error: 'countryCode must be PT' }, 400);
+      }
+      const queued = await queueOvertureCountryImport(env, 'PT', Date.now());
+      if (queued.started && queued.runId) triggerBuild(env, ctx, 'overture-country', 'PT', queued.rawExtractR2Key ?? undefined, queued.runId);
+      return json({ ok: true, status: queued.status, started: queued.started, runId: queued.runId });
+    }
+
+    if (url.pathname === '/internal/overture-country/source' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || body.countryCode !== 'PT' || typeof body.runId !== 'string' ||
+          typeof body.rawExtractR2Key !== 'string' || !body.rawExtractR2Key.startsWith('overture-country-sources/PT/') ||
+          !Number.isSafeInteger(body.sourceRows) || (body.sourceRows as number) < 0) {
+        return json({ error: 'invalid Overture source checkpoint payload' }, 400);
+      }
+      const ok = await checkpointOvertureCountrySource(env, {
+        countryCode: 'PT', runId: body.runId, rawExtractR2Key: body.rawExtractR2Key, sourceRows: body.sourceRows as number,
+      });
+      if (!ok) return json({ error: 'run is not active' }, 409);
+      return json({ ok: true });
+    }
+
+    if (url.pathname === '/internal/overture-country/complete' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      const counts = ['sourceRows', 'stagedRows', 'droppedRows', 'promotedRows', 'rejectedRows', 'pendingRows'] as const;
+      if (!body || body.countryCode !== 'PT' || typeof body.runId !== 'string' ||
+          typeof body.backlogReportR2Key !== 'string' || !body.backlogReportR2Key.startsWith('overture-country-reports/PT/') ||
+          counts.some(field => !Number.isSafeInteger(body[field]) || (body[field] as number) < 0)) {
+        return json({ error: 'invalid Overture completion payload' }, 400);
+      }
+      const ok = await completeOvertureCountryImport(env, {
+        countryCode: 'PT', runId: body.runId, backlogReportR2Key: body.backlogReportR2Key,
+        sourceRows: body.sourceRows as number, stagedRows: body.stagedRows as number,
+        droppedRows: body.droppedRows as number, promotedRows: body.promotedRows as number,
+        rejectedRows: body.rejectedRows as number, pendingRows: body.pendingRows as number, now: Date.now(),
+      });
+      if (!ok) return json({ error: 'run is not active or source accounting is invalid' }, 409);
+      return json({ ok: true });
+    }
+
+    if (url.pathname === '/internal/overture-country/failed' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<Record<string, unknown>>().catch(() => null);
+      if (!body || body.countryCode !== 'PT' || typeof body.runId !== 'string') {
+        return json({ error: 'invalid Overture failure payload' }, 400);
+      }
+      const ok = await failOvertureCountryImport(env, 'PT', body.runId, typeof body.error === 'string' ? body.error : 'unknown', Date.now());
+      if (!ok) return json({ error: 'run is not active' }, 409);
+      return json({ ok: true });
+    }
+
+    if (url.pathname === '/internal/overture-country/status' && request.method === 'GET') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      if (url.searchParams.get('countryCode') !== 'PT') return json({ error: 'countryCode must be PT' }, 400);
+      const status = await overtureCountryImportStatus(env, 'PT');
+      if (!status) return json({ error: "no Overture country import for 'PT'" }, 404);
+      return json(status);
     }
 
     // KAN-383 — operational queue for the supplementary OSM source. This is

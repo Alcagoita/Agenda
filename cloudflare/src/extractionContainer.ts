@@ -49,35 +49,41 @@ export class ExtractionContainer extends Container<Env> {
  * via `wrangler tail` before this fix, not guessed.
  */
 ExtractionContainer.outboundByHost = {
-  // POST http://d1.internal/ { sql, mode? }. The ordinary pipeline writes via
+  // POST http://d1.internal/ { sql|sqls, mode? }. The ordinary pipeline writes via
   // .run(); KAN-383's OSM supplementation does a bounded identity scan with
   // mode='all'. The container is the only caller of this hostname.
   'd1.internal': async (request: Request, env: Env): Promise<Response> => {
     if (request.method !== 'POST') {
       return new Response(JSON.stringify({ success: false, error: 'method not allowed' }), { status: 405 });
     }
-    let body: { sql?: unknown; mode?: unknown };
+    let body: { sql?: unknown; sqls?: unknown; mode?: unknown };
     try {
       body = await request.json();
     } catch {
       return new Response(JSON.stringify({ success: false, error: 'invalid JSON body' }), { status: 400 });
     }
-    if (typeof body.sql !== 'string' || !body.sql.trim()) {
-      return new Response(JSON.stringify({ success: false, error: 'sql must be a non-empty string' }), { status: 400 });
+    const statements = Array.isArray(body.sqls) ? body.sqls : body.sql === undefined ? null : [body.sql];
+    if (!statements || statements.length === 0 || statements.length > 50 ||
+        statements.some(statement => typeof statement !== 'string' || !statement.trim())) {
+      return new Response(JSON.stringify({ success: false, error: 'sql must be a non-empty statement or a batch of at most 50 statements' }), { status: 400 });
     }
     if (body.mode !== undefined && body.mode !== 'all') {
       return new Response(JSON.stringify({ success: false, error: 'mode must be all when supplied' }), { status: 400 });
     }
-    if (body.mode === 'all' && !/^\s*(SELECT|WITH)\b/i.test(body.sql)) {
+    if (body.mode === 'all' && (statements.length !== 1 || !/^\s*(SELECT|WITH)\b/i.test(statements[0] as string))) {
       return new Response(JSON.stringify({ success: false, error: 'read mode accepts SELECT statements only' }), { status: 400 });
     }
     try {
       if (body.mode === 'all') {
-        const result = await env.REGISTRY_DB.prepare(body.sql).all();
+        const result = await env.REGISTRY_DB.prepare(statements[0] as string).all();
         return new Response(JSON.stringify({ success: true, results: result.results }), { status: 200 });
       }
-      const result = await env.REGISTRY_DB.prepare(body.sql).run();
-      return new Response(JSON.stringify({ success: true, meta: result.meta }), { status: 200 });
+      if (statements.length === 1) {
+        const result = await env.REGISTRY_DB.prepare(statements[0] as string).run();
+        return new Response(JSON.stringify({ success: true, meta: result.meta }), { status: 200 });
+      }
+      const results = await env.REGISTRY_DB.batch(statements.map(statement => env.REGISTRY_DB.prepare(statement as string)));
+      return new Response(JSON.stringify({ success: true, meta: results.map(result => result.meta) }), { status: 200 });
     } catch (err) {
       return new Response(JSON.stringify({ success: false, error: String(err) }), { status: 500 });
     }

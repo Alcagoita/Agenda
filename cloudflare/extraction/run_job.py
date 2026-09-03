@@ -23,6 +23,7 @@ import sys
 import time
 import traceback
 import uuid
+import csv
 
 import d1_client
 import r2_client
@@ -34,6 +35,10 @@ import settlement_registry
 import supplement_osm_pois
 import enrich_osm_cuisine
 import multibanco_import
+import extract_overture
+import load_overture_candidates
+import promote_overture_candidates
+import report_overture_backlog
 
 # KAN-387. Municipalities per container invocation, processed serially —
 # Overpass politeness, and small enough that a dead instance loses little.
@@ -41,6 +46,76 @@ import multibanco_import
 # the authority, this is the request.
 OSM_SCOPE_BATCH_SIZE = 8
 MULTIBANCO_SCOPE_BATCH_SIZE = 8
+
+
+def _csv_row_count(path):
+    with open(path, newline='') as handle:
+        return sum(1 for _ in csv.DictReader(handle))
+
+
+def _execute_sql_directory(path):
+    for name in sorted(os.listdir(path)):
+        if name.endswith('.sql'):
+            d1_client.execute_sql_file(os.path.join(path, name))
+
+
+def _source_decision_counts(source_r2_key):
+    rows = d1_client.select(
+        "SELECT promotion_status, COUNT(*) AS count FROM overture_candidate "
+        f"WHERE country_source_r2_key = {load_overture_candidates.sql_escape(source_r2_key)} "
+        "GROUP BY promotion_status")
+    counts = {row['promotion_status']: row['count'] for row in rows}
+    return {status: counts.get(status, 0) for status in ('promoted', 'rejected', 'pending')}
+
+
+def run_overture_country(country_code, run_id, source_r2_key=None):
+    """Archive Overture in R2 before D1 work; retries reuse that archive."""
+    os.environ['D1_INTERNAL'] = '1'
+    work_dir = os.path.join(extract.BUILD_DIR, f'overture-country-{run_id}')
+    csv_path = os.path.join(work_dir, f'{country_code}.csv')
+    report_path = os.path.join(work_dir, 'unresolved.tsv')
+    stage_dir = os.path.join(work_dir, 'stage-sql')
+    promote_dir = os.path.join(work_dir, 'promote-sql')
+    os.makedirs(work_dir, exist_ok=True)
+    try:
+        if source_r2_key:
+            r2_client.download_file(source_r2_key, csv_path)
+            raw_key = source_r2_key
+        else:
+            extract_overture.extract_country(country_code, csv_path)
+            raw_key = f'overture-country-sources/{country_code}/{run_id}.csv'
+            r2_client.upload_file(csv_path, raw_key)
+        source_rows = _csv_row_count(csv_path)
+        worker_client.overture_country_source(country_code, run_id, raw_key, source_rows)
+
+        # This reads the archived CSV locally and streams its report before
+        # any staging write; it is not a country-scale D1 scan.
+        report_overture_backlog.write_report(csv_path, report_path)
+        report_key = f'overture-country-reports/{country_code}/{run_id}.tsv'
+        r2_client.upload_file(report_path, report_key)
+
+        staged_rows = load_overture_candidates.write_sql(
+            csv_path, stage_dir, country_source_r2_key=raw_key)
+        _execute_sql_directory(stage_dir)
+        promote_overture_candidates.run(10000, promote_dir, False, raw_key)
+        _execute_sql_directory(promote_dir)
+        decisions = _source_decision_counts(raw_key)
+        stats = {
+            'source_rows': source_rows, 'staged_rows': staged_rows,
+            'dropped_rows': source_rows - staged_rows,
+            'promoted_rows': decisions['promoted'],
+            'rejected_rows': decisions['rejected'],
+            'pending_rows': decisions['pending'],
+        }
+        worker_client.overture_country_complete(country_code, run_id, report_key, stats)
+        print(f'[run_job] Overture {country_code}: {stats}')
+    except Exception as error:
+        traceback.print_exc()
+        try:
+            worker_client.overture_country_failed(country_code, run_id, f'{type(error).__name__}: {error}')
+        except Exception:
+            traceback.print_exc()
+        raise
 
 def supplement_place_with_osm(place_id, min_lat, max_lat, min_lng, max_lng, country_code=None):
     """The per-Place OSM pass (KAN-394). Additive, and never fails the Place.
@@ -487,6 +562,12 @@ if __name__ == '__main__':
             print('MULTIBANCO_RUN_ID is required for multibanco-country mode', file=sys.stderr)
             sys.exit(2)
         run_multibanco_import(target.upper(), run_id)
+    elif mode == 'overture-country':
+        run_id = os.environ.get('OVERTURE_COUNTRY_RUN_ID')
+        if not run_id:
+            print('OVERTURE_COUNTRY_RUN_ID is required for overture-country mode', file=sys.stderr)
+            sys.exit(2)
+        run_overture_country(target.upper(), run_id, os.environ.get('COUNTRY_SOURCE_R2_KEY'))
     else:
-        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', 'osm-country', or 'multibanco-country'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', 'osm-country', 'multibanco-country', or 'overture-country'")
         sys.exit(2)

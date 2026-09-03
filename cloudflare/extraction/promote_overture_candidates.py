@@ -356,17 +356,38 @@ def status_updates(decided, status):
     Never overwrites a decision already made: a rerun must not turn a
     promotion into something else because the mapping changed underneath it.
     """
+    # One UPDATE per candidate made the pilot convenient but a national run
+    # would turn 440k decisions into 440k D1 requests.  Keep each decision's
+    # reason using CASE, while applying a bounded batch at a time.
+    batch = []
+    size = 200
     for overture_id, reason in decided:
-        yield (
-            'UPDATE overture_candidate SET '
-            f'promotion_status = {sql_escape(status)}, '
-            f'promotion_note = {sql_escape(reason)} '
-            f"WHERE overture_id = {sql_escape(overture_id)} "
-            "AND promotion_status = 'pending';\n"
-        )
+        piece = f' WHEN {sql_escape(overture_id)} THEN {sql_escape(reason)}'
+        # The id is present both in CASE and IN. Account for both so no
+        # generated statement crosses D1's SQL-size limit.
+        piece_size = byte_len(piece) + 2 * byte_len(sql_escape(overture_id)) + 4
+        if batch and (size + piece_size > MAX_STATEMENT_BYTES or len(batch) >= MAX_VALUES_TERMS):
+            yield _status_update_statement(batch, status)
+            batch, size = [], 200
+        batch.append((overture_id, reason))
+        size += piece_size
+    if batch:
+        yield _status_update_statement(batch, status)
 
 
-def run(batch, out_dir, dry_run):
+def _status_update_statement(batch, status):
+    cases = ''.join(f' WHEN {sql_escape(overture_id)} THEN {sql_escape(reason)}'
+                    for overture_id, reason in batch)
+    ids = ','.join(sql_escape(overture_id) for overture_id, _ in batch)
+    return (
+        'UPDATE overture_candidate SET '
+        f'promotion_status = {sql_escape(status)}, '
+        f'promotion_note = CASE overture_id{cases} ELSE promotion_note END '
+        f"WHERE promotion_status = 'pending' AND overture_id IN ({ids});\n"
+    )
+
+
+def run(batch, out_dir, dry_run, country_source_r2_key=None):
     mapping = category_map()
     reachable = reachable_types()
     brand_dictionary = load_brand_dictionary()
@@ -385,12 +406,15 @@ def run(batch, out_dir, dry_run):
 
     # `overture_id` is the primary key, so it is unique per returned row —
     # the condition paged() requires for its keyset cursor to be safe.
+    where = "promotion_status = 'pending'"
+    if country_source_r2_key:
+        where += f' AND country_source_r2_key = {sql_escape(country_source_r2_key)}'
     for row in paged(
         'overture_candidate',
         ('overture_id', 'name', 'lat', 'lng', 'address', 'category',
          'category_path', 'confidence', 'source_datasets'),
         'overture_id', batch,
-        where="promotion_status = 'pending'",
+        where=where,
     ):
         status, types, attributes, reason = decide(
             row, mapping, reachable, brand_dictionary, store_kind_aliases,
@@ -440,7 +464,7 @@ def run(batch, out_dir, dry_run):
 
     if dry_run:
         print('\n--dry-run: no SQL written')
-        return
+        return dict(stats)
 
     os.makedirs(out_dir, exist_ok=True)
     for name, statements in (
@@ -454,6 +478,7 @@ def run(batch, out_dir, dry_run):
         with open(path, 'w') as handle:
             handle.writelines(statements)
         print(f'wrote {path}')
+    return dict(stats)
 
 
 def main(argv):
