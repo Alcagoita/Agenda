@@ -121,10 +121,14 @@ class PagedCursorTest(unittest.TestCase):
             with mock.patch.dict(sys.modules, {'d1_client': fake_d1}):
                 self.assertEqual(A.query('SELECT poi_type FROM type_relation'), [{'poi_type': 'cafe'}])
         finally:
-            if old_mode is None: os.environ.pop('MODE', None)
-            else: os.environ['MODE'] = old_mode
-            if old_internal is None: os.environ.pop('D1_INTERNAL', None)
-            else: os.environ['D1_INTERNAL'] = old_internal
+            if old_mode is None:
+                os.environ.pop('MODE', None)
+            else:
+                os.environ['MODE'] = old_mode
+            if old_internal is None:
+                os.environ.pop('D1_INTERNAL', None)
+            else:
+                os.environ['D1_INTERNAL'] = old_internal
 
 
 if __name__ == '__main__':
