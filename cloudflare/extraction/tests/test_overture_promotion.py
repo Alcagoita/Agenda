@@ -123,6 +123,46 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(types[0], 'store')
         self.assertIn(('store_kind', 'hardware'), attributes)
 
+    def test_a_name_replaces_a_bare_store_with_a_specific_type(self):
+        mapping = {**self.mapping, 'generic_store': {'poi_type': 'store'}}
+        status, types, attributes, reason = self.promote.decide(
+            _row('Pizzaria Angelus', 'generic_store'), mapping, self.reachable, self.brands)
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('restaurant',))
+        self.assertNotIn(('store_kind', 'pizza'), attributes)
+        self.assertEqual(reason, 'name replaces generic store: restaurant')
+
+    def test_a_restaurant_name_recovers_a_missing_cuisine(self):
+        status, types, attributes, _ = self.decide('Noori Sushi', 'restaurant')
+        self.assertEqual(status, 'promoted')
+        self.assertIn('restaurant', types)
+        self.assertIn(('food_cuisine', 'sushi'), attributes)
+
+    def test_official_multibanco_source_owns_generic_overture_atms(self):
+        status, types, attributes, reason = self.decide('ATM Multibanco', 'atms')
+        self.assertEqual(status, 'rejected')
+        self.assertEqual(types, ())
+        self.assertEqual(attributes, ())
+        self.assertEqual(reason, 'ATM reserved for official Multibanco source')
+
+    def test_explicit_non_multibanco_operator_remains_an_atm(self):
+        status, types, _, _ = self.decide('Euronet ATM', 'atms')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('atm',))
+
+    def test_operator_name_must_be_a_complete_token(self):
+        status, types, _, reason = self.decide('Euronetwork ATM', 'atms')
+        self.assertEqual(status, 'rejected')
+        self.assertEqual(types, ())
+        self.assertEqual(reason, 'ATM reserved for official Multibanco source')
+
+    def test_financial_name_rules_apply_to_overture_rows(self):
+        status, types, attributes, _ = self.decide('Western Union - Faro', 'banks')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types[0], 'money_transfer')
+        self.assertNotIn('bank', types)
+        self.assertEqual(attributes, ())
+
     def test_an_unnamed_row_is_rejected(self):
         status, types, _, reason = self.decide('   ', 'pharmacy')
         self.assertEqual(status, 'rejected')
@@ -198,6 +238,51 @@ class ViewpointTest(DecideTest):
     def test_a_bar_named_miradouro_does_not(self):
         _, types, _, _ = self.decide('Bar Miradouro', 'bar')
         self.assertNotIn('viewpoint', types)
+
+
+class BackfillTest(unittest.TestCase):
+    def test_backfill_query_requires_an_explicit_pilot_cutoff(self):
+        import backfill_overture_classification as backfill
+        original = backfill.run_d1_query
+        captured = []
+        backfill.run_d1_query = captured.append
+        try:
+            backfill.rows_for_backfill('2026-09-04T00:00:00Z')
+        finally:
+            backfill.run_d1_query = original
+        self.assertIn("WHERE p.imported_at < '2026-09-04T00:00:00Z'", captured[0])
+
+    def test_generic_overture_atms_are_suppressed_without_deleting_the_row(self):
+        import backfill_overture_classification as backfill
+        import analyse_poi_candidates as analyse
+
+        original_pairs = analyse._type_relation_pairs
+        analyse._type_relation_pairs = lambda: []
+        try:
+            sql = ''.join(backfill.statements([{
+                'overture_id': 'gers-atm', 'name': 'ATM Multibanco', 'category': 'atms',
+                'primary_poi_type': 'atm', 'types': 'atm', 'max_rank': 0, 'attributes': None,
+            }]))
+        finally:
+            analyse._type_relation_pairs = original_pairs
+        self.assertIn("INSERT INTO poi_source_correction", sql)
+        self.assertIn("'overture','gers-atm',0", sql)
+        self.assertNotIn('DELETE FROM overture_poi;', sql)
+
+    def test_store_with_an_existing_kind_is_not_replaced(self):
+        import backfill_overture_classification as backfill
+        import analyse_poi_candidates as analyse
+        original_pairs = analyse._type_relation_pairs
+        analyse._type_relation_pairs = lambda: []
+        try:
+            sql = ''.join(backfill.statements([{
+                'overture_id': 'gers-store', 'name': 'Pizzaria Angelus', 'category': 'generic_store',
+                'primary_poi_type': 'store', 'types': 'store', 'max_rank': 0,
+                'attributes': 'store_kind:hardware',
+            }]))
+        finally:
+            analyse._type_relation_pairs = original_pairs
+        self.assertNotIn('DELETE FROM overture_poi_type', sql)
 
 
 if __name__ == '__main__':
