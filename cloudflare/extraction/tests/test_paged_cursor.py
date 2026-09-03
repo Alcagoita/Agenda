@@ -1,5 +1,6 @@
 import os
 import sys
+import types
 import unittest
 from unittest import mock
 
@@ -95,6 +96,21 @@ class PagedCursorTest(unittest.TestCase):
         # 'a' had a third type row in the table; it never appears.
         self.assertEqual([r['poi_type'] for r in rows], ['cafe', 'bakery', 'store'])
         self.assertNotIn('ice_cream', [r['poi_type'] for r in rows])
+
+    def test_container_reads_use_the_d1_binding_not_workstation_wrangler(self):
+        seen = []
+        fake_d1 = types.SimpleNamespace(select=lambda sql: seen.append(sql) or [{'poi_type': 'cafe'}])
+        previous = os.environ.get('D1_INTERNAL')
+        os.environ['D1_INTERNAL'] = '1'
+        try:
+            with mock.patch.dict(sys.modules, {'d1_client': fake_d1}):
+                self.assertEqual(A.query('SELECT poi_type FROM type_relation'), [{'poi_type': 'cafe'}])
+        finally:
+            if previous is None:
+                os.environ.pop('D1_INTERNAL', None)
+            else:
+                os.environ['D1_INTERNAL'] = previous
+        self.assertEqual(seen, ['SELECT poi_type FROM type_relation'])
 
 
 if __name__ == '__main__':
