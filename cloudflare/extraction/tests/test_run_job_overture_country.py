@@ -64,8 +64,8 @@ class FakeD1:
     def __init__(self):
         self.files = []
 
-    def execute_sql_file(self, path):
-        self.files.append(os.path.basename(path))
+    def execute_sql_file(self, path, statements_per_request=50):
+        self.files.append((os.path.basename(path), statements_per_request))
 
     def select(self, _sql):
         return [{'promotion_status': 'promoted', 'count': 1}]
@@ -125,7 +125,7 @@ class OvertureCountryRunTest(unittest.TestCase):
         run_job.run_overture_country('PT', 'run-1')
         self.assertEqual(self.r2.uploads[0][1], 'overture-country-sources/PT/run-1.csv')
         self.assertEqual(self.worker.source[0][2], 'overture-country-sources/PT/run-1.csv')
-        self.assertEqual(self.d1.files, ['00.sql', '01.sql'])
+        self.assertEqual(self.d1.files, [('00.sql', 1), ('01.sql', 1)])
         self.assertEqual(self.worker.complete[0][3]['source_rows'], 1)
         self.assertEqual(self.worker.complete[0][3]['staged_rows'], 1)
         self.assertEqual(self.worker.failed, [])

@@ -46,6 +46,10 @@ import report_overture_backlog
 # the authority, this is the request.
 OSM_SCOPE_BATCH_SIZE = 8
 MULTIBANCO_SCOPE_BATCH_SIZE = 8
+# Country-scale Overture writes use one bounded SQL statement per D1 request.
+# A 50-statement D1 batch is atomic, but its accumulated statement state can
+# exceed D1's memory budget on the national archive.
+OVERTURE_D1_STATEMENTS_PER_REQUEST = 1
 
 
 def _csv_row_count(path):
@@ -53,10 +57,12 @@ def _csv_row_count(path):
         return sum(1 for _ in csv.DictReader(handle))
 
 
-def _execute_sql_directory(path):
+def _execute_sql_directory(path, statements_per_request=50):
     for name in sorted(os.listdir(path)):
         if name.endswith('.sql'):
-            d1_client.execute_sql_file(os.path.join(path, name))
+            d1_client.execute_sql_file(
+                os.path.join(path, name),
+                statements_per_request=statements_per_request)
 
 
 def _source_decision_counts(source_r2_key):
@@ -96,9 +102,9 @@ def run_overture_country(country_code, run_id, source_r2_key=None):
 
         staged_rows = load_overture_candidates.write_sql(
             csv_path, stage_dir, country_source_r2_key=raw_key)
-        _execute_sql_directory(stage_dir)
+        _execute_sql_directory(stage_dir, OVERTURE_D1_STATEMENTS_PER_REQUEST)
         promote_overture_candidates.run(10000, promote_dir, False, raw_key)
-        _execute_sql_directory(promote_dir)
+        _execute_sql_directory(promote_dir, OVERTURE_D1_STATEMENTS_PER_REQUEST)
         decisions = _source_decision_counts(raw_key)
         stats = {
             'source_rows': source_rows, 'staged_rows': staged_rows,
