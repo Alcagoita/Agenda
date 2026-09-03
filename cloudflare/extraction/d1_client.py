@@ -56,13 +56,11 @@ def select(sql):
         raise D1Error(f'D1 reported read failure: {data.get("error")}')
     return data.get('results') or []
 
-def execute_sql_file(path, statements_per_request=50):
+def execute_sql_file(path):
     """Splits classify_and_load.py's own output on the `;\\n` statement
     boundary it writes and executes each one."""
-    if not 1 <= statements_per_request <= 50:
-        raise ValueError('statements_per_request must be between 1 and 50')
     with open(path) as f:
         content = f.read()
     statements = [s.strip() for s in content.split(';\n') if s.strip()]
-    for start in range(0, len(statements), statements_per_request):
-        execute_many(stmt + ';' for stmt in statements[start:start + statements_per_request])
+    for start in range(0, len(statements), 50):
+        execute_many(stmt + ';' for stmt in statements[start:start + 50])
