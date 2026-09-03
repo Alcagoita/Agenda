@@ -51,7 +51,7 @@ describe('KAN-443 Overture country import', () => {
     }), env, CTX);
     const invalid = await worker.fetch(post('/internal/overture-country/complete', {
       countryCode: 'PT', runId: first.OVERTURE_COUNTRY_RUN_ID,
-      backlogReportR2Key: 'overture-country-reports/PT/first.tsv', sourceRows: 2, stagedRows: 2, droppedRows: 1,
+      backlogReportR2Key: 'overture-country-reports/PT/first.tsv', sourceRows: 2, stagedRows: 1, droppedRows: 1,
       promotedRows: 0, rejectedRows: 0, pendingRows: 0,
     }), env, CTX);
     expect(invalid.status).toBe(409);

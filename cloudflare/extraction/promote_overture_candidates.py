@@ -387,7 +387,7 @@ def _status_update_statement(batch, status):
     )
 
 
-def run(batch, out_dir, dry_run):
+def run(batch, out_dir, dry_run, country_source_r2_key=None):
     mapping = category_map()
     reachable = reachable_types()
     brand_dictionary = load_brand_dictionary()
@@ -406,12 +406,15 @@ def run(batch, out_dir, dry_run):
 
     # `overture_id` is the primary key, so it is unique per returned row —
     # the condition paged() requires for its keyset cursor to be safe.
+    where = "promotion_status = 'pending'"
+    if country_source_r2_key:
+        where += f' AND country_source_r2_key = {sql_escape(country_source_r2_key)}'
     for row in paged(
         'overture_candidate',
         ('overture_id', 'name', 'lat', 'lng', 'address', 'category',
          'category_path', 'confidence', 'source_datasets'),
         'overture_id', batch,
-        where="promotion_status = 'pending'",
+        where=where,
     ):
         status, types, attributes, reason = decide(
             row, mapping, reachable, brand_dictionary, store_kind_aliases,

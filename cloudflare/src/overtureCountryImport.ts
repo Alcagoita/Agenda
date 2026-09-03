@@ -53,6 +53,7 @@ export async function completeOvertureCountryImport(env: Env, options: {
   stagedRows: number; droppedRows: number; promotedRows: number; rejectedRows: number; pendingRows: number; now: number;
 }): Promise<boolean> {
   if (options.sourceRows !== options.stagedRows + options.droppedRows) return false;
+  if (options.promotedRows + options.rejectedRows + options.pendingRows !== options.stagedRows) return false;
   const result = await env.REGISTRY_DB.prepare(
     `UPDATE overture_country_import SET status = 'mapped', completed_at = ?, backlog_report_r2_key = ?,
        source_rows = ?, staged_rows = ?, dropped_rows = ?, promoted_rows = ?, rejected_rows = ?, pending_rows = ?, last_error = NULL

@@ -41,12 +41,12 @@ from classify_and_load import MAX_STATEMENT_BYTES, byte_len, sql_escape
 INSERT_PREFIX = (
     'INSERT OR IGNORE INTO overture_candidate '
     '(overture_id, name, lat, lng, address, locality, category, basic_category, '
-    'category_path, confidence, source_datasets, imported_at) VALUES '
+    'category_path, confidence, source_datasets, imported_at, country_source_r2_key) VALUES '
 )
 MAX_VALUES_TERMS = 500
 
 
-def candidate_rows(csv_path):
+def candidate_rows(csv_path, country_source_r2_key=None):
     """The rows worth staging, with the source's own values preserved."""
     imported_at = datetime.now(timezone.utc).isoformat()
     seen = set()
@@ -71,19 +71,20 @@ def candidate_rows(csv_path):
                 (row.get('category_path') or '').strip() or None,
                 float(confidence) if confidence else None,
                 (row.get('source_datasets') or '').strip() or None,
-                imported_at,
+                imported_at, country_source_r2_key,
             )
 
 
 def value_tuple(row):
     (overture_id, name, lat, lng, address, locality, category,
-     basic_category, category_path, confidence, sources, imported_at) = row
+     basic_category, category_path, confidence, sources, imported_at,
+     country_source_r2_key) = row
     return (
         f'({sql_escape(overture_id)},{sql_escape(name)},{lat},{lng},'
         f'{sql_escape(address)},{sql_escape(locality)},{sql_escape(category)},'
         f'{sql_escape(basic_category)},{sql_escape(category_path)},'
         f'{"NULL" if confidence is None else confidence},'
-        f'{sql_escape(sources)},{sql_escape(imported_at)})'
+        f'{sql_escape(sources)},{sql_escape(imported_at)},{sql_escape(country_source_r2_key)})'
     )
 
 
@@ -104,10 +105,15 @@ def batched(pieces):
         yield INSERT_PREFIX + ',\n'.join(values) + ';\n'
 
 
-def write_sql(csv_path, sql_out, dry_run=False):
+def write_sql(csv_path, sql_out, dry_run=False, country_source_r2_key=None):
     """Write idempotent candidate SQL and return the number of usable rows."""
-    rows = list(candidate_rows(csv_path))
+    rows = list(candidate_rows(csv_path, country_source_r2_key))
     statements = list(batched(value_tuple(row) for row in rows))
+    if country_source_r2_key:
+        statements = [statement[:-2] + (
+            ' ON CONFLICT(overture_id) DO UPDATE SET country_source_r2_key = '
+            'COALESCE(overture_candidate.country_source_r2_key, excluded.country_source_r2_key);\n'
+        ) for statement in statements]
     print(f'{len(rows):,} candidate rows -> {len(statements)} statements', file=sys.stderr)
     if dry_run:
         print('--dry-run: no SQL written', file=sys.stderr)

@@ -59,6 +59,15 @@ def _execute_sql_directory(path):
             d1_client.execute_sql_file(os.path.join(path, name))
 
 
+def _source_decision_counts(source_r2_key):
+    rows = d1_client.select(
+        "SELECT promotion_status, COUNT(*) AS count FROM overture_candidate "
+        f"WHERE country_source_r2_key = {load_overture_candidates.sql_escape(source_r2_key)} "
+        "GROUP BY promotion_status")
+    counts = {row['promotion_status']: row['count'] for row in rows}
+    return {status: counts.get(status, 0) for status in ('promoted', 'rejected', 'pending')}
+
+
 def run_overture_country(country_code, run_id, source_r2_key=None):
     """Archive Overture in R2 before D1 work; retries reuse that archive."""
     os.environ['D1_INTERNAL'] = '1'
@@ -85,16 +94,18 @@ def run_overture_country(country_code, run_id, source_r2_key=None):
         report_key = f'overture-country-reports/{country_code}/{run_id}.tsv'
         r2_client.upload_file(report_path, report_key)
 
-        staged_rows = load_overture_candidates.write_sql(csv_path, stage_dir)
+        staged_rows = load_overture_candidates.write_sql(
+            csv_path, stage_dir, country_source_r2_key=raw_key)
         _execute_sql_directory(stage_dir)
-        promotion = promote_overture_candidates.run(10000, promote_dir, False)
+        promote_overture_candidates.run(10000, promote_dir, False, raw_key)
         _execute_sql_directory(promote_dir)
+        decisions = _source_decision_counts(raw_key)
         stats = {
             'source_rows': source_rows, 'staged_rows': staged_rows,
             'dropped_rows': source_rows - staged_rows,
-            'promoted_rows': promotion.get('promoted', 0),
-            'rejected_rows': promotion.get('rejected', 0),
-            'pending_rows': promotion.get('pending', 0),
+            'promoted_rows': decisions['promoted'],
+            'rejected_rows': decisions['rejected'],
+            'pending_rows': decisions['pending'],
         }
         worker_client.overture_country_complete(country_code, run_id, report_key, stats)
         print(f'[run_job] Overture {country_code}: {stats}')

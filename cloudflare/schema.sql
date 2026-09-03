@@ -138,10 +138,13 @@ CREATE TABLE IF NOT EXISTS overture_candidate (
   promotion_status TEXT NOT NULL DEFAULT 'pending'
     CHECK (promotion_status IN ('pending', 'promoted', 'rejected')),
   promotion_note TEXT,
-  imported_at TEXT NOT NULL
+  imported_at TEXT NOT NULL,
+  country_source_r2_key TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_overture_candidate_status ON overture_candidate (promotion_status);
 CREATE INDEX IF NOT EXISTS idx_overture_candidate_category ON overture_candidate (category);
+CREATE INDEX IF NOT EXISTS idx_overture_candidate_source_status
+  ON overture_candidate (country_source_r2_key, promotion_status);
 
 CREATE TABLE IF NOT EXISTS overture_country_import (
   country_code TEXT PRIMARY KEY,
