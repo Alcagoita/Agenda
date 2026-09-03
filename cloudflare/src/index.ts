@@ -2367,10 +2367,50 @@ export default {
     if (url.pathname === '/internal/osm-supplement/queue' && request.method === 'POST') {
       const internalAuthError = authenticateInternal(request, env);
       if (internalAuthError) return internalAuthError;
-      // KAN-442: Overture is the nationwide base. Existing OSM rows remain
-      // temporarily for the offline review queue, but no new country-wide
-      // OSM import may be started.
-      return json({ error: 'OSM supplementation is retired; use Overture and curated mall tenants' }, 410);
+      const body = await request.json<{ countryCode?: unknown; retryFailed?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) {
+        return json({ error: 'countryCode must be a two-letter ISO code' }, 400);
+      }
+      const countryCode = body.countryCode.toUpperCase();
+      const country = await env.REGISTRY_DB.prepare('SELECT status FROM country WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (!country) return json({ error: `no country row for '${countryCode}'` }, 404);
+      if (country.status !== 'mapped') return json({ error: 'country must be mapped before OSM supplementation' }, 409);
+      const registry = await env.REGISTRY_DB.prepare('SELECT status FROM settlement_registry_import WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string }>();
+      if (registry?.status !== 'mapped') return json({ error: 'settlement registry must be mapped before OSM supplementation' }, 409);
+      const runId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const started = await env.REGISTRY_DB.prepare(
+        `INSERT INTO osm_supplement_import
+           (country_code, status, active_run_id, started_at, completed_at, source_elements, inserted_rows, matched_skipped, ambiguous_skipped, last_error)
+         VALUES (?, 'mapping', ?, ?, NULL, 0, 0, 0, 0, NULL)
+         ON CONFLICT(country_code) DO UPDATE SET
+           status = 'mapping', active_run_id = excluded.active_run_id, started_at = excluded.started_at,
+           completed_at = NULL, source_elements = 0, inserted_rows = 0, matched_skipped = 0,
+           ambiguous_skipped = 0, failed_scopes = 0, last_error = NULL,
+           batch_worker_id = NULL, batch_lease_expires_at = NULL,
+           backoff_until = NULL, backoff_seconds = 0, cancel_requested = 0
+         WHERE osm_supplement_import.status IN ('none', 'failed', 'mapped')`,
+      ).bind(countryCode, runId, now).run();
+      let seeded = 0;
+      let retried = 0;
+      if (body.retryFailed === true) retried = await retryFailedScopes(env, countryCode);
+      if (started.meta.changes === 1) {
+        seeded = await seedScopes(env, countryCode);
+        const counts = await scopeCounts(env, countryCode, Date.now());
+        if (counts.total === 0) {
+          await env.REGISTRY_DB.prepare(
+            `UPDATE osm_supplement_import SET status = 'failed', completed_at = ?, last_error = ?
+             WHERE country_code = ? AND active_run_id = ?`,
+          ).bind(now, 'no bounded municipality registry; import settlement metadata first', countryCode, runId).run();
+          return json({ error: `country '${countryCode}' has no bounded municipality scopes` }, 409);
+        }
+        triggerBuild(env, ctx, 'osm-country', countryCode, undefined, runId);
+      }
+      const state = await env.REGISTRY_DB.prepare('SELECT status, active_run_id FROM osm_supplement_import WHERE country_code = ?')
+        .bind(countryCode).first<{ status: string; active_run_id: string | null }>();
+      return json({ ok: true, status: state?.status ?? 'none', started: started.meta.changes === 1, seeded, retried });
     }
 
     // The container's batch loop. Each call takes the country lock and hands
