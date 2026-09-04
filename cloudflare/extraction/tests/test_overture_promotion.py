@@ -96,6 +96,21 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(status, 'pending')
         self.assertEqual(types, ())
 
+    def test_reviewed_shopping_override_is_a_scoped_store_subtype(self):
+        reviewed = {
+            'gers-1': {
+                'poi_type': 'store', 'store_kind': 'books',
+                'reason': 'reviewed Books batch: bookshop',
+            },
+        }
+        status, types, attributes, reason = self.promote.decide(
+            _row('Livraria Exemplo', 'shopping'), self.mapping, self.reachable,
+            self.brands, overrides=reviewed)
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('store',))
+        self.assertEqual(attributes, (('store_kind', 'books'),))
+        self.assertEqual(reason, 'reviewed Books batch: bookshop')
+
     def test_a_rejected_category_is_rejected_whatever_the_name_says(self):
         # Letting a name keyword rescue a ruled-out category would reopen
         # the decision one row at a time.

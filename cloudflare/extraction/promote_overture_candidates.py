@@ -182,8 +182,21 @@ def category_map():
         return {k: v for k, v in json.load(handle).items() if not k.startswith('_')}
 
 
+def candidate_overrides(country_source_r2_key):
+    """The small, reviewed batches that cannot safely become broad rules.
+
+    Generic ``shopping`` carries no usable subtype.  A reviewed ID can still
+    be promoted, but keeping the decision source-scoped and explicit prevents
+    a name fragment from silently classifying the national backlog.
+    """
+    path = os.path.join(CLOUDFLARE_DIR, 'src', 'overtureCandidateOverrides.json')
+    with open(path) as handle:
+        return json.load(handle).get(country_source_r2_key, {})
+
+
 def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
-           food_cuisine_aliases=None, financial_service_rules=None, store_brands=None):
+           food_cuisine_aliases=None, financial_service_rules=None, store_brands=None,
+           overrides=None):
     """(status, types, attributes, reason) for one candidate.
 
     `types` is ranked: the category's answer first, then anything the name
@@ -209,6 +222,15 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
         return 'rejected', (), (), f"rejected category: {row['category']}"
     if normalized.startswith(REJECTED_NAME_PREFIXES):
         return 'rejected', (), (), 'housing development, not a place'
+
+    override = (overrides or {}).get(row.get('overture_id'))
+    if override:
+        poi_type = override['poi_type']
+        store_kind = override.get('store_kind')
+        if (row['category'] != 'shopping' or poi_type != 'store'
+                or not store_kind or poi_type not in reachable):
+            raise ValueError(f"invalid reviewed override for {row['overture_id']}")
+        return 'promoted', (reachable[poi_type],), (('store_kind', store_kind),), override['reason']
 
     types, attributes, reason = [], [], None
     entry = mapping.get(row['category'])
@@ -393,7 +415,7 @@ def _status_update_statement(batch, status):
 
 def _country_page(rows, mapping, reachable, brand_dictionary, store_kind_aliases,
                   food_cuisine_aliases, financial_service_rules, store_brands,
-                  refreshed):
+                  refreshed, overrides=None):
     """Decide one bounded page without retaining the national result set."""
     stats = Counter()
     poi_pieces, type_pieces, attribute_pieces = [], [], []
@@ -401,7 +423,7 @@ def _country_page(rows, mapping, reachable, brand_dictionary, store_kind_aliases
     for row in rows:
         status, types, attributes, reason = decide(
             row, mapping, reachable, brand_dictionary, store_kind_aliases,
-            food_cuisine_aliases, financial_service_rules, store_brands)
+            food_cuisine_aliases, financial_service_rules, store_brands, overrides)
         stats[status] += 1
         if status == 'promoted':
             promoted.append((row['overture_id'], reason))
@@ -465,10 +487,10 @@ def run_country(batch, country_source_r2_key):
 def _promote_country_page(page, mapping, reachable, brand_dictionary,
                            store_kind_aliases, food_cuisine_aliases,
                            financial_service_rules, store_brands, refreshed,
-                           stats, d1_client):
+                           stats, d1_client, overrides=None):
     decided = _country_page(
         page, mapping, reachable, brand_dictionary, store_kind_aliases,
-        food_cuisine_aliases, financial_service_rules, store_brands, refreshed)
+        food_cuisine_aliases, financial_service_rules, store_brands, refreshed, overrides)
     page_stats, poi_pieces, type_pieces, attribute_pieces, promoted, rejected = decided
     for prefix, pieces in (
         (POI_INSERT_PREFIX, poi_pieces),
@@ -484,6 +506,39 @@ def _promote_country_page(page, mapping, reachable, brand_dictionary,
         for statement in status_updates(decisions, status):
             d1_client.execute(statement)
     stats.update(page_stats)
+
+
+def run_country_overrides(country_source_r2_key):
+    """Promote one reviewed batch without scanning the country backlog."""
+    import d1_client
+
+    overrides = candidate_overrides(country_source_r2_key)
+    if not overrides:
+        return {}
+    mapping = category_map()
+    reachable = reachable_types()
+    brand_dictionary = load_brand_dictionary()
+    store_kind_aliases = store_kind_alias_index()
+    food_cuisine_aliases = food_cuisine_alias_index()
+    financial_service_rules = load_financial_service_name_rules()
+    store_brands = store_brand_index()
+    refreshed = date.today().isoformat()
+    stats = Counter()
+    ids = sorted(overrides)
+    for start in range(0, len(ids), MAX_VALUES_TERMS):
+        requested = ids[start:start + MAX_VALUES_TERMS]
+        values = ','.join(sql_escape(overture_id) for overture_id in requested)
+        rows = d1_client.select(
+            'SELECT overture_id, name, lat, lng, address, category, category_path, '
+            'confidence, source_datasets FROM overture_candidate '
+            "WHERE promotion_status = 'pending' AND country_source_r2_key = "
+            f"{sql_escape(country_source_r2_key)} AND overture_id IN ({values}) "
+            'ORDER BY overture_id')
+        _promote_country_page(
+            rows, mapping, reachable, brand_dictionary, store_kind_aliases,
+            food_cuisine_aliases, financial_service_rules, store_brands,
+            refreshed, stats, d1_client, overrides)
+    return dict(stats)
 
 
 def run(batch, out_dir, dry_run, country_source_r2_key=None):
