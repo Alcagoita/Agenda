@@ -20,6 +20,7 @@ const MIGRATION = readFileSync(join(ROOT, 'migrations', '0022_bridge_classifier_
 const ICE_CREAM_MIGRATION = readFileSync(join(ROOT, 'migrations', '0023_ice_cream_poi_type.sql'), 'utf8');
 const TOBACCO_MIGRATION = readFileSync(join(ROOT, 'migrations', '0035_tobacco_intent.sql'), 'utf8');
 const VAPE_BACKFILL_MIGRATION = readFileSync(join(ROOT, 'migrations', '0036_tobacco_vape_backfill.sql'), 'utf8');
+const WINE_AND_SPIRITS_MIGRATION = readFileSync(join(ROOT, 'migrations', '0037_rename_drinks_to_wine_and_spirits.sql'), 'utf8');
 /** The table definition alone, without the rows the schema seeds. */
 const CREATE_TABLE = SCHEMA.split('INSERT OR IGNORE')[0];
 
@@ -99,6 +100,14 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     expect(new Set(ids).size).toBe(81);
     expect(VAPE_BACKFILL_MIGRATION).toContain("'lottery', 1");
     expect(VAPE_BACKFILL_MIGRATION).not.toMatch(/WHERE\s+.*store_kind/i);
+  });
+
+  it('renames the exact wine-and-spirits source set without touching bar intent', () => {
+    const ids = WINE_AND_SPIRITS_MIGRATION.match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g) ?? [];
+    expect(ids).toHaveLength(791);
+    expect(new Set(ids).size).toBe(791);
+    expect(WINE_AND_SPIRITS_MIGRATION).toContain("value = 'wine_and_spirits'");
+    expect(WINE_AND_SPIRITS_MIGRATION).not.toContain("poi_type = 'bar'");
   });
 
   it('never drops its own type when a search type gains a partner', () => {

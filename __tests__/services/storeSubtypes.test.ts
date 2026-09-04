@@ -24,6 +24,8 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Buy a necklace')).toBe('jewelry');
     expect(inferStoreSubtype('Buy contact lenses')).toBe('eyewear_and_optician');
     expect(inferStoreSubtype('Comprar líquido para lentes')).toBe('eyewear_and_optician');
+    expect(inferStoreSubtype('Comprar vinho')).toBe('wine_and_spirits');
+    expect(inferStoreSubtype('Ir beber um copo')).not.toBe('wine_and_spirits');
   });
 
   it('requires shopping context before promoting subtype intent to store POI inference', () => {

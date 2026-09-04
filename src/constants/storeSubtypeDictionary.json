@@ -439,15 +439,14 @@
       "Rituals"
     ]
   },
-  "drinks": {
-    "label": "Drinks",
-    "labelPt": "Bebidas",
+  "wine_and_spirits": {
+    "label": "Wine & spirits",
+    "labelPt": "Garrafeira",
     "aliases": [
       "wine",
       "beer",
       "spirits",
       "liquor",
-      "drinks",
       "bottle shop",
       "off licence",
       "vinho",
