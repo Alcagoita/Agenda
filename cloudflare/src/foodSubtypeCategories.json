@@ -99,6 +99,9 @@
   "filipino": {
     "category_name": "Filipino"
   },
+  "fondue": {
+    "category_name": "Fondue"
+  },
   "fish_and_chips": {
     "category_name": "Fish And Chips"
   },
@@ -107,6 +110,9 @@
   },
   "georgian": {
     "category_name": "Georgian"
+  },
+  "gluten_free": {
+    "category_name": "Gluten-free"
   },
   "german": {
     "category_name": "German"

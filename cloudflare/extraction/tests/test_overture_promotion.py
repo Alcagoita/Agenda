@@ -104,6 +104,24 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(types, ())
         self.assertEqual(reason, 'rejected category: dentist')
 
+    def test_restaurant_suppliers_are_not_promoted_as_places_to_eat(self):
+        status, types, _, reason = self.decide(
+            'H3D Equipamentos Hoteleiros', 'restaurant_equipment_and_supply')
+        self.assertEqual(status, 'rejected')
+        self.assertEqual(types, ())
+        self.assertEqual(reason, 'rejected category: restaurant_equipment_and_supply')
+
+    def test_new_food_cuisines_are_written_with_the_restaurant_type(self):
+        for category, cuisine in (
+            ('gluten_free_restaurant', 'gluten_free'),
+            ('fondue_restaurant', 'fondue'),
+        ):
+            with self.subTest(category=category):
+                status, types, attributes, _ = self.decide('Restaurant', category)
+                self.assertEqual(status, 'promoted')
+                self.assertEqual(types, ('restaurant',))
+                self.assertIn(('food_cuisine', cuisine), attributes)
+
     def test_a_housing_development_is_not_a_landmark(self):
         status, _, _, reason = self.decide(
             'Urbanização da Quinta Nova', 'landmark_and_historical_building')

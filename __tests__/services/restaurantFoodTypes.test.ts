@@ -13,6 +13,8 @@ describe('restaurantFoodTypes', () => {
   it('infers food type intent from English and pt-PT task text', () => {
     expect(inferRestaurantFoodType('Go out to sushi')).toBe('sushi');
     expect(inferRestaurantFoodType('Jantar vegetariano')).toBe('vegetarian');
+    expect(inferRestaurantFoodType('Jantar sem glúten')).toBe('gluten_free');
+    expect(inferRestaurantFoodType('Fondue no inverno')).toBe('fondue');
     expect(inferRestaurantFoodType('Comer comida portuguesa')).toBe('portuguese');
   });
 
@@ -107,7 +109,7 @@ describe('restaurantFoodTypes', () => {
 
   it('lists the new subtypes as selectable food types', () => {
     const types = listRestaurantFoodTypes();
-    for (const t of ['pizza', 'seafood', 'bbq', 'brazilian', 'mediterranean', 'asian']) {
+    for (const t of ['pizza', 'seafood', 'bbq', 'brazilian', 'mediterranean', 'asian', 'gluten_free', 'fondue']) {
       expect(types).toContain(t);
     }
   });

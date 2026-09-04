@@ -105,6 +105,10 @@ REJECTED_CATEGORIES = frozenset({
     'lawyer', 'insurance_agency', 'psychologist',
     'community_services_non_profits',
     'dance_school', 'driving_school',
+    # Suppliers to restaurants, not places where a user can eat. They are
+    # deliberately settled now rather than being re-presented as restaurant
+    # candidates in a later food phase.
+    'restaurant_equipment_and_supply', 'restaurant_wholesale',
 })
 
 # A housing development is a place NAME, not a place. Overture files these
