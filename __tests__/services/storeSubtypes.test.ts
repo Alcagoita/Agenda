@@ -22,6 +22,8 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Buy screws')).toBe('hardware');
     expect(inferStoreSubtype('Buy a bicycle helmet')).toBe('bicycle');
     expect(inferStoreSubtype('Buy a necklace')).toBe('jewelry');
+    expect(inferStoreSubtype('Buy contact lenses')).toBe('eyewear_and_optician');
+    expect(inferStoreSubtype('Comprar líquido para lentes')).toBe('eyewear_and_optician');
   });
 
   it('requires shopping context before promoting subtype intent to store POI inference', () => {
@@ -46,6 +48,7 @@ describe('storeSubtypes', () => {
     expect(storeSubtypeSuggestions('Bi')).toEqual(['bicycle']);
     expect(storeSubtypeSuggestions('Je')).toEqual(['jewelry']);
     expect(storeSubtypeSuggestions('Sh')).toEqual(['shoes']);
+    expect(storeSubtypeSuggestions('Op')).toEqual(['eyewear_and_optician']);
     expect(storeSubtypeSuggestions('Sap', 'pt-PT')).toEqual(['shoes']);
   });
 

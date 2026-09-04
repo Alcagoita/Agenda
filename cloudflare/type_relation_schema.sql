@@ -78,6 +78,13 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('cafe', 'coffee_shop'),
   ('coffee_shop', 'coffee_shop'),
   ('coffee_shop', 'cafe'),
+  -- KAN-432: buying cigarettes is a composite errand. Tobacco/vape shops
+  -- are classified as lottery alongside their store kind; cafés and lottery
+  -- counters are useful answers too. Specialist cigar shops stay separate.
+  ('tobacco', 'tobacco'),
+  ('tobacco', 'lottery'),
+  ('tobacco', 'cafe'),
+  ('tobacco', 'coffee_shop'),
   -- clinic <-> doctor only; dentist/hospital/medical_lab/physiotherapist
   -- stay separate, and bus <-> bus_station only, since a train station is a
   -- different mode rather than another word for a bus stop.

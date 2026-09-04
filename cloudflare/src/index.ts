@@ -1645,7 +1645,7 @@ const OSM_SCOPE_ERROR_CLASSES = new Set<OsmScopeErrorClass>([
 function triggerBuild(
   env: Env,
   ctx: ExecutionContext | undefined,
-  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country' | 'multibanco-country' | 'overture-country',
+  mode: 'place' | 'country' | 'country-reconcile' | 'settlements' | 'osm-country' | 'multibanco-country' | 'overture-country' | 'overture-overrides',
   target: string,
   countrySourceR2Key?: string,
   countryRunId?: string,
@@ -1663,6 +1663,7 @@ function triggerBuild(
       ...(mode === 'osm-country' ? { D1_INTERNAL: '1', OSM_SUPPLEMENT_RUN_ID: countryRunId ?? '' } : {}),
       ...(mode === 'multibanco-country' ? { D1_INTERNAL: '1', MULTIBANCO_RUN_ID: countryRunId ?? '' } : {}),
       ...(mode === 'overture-country' ? { D1_INTERNAL: '1', OVERTURE_COUNTRY_RUN_ID: countryRunId ?? '' } : {}),
+      ...(mode === 'overture-overrides' ? { D1_INTERNAL: '1', OVERTURE_OVERRIDE_BATCH: countryRunId ?? '' } : {}),
     },
   }).catch(async (error) => {
     // A detached promise is cancelled when the Worker finishes the request.
@@ -2431,6 +2432,26 @@ export default {
       const status = await overtureCountryImportStatus(env, 'PT');
       if (!status) return json({ error: "no Overture country import for 'PT'" }, 404);
       return json(status);
+    }
+
+    // Reviewed country corrections are deliberately separate from the
+    // national import run: each named batch selects only its listed IDs and
+    // is safe to repeat after an interrupted container start.
+    if (url.pathname === '/internal/overture-country/overrides' && request.method === 'POST') {
+      const internalAuthError = authenticateInternal(request, env);
+      if (internalAuthError) return internalAuthError;
+      const body = await request.json<{ countryCode?: unknown; batch?: unknown }>().catch(() => null);
+      if (typeof body?.countryCode !== 'string' || body.countryCode.toUpperCase() !== 'PT' ||
+          typeof body.batch !== 'string' || !/^[a-z0-9_-]+$/.test(body.batch)) {
+        return json({ error: 'countryCode must be PT and batch must be a simple identifier' }, 400);
+      }
+      const status = await overtureCountryImportStatus(env, 'PT');
+      if (!status || status.status !== 'mapped' || typeof status.raw_extract_r2_key !== 'string' ||
+          !status.raw_extract_r2_key.startsWith('overture-country-sources/PT/')) {
+        return json({ error: 'the PT Overture import must be mapped with an immutable source first' }, 409);
+      }
+      triggerBuild(env, ctx, 'overture-overrides', 'PT', status.raw_extract_r2_key, body.batch);
+      return json({ ok: true, started: true, batch: body.batch });
     }
 
     // KAN-383 — operational queue for the supplementary OSM source. This is

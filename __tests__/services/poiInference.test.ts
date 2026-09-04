@@ -98,6 +98,11 @@ describe('inferPoiFromRules (en)', () => {
     expect(inferPoiFromRules('withdraw cash')).toBe('atm');
   });
 
+  it('maps cigarette and vape errands to the tobacco intent', () => {
+    expect(inferPoiFromRules('buy cigarettes')).toBe('tobacco');
+    expect(inferPoiFromRules('buy vape liquid')).toBe('tobacco');
+  });
+
   it('maps a prescription task to pharmacy', () => {
     expect(inferPoiFromRules('pick up prescription')).toBe('pharmacy');
   });
@@ -146,6 +151,11 @@ describe('inferPoiFromRules (pt-PT)', () => {
 
   it('maps a multibanco task to atm', () => {
     expect(inferPoiFromRules('levantar dinheiro no multibanco', 'pt-PT')).toBe('atm');
+  });
+
+  it('maps tabacaria errands to the tobacco intent', () => {
+    expect(inferPoiFromRules('comprar cigarros', 'pt-PT')).toBe('tobacco');
+    expect(inferPoiFromRules('ir à tabacaria', 'pt-PT')).toBe('tobacco');
   });
 
   it('maps a farmácia task to pharmacy', () => {

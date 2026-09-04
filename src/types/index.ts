@@ -134,7 +134,7 @@ export type PoiType =
   // when a car breaks the user searches for it directly, so it is never a
   // "you happen to be nearby" errand.
   | 'phone_repair' | 'shoe_repair' | 'clothing_repair'
-  | 'lottery' | 'tea' | 'juice'
+  | 'lottery' | 'tobacco' | 'tea' | 'juice'
   // KAN-412. Types the classifiers were already writing with nowhere for a
   // search to reach them — 64 such types held 75,977 rows. These are the
   // ones that pass the test: could a user plausibly write a task about
@@ -199,7 +199,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'ice_cream' }, { type: 'tea' }, { type: 'juice' },
   { type: 'tattoo' },
   { type: 'phone_repair' }, { type: 'shoe_repair' }, { type: 'clothing_repair' },
-  { type: 'lottery' },
+  { type: 'lottery' }, { type: 'tobacco' },
   // KAN-412. Catalog and free-text only — none of these joins
   // QUICK_ACTIONABLE_POI_TYPES. People reach for them specifically ("find a
   // vet for today"), never by browsing a carousel, so the dictionary is
@@ -222,7 +222,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
  * carousels and their automatic quick suggestion use this single list.
  */
 export const QUICK_ACTIONABLE_POI_TYPES: readonly PoiType[] = [
-  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
+  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store', 'tobacco',
   'florist', 'bakery', 'ice_cream', 'park', 'gym', 'bar', 'library',
 ];
 
@@ -406,7 +406,7 @@ export interface Category {
 
 /** Which POI types can appear on tasks of each category. */
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
-  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist'],
+  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist', 'tobacco'],
   health:   ['pharmacy', 'clinic', 'gym'],
   personal: ['cafe', 'restaurant', 'bar', 'park', 'salon', 'ice_cream', 'tattoo', 'barber', 'hairdresser', 'nail_salon'],
   work:     ['library', 'school'],
@@ -578,6 +578,7 @@ export const POI_OSM_TAGS: Record<PoiType, OsmTagSelector> = {
   shoe_repair:     { key: 'craft', value: 'shoemaker' },
   clothing_repair: { key: 'craft', value: 'tailor' },
   lottery:         { key: 'shop',  value: 'lottery' },
+  tobacco:         { key: 'shop',  value: 'tobacco' },
   tea:             { key: 'shop',  value: 'tea' },
   // OSM has no settled juice tag. shop=beverages is the closest widely
   // used one, but it means drinks retail rather than a juice counter, so
@@ -832,6 +833,7 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   shoe_repair:     50,
   clothing_repair: 50,
   lottery:         50,
+  tobacco:         50,
   tea:             50,
   juice:           50,
   // KAN-412. Small shopfronts stay tight; a playground and a charging

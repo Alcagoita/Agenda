@@ -1,24 +1,1662 @@
 {
   "overture-country-sources/PT/1ea48e22-9b0d-47a2-beb7-29f5203bc204.csv": {
-    "e5e4bd94-fd64-4c96-b4d4-4658f0fb9f6b": {
-      "poi_type": "store",
-      "store_kind": "books",
-      "reason": "reviewed Books batch: stationery shop"
+    "books": {
+      "e5e4bd94-fd64-4c96-b4d4-4658f0fb9f6b": {
+        "poi_type": "store",
+        "store_kind": "books",
+        "reason": "reviewed Books batch: stationery shop"
+      },
+      "cd8136f6-84fa-49b5-91d8-f3fd2d77147c": {
+        "poi_type": "store",
+        "store_kind": "books",
+        "reason": "reviewed Books batch: bookshop"
+      },
+      "a19cd982-3ba3-464c-886f-833a53b6ebc2": {
+        "poi_type": "store",
+        "store_kind": "books",
+        "reason": "reviewed Books batch: bookshop"
+      },
+      "209341f8-54ef-4df1-8186-c3753aee3a88": {
+        "poi_type": "store",
+        "store_kind": "books",
+        "reason": "reviewed Books batch: stationery shop"
+      }
     },
-    "cd8136f6-84fa-49b5-91d8-f3fd2d77147c": {
-      "poi_type": "store",
-      "store_kind": "books",
-      "reason": "reviewed Books batch: bookshop"
+    "opticians": {
+      "a93051e4-e721-4836-8f7b-ddaa2fe1764b": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d3653259-a3d9-4c62-a1b7-8d422de7d924": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d356fb68-5148-4009-8a90-19b7e0f9721e": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f9d32c78-2035-4f6f-a3f6-a8c275701b5f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ed5b72f4-4e2b-4d14-ab6e-1669c5216a03": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "35b8a5f7-7938-440c-a8af-f960b55d2fab": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "21c38839-7251-4de5-b799-0ab47f646a70": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "67f27c0c-ab97-4a43-a0b7-f6801aa971d8": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "8f6cbd0a-6970-438e-9108-5a0e4358f0d1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "91939410-0721-4ce0-8159-c928539076fa": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "280af88d-8542-47c9-aa8e-0693776ae846": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a03dbdf7-e763-4c24-a6e9-69fa215711a8": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "c85241bd-846c-4dc3-8af7-6c67adc4e07e": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "78cebb8d-671b-40b1-ba6a-8254ea2b7186": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "2dbc225a-f4d9-43c2-8961-4ab960f61524": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "10f112c2-6174-402c-92df-5c297aa9658c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3393e1ff-5244-4a7d-aef5-5450309d3cc6": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5ed06bc7-d912-46ca-8698-a389a4aac11e": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "8a523c86-b066-4b89-97b1-1bacc5e09769": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "1ccb99a8-b022-49a3-8e70-46fb952b06d9": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e207416e-d9a7-49de-9166-b7c31ee4d940": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3f485b1a-ec52-43ec-8d14-af3a6b14e7e5": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "21f1d84e-c198-47a4-a376-6b5cba9d9a5d": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "dcebe0b7-30c6-43da-b76e-0e735056c0d6": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f441175f-13bb-4b8d-901d-4dc7d88e5b1c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "7563a1f9-fe4d-44f4-a297-e7bc3d2ccd99": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "87abdc7c-ad9c-4892-9a1d-9ec3db9f07d4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "6882ea93-9162-49be-8e42-c26da8a0f0d8": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ec84fe47-0c2a-41d2-b74a-b6fdf234a2cd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e7804039-ffee-4b6e-ba3a-1ce932ae1a48": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d6954a3e-1e80-427a-963f-b9d08ed1a7b2": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d77f87e7-5761-4357-83c5-31a96ff68dde": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e811debe-c2c0-45b7-a7bf-3d243cfacb51": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "37dfe6d4-0ff5-494e-b215-9ea3dd9b8c29": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "40bb5e50-7bab-4e3c-8b6d-5733329495bf": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "506d22ea-fefb-48a1-947b-1314642b5727": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "77318c7d-ce78-48e1-9596-0bf8cbb6113c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "939e38a3-8462-44ab-9a84-85ad0c4fbca5": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "96fdf083-c258-4389-a609-1ff4838cbdb1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d3ddb0e7-4161-427c-8d83-d88275552cbd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "97dcb5fe-1adb-4c77-8524-c8a43be701a0": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3c9a500b-b505-4005-9e1b-997c24c61012": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f5110ac2-e49f-4a64-98de-f3b07fe15590": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "04d93d36-f690-4ec5-8df7-dff107b365db": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "1ca742fe-2455-4615-9300-08ae5981ed1f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3c5dacb3-f0b8-43fd-ae20-aec68390caf1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "41043050-a6a9-479f-9b62-fd4ed21505dd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5003bf54-4a59-428a-958a-f43c0ca7ec53": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "59bc14d5-2ccd-48a7-a7a2-4090e512a8db": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5c8679ce-0d21-48b9-893e-a501c8e5c5b3": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5d364465-1d30-4845-a76a-0e697da1de96": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "7285e723-1038-47cb-8012-ec045f77161e": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "750fb4f4-2340-4705-b531-be5e84a7edce": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "77cd4daf-a8a5-44b6-876b-cc10c825a9a4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "864ac039-bf02-4366-b63d-48c07d9bf7df": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "97ceea3f-2a34-487f-a918-cdeaf10a85be": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9bd1d94c-8838-432c-90e8-91170678653e": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9ede237d-4294-4d33-adc9-f1389b968a89": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9ef99d6a-3efb-4264-9677-0272662fccc9": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9fe6ac2b-b37b-42df-b02e-2e0ae75be3d2": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a2f827ce-12bd-4af0-9d15-e2ba5755ce13": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a8132d53-99a1-4592-ac1b-f82b6ca2e5f5": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ac90eddb-b8e1-4fbc-8ba2-568e39425dfe": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ae6cc118-ecab-4a91-929a-7f1626522f7a": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "b49e6c7c-7ba8-4ee1-b817-cd1ccf6efca1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "b8b7ae93-a85d-4514-99e9-3d428e1b3d27": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "bb488cde-84ec-423a-b921-74f6ad52f2f5": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "c192af83-b7ce-4a3c-8763-59068cfcfe63": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d1d071c1-f993-4952-a209-4522477454b9": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d7020a52-06d4-4237-a74c-7381f88b05da": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "db9ee9ad-71ff-480c-8844-c83c966b1983": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "df48e18e-8150-4d0d-9c1e-4ee7d3816d24": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e0814106-469d-4954-bd67-75dc0d21e665": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e39f0ace-b66a-4844-858d-dc23707240fd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ea2b8e36-e632-466f-a656-769b6086f769": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ea41685e-67ea-495a-9974-92fdee25a4b4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f1d5d2d9-417a-4843-9d6d-f34eca5462e3": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f1e141f8-f376-4a7c-be00-30c2625bfd80": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f5605537-b2da-45c8-a932-cb9146a4f8b8": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "6bb500c4-6ad5-459d-b7a1-dd0b9c6ab994": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "eb4b3256-2066-493e-9b06-59f3a3e69a62": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5e4dc0ad-0186-49ae-aaa7-7b0aa84ea81f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e60e6cc7-92c1-4bbf-b5e2-e10bcf256a90": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3557b66c-f1c6-4934-bdda-1062961964fd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "cd451067-22f3-48c8-baae-7de5e8cb7c3d": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9f56b2f1-5b6d-491c-a75f-420cfa2f96ad": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "43626bd6-7d45-4feb-8a44-e3d363822190": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5d645ed8-d1d8-47d9-bf1c-9ba18cec46ed": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "b5c58562-7a48-41c6-b79e-78d98e0d53b2": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ccdf32d7-01eb-4665-9b51-6039f65c7749": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d7ed0c0b-9b43-4e58-bf01-620a140c2748": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "b1e02b41-179f-459e-a564-85b718fb6189": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "0d876c76-43c0-41b5-948e-2af4b2bd85d3": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "1acc8078-c7fa-4e7e-bba6-672118d80729": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "63fa8b42-a81c-4ed8-afa0-1aec01cee591": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "230da51b-8e33-4169-a933-aa58ac1bc14d": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "08426a9f-5453-46a9-9dcd-c83ec326ba34": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "7a268e5f-24b0-4ea0-9892-c036b003e387": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d4587293-8222-4760-b7e1-e79419ab3d16": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ebfc55b7-e142-4529-a98e-0ef3d39daeee": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "04976fa6-8e93-4565-b385-f84d8dc18f5c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e896435a-3e0b-44ea-8a0f-b474c13385cc": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a98c8997-ae01-4751-9712-9fe7437e8282": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e89fbfc8-6a94-4375-9e46-a9bef1dfadbd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "18cc4969-6aae-4d5b-b888-621550675ae4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5d5bd41c-aa4a-4c27-b374-764a5a627ba9": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "84fad4fb-e6f5-45e9-8cf2-00e92ebdcc16": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ed962df2-1586-43a7-9eba-16f55b1cbf09": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d8f64156-7e06-4f5c-90cf-33233a40db0f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "fdf6a7ac-19c4-40ef-b245-15fff8840537": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "4e6cf020-a97c-4a21-ad59-aaff5878c436": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "630d26d1-e535-4bea-9f8b-561c1cfa1498": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "02441a42-b003-4fc0-bf99-6e13ecd4674c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "db192564-f301-4661-a90c-9b14a19b046f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "cdd21a23-a777-4146-8a30-f3b610351e27": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "07034bcf-7519-4765-8b2f-c2627a89a30e": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9ad987c0-56f9-4554-8322-f7adf17f85cd": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "c57494aa-1ef8-4e98-a1fc-0026cd3f79ca": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "73906c67-633a-495e-8c27-2ac602d2c4d4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "82eaedd0-5a04-4fe9-9a55-821aba6786ad": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "eafb246e-54a7-42a7-8541-6577c4273747": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "cd915953-0a91-4042-932b-459530821493": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "f5dbe9bf-0015-4bc6-8534-0ececb6355a7": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "8994bdf5-9aa7-4f3b-9a68-14d504523fc1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e8d5805a-cfdc-4871-9cfe-6b707d8d41e4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "6b1e20a9-3a88-4030-84b0-0fee009358f1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "7871e6de-eeaa-481a-9d48-56d6dae2be1c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "fa2c6f5c-4b59-4028-bd5b-52006822fc07": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "bc587273-a4b5-4619-8331-c8fd0e06c279": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "38dff930-df9b-41a7-9dd7-bf93bbff671b": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3bc40e48-e566-402b-84fb-2086fc71aefb": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3efbf0ae-36c5-4015-ac6a-97656167c148": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "bd1892d7-50e1-4f7d-8afb-dbd0fa9cddb6": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a49b9e03-2449-422f-8155-18a4c60c6ff1": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "1a1c443f-9660-42a1-a7cf-26ee03e660c7": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "84237fd2-b0a5-4f08-8cc1-648ef81416b4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "3b2f09d9-737a-4cea-8c20-073ded695d66": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a4fd07f4-8a05-4e02-9669-093c750cfea4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "859ab4bc-7dca-4ab8-bb21-faf70656fdaa": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "43bb8396-d964-4359-a27a-dd9fd3d42e33": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "72f01134-6e6f-4c68-b071-a16329851bd8": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "713c1880-ca2e-4341-87de-23593662561d": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "0c2413ef-be2f-4230-b8d9-78000edf8ea5": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "0f5cf073-9694-47b4-9f7d-7717d1f3a15b": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "6c70695e-bc71-4524-9a9a-95f12eb3b24d": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "fa6013b1-66e5-4e41-9a14-bed2daa67883": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "55f7218d-e618-4bfa-a266-c713dfaa62ed": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "8fc77023-95bf-4faa-be72-ff3990b90548": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "465b1e5a-4f41-4a93-a677-23f506682f9c": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e4e89821-bf31-46a0-b1df-df626c74e860": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "17349305-7c54-4704-aba6-f9519e12de39": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "90ec8836-9d16-466d-baa7-5f40f23063f3": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "b8570df9-4e46-4e21-a447-3c09973aa6db": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "03c585df-69f8-4117-8085-d2b1153e022b": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "a2bd08e0-0e16-43ff-960e-2ed8b1a1bafb": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ef3d5d19-b210-4ba3-9d50-5fdcadbc6841": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "04d845e7-1fd3-4fee-9bec-86766c6e36de": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "d7caed7f-d93f-441b-90fa-2c824020ffd9": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "51390331-a182-4af0-bbb9-3ef8c24fa7f4": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "1fec1583-52cd-4b01-ac9f-e4c3bfdfa83d": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "b107d7b8-fc0c-4fef-ad3e-7823dfc48854": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "aa252c2e-f67d-43ad-afd9-9fcd25d9e9ce": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5746d6df-f89e-4766-92e1-5db3a29cfe8b": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "833b91e9-2fad-4a1f-9f0c-cbca6755ff1f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "bddac7d7-c5a9-4188-a307-ff64e3a1d86f": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "68b5ae3e-de93-4f96-a1bb-8df165d73300": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "5e89c753-f88b-4a18-8225-f765b1a3ccb5": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "ee1199d6-de8c-4350-b4e3-56f1c428ebab": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "8d55f6bd-aa84-47ff-861d-5c134e41dbd8": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "412ebd8b-3be1-48a1-88c5-31115c23f376": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "11d7d8f7-2aa6-4ab0-8813-04a80aa478e9": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9a60be93-5770-45cf-8140-0b06ed3c739a": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "4ce9cfc5-1ac6-46f3-ba86-e905f8e5c58b": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "6b5f016a-9c8a-454e-84f9-1f43cbd194a6": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e99fce41-876c-4086-8807-78c762fdbcee": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e1255f44-a792-4fd0-a00a-0669ef4a1a23": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "9dab8fab-9818-45c9-9a13-00d0c75a8e99": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e73bb1da-2063-4fca-9296-4dbbd440da68": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      },
+      "e4f0561e-8dcb-41cd-9f73-e6bf8fe38bb2": {
+        "poi_type": "store",
+        "store_kind": "eyewear_and_optician",
+        "reason": "reviewed Opticians batch: explicit optical retailer name"
+      }
     },
-    "a19cd982-3ba3-464c-886f-833a53b6ebc2": {
-      "poi_type": "store",
-      "store_kind": "books",
-      "reason": "reviewed Books batch: bookshop"
+    "clothing_repair": {
+      "4be8c95f-dea1-4339-856b-bdce4a86c9f6": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "3bd3508f-06b7-4d3a-9031-af04839bd630": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "bd1c44da-b404-4776-a873-8abf5e702719": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "b0517035-9a6b-4bc0-a15d-f1c77bd39284": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "b25f6dff-ed48-4d01-9ee0-63291267e42f": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "18235d64-5a0b-49be-9972-ff1459eba25e": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "e763e757-a475-4e8a-abb9-4a36ad16353e": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "2ae45261-7734-41bd-a39d-ea8e1ee635de": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "e3d8de04-6922-412f-aaac-8033d1d6db52": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "21c33beb-1970-46d5-93fe-5e89ffc310b9": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "af68afae-1e3c-48a4-9ccd-d0741dd308ce": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "9c03812c-5897-48cf-955d-3b8de222f2a2": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "9a2c252b-3b5e-488b-b556-7e3265090403": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "870bfe27-048a-4378-b390-9f339a2dd278": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "44f08dbc-602f-497b-9e38-a008cc5dffe0": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "e5e43751-4cc1-4736-a42e-e24e6e5bc0f8": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "4f9a1c5d-da1a-41e9-a7bf-5a353fdbd40e": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "22f87e71-a8ab-4dec-97b4-9e6eb41d8789": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "8e4d986d-4516-4598-8441-a8e56237451d": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "4af4e97f-1ff3-48ae-abe3-74106b606952": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "07892b56-e5bb-48a7-a7d7-c77b829344ed": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "4d7facd8-b523-4dff-b36a-4fc79e04d198": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "b2b4177e-8bf8-4f55-b1f3-78108b944e78": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "ed48de0d-5324-4d52-b987-683e9b930868": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "ae65ad1b-2d15-48fc-85de-8a48224cbdca": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "0c677189-4405-4e39-96ed-35ff26201689": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "0ddb70d5-793c-477f-8ede-4778420e4d2f": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "18f32bd8-c884-424b-9be8-a9dade953ff2": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "72f3e739-ab0c-4fbd-98dc-157df1e34a92": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "4e87b07c-7d70-4414-82cc-0ebd693ce5d8": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "eda1fe44-10dd-4dcf-9571-346a34fb8e16": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "432f25a4-432e-41a7-81b1-a13a255ad8b6": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "cf7fa04c-5083-42af-a3cb-2b6320eb2f1b": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "27fbd0eb-6097-4369-8c15-526e01c5607c": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "bb04fe80-23ce-4cbc-b214-4d1634296411": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "9eef4662-d856-4a27-a00e-451c4b1d2162": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "79f77fcf-f51d-4d8a-8338-9f0f4ff277c0": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "6516715a-3a3e-4d18-baba-5c3d684318fe": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "909dce41-8b10-4057-abbd-7011e58c1d4f": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "f3a516da-fb6b-46d9-8e28-1347c7f76c93": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "311fb392-51e6-416a-bc71-dbb8197207ab": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "7ec9c97b-d66d-48ab-886f-9476c94abbcd": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "836c6568-17a5-4241-9d13-1f071f9f3736": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "57d36ea6-80e6-46cf-b943-399c9e4e4b10": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "41068e40-faeb-41ff-bdba-46b7864c6957": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "0d5cfcda-c84e-44eb-a0af-977c903caf04": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "8ac9b645-3b66-412d-9719-ad71894ed008": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "ded12840-f81c-4b8d-af4d-cd7fd742a980": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "63eb287a-a39c-45ae-bee6-383ec5c94367": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "70bddbe8-9d4a-445b-aca2-9e2417b32dd9": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "53fd9388-1aaa-4dd2-abee-f0b682003a6b": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "ba7d0c99-c0cd-48da-99bd-53660ccbb7b9": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "0f9e6fa8-a04d-438c-8763-a870cc32b0c9": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      },
+      "e030d592-76f4-455e-bb19-64236371fff6": {
+        "poi_type": "store",
+        "store_kind": "clothing_repair",
+        "reason": "reviewed Clothing repair batch: retrosaria"
+      }
     },
-    "209341f8-54ef-4df1-8186-c3753aee3a88": {
-      "poi_type": "store",
-      "store_kind": "books",
-      "reason": "reviewed Books batch: stationery shop"
+    "shoes": {
+      "fe61e31e-cda3-48bc-bafd-c43275e57bd2": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "ea3ca51e-4d76-4207-a859-de69621f7952": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "ff4af5fd-066e-4d69-b1e7-bb25f40e3ffa": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "ca543162-475d-4225-be5c-cd69416e9229": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "6b32971e-00aa-4269-a6f3-8b442587426d": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "05c8650a-57d1-44e4-b35f-8b1df2d17436": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "e5ec44dc-60a7-4990-af74-4d9cf2ba92ca": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "ca552498-411a-482c-aecb-a1cecfbb4ff0": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "47b10673-dce9-49a5-aa6f-3582ab457c60": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "4b0f7be9-220a-4fb5-ab71-dd7cf060c296": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "65284543-b394-456d-90bb-bfc418ca4537": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "cb1bd1c0-e33f-4c99-b35b-2bba482f2998": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      },
+      "053e723f-8590-4edd-9c69-3a2e84e85da5": {
+        "poi_type": "store",
+        "store_kind": "shoes",
+        "reason": "reviewed Shoes batch: sapataria"
+      }
+    },
+    "jewelry": {
+      "1d331ee5-cf3d-41c2-996a-e1ffe57e4cf4": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "5ec406e5-1528-479e-a5fb-943c869a32aa": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "d1aeebc4-9f8a-4e77-abd4-640afe8c7f0d": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "9bf612ae-097c-48ee-9f20-3e01d193789a": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "e15e3003-483d-45be-ae92-a5272ee34b5c": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "e7d623b2-fadd-4b38-9314-54c4db0bf438": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "69d43aa0-cddc-494e-a08e-b384f2853126": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "7cec6ae7-abd7-432c-bdb4-70a3a888c761": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "78453725-944b-4448-8a82-f6030f14fce4": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "20d49ac7-8ccd-4efb-98ff-6aecb1c37fda": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "be82b81d-4390-4b49-b687-cdd8079054c7": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "b10e7d42-067e-4440-9fc5-44075c0805f2": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "30a5d236-4358-41c5-b90f-94c1c36d34ba": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "f9dacfeb-0dde-40ee-a398-c9540d076d10": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "112ce358-e072-49b1-8c87-18903f7da58c": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "7311e5b7-d8bb-4714-8e37-7658cbce88e4": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "846487e6-9d0f-42f5-a392-79b2d39fc3b5": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "16ff93af-022c-4789-9243-36f8231629c0": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "b966be92-c324-4e50-838f-542a9726cf90": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "1b1afff3-d52f-4c6a-beb5-1a1750d51501": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      },
+      "01f734ea-88b4-41f5-8c46-7213cbc0aa66": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed Jewelry batch: ourivesaria or joalharia"
+      }
+    },
+    "drinks": {
+      "676b944a-d274-4ad5-b5fb-0510c7ed45fa": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "4cb0e976-590b-4ee1-9ed3-976da1eb9fe6": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "3450d4e3-7caa-495b-9890-ccddef06fe27": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "1a43f920-4cc6-4d3f-9a65-97ebc7dc70a8": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "f5627cce-3234-4187-bf43-4be9bbf3d3e2": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "53e810d2-5255-41c4-be06-a2dbb9af8b60": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "b605550d-a463-4649-a1a5-ef0280e93ba0": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "3723ad9d-9c01-4666-80d6-0c611b10ef08": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "46fc15f3-4f2b-4abc-9b61-a226d47c7a9e": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "6dafd10a-1742-4c93-af49-c04bb97e100a": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "1ec6b67b-8cf4-44af-9b51-f53bb44b51ec": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "f9a76669-408e-4931-8831-d7971f9965c2": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "2f1054ef-109f-4a43-ab9c-e804495311b3": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "8470e9f8-49b7-4130-bf52-2d25ba6efab1": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "2c1b437d-44d2-4e64-bc4d-17b64be3fef5": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "979d98e2-cd25-4dd6-98c6-acc45be1b871": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "d30f9c77-4904-4b76-a50b-99726c48ef31": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      },
+      "af024a35-12ff-4a92-947d-f5285b3b16ad": {
+        "poi_type": "store",
+        "store_kind": "drinks",
+        "reason": "reviewed Drinks batch: garrafeira"
+      }
+    },
+    "furniture": {
+      "1fbf9c89-babe-4821-aeb7-37b7ac948462": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "3cb20134-af8e-4a51-8e0f-597f52f61e96": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "07e33847-597a-459e-8d32-255986c29ce4": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "4defef92-8b64-447a-a58c-6c9d0823519a": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "02021862-aa22-4ef4-bfc1-111196ad58a2": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "08e8a77f-5c6b-4d61-acdc-0f7c95137e2e": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "135ac2de-dd35-43a9-927a-b2e595e7dc13": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "1a6c7592-e843-499b-8996-90e4ed25e6d5": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "50769700-4987-4deb-9137-65a06dfd105d": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "5989cfdd-9f8a-460d-84fa-96c4c1d5c816": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "6bf5b46a-93a4-4077-b177-72362fd13213": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "710433ef-80e8-47d9-82f7-5773347e72e9": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "86f26185-55f0-4f0a-b4dd-be4fa0419a3c": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "8e305c26-8295-4248-906e-0b52923e0ace": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "b9fb02c7-92b0-4c0c-8604-7688425f0429": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "d65a0d90-04b0-4ead-8ba2-61a20b5bf6d4": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "ff924aed-e8c9-498d-ae18-20bcc230dd0e": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "42be8416-b519-480b-a2bd-39b399ed10cf": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "b127802d-9182-414c-a8cd-336f366fd180": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "a987e1d2-e885-497f-bfa1-8ea33a7dadea": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "bf3a0b30-abb9-4950-8bb6-8a599af29014": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "92a074e4-4913-489b-8197-cc7b3c51ac55": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      },
+      "ef3dad15-802f-42fd-a6e1-54a20084f2cb": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed Furniture batch: explicit sofa retailer name"
+      }
+    },
+    "beauty": {
+      "8f8a233b-19a8-459d-9363-ba07b2b3ef38": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "dd3098e6-86e9-4889-a83b-1b244956328d": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "97f51535-d1f3-4a39-b3d4-ee728d952126": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "da3b065c-731b-4745-8172-4939ad6473e1": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "6b608fc0-bd7c-4e9a-914a-914de73ffa97": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "d931530f-7315-4d6b-8bae-2f58d7d8d088": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "bef15df1-696f-4c0d-8bab-8b749e4ebb2e": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "75b33fee-e2c7-4ee4-badf-8240352c466a": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "80a10275-88c2-4d23-8e52-919be0236bd7": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "541e0716-10e1-44ca-bf8b-efa1dba74677": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "b2f6a33a-9d2a-43ea-bfec-93a349153d53": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "799e7a09-5d1d-4654-849d-f34180a52f6e": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "979c5ace-e9b7-4919-9ff8-45932f6fc00a": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "a67c9c88-4ba4-41b3-9b45-23a86bcd06bf": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      },
+      "59aa87b4-92a5-4591-9fcf-f722cd466a7d": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed Beauty batch: perfumaria"
+      }
+    },
+    "pet": {
+      "5943b859-7559-44f4-aac9-d58d5ec0db28": {
+        "poi_type": "store",
+        "store_kind": "pet",
+        "reason": "reviewed Pet batch: explicit pet shop name"
+      }
     }
   }
 }

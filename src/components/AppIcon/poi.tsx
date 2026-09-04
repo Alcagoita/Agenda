@@ -589,6 +589,17 @@ export function PoiIcon({ type, color, size = 24 }: PoiIconProps) {
         </Svg>
       );
 
+    case 'tobacco':
+      return (
+        <Svg {...p}>
+          {/* Cigarette and lit end; product-specific without an emoji. */}
+          <Path d="M4 11h12v3H4z" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M16 11h4v3h-4" stroke={color} strokeWidth={1.6} {...S} />
+          <Path d="M20 10.5c1 .7 1 2.3 0 3" stroke={color} strokeWidth={1.3} {...S} />
+          <Path d="M7 8.5c-.8-.8-.8-1.7 0-2.5M10 8.5c.8-.8.8-1.7 0-2.5" stroke={color} strokeWidth={1.3} {...S} />
+        </Svg>
+      );
+
     // ─── KAN-412 ────────────────────────────────────────────────────────
     // Same hairline house style. Every catalog type gets a bespoke glyph
     // rather than falling through to the pin: ten entries all showing the

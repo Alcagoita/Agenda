@@ -129,7 +129,7 @@
   "donuts": { "poi_type": "bakery" },
   "drugstore": { "poi_type": "store", "store_kind": "drugstore" },
   "dry_cleaning": { "poi_type": "laundry" },
-  "e_cigarette_store": { "poi_type": "store", "store_kind": "e_cigarette" },
+  "e_cigarette_store": { "poi_type": "store", "store_kind": "e_cigarette", "also_types": ["lottery"] },
   "eastern_european_restaurant": { "poi_type": "restaurant", "food_cuisine": "eastern_european" },
   "eat_and_drink": { "poi_type": "restaurant" },
   "education": { "poi_type": "school" },

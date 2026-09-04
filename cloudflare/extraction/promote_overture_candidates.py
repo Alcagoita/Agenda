@@ -182,7 +182,7 @@ def category_map():
         return {k: v for k, v in json.load(handle).items() if not k.startswith('_')}
 
 
-def candidate_overrides(country_source_r2_key):
+def candidate_overrides(country_source_r2_key, batch=None):
     """The small, reviewed batches that cannot safely become broad rules.
 
     Generic ``shopping`` carries no usable subtype.  A reviewed ID can still
@@ -191,7 +191,13 @@ def candidate_overrides(country_source_r2_key):
     """
     path = os.path.join(CLOUDFLARE_DIR, 'src', 'overtureCandidateOverrides.json')
     with open(path) as handle:
-        return json.load(handle).get(country_source_r2_key, {})
+        source_overrides = json.load(handle).get(country_source_r2_key, {})
+    # KAN-432: each review batch is separately runnable.  The legacy flat
+    # shape is still accepted so a checked-out older configuration remains
+    # readable, but new country batches must name the reviewed group.
+    if batch is None:
+        return source_overrides if all('poi_type' in value for value in source_overrides.values()) else {}
+    return source_overrides.get(batch, {})
 
 
 def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
@@ -508,11 +514,11 @@ def _promote_country_page(page, mapping, reachable, brand_dictionary,
     stats.update(page_stats)
 
 
-def run_country_overrides(country_source_r2_key):
+def run_country_overrides(country_source_r2_key, batch=None):
     """Promote one reviewed batch without scanning the country backlog."""
     import d1_client
 
-    overrides = candidate_overrides(country_source_r2_key)
+    overrides = candidate_overrides(country_source_r2_key, batch)
     if not overrides:
         return {}
     mapping = category_map()

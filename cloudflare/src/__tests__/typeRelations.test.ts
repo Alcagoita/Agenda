@@ -18,6 +18,7 @@ const ROOT = join(__dirname, '..', '..');
 const SCHEMA = readFileSync(join(ROOT, 'type_relation_schema.sql'), 'utf8');
 const MIGRATION = readFileSync(join(ROOT, 'migrations', '0022_bridge_classifier_vocabulary.sql'), 'utf8');
 const ICE_CREAM_MIGRATION = readFileSync(join(ROOT, 'migrations', '0023_ice_cream_poi_type.sql'), 'utf8');
+const TOBACCO_MIGRATION = readFileSync(join(ROOT, 'migrations', '0035_tobacco_intent.sql'), 'utf8');
 /** The table definition alone, without the rows the schema seeds. */
 const CREATE_TABLE = SCHEMA.split('INSERT OR IGNORE')[0];
 
@@ -82,6 +83,13 @@ describe('KAN-398 classifier vocabulary bridges', () => {
 
   it('lets cafe reach the coffee shops it was missing', () => {
     expect(relations().get('cafe')).toEqual(new Set(['cafe', 'coffee_shop']));
+  });
+
+  it('makes tobacco a deliberate composite errand without opening all stores', () => {
+    const expected = new Set(['tobacco', 'lottery', 'cafe', 'coffee_shop']);
+    expect(relations().get('tobacco')).toEqual(expected);
+    expect(migrationOnly(TOBACCO_MIGRATION, 2).get('tobacco')).toEqual(expected);
+    expect(relations().get('tobacco')?.has('store')).toBe(false);
   });
 
   it('never drops its own type when a search type gains a partner', () => {

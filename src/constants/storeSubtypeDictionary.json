@@ -145,6 +145,34 @@
       "CeX"
     ]
   },
+  "eyewear_and_optician": {
+    "label": "Optician",
+    "labelPt": "Ótica",
+    "aliases": [
+      "optician",
+      "optical",
+      "eyewear",
+      "glasses",
+      "contact lenses",
+      "lens solution",
+      "ótica",
+      "optica",
+      "óptica",
+      "optico",
+      "óptico",
+      "óculos",
+      "lentes",
+      "lentes de contacto",
+      "líquido para lentes"
+    ],
+    "stores": [
+      "Opticalia",
+      "MultiOpticas",
+      "Alain Afflelou",
+      "GrandOptical",
+      "Wells Ótica"
+    ]
+  },
   "books": {
     "label": "Books",
     "labelPt": "Livros",

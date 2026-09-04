@@ -64,4 +64,23 @@ describe('KAN-443 Overture country import', () => {
     expect(second.COUNTRY_SOURCE_R2_KEY).toBe(rawKey);
     expect(second.OVERTURE_COUNTRY_RUN_ID).not.toBe(first.OVERTURE_COUNTRY_RUN_ID);
   });
+
+  it('starts only a named reviewed batch from the immutable mapped source', async () => {
+    const db = schemaDb();
+    const env = envFor(db);
+    const rawKey = 'overture-country-sources/PT/reviewed.csv';
+    db.prepare(`INSERT INTO overture_country_import
+      (country_code, status, active_run_id, raw_extract_r2_key, started_at, completed_at)
+      VALUES ('PT', 'mapped', 'completed', ?, 1, 2)`).run(rawKey);
+
+    const response = await worker.fetch(post('/internal/overture-country/overrides', {
+      countryCode: 'PT', batch: 'books',
+    }), env, CTX);
+    expect(response.status).toBe(200);
+    const envVars = (mockStart.mock.calls.at(-1)?.[0] as { envVars: Record<string, string> }).envVars;
+    expect(envVars).toMatchObject({
+      MODE: 'overture-overrides', TARGET: 'PT', D1_INTERNAL: '1',
+      COUNTRY_SOURCE_R2_KEY: rawKey, OVERTURE_OVERRIDE_BATCH: 'books',
+    });
+  });
 });

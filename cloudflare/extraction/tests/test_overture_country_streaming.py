@@ -68,7 +68,7 @@ class CountryStreamingTest(unittest.TestCase):
             mock.patch.object(promote, 'store_brand_index', return_value=[]),
         ):
             self.assertEqual(
-                promote.run_country_overrides('overture-country-sources/PT/run.csv'),
+                promote.run_country_overrides('overture-country-sources/PT/run.csv', 'books'),
                 {'promoted': 1})
 
         self.assertIn("overture_id IN ('reviewed-1')", d1_client.select.call_args.args[0])

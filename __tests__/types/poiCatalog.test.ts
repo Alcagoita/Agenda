@@ -22,7 +22,7 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
   'financial_service', 'ice_cream', 'tattoo',
   'barber', 'hairdresser', 'nail_salon',
   // KAN-411
-  'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tea', 'juice',
+  'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tobacco', 'tea', 'juice',
   // KAN-412
   'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
   'car_rental', 'movie_theater', 'yoga_studio', 'playground',
@@ -42,7 +42,7 @@ const ALL_BUILT_IN_TYPES: PoiType[] = [
 ];
 
 const QUICK_ACTIONABLE_TYPES: PoiType[] = [
-  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store',
+  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store', 'tobacco',
   'florist', 'bakery', 'ice_cream', 'park', 'gym', 'bar', 'library',
 ];
 
@@ -105,7 +105,7 @@ describe('POI_GOOGLE_TYPES', () => {
     // be adding to a system we are deleting.
     const notGoogleBacked = [
       'currency_exchange', 'money_transfer', 'financial_service',
-      'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tea', 'juice',
+      'phone_repair', 'shoe_repair', 'clothing_repair', 'lottery', 'tobacco', 'tea', 'juice',
       'butcher', 'fishmonger', 'laundry', 'veterinary_care', 'car_wash',
       'car_rental', 'movie_theater', 'yoga_studio', 'playground',
       'electric_vehicle_charging_station',

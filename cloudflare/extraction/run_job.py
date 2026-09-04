@@ -559,6 +559,14 @@ if __name__ == '__main__':
             print('OVERTURE_COUNTRY_RUN_ID is required for overture-country mode', file=sys.stderr)
             sys.exit(2)
         run_overture_country(target.upper(), run_id, os.environ.get('COUNTRY_SOURCE_R2_KEY'))
+    elif mode == 'overture-overrides':
+        source_key = os.environ.get('COUNTRY_SOURCE_R2_KEY')
+        batch = os.environ.get('OVERTURE_OVERRIDE_BATCH')
+        if not source_key or not batch:
+            print('COUNTRY_SOURCE_R2_KEY and OVERTURE_OVERRIDE_BATCH are required for overture-overrides mode', file=sys.stderr)
+            sys.exit(2)
+        stats = promote_overture_candidates.run_country_overrides(source_key, batch)
+        print(f"[run_job] OVERTURE overrides {batch}: {stats}")
     else:
-        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', 'osm-country', 'multibanco-country', or 'overture-country'")
+        print(f"unknown MODE '{mode}' — expected 'place', 'country', 'country-reconcile', 'settlements', 'osm-country', 'multibanco-country', 'overture-country', or 'overture-overrides'")
         sys.exit(2)

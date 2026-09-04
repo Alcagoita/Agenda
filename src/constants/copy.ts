@@ -726,6 +726,7 @@ const en = {
     shoe_repair: 'Shoe repair',
     clothing_repair: 'Clothing alterations',
     lottery: 'Lottery',
+    tobacco: 'Tobacco',
     butcher: 'Butcher',
     fishmonger: 'Fishmonger',
     laundry: 'Laundry',
@@ -1908,6 +1909,7 @@ const ptPT: typeof en = {
     shoe_repair: 'Sapateiro',
     clothing_repair: 'Arranjos de roupa',
     lottery: 'Jogos e lotarias',
+    tobacco: 'Tabacaria',
     butcher: 'Talho',
     fishmonger: 'Peixaria',
     // Covers the launderette and the dry cleaner alike — one type, because
