@@ -96,6 +96,21 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(status, 'pending')
         self.assertEqual(types, ())
 
+    def test_reviewed_shopping_override_is_a_scoped_store_subtype(self):
+        reviewed = {
+            'gers-1': {
+                'poi_type': 'store', 'store_kind': 'books',
+                'reason': 'reviewed Books batch: bookshop',
+            },
+        }
+        status, types, attributes, reason = self.promote.decide(
+            _row('Livraria Exemplo', 'shopping'), self.mapping, self.reachable,
+            self.brands, overrides=reviewed)
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('store',))
+        self.assertEqual(attributes, (('store_kind', 'books'),))
+        self.assertEqual(reason, 'reviewed Books batch: bookshop')
+
     def test_a_rejected_category_is_rejected_whatever_the_name_says(self):
         # Letting a name keyword rescue a ruled-out category would reopen
         # the decision one row at a time.
@@ -103,6 +118,27 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(status, 'rejected')
         self.assertEqual(types, ())
         self.assertEqual(reason, 'rejected category: dentist')
+
+    def test_restaurant_suppliers_are_not_promoted_as_places_to_eat(self):
+        status, types, _, reason = self.decide(
+            'H3D Equipamentos Hoteleiros', 'restaurant_equipment_and_supply')
+        self.assertEqual(status, 'rejected')
+        self.assertEqual(types, ())
+        self.assertEqual(reason, 'rejected category: restaurant_equipment_and_supply')
+
+    def test_fondue_is_written_as_a_restaurant_food_subtype(self):
+        status, types, attributes, _ = self.decide('O Fondue', 'fondue_restaurant')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('restaurant',))
+        self.assertIn(('food_cuisine', 'fondue'), attributes)
+
+    def test_gluten_free_source_category_stays_pending_for_name_review(self):
+        # CHOC' ME is a bakery, despite Overture filing it as a restaurant.
+        # Never publish a source category as restaurant until it is reviewed.
+        status, types, attributes, _ = self.decide("CHOC' ME", 'gluten_free_restaurant')
+        self.assertEqual(status, 'pending')
+        self.assertEqual(types, ())
+        self.assertEqual(attributes, ())
 
     def test_a_housing_development_is_not_a_landmark(self):
         status, _, _, reason = self.decide(

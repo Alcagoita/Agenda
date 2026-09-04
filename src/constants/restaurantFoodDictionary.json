@@ -32,6 +32,24 @@
       "Legumi Sushi Vegan"
     ]
   },
+  "gluten_free": {
+    "label": "Gluten-free",
+    "labelPt": "Sem glúten",
+    "aliases": ["gluten free", "gluten-free", "sem glúten", "sem gluten"],
+    "restaurants": [
+      "Glutenfreak",
+      "Longe da Espiga"
+    ]
+  },
+  "fondue": {
+    "label": "Fondue",
+    "labelPt": "Fondue",
+    "aliases": ["fondue"],
+    "restaurants": [
+      "O Fondue",
+      "Peppers Fondue"
+    ]
+  },
   "portuguese": {
     "label": "Portuguese",
     "labelPt": "Português",

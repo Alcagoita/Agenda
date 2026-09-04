@@ -153,6 +153,7 @@
   "fashion_accessories_store": { "poi_type": "store", "store_kind": "fashion_accessories" },
   "fast_food_restaurant": { "poi_type": "restaurant" },
   "filipino_restaurant": { "poi_type": "restaurant", "food_cuisine": "filipino" },
+  "fondue_restaurant": { "poi_type": "restaurant", "food_cuisine": "fondue" },
   "fish_and_chips_restaurant": { "poi_type": "restaurant", "food_cuisine": "fish_and_chips" },
   "fishmonger": { "poi_type": "fishmonger" },
   "fitness_trainer": { "poi_type": "gym" },
