@@ -19,6 +19,7 @@ const SCHEMA = readFileSync(join(ROOT, 'type_relation_schema.sql'), 'utf8');
 const MIGRATION = readFileSync(join(ROOT, 'migrations', '0022_bridge_classifier_vocabulary.sql'), 'utf8');
 const ICE_CREAM_MIGRATION = readFileSync(join(ROOT, 'migrations', '0023_ice_cream_poi_type.sql'), 'utf8');
 const TOBACCO_MIGRATION = readFileSync(join(ROOT, 'migrations', '0035_tobacco_intent.sql'), 'utf8');
+const VAPE_BACKFILL_MIGRATION = readFileSync(join(ROOT, 'migrations', '0036_tobacco_vape_backfill.sql'), 'utf8');
 /** The table definition alone, without the rows the schema seeds. */
 const CREATE_TABLE = SCHEMA.split('INSERT OR IGNORE')[0];
 
@@ -90,6 +91,14 @@ describe('KAN-398 classifier vocabulary bridges', () => {
     expect(relations().get('tobacco')).toEqual(expected);
     expect(migrationOnly(TOBACCO_MIGRATION, 2).get('tobacco')).toEqual(expected);
     expect(relations().get('tobacco')?.has('store')).toBe(false);
+  });
+
+  it('backfills only the immutable PT source vape IDs, never all stores', () => {
+    const ids = VAPE_BACKFILL_MIGRATION.match(/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/g) ?? [];
+    expect(ids).toHaveLength(81);
+    expect(new Set(ids).size).toBe(81);
+    expect(VAPE_BACKFILL_MIGRATION).toContain("'lottery', 1");
+    expect(VAPE_BACKFILL_MIGRATION).not.toMatch(/WHERE\s+.*store_kind/i);
   });
 
   it('never drops its own type when a search type gains a partner', () => {
