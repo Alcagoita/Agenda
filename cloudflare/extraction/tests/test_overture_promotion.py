@@ -111,16 +111,19 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(types, ())
         self.assertEqual(reason, 'rejected category: restaurant_equipment_and_supply')
 
-    def test_new_food_cuisines_are_written_with_the_restaurant_type(self):
-        for category, cuisine in (
-            ('gluten_free_restaurant', 'gluten_free'),
-            ('fondue_restaurant', 'fondue'),
-        ):
-            with self.subTest(category=category):
-                status, types, attributes, _ = self.decide('Restaurant', category)
-                self.assertEqual(status, 'promoted')
-                self.assertEqual(types, ('restaurant',))
-                self.assertIn(('food_cuisine', cuisine), attributes)
+    def test_fondue_is_written_as_a_restaurant_food_subtype(self):
+        status, types, attributes, _ = self.decide('O Fondue', 'fondue_restaurant')
+        self.assertEqual(status, 'promoted')
+        self.assertEqual(types, ('restaurant',))
+        self.assertIn(('food_cuisine', 'fondue'), attributes)
+
+    def test_gluten_free_source_category_stays_pending_for_name_review(self):
+        # CHOC' ME is a bakery, despite Overture filing it as a restaurant.
+        # Never publish a source category as restaurant until it is reviewed.
+        status, types, attributes, _ = self.decide("CHOC' ME", 'gluten_free_restaurant')
+        self.assertEqual(status, 'pending')
+        self.assertEqual(types, ())
+        self.assertEqual(attributes, ())
 
     def test_a_housing_development_is_not_a_landmark(self):
         status, _, _, reason = self.decide(

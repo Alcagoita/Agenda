@@ -179,7 +179,6 @@
   "gay_bar": { "poi_type": "bar" },
   "gelato": { "poi_type": "ice_cream" },
   "georgian_restaurant": { "poi_type": "restaurant", "food_cuisine": "georgian" },
-  "gluten_free_restaurant": { "poi_type": "restaurant", "food_cuisine": "gluten_free" },
   "german_restaurant": { "poi_type": "restaurant", "food_cuisine": "german" },
   "gift_shop": { "poi_type": "store", "store_kind": "gift" },
   "golf_course": { "poi_type": "golf_course" },
