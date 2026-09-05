@@ -381,7 +381,7 @@ def batched(prefix, pieces):
         yield prefix + ',\n'.join(values) + ';\n'
 
 
-def status_updates(decided, status):
+def status_updates(decided, status, only_pending=True):
     """What was decided AND why. A status without its reason cannot be
     reviewed by anyone who was not in the room.
 
@@ -399,23 +399,24 @@ def status_updates(decided, status):
         # generated statement crosses D1's SQL-size limit.
         piece_size = byte_len(piece) + 2 * byte_len(sql_escape(overture_id)) + 4
         if batch and (size + piece_size > MAX_STATEMENT_BYTES or len(batch) >= MAX_VALUES_TERMS):
-            yield _status_update_statement(batch, status)
+            yield _status_update_statement(batch, status, only_pending)
             batch, size = [], 200
         batch.append((overture_id, reason))
         size += piece_size
     if batch:
-        yield _status_update_statement(batch, status)
+        yield _status_update_statement(batch, status, only_pending)
 
 
-def _status_update_statement(batch, status):
+def _status_update_statement(batch, status, only_pending):
     cases = ''.join(f' WHEN {sql_escape(overture_id)} THEN {sql_escape(reason)}'
                     for overture_id, reason in batch)
     ids = ','.join(sql_escape(overture_id) for overture_id, _ in batch)
+    pending_guard = "promotion_status = 'pending' AND " if only_pending else ''
     return (
         'UPDATE overture_candidate SET '
         f'promotion_status = {sql_escape(status)}, '
         f'promotion_note = CASE overture_id{cases} ELSE promotion_note END '
-        f"WHERE promotion_status = 'pending' AND overture_id IN ({ids});\n"
+        f"WHERE {pending_guard}overture_id IN ({ids});\n"
     )
 
 
@@ -493,7 +494,7 @@ def run_country(batch, country_source_r2_key):
 def _promote_country_page(page, mapping, reachable, brand_dictionary,
                            store_kind_aliases, food_cuisine_aliases,
                            financial_service_rules, store_brands, refreshed,
-                           stats, d1_client, overrides=None):
+                           stats, d1_client, overrides=None, only_pending=True):
     decided = _country_page(
         page, mapping, reachable, brand_dictionary, store_kind_aliases,
         food_cuisine_aliases, financial_service_rules, store_brands, refreshed, overrides)
@@ -509,7 +510,7 @@ def _promote_country_page(page, mapping, reachable, brand_dictionary,
     # batch with the writes above: a national-sized atomic transaction is
     # precisely what exhausted D1 memory.
     for status, decisions in (('promoted', promoted), ('rejected', rejected)):
-        for statement in status_updates(decisions, status):
+        for statement in status_updates(decisions, status, only_pending):
             d1_client.execute(statement)
     stats.update(page_stats)
 
@@ -537,13 +538,13 @@ def run_country_overrides(country_source_r2_key, batch=None):
         rows = d1_client.select(
             'SELECT overture_id, name, lat, lng, address, category, category_path, '
             'confidence, source_datasets FROM overture_candidate '
-            "WHERE promotion_status = 'pending' AND country_source_r2_key = "
+            "WHERE country_source_r2_key = "
             f"{sql_escape(country_source_r2_key)} AND overture_id IN ({values}) "
             'ORDER BY overture_id')
         _promote_country_page(
             rows, mapping, reachable, brand_dictionary, store_kind_aliases,
             food_cuisine_aliases, financial_service_rules, store_brands,
-            refreshed, stats, d1_client, overrides)
+            refreshed, stats, d1_client, overrides, only_pending=False)
     return dict(stats)
 
 

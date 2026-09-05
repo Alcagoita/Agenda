@@ -72,10 +72,12 @@ class CountryStreamingTest(unittest.TestCase):
                 {'promoted': 1})
 
         self.assertIn("overture_id IN ('reviewed-1')", d1_client.select.call_args.args[0])
+        self.assertNotIn("promotion_status = 'pending'", d1_client.select.call_args.args[0])
         statements = [call.args[0] for call in d1_client.execute.call_args_list]
         self.assertTrue(statements[0].startswith('INSERT OR IGNORE INTO overture_poi '))
         self.assertIn("'store_kind','books'", statements[2])
         self.assertIn("promotion_status = 'promoted'", statements[-1])
+        self.assertNotIn("WHERE promotion_status = 'pending'", statements[-1])
 
 
 if __name__ == '__main__':
