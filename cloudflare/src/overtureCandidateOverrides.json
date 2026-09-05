@@ -1,25 +1,10 @@
 {
   "overture-country-sources/PT/1ea48e22-9b0d-47a2-beb7-29f5203bc204.csv": {
-    "books": {
+    "stationery": {
       "e5e4bd94-fd64-4c96-b4d4-4658f0fb9f6b": {
         "poi_type": "store",
-        "store_kind": "books",
-        "reason": "reviewed Books batch: stationery shop"
-      },
-      "cd8136f6-84fa-49b5-91d8-f3fd2d77147c": {
-        "poi_type": "store",
-        "store_kind": "books",
-        "reason": "reviewed Books batch: bookshop"
-      },
-      "a19cd982-3ba3-464c-886f-833a53b6ebc2": {
-        "poi_type": "store",
-        "store_kind": "books",
-        "reason": "reviewed Books batch: bookshop"
-      },
-      "209341f8-54ef-4df1-8186-c3753aee3a88": {
-        "poi_type": "store",
-        "store_kind": "books",
-        "reason": "reviewed Books batch: stationery shop"
+        "store_kind": "cards_and_stationery",
+        "reason": "reviewed Stationery batch: papelaria"
       }
     },
     "opticians": {

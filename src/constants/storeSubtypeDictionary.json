@@ -180,11 +180,9 @@
       "book",
       "books",
       "notebook",
-      "stationery",
       "livro",
       "livros",
-      "caderno",
-      "papelaria"
+      "caderno"
     ],
     "stores": [
       "Bertrand",
@@ -193,6 +191,24 @@
       "Wook",
       "Note!",
       "Staples"
+    ]
+  },
+  "cards_and_stationery": {
+    "label": "Stationery",
+    "labelPt": "Papelaria",
+    "aliases": [
+      "stationery",
+      "paper shop",
+      "cards",
+      "papelaria",
+      "papelarias",
+      "material escolar",
+      "material de escritório"
+    ],
+    "stores": [
+      "Staples",
+      "Note!",
+      "Papelaria Fernandes"
     ]
   },
   "furniture": {
