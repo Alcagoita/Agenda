@@ -2683,6 +2683,120 @@
         "poi_type": "mini_market",
         "reason": "reviewed named mini-market"
       }
+    },
+    "reviewed_hardware_paint": {
+      "f6966442-ea95-4512-bb3a-2f00d2f5c966": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "989d91d4-2b39-41cb-82ed-a478350c7d99": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "c401b81f-6839-4fc3-a476-4a160b6bb54d": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "00a2ae90-d53b-4705-a7b8-d0d5311e2b6b": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "ce018dbc-ea92-4892-bf11-6651bb9f7a5d": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "f6c3edc2-bd05-483d-b2d3-1e2c57e8f500": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "afc4556a-2034-466d-83e1-42ff42c556a1": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "57127596-3107-41c0-ae90-52b0bf1a0a22": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "b22f264f-6f6a-4537-9806-58d89b8f450a": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "5ab346ab-5839-4527-bf98-c48b07296cd4": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "d1e1e12b-4cbe-47d2-a217-13452683d2c8": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "05a7a958-9367-4eee-985b-9bae9edfb01c": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "a01e9a76-c707-4931-8f32-5e48c2677b47": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "d0a77488-265b-4ec5-8fbc-dee1d6df2e44": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      },
+      "5fe43cef-948a-4ad1-8132-2cc30463e449": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware retailer"
+      }
+    },
+    "reviewed_electronics_explicit": {
+      "03b0d716-c372-43c2-98cc-40b6bc6abd83": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      },
+      "a66d6678-e43d-4f74-8f3f-92e348267fbb": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      },
+      "d31f95a9-7e1f-44f4-a72f-379754c603b7": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      },
+      "624412b3-d61f-4187-a7b0-3ff074ff6427": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      },
+      "b8226f8b-2bba-443a-b428-0c17b53ce6c9": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      },
+      "312bbb70-f683-4447-a5ec-2e980ed66ac4": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      },
+      "a6a0570a-0e10-45f8-96f8-7a916c74fe8c": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics retailer"
+      }
     }
   }
 }
