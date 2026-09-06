@@ -3138,6 +3138,24 @@
         "store_kind": "home",
         "reason": "reviewed home textiles retailer"
       }
+    },
+    "reviewed_exclusions_industrial_equipment": {
+      "133bb95e-2608-423d-bde7-cb696c0c5e2a": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: industrial equipment supplier"
+      },
+      "7319e5b6-8869-48c0-a49d-38167d8c0eb0": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: industrial equipment supplier"
+      },
+      "2608f44f-a950-4fc7-897b-fc76a2b0e506": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: industrial equipment supplier"
+      },
+      "39f54c2a-ce90-4361-8fd3-73385ac0f4ae": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: industrial equipment supplier"
+      }
     }
   }
 }
