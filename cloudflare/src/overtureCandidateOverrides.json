@@ -2501,6 +2501,90 @@
         "poi_type": "luggage_storage",
         "reason": "reviewed luggage-storage chain"
       }
+    },
+    "reviewed_exclusions_trade_only": {
+      "1bf4199e-a5ab-4663-b663-c7a7de0a8dbe": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "97129ce2-4ec4-42dc-99c9-34d05834a746": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "384a3d23-4807-48a0-a2fd-c8c9a0d86944": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "2b8c7bdf-73eb-475e-a9de-79990de52a63": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "77cdb272-0361-48a4-82da-5ca2f3441693": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "d9fcf0e7-2426-403b-8604-fd158438fd31": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "f7998dcf-58bc-4646-9e6c-394580fe476e": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "c83c2a15-e923-4729-9612-fc64e6cfc3e1": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "6769ba10-a20a-4e69-9361-9074cf314e03": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "bdab51b2-34ab-4827-a760-39e8e494a7a9": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "ce88f364-b038-495f-af42-191861c8f332": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "e8df618f-32c9-4481-b396-f0b682b860c0": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      },
+      "b404b1ce-caa9-482e-adfd-a61fd31564d8": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: trade-only wholesale or distribution business"
+      }
+    },
+    "reviewed_exclusions_professional": {
+      "d6d19c2f-54d4-4ad6-91d3-76134e9e610e": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      },
+      "792ce689-8934-40d3-bf7a-76f20badf33b": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      },
+      "5a816893-f06a-43db-a32b-96623edd1346": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      },
+      "2968cd13-cb20-46c4-9cb3-f69b3ef9ce54": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      },
+      "e74ada33-b5c4-4664-ae36-8453e08cc1dd": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      },
+      "e4521616-6b2f-469d-98f6-8abd01890841": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      },
+      "4866bca0-885b-402b-92de-2351e7883399": {
+        "decision": "rejected",
+        "reason": "reviewed exclusion: appointment-only professional service"
+      }
     }
   }
 }

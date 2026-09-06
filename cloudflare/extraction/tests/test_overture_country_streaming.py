@@ -99,6 +99,22 @@ class CountryStreamingTest(unittest.TestCase):
 
         self.assertEqual((status, types, attributes), ('promoted', ('luggage_storage',), ()))
 
+    def test_reviewed_professional_service_exclusion_leaves_generic_shopping(self):
+        import promote_overture_candidates as promote
+
+        status, types, attributes, reason = promote.decide(
+            row('consulting-1', 'Exemplo Consultoria', 'shopping'),
+            mapping={}, reachable={}, brand_dictionary={}, store_kind_aliases=[],
+            food_cuisine_aliases=[], financial_service_rules={}, store_brands=[],
+            overrides={'consulting-1': {
+                'decision': 'rejected',
+                'reason': 'reviewed exclusion: professional service',
+            }},
+        )
+
+        self.assertEqual((status, types, attributes), ('rejected', (), ()))
+        self.assertEqual(reason, 'reviewed exclusion: professional service')
+
 
 if __name__ == '__main__':
     unittest.main()

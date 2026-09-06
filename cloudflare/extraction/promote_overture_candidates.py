@@ -231,6 +231,14 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
 
     override = (overrides or {}).get(row.get('overture_id'))
     if override:
+        if override.get('decision') == 'rejected':
+            # Reviewed exclusions use the same source-scoped, explicit-ID
+            # path as promotions.  A generic-shopping candidate that is
+            # plainly trade-only or appointment-only should leave the
+            # backlog, not be forced into an unusable store subtype.
+            if row['category'] != 'shopping' or not override.get('reason'):
+                raise ValueError(f"invalid reviewed exclusion for {row['overture_id']}")
+            return 'rejected', (), (), override['reason']
         poi_type = override['poi_type']
         store_kind = override.get('store_kind')
         # A reviewed generic-shopping row can either be a typed store, which
