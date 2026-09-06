@@ -3004,6 +3004,78 @@
         "store_kind": "household_supplies",
         "reason": "reviewed Portuguese drogaria"
       }
+    },
+    "reviewed_electronics_computing": {
+      "9ac0dda2-3345-40f5-be69-243d6f140e64": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "6cd94925-b079-4845-b26e-5164ceafca51": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "d0b2bcaa-203d-43c8-8d0a-50547d8af94d": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "c0e9253b-8bc9-41e5-9458-2c29ad3bd2d6": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "c5de1433-31e3-41b5-b17f-b746b5d9b604": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "ed7c838e-67ed-44b0-aae8-1603aa94c22c": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "224a15c0-2519-4547-b148-6c1626419308": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "ffccf56f-ce66-4e16-b356-9366d7e4bc22": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "3a9f94fd-27ed-4009-b140-fdb1e2a772c6": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "12429c45-2840-43a8-bc34-a02741d4652c": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "f1d8bde7-aa3e-4b19-9dfe-a65cca953860": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "77f3ebf7-ed3b-46d3-931a-9709115ca85d": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "a4b76660-7020-4fa8-b82a-8db9fa16b23b": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      },
+      "907210c4-127e-418f-be70-83238fa3d8d4": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed computing retailer"
+      }
     }
   }
 }
