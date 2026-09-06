@@ -2797,6 +2797,213 @@
         "store_kind": "electronics",
         "reason": "reviewed electronics retailer"
       }
+    },
+    "reviewed_household_supplies_drogaria": {
+      "8f8b6d68-6a33-40cb-9bad-a84726cd32e7": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "f7760b33-f7b2-404e-b7ac-da1162a53115": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "64ff1811-83e9-4b9c-8b9c-e58fb6eabb10": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "5f71c053-edc4-4ee2-9350-1afefc32af8f": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "8170ade5-4f7c-4527-b68a-845815c7d79c": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "3be5adb9-f559-4286-ad5b-08da7c103711": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "153186fa-75cf-4c58-8c78-86342ae60d50": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "e36effd9-2829-41eb-b1ca-6266f834ac39": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "22e2f5a6-ae33-4347-9d5c-5ce41afa2cc4": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "f8bee2e2-be8d-4da5-83c0-382ba7c6cc2b": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "f1e6c843-1913-419f-afdf-3b300959b725": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "9bc136bc-5a34-45fc-b825-9bf505eeb124": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "1686ac8c-13d2-48ff-8910-c44af0417889": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "58179aa8-9d04-4c25-ac53-c173634fe1b8": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "3db9d47d-6c47-4c86-894e-f2dc344c813a": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "bf442761-f9b4-405b-bf2d-c90c252689f4": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "8a9b5ada-2b14-4b8d-a636-cde464e1a451": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "8f2bbafc-1158-43c6-b44d-ded4633a0d35": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "13db6ec2-2db1-4dca-8b4d-30872a4b59d7": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "ac5cda58-32a9-4274-8bc6-f266daca74fc": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "4d3b2f42-0e70-45c7-ab80-021b2315799f": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "166ffca6-34a6-478e-b038-7637dcd42eb3": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "d440e63a-0c9f-4e18-b61d-0a8f23400b2c": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "52048720-5eae-433b-a786-569c07401791": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "9d67dee7-766d-48f5-8003-542bee5398f8": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "d0f99f75-ee13-460e-9c75-364161de6112": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "ac9438be-0247-46b3-aeba-a8b2e46680ac": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "88224581-b031-4296-b54a-493f6682e651": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "490b13e7-49db-4f14-8a80-ad948f4943d4": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "70cc4271-8ffe-4341-8c32-765609ee0ce3": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "c48c8af9-72a9-432a-aa1e-050bbef44384": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "d735f5d1-57a6-41c1-befc-aba086372b7a": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "e9aa8a10-1075-4eb4-8888-2337d792ecf5": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "a4f0b54f-a14b-4b8f-8b84-0d58c38c9799": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "ca2f7f49-4e2a-4516-8f19-338979cdb88b": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "8b916b45-9b2f-4fe8-b643-fc7a56535e3f": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "53b9fb95-8cd5-4819-a568-60ac2a39888b": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "37d1c1ae-4c38-4f86-9ea9-01932e449920": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "786b6342-2fbe-445d-bc2f-769f2f3b853c": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "caf7179d-8af5-454e-a0e0-19d6f205d8ec": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      },
+      "4b365875-8812-4adf-8661-ec82a0cec899": {
+        "poi_type": "store",
+        "store_kind": "household_supplies",
+        "reason": "reviewed Portuguese drogaria"
+      }
     }
   }
 }
