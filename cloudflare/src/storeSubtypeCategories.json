@@ -9,6 +9,12 @@
     "category_id": "4d4b7105d754a06378d81259",
     "category_name": "Retail"
   },
+  "discount_store": {
+    "category_name": "Discount Store"
+  },
+  "coffee_supplies": {
+    "category_name": "Coffee Supplies"
+  },
   "art_supply": {
     "category_name": "Art Supply"
   },

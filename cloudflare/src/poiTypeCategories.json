@@ -207,6 +207,9 @@
     "category_id": "4bf58dd8d48988d1fc941735",
     "category_name": "Laundry Service"
   },
+  "luggage_storage": {
+    "category_name": "Luggage Storage"
+  },
   "library": {
     "category_id": "4bf58dd8d48988d12f941735",
     "category_name": "Library"

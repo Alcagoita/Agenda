@@ -233,10 +233,16 @@ def decide(row, mapping, reachable, brand_dictionary, store_kind_aliases=None,
     if override:
         poi_type = override['poi_type']
         store_kind = override.get('store_kind')
-        if (row['category'] != 'shopping' or poi_type != 'store'
-                or not store_kind or poi_type not in reachable):
+        # A reviewed generic-shopping row can either be a typed store, which
+        # necessarily needs a subtype, or a real non-store errand such as
+        # luggage storage.  The latter must not be forced through the store
+        # schema just because Overture filed it under generic shopping.
+        if (row['category'] != 'shopping' or poi_type not in reachable
+                or (poi_type == 'store' and not store_kind)
+                or (poi_type != 'store' and store_kind)):
             raise ValueError(f"invalid reviewed override for {row['overture_id']}")
-        return 'promoted', (reachable[poi_type],), (('store_kind', store_kind),), override['reason']
+        attributes = (('store_kind', store_kind),) if store_kind else ()
+        return 'promoted', (reachable[poi_type],), attributes, override['reason']
 
     types, attributes, reason = [], [], None
     entry = mapping.get(row['category'])

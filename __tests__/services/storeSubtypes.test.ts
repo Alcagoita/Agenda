@@ -26,6 +26,8 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Buy contact lenses')).toBe('eyewear_and_optician');
     expect(inferStoreSubtype('Comprar líquido para lentes')).toBe('eyewear_and_optician');
     expect(inferStoreSubtype('Comprar vinho')).toBe('wine_and_spirits');
+    expect(inferStoreSubtype('Comprar cápsulas de café')).toBe('coffee_supplies');
+    expect(inferStoreSubtype('Comprar numa loja de descontos')).toBe('discount_store');
     expect(inferStoreSubtype('Ir beber um copo')).not.toBe('wine_and_spirits');
   });
 
@@ -58,6 +60,8 @@ describe('storeSubtypes', () => {
   it('matches nearby store names against the bundled subtype list', () => {
     expect(storePlaceMatchesSubtype('Aquaplante', 'any')).toBe(true);
     expect(storePlaceMatchesSubtype('Zara Colombo', 'clothing')).toBe(true);
+    expect(storePlaceMatchesSubtype('NORMAL LoureShopping', 'discount_store')).toBe(true);
+    expect(storePlaceMatchesSubtype('Nespresso Colombo', 'coffee_supplies')).toBe(true);
     expect(storePlaceMatchesSubtype('Aquaplante', 'clothing')).toBe(false);
   });
 

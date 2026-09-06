@@ -85,6 +85,7 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('tobacco', 'lottery'),
   ('tobacco', 'cafe'),
   ('tobacco', 'coffee_shop'),
+  ('luggage_storage', 'luggage_storage'),
   -- clinic <-> doctor only; dentist/hospital/medical_lab/physiotherapist
   -- stay separate, and bus <-> bus_station only, since a train station is a
   -- different mode rather than another word for a bus stop.

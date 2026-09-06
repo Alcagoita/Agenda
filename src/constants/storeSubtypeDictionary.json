@@ -14,6 +14,18 @@
     ],
     "stores": []
   },
+  "discount_store": {
+    "label": "Discount store",
+    "labelPt": "Loja de descontos",
+    "aliases": ["discount store", "discount", "loja de descontos", "precos baixos", "preços baixos"],
+    "stores": ["Normal", "Flying Tiger", "Flying Tiger Copenhagen"]
+  },
+  "coffee_supplies": {
+    "label": "Coffee supplies",
+    "labelPt": "Cápsulas e máquinas de café",
+    "aliases": ["coffee capsules", "coffee machine", "capsulas de cafe", "cápsulas de café", "maquina de cafe", "máquina de café"],
+    "stores": ["Nespresso"]
+  },
   "clothing": {
     "label": "Clothing",
     "labelPt": "Roupa",

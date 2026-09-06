@@ -129,6 +129,7 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     'scratch card': 'lottery',
     tobacco: 'tobacco', cigarette: 'tobacco', cigarettes: 'tobacco',
     'buy cigarettes': 'tobacco', vape: 'tobacco', vaping: 'tobacco',
+    'luggage storage': 'luggage_storage', 'store luggage': 'luggage_storage',
     // ── KAN-412 ──
     butcher: 'butcher', 'butchers': 'butcher', meat: 'butcher',
     'buy meat': 'butcher', steak: 'butcher',
@@ -281,6 +282,7 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     'raspadinha': 'lottery', totoloto: 'lottery', 'jogos santa casa': 'lottery',
     tabaco: 'tobacco', tabacaria: 'tobacco', cigarro: 'tobacco', cigarros: 'tobacco',
     'comprar cigarros': 'tobacco', maço: 'tobacco', vape: 'tobacco',
+    'guardar bagagem': 'luggage_storage', 'deposito de bagagem': 'luggage_storage', 'depósito de bagagem': 'luggage_storage',
     // ── KAN-412 ──
     talho: 'butcher', talhos: 'butcher', talhante: 'butcher',
     carne: 'butcher', 'comprar carne': 'butcher', 'carne para o jantar': 'butcher',

@@ -1767,6 +1767,740 @@
         "store_kind": "pet",
         "reason": "reviewed Pet batch: explicit pet shop name"
       }
+    },
+    "reviewed_sports": {
+      "cf3e2f09-2621-4235-9d02-4ffba65a0ba2": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "e82962eb-3e0e-4e1c-8a43-986e83d31b2b": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "bb744f7c-3957-45b8-a64c-83aba4253f6b": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "50b34966-65f3-41a4-83cd-4a9c2a4da818": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "f8125b82-5649-40e4-8ecf-aec98f977537": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "8e11a975-ba83-488d-be20-b7f8ca6e0ec4": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "3fa88603-ca82-4994-9981-e262c4c7e088": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "2f1fd163-3917-4240-a35b-b94bffd4e513": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "98ae6fb0-bc08-43e3-b4d4-fbbb71ad20e0": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "09ea8ea3-1c7a-4afa-afe4-d28ddb107ec8": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "cd3f7679-40c2-40d7-b5bb-8c737b01cd6f": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "cafa11fd-1f5c-4c4f-80bc-aae8a15daa74": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "05b7d635-845d-457a-af61-7b0e2d972c01": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "58df3dec-0c6b-40bc-88df-b6b7284ab7d4": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "5a3a5525-9e4d-473b-8883-68bf27f147cc": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "69195b71-b896-4e64-a2d1-bcd7bc99f556": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "e3bf552c-ea70-428d-b2c6-a2fbfdc5067c": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "67a3e812-5ee8-4556-9bff-9d38f1d070db": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "4acf534d-4477-4ec6-96d5-acb689c9318c": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "0caaa3b9-b255-471f-9977-a9691cac8b14": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "bbfab739-f689-46b4-bb16-456f59217736": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "edccebd2-9418-4118-bc1c-7b9546cd71d1": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "cd5b806d-f806-4890-b784-d215593ac163": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "2db8365c-fe97-40d5-8549-ad7346db7baa": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "d2538d79-2127-4023-a06a-292be0dde4bb": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "78a762f5-f80c-4ef5-b8c1-e1810b6d9c93": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "9b731f9a-3e6c-4efc-88a5-872bbb0977df": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "d3a88a0e-1f36-437a-a184-d5c253f8d825": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "ba03ce89-330d-4d33-b995-fd2069a33378": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "1e13d0b9-71fa-4e4f-aa85-06f0d1a1d3de": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "65891e08-0402-4e16-aa8b-bad239c19c8f": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "8ef9d411-31a5-409b-9cdb-4cf18abe9d03": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      },
+      "6bbc69c7-61ba-4a8f-8161-a67135c5111c": {
+        "poi_type": "store",
+        "store_kind": "sports",
+        "reason": "reviewed sports chain"
+      }
+    },
+    "reviewed_furniture": {
+      "e7321e46-6a4d-420e-b9b5-0b64c8939f41": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "293ac1f7-b34e-4a2c-a9f1-46f4e6706a27": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "00fb2d58-5386-4080-99dd-cd5368579a1d": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "79feb97c-6d10-4cb2-9883-f9594179b8fb": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "4b024cfd-52b8-4eb4-8e8e-1aca6320bc42": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "094db8e6-dd25-4275-a8bd-47657a6164c4": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "09fefcc0-4159-4445-a1f0-18ef4a8493b7": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "3421badd-462d-4bd6-9dac-6c7e4dd91529": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "9fbd30bc-37de-4556-ab8d-e3a0e782b526": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "bb170210-372b-49a8-b2c9-63627eb60a3a": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "cae27ddf-59f5-4ee2-a085-dad2d5929cdc": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "cc32a97f-2600-4095-b831-baf991addadf": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "d1feae12-532c-4bdc-b972-046ed887afc2": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      },
+      "16961acd-d769-47d2-bf36-7af6787e9f5d": {
+        "poi_type": "store",
+        "store_kind": "furniture",
+        "reason": "reviewed furniture chain"
+      }
+    },
+    "reviewed_hardware": {
+      "597f1060-8387-4fe8-a808-7ecf8a2c215c": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware chain"
+      },
+      "27e90ce8-17c6-48e5-8bd4-61f2c4cf03e9": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware chain"
+      },
+      "61ade6c2-d23f-44ff-8a33-baf39fa48c0a": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware chain"
+      },
+      "b06eb8e1-04ab-450a-89e8-dc2c72d0d410": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware chain"
+      },
+      "5fecb087-ac5b-4035-b7b2-35e0490aad88": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware chain"
+      },
+      "6fc3ce5b-fe23-4c3d-806e-25d4f507b1a9": {
+        "poi_type": "store",
+        "store_kind": "hardware",
+        "reason": "reviewed hardware chain"
+      }
+    },
+    "reviewed_beauty": {
+      "33367246-d42a-4c1a-b7be-07d95711d77e": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "140a1649-8d8a-41eb-9a51-6486a5791466": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "d3a216a2-7c90-4b58-9915-b55d91c423cd": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "5af660c0-3757-43b4-9be6-d82c4c980dc7": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "73f0b54d-c59a-4936-8b3e-0fd44bd422e3": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "ea72c77d-4f9e-4b7e-b469-03fa93225473": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "feb57dc1-5bda-4984-b82a-e8c00a149d87": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      },
+      "1b0920a7-c3e6-4990-8a72-9cbd70b8dd5a": {
+        "poi_type": "store",
+        "store_kind": "beauty",
+        "reason": "reviewed beauty chain"
+      }
+    },
+    "reviewed_jewelry": {
+      "611630f1-f5f8-41e9-9e8f-9f92abc3cd21": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed jewelry chain"
+      },
+      "bb5de8fd-3eb5-4d07-9b2f-f8caa593557b": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed jewelry chain"
+      },
+      "cc1ec9cb-0a84-4a4c-88e4-73ea04152034": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed jewelry chain"
+      },
+      "d47c44c5-a45e-4280-9219-c648df0e4cfc": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed jewelry chain"
+      },
+      "c0662e27-f01e-4b11-b20e-b20d6a0276b5": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed jewelry chain"
+      },
+      "fbe44cbf-61af-419e-ac36-c03fda8a86bd": {
+        "poi_type": "store",
+        "store_kind": "jewelry",
+        "reason": "reviewed jewelry chain"
+      }
+    },
+    "reviewed_home": {
+      "1df4faf5-07d4-4d72-aeef-3092a1222002": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home chain"
+      },
+      "738f8ce4-cff2-4151-8e42-00339954f5b9": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home chain"
+      },
+      "a2e8ac72-9179-4360-99b2-ff6980f01ece": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home chain"
+      },
+      "bc9f8cb5-1d34-491b-8836-50306b1ebab9": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home chain"
+      },
+      "c94c28ce-2f61-4dbc-91d1-22980e862e29": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home chain"
+      },
+      "ef83bf11-70c1-44bf-9408-d5b3c55680fd": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home chain"
+      }
+    },
+    "reviewed_electronics": {
+      "2e566808-706c-47fc-9a10-39eeb39323e8": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics chain"
+      },
+      "78fa9c79-9a90-4feb-9382-da418a5136b8": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics chain"
+      },
+      "9f216181-3597-4195-a0e9-071e2466b194": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics chain"
+      },
+      "e2bf10b8-fe5f-4a58-891d-79238ae61f13": {
+        "poi_type": "store",
+        "store_kind": "electronics",
+        "reason": "reviewed electronics chain"
+      }
+    },
+    "reviewed_clothing": {
+      "93e2ff11-b417-41aa-b955-d2c34041147b": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed clothing chain"
+      },
+      "f151fde2-af1c-4ba8-8603-dcee8bfa806e": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed clothing chain"
+      }
+    },
+    "reviewed_discount_store": {
+      "ebb38555-60d6-4b68-b9d2-71f49bffa074": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "15ec0aac-0608-4513-be76-609c9f763517": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "4bcbee45-96ac-4d65-bc0f-d8f595f5c443": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "774121ea-c16f-4036-8b39-7ed1badb0d87": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "83652191-b291-40ec-b09a-ee2a53286a8c": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "99626ec0-e130-4747-94d4-b9f7d8e260fb": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "9b3fbafa-7525-495e-9b54-37225d7286fc": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "ce092214-3950-4ea8-9160-5b042578bb68": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      },
+      "fcc90f71-6e4c-4353-a6d6-f5570fcd98c4": {
+        "poi_type": "store",
+        "store_kind": "discount_store",
+        "reason": "reviewed discount store chain"
+      }
+    },
+    "reviewed_coffee_supplies": {
+      "452c5a15-3a5c-438e-843d-f9bc3ae96b57": {
+        "poi_type": "store",
+        "store_kind": "coffee_supplies",
+        "reason": "reviewed coffee supplies chain"
+      },
+      "c4ebb002-512a-4dc5-b6e1-b29b48da6079": {
+        "poi_type": "store",
+        "store_kind": "coffee_supplies",
+        "reason": "reviewed coffee supplies chain"
+      },
+      "c78f7a07-d814-4723-9140-4f600f0b301f": {
+        "poi_type": "store",
+        "store_kind": "coffee_supplies",
+        "reason": "reviewed coffee supplies chain"
+      },
+      "f8c70893-6d71-4e5b-9080-04bed2e726c1": {
+        "poi_type": "store",
+        "store_kind": "coffee_supplies",
+        "reason": "reviewed coffee supplies chain"
+      }
+    },
+    "reviewed_luggage_storage": {
+      "0212c27d-cb98-4ea5-b61c-d35f734989a2": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "029d8d43-e097-4849-b1e4-82380aa9211b": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "0414b6e6-1073-45c5-9f73-c5fe1572239b": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "078b1ba1-55d0-4286-aa98-9eeeccd640b6": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "08cf5774-4b5b-4d38-9af9-4480c6fa36ca": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "11c7c249-6d62-4b06-a9ec-b4c284b398ec": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "16cb4cfd-6f8f-4258-b4a9-ec5348f72b35": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "17708c1c-2f8a-41d5-a79c-5e0a1edb6e87": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "1c654761-d3a9-4595-99a5-974afa097591": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "21bf2dfe-f1ad-40eb-a2c4-906beb13e733": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "2c3b935e-4ff1-4404-8be1-8a5e2bb891f9": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "2cc69949-488a-4f0e-b195-d0cd72daf9d8": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "34bd458d-937a-436f-8f65-44b459f3afaf": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "363e33e7-1c0c-4bba-b036-61d8edd4294e": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "3d199ee1-873a-4d72-8fdb-848b178f46a6": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "4307817c-2a3d-480c-a13c-138549fb0e58": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "46031133-71fc-40f1-a2ce-55c4256bfaab": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "46c9b050-07f7-4966-a1d0-954d69e72faf": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "49379bd8-85e5-43d1-a981-716e5a519f04": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "4b98d04b-3e49-48a0-804d-0fff416b95b8": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "4ddf3758-5bfe-4c76-b20b-003c8bb460c3": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "4ef2770e-76a8-40c8-93c8-49f014ac3334": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "65053cef-b53b-4dde-9389-ba3f6ab83711": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "66ac1f18-77db-4c09-b27e-51e68e6cc63c": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "68b1add3-06e3-41be-8978-baac2221e3d9": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "6a5f560f-3be3-4690-ace7-579e217410d2": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "70cdd332-23ce-49b1-b298-148412229643": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "7530142e-1656-4afe-a5c1-aaed2468443d": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "75630ac0-01e0-43b8-acd5-7db23f99a165": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "78c82114-bcb4-41b0-803b-6c41fc91e043": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "86185a46-b711-4868-b1d3-f764f7a6a0ba": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "8876e672-baca-433e-954e-7b5f2553ece8": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "8a272853-9ade-4ea6-9836-19ef04d69dbf": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "8dadbee5-ce05-4587-9617-4bf569f06760": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "995c784b-5570-4b79-be8b-3f84dfdfb3e4": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "9ae5bf51-7f62-486d-af6e-98e279f6cbd8": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "a0ee2b06-a2e3-4399-a998-51b3498816f7": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "a364f879-c10d-4f0e-bd52-c6b461069187": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "a83da6da-59bd-45ae-a0bb-9f7a1ae72d43": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "af14b759-7f7f-488d-9a11-2bb3ba115e19": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "af5db2eb-4a87-4203-b537-bc6a27ad713f": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "b1b0552d-5a47-47df-adf9-ef413df4f761": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "b20a8804-f80a-44a5-9bbe-bd3b75097d37": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "b81ce745-54b3-4ed9-ac45-704305e9a275": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "bf59d37e-49de-43f2-9d8a-4e7cc57a8b14": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "c4a4540b-25e3-4044-b196-5bb0acc6762f": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "c8d02b15-5357-4a32-a406-8bc3362ab6c8": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "cf20778f-45e4-4a81-9e39-007c6e30298a": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "cf77c292-791e-457d-ae86-a79418192363": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "d0f332a6-db67-468c-a392-abd75a38a425": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "d1847442-7937-4833-bfa9-fa5b68f41c90": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "d33955b8-3895-4ddb-b2ac-5120a8e23817": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "d426dd6b-81bf-45e9-9189-be8e9460b4c6": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "d89871b4-a845-4f50-b675-9d6b98e1cb3a": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "d9166d84-f7bf-4d7e-8a01-a9e6ce4a277d": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "dcd45d7b-a517-47bc-8616-1df181a06ea2": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "e0fe0b5e-e16f-485d-9bbb-4528ecd63bd6": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "faa24e92-7102-4441-a2a2-202afc2d0540": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "fde8bc76-ccfc-4377-b5c7-094ce3033dec": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "ff635193-cf89-4db9-8f9f-83c55d388b8a": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "ee8f5d01-e1b4-4ffd-9cb2-420985db513e": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "317b4164-0453-429c-8198-9d99c45faef3": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      },
+      "38d37e98-6634-45f7-855a-b035754eccd4": {
+        "poi_type": "luggage_storage",
+        "reason": "reviewed luggage-storage chain"
+      }
     }
   }
 }

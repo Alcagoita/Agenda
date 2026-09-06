@@ -79,6 +79,26 @@ class CountryStreamingTest(unittest.TestCase):
         self.assertIn("promotion_status = 'promoted'", statements[-1])
         self.assertNotIn("WHERE promotion_status = 'pending'", statements[-1])
 
+    def test_reviewed_luggage_storage_override_is_not_forced_to_be_a_store(self):
+        import promote_overture_candidates as promote
+
+        status, types, attributes, _ = promote.decide(
+            row('luggage-1', 'Nannybag Luggage Storage', 'shopping'),
+            mapping={},
+            reachable={'luggage_storage': 'luggage_storage'},
+            brand_dictionary={},
+            store_kind_aliases=[],
+            food_cuisine_aliases=[],
+            financial_service_rules={},
+            store_brands=[],
+            overrides={'luggage-1': {
+                'poi_type': 'luggage_storage',
+                'reason': 'reviewed luggage-storage chain',
+            }},
+        )
+
+        self.assertEqual((status, types, attributes), ('promoted', ('luggage_storage',), ()))
+
 
 if __name__ == '__main__':
     unittest.main()

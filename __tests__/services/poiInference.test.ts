@@ -103,6 +103,10 @@ describe('inferPoiFromRules (en)', () => {
     expect(inferPoiFromRules('buy vape liquid')).toBe('tobacco');
   });
 
+  it('maps luggage-storage errands to luggage_storage', () => {
+    expect(inferPoiFromRules('store luggage before check-in')).toBe('luggage_storage');
+  });
+
   it('maps a prescription task to pharmacy', () => {
     expect(inferPoiFromRules('pick up prescription')).toBe('pharmacy');
   });
@@ -156,6 +160,10 @@ describe('inferPoiFromRules (pt-PT)', () => {
   it('maps tabacaria errands to the tobacco intent', () => {
     expect(inferPoiFromRules('comprar cigarros', 'pt-PT')).toBe('tobacco');
     expect(inferPoiFromRules('ir à tabacaria', 'pt-PT')).toBe('tobacco');
+  });
+
+  it('maps depósito de bagagem errands to luggage_storage', () => {
+    expect(inferPoiFromRules('guardar bagagem', 'pt-PT')).toBe('luggage_storage');
   });
 
   it('maps a farmácia task to pharmacy', () => {
