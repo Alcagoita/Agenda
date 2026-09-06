@@ -3156,6 +3156,416 @@
         "decision": "rejected",
         "reason": "reviewed exclusion: industrial equipment supplier"
       }
+    },
+    "reviewed_home_bazaar": {
+      "340d5c47-dce1-4d1b-821b-3380a4677dc8": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "25ce9c3d-bd65-41ea-a86d-4dc36f4531c8": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "93ee53de-dffb-46dc-9f1f-c3f8787a42e7": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "caee241b-6d9f-4f29-ab0f-30daa375ca81": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "18bbae73-c460-42fb-a422-6c941d94760f": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "c766d0cb-ecf0-4d83-bcf1-51d4c3ba9e55": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "a248fcc4-8cdb-47a8-9cc5-b75220071e86": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "4d04ab17-50f6-4804-9dde-01c1d7b43c00": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "8f9e7081-6cb2-477f-9411-d5e3af2a0b4a": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "59d7cff9-4225-4618-8732-59d8f9f14f64": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "e4f5e4d2-a7e7-47be-a314-c1e4e957e8da": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "09a8c983-1f12-4a52-b44c-bfbe3f242e0c": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "72528057-77d2-45e1-84b3-e8c5eae03bd3": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "e5eb6f7d-a974-44fa-9725-a452da1e7d77": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "2d377ba7-f942-4a48-85ac-c815ef26ae02": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "497278a2-a6e0-4300-80bc-6a59aaf8d5f5": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "7b096fcc-2d08-43cd-8668-7daa1cfc62ce": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "135e32ed-12b3-4b4a-a859-9f61678cfb58": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "84029a9b-0dfb-44c8-b9d8-34bbb80bfa16": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "9139e972-e0c4-4da8-af5e-ab42deb32612": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "f4a7d2b6-54c4-4cb3-9318-80f5505d4d8f": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "e4f1c1b3-d050-4e22-a267-cf610618d765": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "4897df9a-c6d8-4146-89a1-0f0bd13cff8f": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "2f421ebe-b7d8-47ba-87b6-e61908061b93": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "4e7aa823-d245-4bfd-b336-1a6db22ad722": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "400b5f18-9059-4c9c-a459-82bdb76ce241": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      }
+    },
+    "reviewed_home_bedding": {
+      "2086dcf1-79b5-4a06-b3c2-1bf8ea6083c5": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "138c710f-fde6-43ca-86de-06a3630039ab": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "ec7d2934-7db5-44d4-9d58-67071c44073b": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "7585b184-f92d-4148-a888-8b7e4439a5d0": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "fbd7c123-50f4-44b6-829a-9007748d90bb": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      },
+      "4b6033e3-336b-4cb7-b5c7-e6a4a2a26c76": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed named retail group"
+      }
+    },
+    "reviewed_clothing_fashion": {
+      "69de17dc-9549-4dd0-8b90-94174204bba8": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "412ef64b-12ae-4d92-afe4-5f1a566f43be": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "8058fa23-5ad8-46ba-a5c2-33a1e614a6ca": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "b10a4613-5cd7-4794-9c61-c094c42e87d1": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "e32cc7a8-4297-424c-9c82-4803c46759a5": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "3e0f2c15-8a50-47b9-a93e-6f3255419bb1": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "a3af7c37-002e-4903-b56a-f393e4e9c537": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "1d419856-0bac-49a3-a7ac-2c0c5853130d": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "c44b64c0-9ebc-4728-a0ab-0e29ab80ad6c": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "bf412c81-0652-44a4-a157-e1ac3d8af21a": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "c4168d68-4c61-45b3-8953-6b03dd7ad333": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "744f943e-36f3-4527-84fe-5cb7122a62df": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "030c3c38-20f7-4c31-a344-7c1ee7052ea5": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "c318e54d-5f49-417a-8033-bcfc0c8826ce": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "aee9891f-7c63-435f-bfb8-f62f6d1407b6": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "c1594788-bc86-409a-9cdb-dcff9ca7cc71": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "aea42dd9-b87c-4bec-9991-3a6f3cb8a972": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "af59ee80-063c-4456-85f7-84ddd5dbd376": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "a5718cd0-6bfd-47d4-b743-f39a6c2282f7": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "8f0e563d-7ba9-4fb8-b3e1-024e6a4eab93": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "5053b684-7053-4050-bb44-3cc91694cfc4": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "36649b6b-a65f-4f3a-9c24-d282c07b5b6c": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "0661e782-3270-4ac0-8c6a-66ef39685226": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "6c130494-1fdc-4efa-b4ce-5378b3bcfedc": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "e0b6778b-68e7-41fc-823f-84d891262c09": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "0e63a68e-4780-4a05-a551-712ac94769e0": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "6e350458-5068-4a19-973a-21f21c0d4880": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "aadbc5e7-1604-4cff-81b4-2a23400f3c40": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "4536de16-cb65-492a-ad01-c44fc960e010": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "6b0ed560-91b1-43bd-8822-5ddb8d1af79b": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "bb416663-354a-4c74-a5cd-c05a092c303a": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "e3c31f97-e28e-44ef-9e10-f608f639b491": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "8b33490a-faa5-46e0-97c0-e9c14a77f523": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "94700dc4-0150-4aa6-9715-4250339d22b6": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "cd9bb19b-bcfe-468d-9e40-207af2b093b7": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "8025c4f5-8aed-4926-bed9-06a58951ee59": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "969a1cc8-5f74-49e7-853c-7610d758babf": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      },
+      "321810fe-1971-45c3-ac73-786a9a91d56a": {
+        "poi_type": "store",
+        "store_kind": "clothing",
+        "reason": "reviewed named retail group"
+      }
+    },
+    "reviewed_food_produce": {
+      "222de2ab-4062-4ec0-9de2-62ad0c8050c3": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "92f23833-abfe-4266-a228-4a5863ce12a6": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "0e1aff19-a159-45f7-9b6f-a6de31d74b2c": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "95118e95-a608-4f17-b551-35b46708beb6": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "a49f6e95-7630-4216-a6fa-a28ae6677923": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "be22afa2-f311-4c61-851e-ec31373bd2e0": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "7c637e82-b62b-4002-8645-a3a941035936": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "c5d14a4a-845f-46c2-b9cd-533add79828b": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "2724aa3c-d98a-44f8-84be-f9fdc2dce343": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "881af87d-1974-41b9-9ca8-56b4a1521444": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "4423e135-d2ed-4c44-8c1e-1a2fe25be90a": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "bfc55f97-bfe8-418b-a455-eb7fcb49e849": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      },
+      "222ada7e-fa85-4f43-8b17-f06bb352d602": {
+        "poi_type": "supermarket",
+        "reason": "reviewed named food retailer"
+      }
     }
   }
 }
