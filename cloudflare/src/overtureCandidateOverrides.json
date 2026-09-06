@@ -3076,6 +3076,68 @@
         "store_kind": "electronics",
         "reason": "reviewed computing retailer"
       }
+    },
+    "reviewed_home_textiles": {
+      "ba48f68b-461a-4309-8b7f-326aff14221a": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "67cff1d8-53f1-4d40-8a07-37e16446210e": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "1754185a-0c68-439d-9b7e-9ca8f4cc651e": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "1ce56098-4621-4a74-83d2-ca7a602d9181": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "7911a13a-edd7-43eb-9ecb-bdcc9f73c588": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "ffcdd01b-5e11-4a44-88aa-d34b7f22b98c": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "b5d115f5-8dcb-4338-b412-e2779a6eae89": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "5e7e217e-c560-4df6-b706-acd553e519d0": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "b1013ad2-1816-4c1c-8e32-273063b92b1d": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "85cbb581-5812-4c67-b908-a396e119354c": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "0af557f5-2016-458d-a10c-6343c4264917": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      },
+      "100584ff-ed40-4edf-9d6c-85df0d7c68ac": {
+        "poi_type": "store",
+        "store_kind": "home",
+        "reason": "reviewed home textiles retailer"
+      }
     }
   }
 }
