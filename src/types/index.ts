@@ -123,7 +123,7 @@ export interface User {
 // ─── POI ──────────────────────────────────────────────────────────────────────
 
 export type PoiType =
-  | 'atm' | 'cafe' | 'supermarket' | 'pharmacy'
+  | 'atm' | 'cafe' | 'supermarket' | 'mini_market' | 'pharmacy'
   | 'gas' | 'gym' | 'bank' | 'restaurant' | 'park'
   | 'library' | 'post' | 'store' | 'clinic' | 'salon'
   | 'bus' | 'school' | 'bakery' | 'florist' | 'bar' | 'ice_cream' | 'tattoo'
@@ -194,7 +194,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
   { type: 'mosque' }, { type: 'museum' }, { type: 'night_club' }, { type: 'rv_park' },
   { type: 'spa' }, { type: 'stadium' }, { type: 'synagogue' }, { type: 'tennis_court' },
   { type: 'tourist_attraction' }, { type: 'water_park' }, { type: 'winery' }, { type: 'zoo' },
-  { type: 'supermarket' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
+  { type: 'supermarket' }, { type: 'mini_market' }, { type: 'pharmacy' }, { type: 'atm' }, { type: 'cafe' },
   { type: 'restaurant' }, { type: 'store' }, { type: 'florist' }, { type: 'bakery' },
   { type: 'ice_cream' }, { type: 'tea' }, { type: 'juice' },
   { type: 'tattoo' },
@@ -222,7 +222,7 @@ export const POI_CATALOG: { type: PoiType }[] = [
  * carousels and their automatic quick suggestion use this single list.
  */
 export const QUICK_ACTIONABLE_POI_TYPES: readonly PoiType[] = [
-  'supermarket', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store', 'tobacco',
+  'supermarket', 'mini_market', 'pharmacy', 'atm', 'cafe', 'restaurant', 'store', 'tobacco',
   'florist', 'bakery', 'ice_cream', 'park', 'gym', 'bar', 'library',
 ];
 
@@ -406,7 +406,7 @@ export interface Category {
 
 /** Which POI types can appear on tasks of each category. */
 export const CATEGORY_POI_MAP: Record<CategoryKey, PoiType[]> = {
-  errands:  ['supermarket', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist', 'tobacco', 'luggage_storage'],
+  errands:  ['supermarket', 'mini_market', 'atm', 'pharmacy', 'bank', 'currency_exchange', 'money_transfer', 'financial_service', 'post', 'store', 'bakery', 'florist', 'tobacco', 'luggage_storage'],
   health:   ['pharmacy', 'clinic', 'gym'],
   personal: ['cafe', 'restaurant', 'bar', 'park', 'salon', 'ice_cream', 'tattoo', 'barber', 'hairdresser', 'nail_salon'],
   work:     ['library', 'school'],
@@ -422,6 +422,7 @@ export const POI_GOOGLE_TYPES: Partial<Record<PoiType, string>> = {
   atm:         'atm',
   cafe:         'cafe',
   supermarket:  'supermarket',
+  mini_market:  'convenience_store',
   pharmacy:     'pharmacy',
   gas:          'gas_station',
   gym:          'gym',
@@ -537,6 +538,7 @@ export const POI_OSM_TAGS: Record<PoiType, OsmTagSelector> = {
   atm:         { key: 'amenity', value: 'atm' },
   cafe:        { key: 'amenity', value: 'cafe' },
   supermarket: { key: 'shop',    value: 'supermarket' },
+  mini_market: { key: 'shop',    value: 'convenience' },
   pharmacy:    { key: 'amenity', value: 'pharmacy' },
   gas:         { key: 'amenity', value: 'fuel' },
   gym:         { key: 'leisure', value: 'fitness_centre' },
@@ -805,6 +807,7 @@ export const POI_GEOFENCE_RADIUS: Record<PoiType, number> = {
   pharmacy:    50,
   cafe:        75,
   supermarket: 75,
+  mini_market: 50,
   gas:         75,
   gym:         100,
   bank:        50,

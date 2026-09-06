@@ -28,6 +28,8 @@ describe('storeSubtypes', () => {
     expect(inferStoreSubtype('Comprar vinho')).toBe('wine_and_spirits');
     expect(inferStoreSubtype('Comprar cápsulas de café')).toBe('coffee_supplies');
     expect(inferStoreSubtype('Comprar numa loja de descontos')).toBe('discount_store');
+    expect(inferStoreSubtype('Comprar produtos de limpeza')).toBe('household_supplies');
+    expect(inferStoreSubtype('Ir à drogaria')).toBe('household_supplies');
     expect(inferStoreSubtype('Ir beber um copo')).not.toBe('wine_and_spirits');
   });
 

@@ -35,6 +35,7 @@ INSERT OR IGNORE INTO type_relation (search_type, include_type) VALUES
   ('atm', 'atm'),
   ('atm', 'bank'),
   ('supermarket', 'supermarket'),
+  ('mini_market', 'mini_market'),
   ('supermarket', 'grocery_store'),
   ('grocery_store', 'grocery_store'),
   ('grocery_store', 'supermarket'),

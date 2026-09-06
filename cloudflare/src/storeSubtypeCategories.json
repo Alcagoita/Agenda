@@ -15,6 +15,9 @@
   "coffee_supplies": {
     "category_name": "Coffee Supplies"
   },
+  "household_supplies": {
+    "category_name": "Household Supplies"
+  },
   "art_supply": {
     "category_name": "Art Supply"
   },

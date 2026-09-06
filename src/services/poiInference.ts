@@ -96,6 +96,7 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── supermarket ──
     groceries: 'supermarket', grocery: 'supermarket', supermarket: 'supermarket',
     market: 'supermarket', 'food shopping': 'supermarket',
+    'mini market': 'mini_market', 'convenience store': 'mini_market',
     bread: 'supermarket', milk: 'supermarket', eggs: 'supermarket',
     butter: 'supermarket', vegetables: 'supermarket', veggies: 'supermarket',
     fruit: 'supermarket',
@@ -245,6 +246,7 @@ const SEED_DICTIONARY: Record<SupportedLang, KeywordMap> = {
     // ── supermarket ──
     compras: 'supermarket', supermercado: 'supermarket', mercearia: 'supermarket',
     mercado: 'supermarket', 'pão': 'supermarket', leite: 'supermarket',
+    minimercado: 'mini_market', 'mini mercado': 'mini_market',
     ovos: 'supermarket', fruta: 'supermarket', legumes: 'supermarket',
     // ── bakery ──
     padaria: 'bakery', 'comprar pão': 'bakery', 'ir buscar pão': 'bakery',

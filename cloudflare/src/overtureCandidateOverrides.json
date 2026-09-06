@@ -2585,6 +2585,104 @@
         "decision": "rejected",
         "reason": "reviewed exclusion: appointment-only professional service"
       }
+    },
+    "reviewed_mini_markets": {
+      "951cfc6f-b8a2-42c9-a8c1-9ef7e0342a25": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "95de7e3a-475c-439d-be28-1e2563959dc0": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "e0383120-7056-42d9-af31-42d29a9f1901": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "418aeae1-d19f-4d6f-ba2e-11d34a7b1216": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "c912a869-3f06-418a-b150-ea512cdcca0b": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "4d2bf609-fd12-45f8-9d56-091f88f2ca3a": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "d82b5a8d-ad6b-4a79-a676-6cb75ce95bce": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "4b077e23-713d-4a73-9b16-66655043dae8": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "b19503f8-1a54-40b4-a7b2-512a5a5e920d": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "7b7c83b1-682a-4034-b82e-250a11450462": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "1efa819b-1c8c-470e-adc7-41c7a44288c3": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "426e3a35-28d2-4bac-88f0-02824ca8c97d": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "c263389d-e358-4daa-aaf6-cf445e814754": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "fbbbffb1-e4d1-403f-ae7f-a4bf615c6244": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "e0fc5d27-b8ba-40d4-a516-85f9a1f9c9ef": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "6a5a09c5-0abb-4c08-b619-b33011a7bfb8": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "acf1f13e-05b2-4a57-bb4c-38a329356e56": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "cce8c4c3-610e-43ec-80bc-8d61f3b0ca72": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "cc00a621-06ad-4b52-9cc8-3c48c3b6153e": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "f1221c6b-bea4-4be4-819e-0091f498303a": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "9360d0ab-ad8f-49a0-a1d0-e9076823b4e6": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "0441b03f-b60f-439e-b3b8-fa2fe82466c7": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "e7c9d80a-6a7b-4d75-9ec6-b53059b7e627": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      },
+      "eb7bacdf-7461-4605-981d-c36546ae6f52": {
+        "poi_type": "mini_market",
+        "reason": "reviewed named mini-market"
+      }
     }
   }
 }

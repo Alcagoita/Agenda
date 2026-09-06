@@ -26,6 +26,12 @@
     "aliases": ["coffee capsules", "coffee machine", "capsulas de cafe", "cápsulas de café", "maquina de cafe", "máquina de café"],
     "stores": ["Nespresso"]
   },
+  "household_supplies": {
+    "label": "Household supplies",
+    "labelPt": "Drogaria",
+    "aliases": ["drogaria", "cleaning supplies", "produtos de limpeza", "detergentes", "inseticida", "inseticidas", "vassoura", "vassouras"],
+    "stores": []
+  },
   "clothing": {
     "label": "Clothing",
     "labelPt": "Roupa",
